@@ -9,9 +9,9 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Procedure:** Start normal and MCP-enabled test configurations, inspect dependency loading, and request root/status/internal availability appropriate to each mode.
 - **Environment / configuration:** Clean backend/frontend environments with MCP disabled and enabled
 - **Pass criterion:** Normal mode serves UI/API without the MCP dependency; enabled mode uses the isolated sidecar and keeps the main project free of that dependency.
-- **Status:** implemented
-- **Evidence:** [`ci/backend-integration.sh`](../../../ci/backend-integration.sh), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl)
-- **Nonconformance:** The supported launcher itself is not directly exercised by one durable integration action.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** The backend integration wrapper covers disabled normal mode, while MCP unit inspection covers configuration/dependency isolation; no durable action starts and probes both integrated modes.
 
 ## INTV-002 — Verify project projection boundaries
 
@@ -39,23 +39,23 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Submit reordered nodes, asymmetric endpoints, physical/virtual edges, duplicate physical pairs, invalid resolved values, and placement-gated protocols.
+- **Procedure:** Submit asymmetric endpoints, physical and virtual edges, reversed duplicate physical pairs, invalid resolved values, and placement-gated protocols.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Validation and construction preserve ordering/roles, build only the physical graph, retain permitted virtual protocols, and reject every invalid fixture without corrupting state.
+- **Pass criterion:** Validation and construction preserve the asserted endpoint roles, build only the physical graph, retain permitted virtual protocols, and reject each listed invalid fixture without corrupting state.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
-- **Nonconformance:** Selected nested malformed JSON shapes can still escape canonical validation.
+- **Nonconformance:** A true reordered node-array fixture is absent and is tracked by UNITV-010; selected nested malformed JSON shapes can still escape canonical validation.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Compare backend constructor/tag/state metadata with frontend descriptors and submit representative default, nullable, named-tag, Variable, structured-state, and unsupported values.
-- **Environment / configuration:** Backend and frontend component/integration environments
+- **Procedure:** Fetch constructor, tag, representation, and structured-state metadata from a real backend client, feed those responses into the real frontend descriptors, and submit representative valid and unsupported values.
+- **Environment / configuration:** Real backend/frontend integration without synthetic catalog fixtures
 - **Pass criterion:** Wire types, placement, nullability, bounds, and safe resolution match across the boundary; unsupported values fail.
-- **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`gui/tests/unit/protocolConstructorForm.test.js`](../../../gui/tests/unit/protocolConstructorForm.test.js)
-- **Nonconformance:** Dynamic dependency-catalog drift is not checked against an explicit compatibility baseline.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Backend metadata and frontend descriptor fixtures are tested independently; no durable action passes a real backend response through the frontend input boundary.
 
 ## INTV-006 — Verify serialized lifecycle transitions
 
@@ -72,12 +72,12 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 
 - **Covers:** SUB-007
 - **Method:** test
-- **Procedure:** Read logs through purge and nonpurge paths, render representative slots/protocols, mutate/query live tags, then block and destroy the simulation.
-- **Environment / configuration:** Backend HTTP and MCP adapter tests
-- **Pass criterion:** Returned values are serializable; purge/bounds match the caller; live-only operations work only while resources remain.
-- **Status:** implemented
-- **Evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl)
-- **Nonconformance:** Every renderer/resource representation and production disclosure path is not covered.
+- **Procedure:** Read logs through purge and nonpurge paths, render slots/protocols, mutate/query live tags, then repeat applicable reads after blocking and destruction.
+- **Environment / configuration:** Real backend HTTP and MCP adapters using one discriminating simulation fixture
+- **Pass criterion:** Representations are serializable, purge/bounds match each caller, and every live-only operation changes to the documented unavailable result after cleanup.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Existing artifacts cover selected logs, protocol results, tags, and queries separately but not the complete representation and unavailable-state matrix.
 
 ## INTV-008 — Verify script-generation boundary
 
@@ -105,12 +105,12 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Inventory and exercise direct validators, protocol/Variable construction, symbolic/numeric paths, tag predicates, and export under both policy states.
-- **Environment / configuration:** Backend unit and conditional HTTP integration environments
-- **Pass criterion:** Every source-bearing path shares the gate/validator/context and forbidden canaries fail before the sole evaluator; safe paths remain usable.
-- **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
-- **Nonconformance:** Disabled real-server mode is present in test logic but not selected by maintained server-backed CI.
+- **Procedure:** Build a parameterized test from every source-bearing route, decoder, tag/query adapter, and export path, tracing each through the gate, validator, context, and evaluator.
+- **Environment / configuration:** Pinned source plus dynamic unit/HTTP fixtures in both policy states
+- **Pass criterion:** Every path has one complete trace to the shared boundary; no alternate evaluation site exists; forbidden canaries fail before execution.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Dynamic fixtures are strong but no durable entry-point inventory exists, and disabled real-server mode is not selected by maintained CI.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 
@@ -128,11 +128,11 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Covers:** SUB-012
 - **Method:** test
 - **Procedure:** Exercise bind/heartbeat/expiry, GUI and MCP revisions, draft flush, command delivery/commit, stale writes, cancellation, impossible acknowledgement, unbind, and rebind.
-- **Environment / configuration:** Backend hub and frontend bridge unit environments plus browser scenario
+- **Environment / configuration:** Real backend hub and browser bridge with controllable lease and acknowledgement delivery
 - **Pass criterion:** Each pre/post-delivery case produces its documented result without silent mutation or continuation from desynchronized state.
-- **Status:** implemented
-- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js)
-- **Nonconformance:** Real-time lease loss after actual browser delivery is not exercised end to end.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Backend hub and frontend bridge unit suites exercise their state machines independently; no durable integration action drives every lease/revision/acknowledgement case across the live boundary.
 
 ## INTV-013 — Verify MCP contract/dispatch/transport
 
@@ -141,6 +141,6 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Procedure:** Load the versioned registry, discover tools/resources, dispatch each group, initialize/reject sessions, read bound representations, and restart with a new session.
 - **Environment / configuration:** Sidecar unit, real local transport, backend adapter, and bound browser environments
 - **Pass criterion:** One registry drives metadata; each group reaches its declared owner; second session is rejected; stable errors/results/resources cross transport.
-- **Status:** implemented
-- **Evidence:** [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl), [`mcp/test/http_integration.jl`](../../../mcp/test/http_integration.jl)
-- **Nonconformance:** Every tool schema and successful bound resource template is not currently exercised.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Sidecar tests load/list the registry and exercise selected handlers and transport errors, but they do not dispatch every group or read a successful bound resource representation.

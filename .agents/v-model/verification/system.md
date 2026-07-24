@@ -1,26 +1,25 @@
 # System Verification Actions
 
-`implemented` means the cited durable test design exists; no current execution record
-was produced in this documentation-only change.
+No product suite was run for this documentation-only change.
 
-## SYSV-001 — Verify integrated startup surfaces
+## SYSV-001 — Verify the supported launcher end to end
 
 - **Covers:** SYS-001
 - **Method:** test
-- **Procedure:** Build through the canonical frontend wrapper, start the test backend, and request the root UI, status, and API documentation.
-- **Environment / configuration:** CI Julia 1.12, Node 24, Ubuntu; production build plus test-mode backend
-- **Pass criterion:** Build/version checks succeed and all three surfaces return usable content from the same checkout.
-- **Status:** implemented
-- **Evidence:** [`ci/frontend-build.sh`](../../../ci/frontend-build.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
-- **Nonconformance:** Existing wrappers do not execute `bin/server` itself as one end-to-end launcher action.
+- **Procedure:** From a clean checkout, run the documented launcher and request the root UI, status endpoint, and API documentation.
+- **Environment / configuration:** Supported Julia/Node versions and locked frontend dependencies
+- **Pass criterion:** The launcher builds the locked frontend, starts the backend, and serves all three surfaces.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** [`ci/frontend-build.sh`](../../../ci/frontend-build.sh) and [`ci/backend-integration.sh`](../../../ci/backend-integration.sh) verify separate portions but do not execute `bin/server` as one black-box action.
 
 ## SYSV-002 — Verify canonical browser authoring
 
 - **Covers:** SYS-002
 - **Method:** test
-- **Procedure:** Exercise browser authoring, Save As/reopen, and selected project projections using discriminating document fixtures.
+- **Procedure:** Exercise browser edits, Save As/reopen, and selected projections with discriminating fixtures.
 - **Environment / configuration:** Vitest/jsdom plus Chromium/Vite workflows
-- **Pass criterion:** Visible edits occur once; named reopen preserves asserted semantics; projections are nonmutating and exclude their documented fields.
+- **Pass criterion:** Edits occur once; reopen preserves asserted semantics; projections are nonmutating and exclude asserted fields.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
 - **Nonconformance:** No one system fixture asserts complete semantic equality across every documented project field.
@@ -29,23 +28,23 @@ was produced in this documentation-only change.
 
 - **Covers:** SYS-003
 - **Method:** test
-- **Procedure:** Decode current, missing-version legacy, additive-physical, malformed, and future-version fixtures through import/session boundaries.
-- **Environment / configuration:** Frontend unit and browser project-session environments
-- **Pass criterion:** Supported inputs normalize without mutation; future/malformed inputs fail before live replacement; frontend-only fields stay out of simulator/export projections.
-- **Status:** implemented
-- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js)
-- **Nonconformance:** UI import is stricter than the codec, and the supported legacy set/horizon is not declared.
+- **Procedure:** Import declared project fixtures in the browser, submit additive payload fixtures to the backend, and attempt malformed/future versions with a project open.
+- **Environment / configuration:** Real browser and backend using an explicit compatibility-fixture registry
+- **Pass criterion:** Supported fixtures normalize without mutation and reach their expected result; malformed/future input does not replace the open project.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Codec/session unit fixtures exist, but there is no declared compatibility set or black-box action spanning browser import and additive backend payloads.
 
 ## SYSV-004 — Verify authoritative metadata-driven inputs
 
 - **Covers:** SYS-004
 - **Method:** test
-- **Procedure:** Fetch catalogs, render representative typed/tag/state inputs, submit valid advertised values, and reject unadvertised/incompatible values.
-- **Environment / configuration:** Backend integration plus frontend unit/browser environments
-- **Pass criterion:** Client choices derive from returned metadata or explicit allowlists and round-trip with the declared wire semantics.
-- **Status:** implemented
-- **Evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/protocol-parameter-options.spec.js`](../../../gui/tests/e2e/protocol-parameter-options.spec.js)
-- **Nonconformance:** Mutable QuantumSavory `master` catalog compatibility is not independently verified.
+- **Procedure:** Fetch real catalogs, render each input kind in the browser, and submit advertised and unsupported values.
+- **Environment / configuration:** Real browser and backend with no intercepted catalog routes
+- **Pass criterion:** Choices derive from returned metadata or explicit allowlists; advertised values round-trip and unsupported values fail.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Backend catalog tests and frontend descriptor tests are separate, and the browser protocol-options scenario intercepts the catalog route.
 
 ## SYSV-005 — Verify simulation lifecycle
 
@@ -62,23 +61,23 @@ was produced in this documentation-only change.
 
 - **Covers:** SYS-006
 - **Method:** test
-- **Procedure:** Inspect progress, structured logs, tags/queries, slot/protocol results, panic paths, and blocked/destroyed availability during a real workflow.
-- **Environment / configuration:** Backend integration and serial Chromium workflow
+- **Procedure:** Inspect every required observation through real clients in running, paused, completed, error, blocked, and destroyed states.
+- **Environment / configuration:** Real backend plus serial browser workflow with fixtures for every required state
 - **Pass criterion:** Each observation is available only in documented phases, final logs drain, and live-only operations fail after cleanup.
-- **Status:** implemented
-- **Evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** Production stack-trace disclosure and every renderer representation are not covered as acceptance clauses.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Existing integration artifacts cover lifecycle, selected logs/results, and tags/queries separately, but no system action covers the complete observation/state matrix.
 
 ## SYSV-007 — Verify browser-to-source handoff
 
 - **Covers:** SYS-007
 - **Method:** test
-- **Procedure:** From a real browser project, request export from a real backend, compare state before/after, parse returned source, and download exact returned bytes.
-- **Environment / configuration:** Chromium/Vite plus test backend; preferably native-source execution disabled
+- **Procedure:** Export a real browser project through the backend, compare state, parse the source, and download exact response bytes.
+- **Environment / configuration:** Chromium/Vite plus real test backend with native-source execution disabled
 - **Pass criterion:** Text/filename are stable and parseable, bytes match the response, the server namespace is unchanged, and a source canary does not execute.
-- **Status:** implemented
-- **Evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js)
-- **Nonconformance:** Browser evidence mocks export; a combined real browser/backend action remains incomplete.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Backend export and browser download have durable separate coverage, but the browser scenario intercepts `/export_script`; no real browser-to-backend action exists.
 
 ## SYSV-008 — Inspect API documentation and failure alignment
 
@@ -95,42 +94,53 @@ was produced in this documentation-only change.
 
 - **Covers:** SYS-009
 - **Method:** test
-- **Procedure:** Exercise all source-bearing and safe structured paths with the gate absent/false and true, including production redaction.
-- **Environment / configuration:** Real test backend in both gate modes plus browser capability behavior
+- **Procedure:** Exercise source-bearing and safe structured paths with the gate absent, false, and true, including production redaction.
+- **Environment / configuration:** Real backend and browser runs selected independently with the gate absent, false, and true
 - **Pass criterion:** Disabled mode executes no canary and returns policy failures; enabled mode admits only restricted source; safe non-source and pure export paths work in both.
-- **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/evaluation-capability.spec.js`](../../../gui/tests/e2e/evaluation-capability.spec.js)
-- **Nonconformance:** Server-backed CI forces true; real disabled HTTP/browser execution remains unselected.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Component fixtures cover both policy values, but server-backed CI forces true and the browser capability scenario intercepts the relevant routes.
 
 ## SYSV-010 — Verify execution and retention bounds
 
 - **Covers:** SYS-010
 - **Method:** test
-- **Procedure:** Use controlled clocks to exercise run timeout, idle block/strip, running exclusion, retained state, and later removal.
-- **Environment / configuration:** Backend component environment with deterministic clocks
-- **Pass criterion:** Every threshold and exclusion matches the requirement and produces the documented observable state.
-- **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
-- **Nonconformance:** Running exclusion uses manually set state rather than a real active task; cleanup failure is separate.
+- **Procedure:** Use a controlled clock for run timeout, idle block/strip, active-run exclusion, and later removal.
+- **Environment / configuration:** Real backend with an injected deterministic wall clock and a genuinely active run task
+- **Pass criterion:** Every threshold and exclusion produces the required observable state.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Existing unit fixtures rewrite timestamps, set running state manually, or call the timeout blocker directly; they do not drive the ten-minute monitor with a controlled clock.
 
 ## SYSV-011 — Verify optional local sidecar control
 
 - **Covers:** SYS-011
 - **Method:** test
-- **Procedure:** Test disabled/invalid startup, explicit start/stop/restart, loopback listener, session initialization, and capability revocation.
-- **Environment / configuration:** Backend MCP unit/supervisor plus real local sidecar transport
+- **Procedure:** Start the integrated application in disabled, invalid, and enabled configurations; initialize one loopback session; then stop and restart it.
+- **Environment / configuration:** Real application and sidecar transport under each supported configuration
 - **Pass criterion:** Invalid enablement fails closed; disabled mode spawns nothing; valid initialization creates one session; Stop/restart revokes stale authority.
-- **Status:** implemented
-- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`mcp/test/http_integration.jl`](../../../mcp/test/http_integration.jl)
-- **Nonconformance:** Cross-site rejection through the actual browser proxy and crash-with-live-binding recovery are not system-tested.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Configuration, supervisor, and real-transport fixtures cover portions separately; no system artifact starts and probes every configuration.
 
-## SYSV-012 — Verify browser-authoritative MCP collaboration
+## SYSV-012 — Verify browser-authoritative MCP editing and lifecycle
 
 - **Covers:** SYS-012
 - **Method:** test
-- **Procedure:** Bind a real browser/client, edit through tools and GUI, provoke a stale revision, prepare/run/reset, read resources/results, inject post-delivery acknowledgement loss, and stop/restart.
+- **Procedure:** Start the real stack, list tools, edit through MCP and GUI, provoke a stale revision, prepare/run/reset, and restart.
 - **Environment / configuration:** CI Chromium/Vite, real Genie backend, real sidecar, one MCP session
-- **Pass criterion:** Valid edits are visible/unsaved, stale edits do not mutate, lifecycle stays browser-mediated, resources read, ambiguous outcome is nonretryable, and restart creates a new session.
+- **Pass criterion:** Tools are visible; edits update the unsaved design; stale work does not mutate; lifecycle updates the browser; restart creates a session.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** Bound resource reads, real lease failure, external sanitization canaries, and ambiguous outcome are not all exercised end to end.
+- **Nonconformance:** This action does not verify bound resource reads or post-delivery acknowledgement loss; SYSV-013 defines that missing system action.
+
+## SYSV-013 — Verify MCP resources and ambiguous outcomes
+
+- **Covers:** SYS-012
+- **Method:** test
+- **Procedure:** Read each bound resource, then lose acknowledgement after one delivered mutation and attempt automatic replay.
+- **Environment / configuration:** Real browser, backend, and sidecar with controllable browser acknowledgement delivery
+- **Pass criterion:** Resources match their contract; uncertainty returns `OUTCOME_UNKNOWN`, desynchronizes, and does not replay.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Unit fixtures cover post-delivery uncertainty and transport fixtures list resources, but no cross-stack artifact reads bound resources or injects acknowledgement loss.
