@@ -38,24 +38,35 @@ updating frontend and MCP derivations.
 
 ## Limits and automatic retention
 
-- Each active run segment has a ten-minute wall-clock cap. Resume starts a new segment;
-  do not describe one ten-minute budget across the whole simulation.
-- The cleanup service scans approximately once per minute.
-- A non-running record idle for thirty minutes is blocked and heavy references are
-  stripped while status remains observable.
-- Blocking refreshes activity; the retained record is removed after a further 300 idle
-  minutes.
+- The run loop checks elapsed wall-clock time immediately before each cooperative
+  simulation step. It blocks the run when the elapsed segment time is strictly greater
+  than ten minutes; it does not interrupt a step already in progress. Resume starts a
+  new segment, so do not describe one ten-minute budget across the whole simulation.
+- The cleanup service scans approximately once per minute and also uses strict
+  greater-than comparisons. On a scan, a non-running record idle for more than thirty
+  minutes is blocked and its heavy references are stripped while status remains
+  observable.
+- Blocking refreshes activity. A later scan removes the retained record after it has
+  then been idle for more than 300 minutes.
 
-Exact intervals are current public behavior but are not configurable. Whether they are
-permanent policy is unresolved.
+These are cooperative, scan-bound current behaviors rather than exact deadline
+guarantees. The thresholds are not configurable, and whether the intended policy should
+instead enforce hard deadlines or exact boundary behavior is unresolved.
 
 ## Cleanup semantics
 
 Cleanup attempts to trace out assigned state and clear network, mapping, graph, and
 payload references. Individual trace-out failures are logged and do not stop remaining
-attempts. Explicit destroy removes the registry entry even when cleanup reports a
-warning. Therefore cleanup is best effort; neither a `true` return nor state removal
-proves every external/native resource was released.
+attempts, but they are not aggregated into the cleanup return value. If no outer cleanup
+exception occurs, the current implementation logs success and returns `true` even when
+an individual trace-out failed. Explicit destroy then removes the registry entry, so
+that failure does not reach the caller as a cleanup warning.
+
+Cleanup also clears the references needed to retry an individual failed release.
+Therefore cleanup is best effort: neither a `true` return nor state removal proves every
+external/native resource was released, and a later invocation does not guarantee a
+retry. Caller-visible partial-failure reporting and retry semantics are unresolved
+desired guarantees, not observed current contracts.
 
 ## Logs, panic, and live metadata
 
@@ -77,5 +88,7 @@ confirmed.
 ## Unresolved questions
 
 - Is restart volatility an explicit non-goal?
-- What cleanup guarantee is required when tracing out one assigned subsystem fails?
-- Should limits remain fixed or become deployment configuration?
+- Must a failed assigned-state release reach the caller, and should enough state be
+  retained to retry it?
+- Should time limits remain fixed or become deployment configuration, and are they
+  intended as hard/exact deadlines rather than cooperative scan-bound thresholds?

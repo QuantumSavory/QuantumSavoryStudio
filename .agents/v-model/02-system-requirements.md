@@ -23,11 +23,11 @@ current branch.
 
 ## SYS-003 — Normalize supported project and payload versions
 
-- **Normative statement:** The product shall decode every declared supported legacy project or additive API payload into the current canonical semantics and reject future or malformed unsupported versions without partially replacing the active project.
+- **Normative statement:** The product shall decode every declared supported legacy project or additive API payload into the current canonical semantics and reject integer project versions newer than the current schema without partially replacing the active project.
 - **Parents:** STK-006
-- **Acceptance criterion:** Schema-v1 and each declared legacy fixture normalize without input mutation; an unsupported future version fails before current-project teardown; simulator/export payloads exclude frontend-only fields.
+- **Acceptance criterion:** Schema-v1 and each declared legacy shape normalize without input mutation; an integer version above the current schema fails before current-project teardown; simulator/export payloads exclude frontend-only fields. Current coercion of missing or non-integer versions to legacy zero and acceptance of negative versions are characterized but are not confirmed support guarantees.
 - **Verification:** SYSV-003 (test)
-- **Origin / risk:** Released schema normalization and additive physical-field compatibility; support horizon unresolved; high compatibility risk
+- **Origin / risk:** Released schema normalization and additive physical-field compatibility; support horizon and malformed-version intent unresolved; high compatibility risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 
 ## SYS-004 — Expose authoritative supported-input metadata
@@ -86,11 +86,11 @@ current branch.
 
 ## SYS-010 — Bound run segments and inactive state
 
-- **Normative statement:** The service shall enforce a finite wall-clock limit on each active run segment, block and release heavy references from an idle non-running simulation, and later remove its retained status record.
+- **Normative statement:** The service shall check a finite wall-clock limit cooperatively between simulation steps, periodically block and release heavy references from an idle non-running simulation, and later remove its retained status record.
 - **Parents:** STK-007
-- **Acceptance criterion:** Under a controlled clock, a run segment reaching ten minutes is blocked; a non-running state idle thirty minutes is blocked and stripped; after a further 300 idle minutes its record is absent; active runs are not treated as idle.
+- **Acceptance criterion:** A run segment whose elapsed time is strictly greater than ten minutes is blocked before its next step, without interrupting a step already in progress. At a cleanup scan, a non-running state idle for more than thirty minutes is blocked and stripped; blocking refreshes activity, and a later scan removes the record after more than 300 additional idle minutes. Active runs are not treated as idle.
 - **Verification:** SYSV-010 (test)
-- **Origin / risk:** Public current time policy; fixed-versus-configurable intent unresolved; medium availability risk
+- **Origin / risk:** Current cooperative time policy; hard-boundary and fixed-versus-configurable intent unresolved; medium availability risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## SYS-011 — Gate local collaboration explicitly

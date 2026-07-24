@@ -26,9 +26,13 @@ Encoding and projection helpers must not mutate their input. In memory, edges re
 
 ## Version and compatibility
 
-Current stored schema is version 1. A missing version is treated as legacy schema 0 and
-normalized; future versions are rejected. Released behavior also accepts selected
-additive legacy physical payload fields when absent or `null`.
+Current stored schema is version 1. The codec coerces a missing or non-integer
+`schemaVersion` (including `null`, strings, and non-integer numbers) to legacy schema 0
+and normalizes it. Negative integer versions also follow the legacy normalization path;
+only integer versions greater than the current version are rejected. Whether
+non-integer and negative values should instead be rejected as malformed is unresolved.
+Released behavior also accepts selected additive legacy physical payload fields when
+absent or `null`.
 
 Compatibility is intentional in current public prose, but no retirement horizon is
 declared. Preserve unknown extension fields only if a specification explicitly says so;
@@ -55,10 +59,18 @@ and never save automatically.
 Switch/import/reset performs this ordering:
 
 1. preflight and decode the candidate before tearing down the current view;
-2. serialize overlapping transitions and reject stale completion;
+2. allocate a transition generation so that a later transition invalidates an older
+   completion rather than waiting for it through a serialization lock;
 3. await collaboration unbind and stop local state/log polling;
 4. clear session-owned UI state and release the old map graph for one Vue tick;
-5. install the candidate while preserving its canonical name.
+5. install the candidate only if its generation is still current, while preserving its
+   canonical name.
+
+The live graph is transiently cleared before the post-`nextTick` generation check. A
+superseding or reentrant operation in that interval can observe the cleared graph, and a
+stale transition returns without restoring its candidate. Current guards and tests do
+not establish serialized or atomic replacement across that interval. Whether project
+replacement must be atomic from the user/session perspective is unresolved.
 
 Current server cleanup targets the destination project namespace before installation,
 not the source project's server simulation. The source state may remain until reopening
@@ -81,6 +93,10 @@ derived attachment edges/bounds remain presentation data.
 ## Unresolved questions
 
 - Must interactive import accept every partial v0/v1 shape accepted by the codec?
+- Are missing, non-integer, and negative `schemaVersion` values intentionally supported
+  as legacy schema 0, or should only an absent version select that path?
+- Must overlapping project replacement be serialized or otherwise atomic across the
+  transient cleared-graph interval?
 - Are exact local-storage keys a supported interface?
 - Is leaving the source project's backend simulation alive on a project switch
   deliberate?

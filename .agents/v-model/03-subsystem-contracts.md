@@ -85,9 +85,9 @@ These records define logical boundaries without making file layout normative.
 
 ## SUB-010 — Restricted-source admission and execution boundary
 
-- **Normative statement:** Every source-bearing surface shall share one policy gate, complete-source parser, profile validator, server-owned lexical context, and evaluated-value contract before reaching the sole native evaluation boundary.
+- **Normative statement:** All source-bearing surfaces shall use complete-source parsing and applicable profile validation; only executing surfaces shall also use the policy gate, server-owned context, evaluated-value checks, and sole native evaluation boundary.
 - **Parents:** SYS-009
-- **Acceptance criterion:** An inventory of all source-bearing paths reaches the gate and exact-subtree validator; forbidden syntax/capability fails before execution; admitted source receives only placement-specific bindings and expected-type/range checks.
+- **Acceptance criterion:** Forbidden syntax fails on every path; non-executing export works with evaluation disabled; execution denies unless enabled and limits admitted source to placement bindings and expected type/range.
 - **Verification:** INTV-010 (test)
 - **Origin / risk:** Central policy/validator/evaluator and coverage tests; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
@@ -114,7 +114,7 @@ These records define logical boundaries without making file layout normative.
 
 - **Normative statement:** One versioned contract shall drive external tools; catalog reads shall use backend metadata, design and lifecycle mutations shall relay through the browser, and simulation reads shall use the transport-neutral service while verifying collaboration context.
 - **Parents:** SYS-012
-- **Acceptance criterion:** The advertised registry loads once from the contract; each tool group reaches its declared boundary; one session is enforced; stable errors cross transport; every advertised resource has a verified representation path.
+- **Acceptance criterion:** Tool groups reach their declared boundaries, one session is enforced, and documented tool errors cross transport. Resource readability, URI encoding, and missing-representation error guarantees remain unresolved.
 - **Verification:** INTV-013 (test)
-- **Origin / risk:** Contract loader/adapters and transport tests; resource/schema coverage incomplete; high interface risk
+- **Origin / risk:** Contract/adapters/transport evidence; optimistic links and resource/schema coverage remain unresolved; high interface risk
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)

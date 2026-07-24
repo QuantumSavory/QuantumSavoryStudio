@@ -30,12 +30,21 @@ backward-compatible names, schemas, result fields, resources, and errors is unre
 
 The sidecar publishes current-design and simulation-state resources plus catalog,
 slot-result, and protocol-result templates. Backend adapters return primitive/JSON,
-HTML, or PNG representations. Existing transport tests list static resources but do not
-successfully read every bound resource/template or verify every missing-representation
-error.
+HTML, or PNG representations.
 
-Resource handler errors currently do not share all structured tool-error behavior. Treat
-this as a visible verification/interface gap.
+Result-producing adapters currently advertise both HTML and PNG resource links before
+establishing that both representations exist. Rendering can leave either representation
+absent, so an advertised link is optimistic rather than a guarantee that the resource
+can be read. Slot and protocol result identifiers are also interpolated into resource
+URIs without percent-encoding while the resource path matcher treats `/` as a
+separator.
+
+Existing transport tests list static resources but do not successfully read every bound
+resource/template or verify every missing-representation error. Missing representations
+can surface as a generic sidecar error rather than the structured tool-error shape.
+Availability-aware advertisement, URI-safe identifier handling, and stable resource
+errors are unresolved desired guarantees; treat them as visible
+verification/interface gaps.
 
 ## Revision and operation fields
 
@@ -71,6 +80,9 @@ transactional snapshot.
   recorded only for an explicit prepare action.
 - Operation-ID reuse with different arguments can return an unrelated cached result.
 - Cache eviction/rebind can make a nominally idempotent replay act again.
+- HTML and PNG result links are advertised optimistically even when one representation
+  is unavailable.
+- Resource identifiers are not encoded before interpolation into path-based URIs.
 - Successful reads for every advertised resource template lack durable system evidence.
 - Result schemas are often only the generic object default.
 
@@ -87,3 +99,7 @@ transactional snapshot.
 - Is idempotence intentionally bounded, and must same-ID/different-argument reuse fail?
 - Is contract version 1 a compatibility promise or only a synchronization marker?
 - Must `simulation_run` populate the prepared revision when it auto-prepares?
+- Must every advertised result link be readable, and which representation formats are
+  guaranteed?
+- Must arbitrary durable identifiers be URI-safe through encoding, and must resource
+  failures use the stable tool-error shape?

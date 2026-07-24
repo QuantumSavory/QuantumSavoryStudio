@@ -21,11 +21,12 @@ Failure responses have this common core:
 {
   "success": false,
   "error": "message",
-  "status_code": 400,
-  "error_code": "optional stable code",
-  "details": {}
+  "status_code": 400
 }
 ```
+
+The helper adds `error_code` only when it is nonempty and adds `details` only when it is
+not `nothing`; neither field is part of the required common core.
 
 Do not infer one universal success envelope. Representative current shapes are:
 

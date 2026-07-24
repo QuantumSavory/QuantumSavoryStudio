@@ -5,11 +5,11 @@ logical boundaries.
 
 ## CMP-001 — Codec version and identity invariants
 
-- **Normative statement:** Project decoding shall reject future versions before live-state replacement, hydrate durable endpoint IDs into model references, and preserve input data while normalization/encoding produces independent values.
+- **Normative statement:** Project decoding shall reject integer versions newer than the current schema before live-state replacement, hydrate durable endpoint IDs into model references, and preserve input data while normalization/encoding produces independent values.
 - **Parents:** SUB-002
-- **Acceptance criterion:** Future-version, malformed-reference, legacy, and asymmetric-identity fixtures distinguish rejection, hydration, normalization, cloning, and source non-mutation.
+- **Acceptance criterion:** An integer version above the current schema is rejected before replacement; documented legacy inputs hydrate endpoint references and normalize into independent values without mutating their source. Current missing/non-integer coercion and negative-version acceptance are characterized separately rather than treated as confirmed compatibility requirements.
 - **Verification:** UNITV-001 (test)
-- **Origin / risk:** Codec/session tests; high data-loss risk
+- **Origin / risk:** Codec/session behavior; malformed-version intent unresolved; high data-loss risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 
 ## CMP-002 — Candidate-based design reconciliation
@@ -32,20 +32,20 @@ logical boundaries.
 
 ## CMP-004 — Cooperative run-task invariants
 
-- **Normative statement:** A state shall own at most one cooperative run task, set running before exposure, yield between simulation steps, retain its cumulative target across pause, and update pause/task/error/time fields coherently on every exit.
+- **Normative statement:** A state shall own at most one cooperative run task, set running before exposure, yield between simulation steps, check its segment timeout before each step without interrupting an in-progress step, retain its cumulative target across pause, and update pause/task/error/time fields coherently on every exit.
 - **Parents:** SUB-006
-- **Acceptance criterion:** Duplicate-run, progress-before-pause, acknowledged pause, same-target resume, later-target extension, timeout, task error, and destroy fixtures assert task reference and serialized flags after each transition.
+- **Acceptance criterion:** Duplicate run is rejected; progress precedes acknowledged pause; same-target resume retains the target; a later target can extend it; elapsed segment time strictly greater than ten minutes blocks before the next step; task error and destroy leave the documented task reference and serialized flags.
 - **Verification:** UNITV-004 (test)
 - **Origin / risk:** Runtime lifecycle unit evidence; high state/race risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## CMP-005 — Best-effort cleanup mechanics
 
-- **Normative statement:** Cleanup shall attempt every assigned-state release independently, clear heavy process references, report partial failure, and allow explicit or timed policy to remove the registry record without claiming every native resource was released.
+- **Normative statement:** Cleanup shall attempt every assigned-state release independently and clear heavy process references. Its current best-effort success result and registry removal shall not be interpreted as proof that every native resource was released.
 - **Parents:** SUB-006, SUB-007
-- **Acceptance criterion:** Success and injected-failure fixtures prove all cleanup attempts occur, retained references and warning state are characterized, a second invocation is deterministic, and subsequent live-only operations fail.
+- **Acceptance criterion:** When one assigned-state release fails, that failure is logged, remaining releases are attempted, heavy references are cleared, and the current call can still return success before registry removal. A later cleanup has no retained reference with which to guarantee retry of the failed release, and subsequent live-only operations fail.
 - **Verification:** UNITV-005 (test)
-- **Origin / risk:** Current cleanup implementation; failure-path evidence planned; high resource-leak risk
+- **Origin / risk:** Current cleanup implementation; caller-visible partial-failure and retry guarantees unresolved, and failure-path evidence planned; high resource-leak risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## CMP-006 — Exact-subtree evaluation invariant
