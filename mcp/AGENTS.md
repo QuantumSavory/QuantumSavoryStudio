@@ -9,19 +9,19 @@ optional component of WebQuantumSavory, not an independently released product.
 
 - Open [MCP architecture](../.agents/context/mcp/architecture.md) for process,
   ownership, trust-boundary, or failure-model changes.
-- Open [the tool contract](../.agents/context/mcp/tool-contract.md) for tools,
-  resources, schemas, dispatch, sessions, revisions, or errors.
+- Open [the tool contract](../.agents/context/mcp/tool-contract.md) to look up tools,
+  resources, schemas, dispatch, sessions, revisions, or stable errors.
 - Open [browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
   binding, leases, snapshots, commands, or lifecycle relaying.
 - Open [sidecar operations](../.agents/context/mcp/sidecar-operations.md) before
-  enabling, upgrading, testing, or recovering the sidecar.
-- Open [the V-model](../.agents/v-model/index.md) when behavior or evidence changes.
+  enabling, upgrading, testing, recovering, or coordinating a cross-component
+  tool/resource rollout.
 
 ## Commands
 
 - Instantiate: `julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'`
 - Sidecar unit checks: `julia --startup-file=no --project=. test/runtests.jl`
-- Full MCP boundary checks from the repository root: `./ci/mcp-unit.sh`
+- Full MCP boundary checks: `../ci/mcp-unit.sh`
 
 ## Local rules
 

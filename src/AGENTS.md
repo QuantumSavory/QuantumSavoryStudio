@@ -16,11 +16,11 @@ Swagger remain governed by `../AGENTS.md` and `../routes.jl`.
 - Open [metadata](../.agents/context/backend/constructor-and-tag-metadata.md),
   [States Zoo/rendering](../.agents/context/backend/states-zoo-and-rendering.md), or
   [script export](../.agents/context/backend/script-export.md) only for those domains.
-- Open [the V-model](../.agents/v-model/index.md) when behavior or evidence changes.
 
 ## Local checks
 
-- Focused package checks: `(cd ../test && julia --project=. runtests.jl test_unit)`
+- Focused package checks: `(cd ../test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true
+  julia --project=. runtests.jl test_unit)`
 - Canonical backend unit entry point: `../ci/backend-unit.sh`
 
 ## Local rules

@@ -1,12 +1,13 @@
 # MCP Sidecar Operations
 
 - **Context need:** Task playbook
-- **Open when:** Enabling, starting, stopping, testing, upgrading, or recovering the MCP
-  sidecar.
-- **Do not open when:** Reasoning about authoring semantics or editing a tool schema.
+- **Open when:** Enabling, starting, stopping, testing, upgrading, recovering the MCP
+  sidecar, or coordinating a cross-component tool/resource rollout.
+- **Do not open when:** Reasoning about authoring semantics or only looking up one
+  tool/schema contract.
 - **Related specification IDs:** SYS-011, SUB-011, CMP-009
 - **Review when:** Environment configuration, dependency pin, transport adapter,
-  supervisor lifecycle, or operational diagnostics change.
+  supervisor lifecycle, operational diagnostics, or tool/resource rollout changes.
 
 ## Enable safely
 
@@ -28,6 +29,8 @@ the supported browser flow explicitly initializes it. A headerless local caller 
 reach the backend start route, so this is user-flow gating rather than authentication.
 
 ## Work on the isolated application
+
+From the repository root:
 
 ```sh
 julia --startup-file=no --project=mcp -e 'using Pkg; Pkg.instantiate()'
