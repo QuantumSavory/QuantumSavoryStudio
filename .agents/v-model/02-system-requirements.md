@@ -86,11 +86,11 @@ current branch.
 
 ## SYS-010 — Bound run segments and inactive state
 
-- **Normative statement:** The service shall check a finite wall-clock limit cooperatively between simulation steps, periodically block and release heavy references from an idle non-running simulation, and later remove its retained status record.
+- **Normative statement:** The service shall enforce the documented time policy for active run segments and inactive simulation state without treating active work as idle.
 - **Parents:** STK-007
-- **Acceptance criterion:** A run segment whose elapsed time is strictly greater than ten minutes is blocked before its next step, without interrupting a step already in progress. At a cleanup scan, a non-running state idle for more than thirty minutes is blocked and stripped; blocking refreshes activity, and a later scan removes the record after more than 300 additional idle minutes. Active runs are not treated as idle.
+- **Acceptance criterion:** Under a controlled clock, an active segment is blocked at the first supported timeout opportunity after the ten-minute policy; a non-running state is blocked and stripped at the first retention opportunity after thirty idle minutes, then removed after 300 further idle minutes; active runs are excluded from idle cleanup.
 - **Verification:** SYSV-010 (test)
-- **Origin / risk:** Current cooperative time policy; hard-boundary and fixed-versus-configurable intent unresolved; medium availability risk
+- **Origin / risk:** Public numeric policy; equality, scheduling tolerance, interruption, and configurability remain unresolved; medium availability risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## SYS-011 — Gate local collaboration explicitly

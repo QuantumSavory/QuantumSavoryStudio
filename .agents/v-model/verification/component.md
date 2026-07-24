@@ -4,12 +4,12 @@
 
 - **Covers:** CMP-001
 - **Method:** test
-- **Procedure:** Run legacy, current, future, malformed-reference, cloning, hydration, and nonmutation codec/session fixtures.
+- **Procedure:** Run legacy, current, future, malformed-reference, cloning, hydration, and nonmutation codec fixtures.
 - **Environment / configuration:** Node 24 Vitest/jsdom
-- **Pass criterion:** Version branches, endpoint references, independent output values, and live-state preservation match every clause.
+- **Pass criterion:** Version rejection, endpoint hydration, independent output values, and source nonmutation match every codec clause.
 - **Status:** implemented
-- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js)
-- **Nonconformance:** Session import intentionally rejects an envelope that the codec can normalize; no current execution record is linked.
+- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
+- **Nonconformance:** This does not establish active-session preservation after decode failure; UNITV-015 defines that action.
 
 ## UNITV-002 — Verify atomic design reconciliation
 
@@ -86,7 +86,7 @@
 - **Pass criterion:** Fixtures discriminate coalesced/cached success, conflict, cancellation, desynchronization, and outcome unknown without duplicate visible mutation.
 - **Status:** implemented
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl)
-- **Nonconformance:** A hash-only mismatch, cache eviction/rebind replay, and same-ID/different-argument behavior are not covered; UNITV-014 defines that decision-dependent action.
+- **Nonconformance:** UNITV-014 covers the missing hash-only fixture. Cache eviction/rebind and same-ID/different-argument semantics remain unresolved outside this action.
 
 ## UNITV-009 — Verify single-session transport and logger
 
@@ -110,27 +110,27 @@
 - **Evidence:** None
 - **Nonconformance:** Existing asymmetric fixtures do not reorder the node array.
 
-## UNITV-011 — Verify wall-clock run timeout
+## UNITV-011 — Verify run-timeout exit state
 
 - **Covers:** CMP-004
 - **Method:** test
-- **Procedure:** Start a genuine cooperative run under an injected monotonic clock, sample at exactly ten minutes, advance strictly past ten minutes, and allow the next pre-step timeout check without directly invoking the blocker.
+- **Procedure:** Drive a genuine cooperative run through its timeout branch under an injected clock without directly invoking the blocker.
 - **Environment / configuration:** Julia backend unit environment with injected clock and real run task
-- **Pass criterion:** The exact-threshold sample does not time out; the next check after exceeding ten minutes blocks the state, and running/task, timeout/error/time, and heavy-reference fields serialize coherently without creating a second task.
+- **Pass criterion:** Timeout blocks the state and leaves running/task, timeout/error/time, and heavy-reference fields coherent without creating a second task.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Current tests call `block_simulation` directly rather than exercising the wall-clock monitor.
+- **Nonconformance:** Current tests call `block_simulation` directly; exact timing semantics remain a system-policy decision.
 
-## UNITV-012 — Verify cleanup partial failure and repeat behavior
+## UNITV-012 — Verify cleanup partial failure
 
 - **Covers:** CMP-005
 - **Method:** test
-- **Procedure:** Inject an assigned-state release failure, record every attempted release and log outcome, inspect cleared references and the returned result, then invoke cleanup again.
+- **Procedure:** Inject one assigned-state release failure, record all attempted releases, and inspect the caller-visible outcome and later live-only access.
 - **Environment / configuration:** Julia backend unit environment with injectable resource-release failures
-- **Pass criterion:** Remaining releases are attempted; the individual failure is logged but not returned absent an outer exception; references clear; a second call cannot retry it.
+- **Pass criterion:** Remaining releases are attempted, complete-release success is not returned, and subsequent live-only access fails.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Failure injection does not exist; whether callers should receive the failure and retain retryable state requires maintainer confirmation.
+- **Nonconformance:** Failure injection does not exist, current code reports success and clears retry state, and the intended caller/retry contract requires maintainer confirmation.
 
 ## UNITV-013 — Inspect evaluation-site completeness
 
@@ -143,13 +143,24 @@
 - **Evidence:** None
 - **Nonconformance:** No durable static evaluator inventory is currently stored.
 
-## UNITV-014 — Verify hash and operation-identity discrimination
+## UNITV-014 — Verify hash-only acknowledgement mismatch
 
 - **Covers:** CMP-008
 - **Method:** test
-- **Procedure:** Acknowledge the expected revision with only the design hash wrong, reuse one operation ID with different arguments before and after cache eviction, and retry after unbind/rebind.
-- **Environment / configuration:** Julia backend collaboration-hub unit environment with bounded-cache controls
-- **Pass criterion:** A hash-only mismatch yields `OUTCOME_UNKNOWN`; cached same-ID/different-argument reuse returns the original result without delivery; reuse after eviction or rebind can deliver again.
+- **Procedure:** Acknowledge the expected revision and operation ID while returning only the wrong design hash.
+- **Environment / configuration:** Julia backend collaboration-hub unit environment
+- **Pass criterion:** The hub desynchronizes and returns `OUTCOME_UNKNOWN` without treating the acknowledgement as committed success.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Hash-only discrimination is absent; operation-argument binding and replay-horizon behavior require maintainer confirmation.
+- **Nonconformance:** The hash-only fixture is absent. Operation-argument binding and replay horizon remain an unresolved contract question outside this action.
+
+## UNITV-015 — Verify failed-decode session preservation
+
+- **Covers:** CMP-001
+- **Method:** test
+- **Procedure:** With a populated active project, attempt open/import using future-schema and malformed-reference documents that fail during codec preflight.
+- **Environment / configuration:** Node 24 Vitest/jsdom project-session environment
+- **Pass criterion:** Each failure occurs before teardown and preserves the active graph, project name, selection, and session-owned state.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Codec rejection is tested directly, but no session fixture carries that rejection through preflight with an active project.

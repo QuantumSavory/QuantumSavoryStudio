@@ -61,7 +61,11 @@ Committed test artifacts are therefore at most `implemented`; no action is marke
 - MCP operation-ID replay is bounded and does not bind an ID to its arguments despite
   idempotent annotations. Direct run auto-preparation can omit the prepared revision,
   and advertised result resources are not all proven readable or URI-safe.
-- Cleanup is best effort, and exact failure/recovery guarantees remain unconfirmed.
+- The 10/30/300-minute policy is public, but equality, scheduling tolerance,
+  interruption, and configurability remain unconfirmed; current strict cooperative
+  checks are characterization, not accepted policy.
+- Cleanup currently reports complete success after some per-resource failures and clears
+  retry state. The draft partial-failure requirement and retry policy need confirmation.
 
 Resolve these through a mini-V: confirm intent, revise affected records, add or update
 verification actions, and record current nonconformance rather than rewriting source

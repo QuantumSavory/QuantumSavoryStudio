@@ -28,23 +28,23 @@ These actions verify logical boundaries; no current run was made.
 
 - **Covers:** SUB-003
 - **Method:** test
-- **Procedure:** Invoke registered design operations through command-service and MCP bridge paths using valid, invalid, mixed, aliased, and edit-locked transactions.
-- **Environment / configuration:** Frontend unit environment plus MCP browser workflow
+- **Procedure:** Invoke every advertised operation through both its GUI action and MCP bridge using valid, invalid, mixed, aliased, and edit-locked transactions.
+- **Environment / configuration:** Real browser command service and MCP bridge against one canonical fixture
 - **Pass criterion:** Equivalent advertised paths share semantics; invalid work leaves live state unchanged; valid work preserves retained identities and marks unsaved exactly once.
-- **Status:** implemented
-- **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** Current parity checks do not semantically prove every historical GUI edit uses the service.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Command-service transactions have strong direct tests and MCP has a successful browser workflow, but invalid/mixed/aliased/edit-locked parity is not driven through both entry points.
 
 ## INTV-004 — Verify payload/topology construction
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Submit asymmetric endpoints, physical and virtual edges, reversed duplicate physical pairs, invalid resolved values, and placement-gated protocols.
+- **Procedure:** Apply asymmetric endpoints, physical/virtual edges, reversed duplicate pairs, invalid values, and placement-gated protocols to validation/construction, then exercise basic HTTP parse validation.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Validation and construction preserve the asserted endpoint roles, build only the physical graph, retain permitted virtual protocols, and reject each listed invalid fixture without corrupting state.
+- **Pass criterion:** Validation and construction preserve endpoint roles, build only the physical graph, retain permitted virtual protocols, reject each listed direct fixture, and reject the basic malformed HTTP payloads.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
-- **Nonconformance:** A true reordered node-array fixture is absent and is tracked by UNITV-010; selected nested malformed JSON shapes can still escape canonical validation.
+- **Nonconformance:** Invalid discriminating fixtures are direct validator tests rather than retained-state HTTP tests; reordered nodes are tracked by UNITV-010, and selected nested malformed shapes can escape validation.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
@@ -62,11 +62,11 @@ These actions verify logical boundaries; no current run was made.
 - **Covers:** SUB-006
 - **Method:** test
 - **Procedure:** Exercise valid and invalid create/replace/prepare/run/pause/resume/block/destroy transitions, including concurrent or duplicate requests.
-- **Environment / configuration:** Backend unit plus real HTTP integration
+- **Environment / configuration:** Real HTTP integration with controllable competing same-name requests
 - **Pass criterion:** Per-name operations serialize, failed replacement preserves healthy state, task/flags remain coherent, and invalid transitions use documented errors.
-- **Status:** implemented
-- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
-- **Nonconformance:** Missing/wrong-type lifecycle request fields lack a durable boundary action.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Existing artifacts cover failed replacement, duplicate run, pause, and selected lock cleanup, but never issue competing lifecycle requests against one name; malformed request fields are also uncovered.
 
 ## INTV-007 — Verify observation/resource availability
 

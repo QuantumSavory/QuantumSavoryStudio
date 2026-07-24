@@ -7,8 +7,8 @@ but did not execute product test suites or create a stable run record.
 | --- | --- | --- |
 | [Acceptance](acceptance.md) | ACC-001 through ACC-007 | Planned pending stakeholder confirmation |
 | [System](system.md) | SYSV-001 through SYSV-013 | 3 implemented; 10 planned |
-| [Integration](integration.md) | INTV-001 through INTV-013 | 6 implemented; 7 planned |
-| [Component](component.md) | UNITV-001 through UNITV-014 | 9 implemented; 5 planned |
+| [Integration](integration.md) | INTV-001 through INTV-013 | 4 implemented; 9 planned |
+| [Component](component.md) | UNITV-001 through UNITV-015 | 9 implemented; 6 planned |
 
 ## Status policy
 

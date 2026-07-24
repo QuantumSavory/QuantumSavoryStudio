@@ -107,10 +107,10 @@ No product suite was run for this documentation-only change.
 - **Method:** test
 - **Procedure:** Use a controlled clock for run timeout, idle block/strip, active-run exclusion, and later removal.
 - **Environment / configuration:** Real backend with an injected deterministic wall clock and a genuinely active run task
-- **Pass criterion:** Every threshold and exclusion produces the required observable state.
+- **Pass criterion:** Transitions occur no earlier than each threshold and no later than the first supported check after it; active runs remain excluded from idle cleanup.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Existing unit fixtures rewrite timestamps, set running state manually, or call the timeout blocker directly; they do not drive the ten-minute monitor with a controlled clock.
+- **Nonconformance:** Existing fixtures rewrite timestamps, set running manually, or call the blocker directly; the accepted equality, scheduling tolerance, and interruption policy also awaits maintainer confirmation.
 
 ## SYSV-011 — Verify optional local sidecar control
 

@@ -56,7 +56,7 @@ and never save automatically.
 
 ## Project transitions
 
-Switch/import/reset performs this ordering:
+Open, demo-open, and import transitions through `commitCandidate` perform this ordering:
 
 1. preflight and decode the candidate before tearing down the current view;
 2. allocate a transition generation so that a later transition invalidates an older

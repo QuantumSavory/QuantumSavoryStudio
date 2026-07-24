@@ -8,7 +8,7 @@ logical boundaries.
 - **Normative statement:** Project decoding shall reject integer versions newer than the current schema before live-state replacement, hydrate durable endpoint IDs into model references, and preserve input data while normalization/encoding produces independent values.
 - **Parents:** SUB-002
 - **Acceptance criterion:** An integer version above the current schema is rejected before replacement; documented legacy inputs hydrate endpoint references and normalize into independent values without mutating their source.
-- **Verification:** UNITV-001 (test)
+- **Verification:** UNITV-001 (test), UNITV-015 (test)
 - **Origin / risk:** Codec/session behavior; malformed-version intent unresolved; high data-loss risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 
@@ -32,20 +32,20 @@ logical boundaries.
 
 ## CMP-004 — Cooperative run-task invariants
 
-- **Normative statement:** A state shall own at most one cooperative run task, set running before exposure, yield between simulation steps, check its segment timeout before each step without interrupting an in-progress step, retain its cumulative target across pause, and update pause/task/error/time fields coherently on every exit.
+- **Normative statement:** A state shall own at most one cooperative run task, set running before exposure, yield between simulation steps, retain its cumulative target across pause, and update pause/task/error/time fields coherently on every exit, including timeout.
 - **Parents:** SUB-006
-- **Acceptance criterion:** Duplicate run is rejected; progress precedes acknowledged pause; same-target resume retains the target; a later target can extend it; elapsed segment time strictly greater than ten minutes blocks before the next step; task error and destroy leave the documented task reference and serialized flags.
+- **Acceptance criterion:** Duplicate run is rejected; progress precedes acknowledged pause; same-target resume retains the target; a later target can extend it; timeout, task error, and destroy leave the documented task reference and serialized flags.
 - **Verification:** UNITV-004 (test), UNITV-011 (test)
 - **Origin / risk:** Runtime lifecycle unit evidence; high state/race risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
-## CMP-005 — Best-effort cleanup mechanics
+## CMP-005 — Cleanup completeness and partial failure
 
-- **Normative statement:** Cleanup shall attempt every assigned-state release independently and clear heavy process references. Its current best-effort success result and registry removal shall not be interpreted as proof that every native resource was released.
+- **Normative statement:** Cleanup shall attempt every assigned-state release independently, make heavy process references unavailable, and distinguish complete release from partial failure without claiming unverified native release.
 - **Parents:** SUB-006, SUB-007
-- **Acceptance criterion:** When one assigned-state release fails, that failure is logged, remaining releases are attempted, heavy references are cleared, and the current call can still return success before registry removal. A later cleanup has no retained reference with which to guarantee retry of the failed release, and subsequent live-only operations fail.
+- **Acceptance criterion:** Successful cleanup clears heavy references and ends live-only access. With one injected release failure, all remaining releases are attempted and the caller receives a partial-failure outcome rather than complete-release success.
 - **Verification:** UNITV-005 (test), UNITV-012 (test)
-- **Origin / risk:** Current cleanup implementation; caller-visible partial-failure and retry guarantees unresolved, and failure-path evidence planned; high resource-leak risk
+- **Origin / risk:** Public resource policy plus proposed partial-failure guarantee; caller visibility and retryability await maintainer confirmation; high resource-leak risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## CMP-006 — Exact-subtree evaluation invariant
@@ -70,7 +70,7 @@ logical boundaries.
 
 - **Normative statement:** The collaboration hub shall compare expected/current revisions before delivery, coalesce currently cached operation IDs, verify browser revision/hash acknowledgements, and mark a binding desynchronized when delivery may have changed the design but acknowledgement cannot prove the result.
 - **Parents:** SUB-012
-- **Acceptance criterion:** Concurrent duplicate, stale revision, pre-delivery expiry, post-delivery expiry, wrong revision/hash, and reused-ID fixtures distinguish cached success, conflict, cancellation, desynchronization, and unknown outcome.
+- **Acceptance criterion:** Concurrent same-operation duplicates, stale revision, pre-delivery expiry, post-delivery expiry, and wrong revision/hash fixtures distinguish cached success, conflict, cancellation, desynchronization, and unknown outcome.
 - **Verification:** UNITV-008 (test), UNITV-014 (test)
 - **Origin / risk:** Hub unit tests; bounded replay and same-ID/different-argument intent unresolved; high duplicate-mutation risk
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
