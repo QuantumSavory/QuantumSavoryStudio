@@ -5,7 +5,7 @@
   sidecar, or coordinating a cross-component tool/resource rollout.
 - **Do not open when:** Reasoning about authoring semantics or only looking up one
   tool/schema contract.
-- **Related specification IDs:** SYS-011, SUB-011, CMP-009
+- **Related specification IDs:** SYS-011, SYS-012, SUB-011, SUB-013, CMP-009
 - **Review when:** Environment configuration, dependency pin, transport adapter,
   supervisor lifecycle, operational diagnostics, or tool/resource rollout changes.
 

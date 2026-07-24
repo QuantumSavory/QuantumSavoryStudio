@@ -1,12 +1,10 @@
 # Component Verification Actions
 
-No product suite was run.
-
 ## UNITV-001 — Verify codec identity and version handling
 
 - **Covers:** CMP-001
 - **Method:** test
-- **Procedure:** Run legacy/current/future, malformed-reference, cloning, hydration, and nonmutation fixtures through codec/session preflight.
+- **Procedure:** Run legacy, current, future, malformed-reference, cloning, hydration, and nonmutation codec/session fixtures.
 - **Environment / configuration:** Node 24 Vitest/jsdom
 - **Pass criterion:** Version branches, endpoint references, independent output values, and live-state preservation match every clause.
 - **Status:** implemented
@@ -30,7 +28,7 @@ No product suite was run.
 - **Method:** test
 - **Procedure:** Build and export the asymmetric two-node fixture with reversed virtual endpoints, a reversed duplicate physical pair, and endpoint-context canaries.
 - **Environment / configuration:** Julia backend unit environment
-- **Pass criterion:** The asserted one-based indices, names, endpoint roles, physical graph membership, virtual protocol retention, duplicate rejection, and generated bindings distinguish source/target swaps.
+- **Pass criterion:** Asserted indices, names, endpoint roles, graph membership, virtual protocols, duplicate rejection, and generated bindings distinguish source/target swaps.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** The fixture keeps the canonical node array in its original order; UNITV-010 defines the missing reordered-node discriminator.
@@ -50,9 +48,9 @@ No product suite was run.
 
 - **Covers:** CMP-005
 - **Method:** test
-- **Procedure:** Run successful assigned-state cleanup, timestamp-driven idle blocking, running-state exclusion, later retained-record removal, and explicit timeout/autopurge blocking.
+- **Procedure:** Run successful cleanup, timestamp-driven idle blocking, running exclusion, retained-record removal, and explicit timeout/autopurge blocking.
 - **Environment / configuration:** Julia backend unit environment with timestamp-controlled state fixtures
-- **Pass criterion:** Successful releases complete, heavy references clear, block reasons and retained-record presence match each fixture, running state is excluded, and blocked live-only access fails.
+- **Pass criterion:** Releases complete, heavy references clear, block reasons and record presence match, running state is excluded, and blocked live access fails.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** Release failures and deterministic repeat behavior are not exercised; UNITV-012 defines those missing clauses.
@@ -105,9 +103,9 @@ No product suite was run.
 
 - **Covers:** CMP-003
 - **Method:** test
-- **Procedure:** Reorder the canonical node array while retaining asymmetric IDs and edge source/target roles, then construct runtime state and generated source from the same fixture.
+- **Procedure:** Reorder the node array while retaining asymmetric IDs and endpoint roles, then build runtime state and source.
 - **Environment / configuration:** Julia backend unit environment
-- **Pass criterion:** Runtime registers, graph endpoints, context indices, generated node bindings, and protocol endpoints all follow the reordered array rather than fixture names or original positions.
+- **Pass criterion:** Registers, graph endpoints, context indices, generated bindings, and protocol endpoints follow array order rather than names or original positions.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Existing asymmetric fixtures do not reorder the node array.
@@ -116,9 +114,9 @@ No product suite was run.
 
 - **Covers:** CMP-004
 - **Method:** test
-- **Procedure:** Start a genuine cooperative run under an injected monotonic clock, advance one run segment to ten minutes, and observe the monitor-driven exit without directly invoking the blocker.
-- **Environment / configuration:** Julia backend unit environment with deterministic injected clock and real run task
-- **Pass criterion:** The task exits, running/task flags clear, timeout/error/time fields serialize coherently, heavy references are blocked, and no second task is created.
+- **Procedure:** Start a genuine cooperative run under an injected monotonic clock, sample at exactly ten minutes, advance strictly past ten minutes, and allow the next pre-step timeout check without directly invoking the blocker.
+- **Environment / configuration:** Julia backend unit environment with injected clock and real run task
+- **Pass criterion:** The exact-threshold sample does not time out; the next check after exceeding ten minutes blocks the state, and running/task, timeout/error/time, and heavy-reference fields serialize coherently without creating a second task.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current tests call `block_simulation` directly rather than exercising the wall-clock monitor.
@@ -127,20 +125,20 @@ No product suite was run.
 
 - **Covers:** CMP-005
 - **Method:** test
-- **Procedure:** Inject independent failures into multiple assigned-state releases, record every attempted release and warning, then invoke cleanup again on the retained state.
+- **Procedure:** Inject an assigned-state release failure, record every attempted release and log outcome, inspect cleared references and the returned result, then invoke cleanup again.
 - **Environment / configuration:** Julia backend unit environment with injectable resource-release failures
-- **Pass criterion:** Every release is attempted despite earlier failures, retained references and warning state are explicit, and the second invocation follows the confirmed deterministic retry policy.
+- **Pass criterion:** Remaining releases are attempted; the individual failure is logged but not returned absent an outer exception; references clear; a second call cannot retry it.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Failure injection does not exist, and the intended second-invocation retry guarantee requires maintainer confirmation.
+- **Nonconformance:** Failure injection does not exist; whether callers should receive the failure and retain retryable state requires maintainer confirmation.
 
 ## UNITV-013 — Inspect evaluation-site completeness
 
 - **Covers:** CMP-006
 - **Method:** inspection
 - **Procedure:** Inventory native evaluation sites and trace every user-controlled source value from its entry point to the validated subtree and server-owned lexical wrapper.
-- **Environment / configuration:** Pinned current-branch source with a durable, reviewable evaluator inventory
-- **Pass criterion:** Exactly one user-controlled native evaluation site exists, it receives the validated subtree unchanged, and no route or helper bypasses the shared policy/context boundary.
+- **Environment / configuration:** Pinned source with a durable evaluator inventory
+- **Pass criterion:** Exactly one user-controlled evaluation site receives the validated subtree unchanged; no path bypasses the policy/context boundary.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** No durable static evaluator inventory is currently stored.
@@ -151,7 +149,7 @@ No product suite was run.
 - **Method:** test
 - **Procedure:** Acknowledge the expected revision with only the design hash wrong, reuse one operation ID with different arguments before and after cache eviction, and retry after unbind/rebind.
 - **Environment / configuration:** Julia backend collaboration-hub unit environment with bounded-cache controls
-- **Pass criterion:** The hash-only fixture desynchronizes with `OUTCOME_UNKNOWN`, and each operation-ID reuse follows the confirmed argument-binding and replay-horizon policy without a duplicate visible mutation.
+- **Pass criterion:** A hash-only mismatch yields `OUTCOME_UNKNOWN`; cached same-ID/different-argument reuse returns the original result without delivery; reuse after eviction or rebind can deliver again.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Hash-only discrimination is absent; operation-argument binding and replay-horizon behavior require maintainer confirmation.

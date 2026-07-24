@@ -25,7 +25,7 @@ current branch.
 
 - **Normative statement:** The product shall decode every declared supported legacy project or additive API payload into the current canonical semantics and reject integer project versions newer than the current schema without partially replacing the active project.
 - **Parents:** STK-006
-- **Acceptance criterion:** Schema-v1 and each declared legacy shape normalize without input mutation; an integer version above the current schema fails before current-project teardown; simulator/export payloads exclude frontend-only fields. Current coercion of missing or non-integer versions to legacy zero and acceptance of negative versions are characterized but are not confirmed support guarantees.
+- **Acceptance criterion:** Schema-v1 and each declared legacy shape normalize without input mutation; an integer version above the current schema fails before current-project teardown; simulator/export payloads exclude frontend-only fields.
 - **Verification:** SYSV-003 (test)
 - **Origin / risk:** Released schema normalization and additive physical-field compatibility; support horizon and malformed-version intent unresolved; high compatibility risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
@@ -68,7 +68,7 @@ current branch.
 
 ## SYS-008 — Publish and fail the HTTP API consistently
 
-- **Normative statement:** Supported HTTP operations shall be discoverable through adjacent API documentation and shall return the common structured failure envelope, while each operation's success shape remains explicitly documented.
+- **Normative statement:** Supported HTTP operations shall be discoverable through published API documentation and shall return the common structured failure envelope, while each operation's success shape remains explicitly documented.
 - **Parents:** STK-002
 - **Acceptance criterion:** Every supported route is represented with correct request/response types; representative validation, not-found, policy, and unexpected failures contain the standard fields without leaking evaluated production internals.
 - **Verification:** SYSV-008 (inspection)
@@ -96,7 +96,7 @@ current branch.
 ## SYS-011 — Gate local collaboration explicitly
 
 - **Normative statement:** MCP collaboration shall be disabled by default, operate only with a loopback backend and sidecar listener, and start/stop through an explicit local control flow without changing ordinary disabled deployments.
-- **Parents:** STK-004, STK-005
+- **Parents:** STK-004
 - **Acceptance criterion:** Disabled startup loads no sidecar; invalid non-loopback or conflicting-port enablement fails before serving; explicit initialization starts one local session, and Stop terminates it and revokes its internal capability.
 - **Verification:** SYSV-011 (test)
 - **Origin / risk:** Explicit public MCP locality and opt-in contract; high local-control risk
@@ -107,6 +107,6 @@ current branch.
 - **Normative statement:** The versioned MCP interface shall expose documented design, catalog, lifecycle, and simulation-read capabilities while preserving one browser-authoritative design, detecting stale revisions, applying advertised edits atomically, and reporting ambiguous outcomes without unsafe automatic replay.
 - **Parents:** STK-004
 - **Acceptance criterion:** One client binds one browser, reads a canonical design, applies a valid edit visible as unsaved, receives a conflict for a stale revision without mutation, controls a simulation through the browser, reads results, and receives `OUTCOME_UNKNOWN` when post-delivery acknowledgement cannot establish the result.
-- **Verification:** SYSV-012 (test)
+- **Verification:** SYSV-012 (test), SYSV-013 (test)
 - **Origin / risk:** Public MCP workflow and versioned contract; idempotence/resource gaps remain; high concurrency/data-loss risk
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)

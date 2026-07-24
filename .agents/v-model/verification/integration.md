@@ -1,6 +1,6 @@
 # Integration Verification Actions
 
-These actions verify logical boundaries. Existing artifacts are not current pass records.
+These actions verify logical boundaries; no current run was made.
 
 ## INTV-001 — Verify integrated boot/dependency boundary
 
@@ -11,7 +11,7 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Pass criterion:** Normal mode serves UI/API without the MCP dependency; enabled mode uses the isolated sidecar and keeps the main project free of that dependency.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** The backend integration wrapper covers disabled normal mode, while MCP unit inspection covers configuration/dependency isolation; no durable action starts and probes both integrated modes.
+- **Nonconformance:** Existing artifacts cover normal mode and MCP isolation separately; none starts and probes both integrated modes.
 
 ## INTV-002 — Verify project projection boundaries
 
@@ -51,11 +51,11 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Covers:** SUB-005
 - **Method:** test
 - **Procedure:** Fetch constructor, tag, representation, and structured-state metadata from a real backend client, feed those responses into the real frontend descriptors, and submit representative valid and unsupported values.
-- **Environment / configuration:** Real backend/frontend integration without synthetic catalog fixtures
+- **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
 - **Pass criterion:** Wire types, placement, nullability, bounds, and safe resolution match across the boundary; unsupported values fail.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend metadata and frontend descriptor fixtures are tested independently; no durable action passes a real backend response through the frontend input boundary.
+- **Nonconformance:** Backend metadata and frontend descriptors are tested independently; no action passes a real response through the frontend.
 
 ## INTV-006 — Verify serialized lifecycle transitions
 
@@ -96,7 +96,7 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Method:** inspection
 - **Procedure:** Compare every supported route declaration, wrapper, adjacent Swagger request/response, error helper, integration case, and frontend/MCP caller.
 - **Environment / configuration:** Pinned current-branch source and generated API document
-- **Pass criterion:** No route bypass exists; documented types/required fields match handlers; each shared contract has reverse-linked verification.
+- **Pass criterion:** No supported route bypasses error translation; documented types and required fields match handlers; representative failures match the standard envelope.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Known Boolean-schema drift, partial request validation, and incomplete Swagger coverage prevent implementation status.
@@ -105,12 +105,12 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Build a parameterized test from every source-bearing route, decoder, tag/query adapter, and export path, tracing each through the gate, validator, context, and evaluator.
+- **Procedure:** Build a parameterized inventory from every source-bearing route, decoder, tag/query adapter, and export path; trace all paths through parsing/profile validation and each executing path through the policy gate, context, and evaluator.
 - **Environment / configuration:** Pinned source plus dynamic unit/HTTP fixtures in both policy states
-- **Pass criterion:** Every path has one complete trace to the shared boundary; no alternate evaluation site exists; forbidden canaries fail before execution.
+- **Pass criterion:** Every source path reaches its applicable parser/profile; export remains non-executing with evaluation disabled; every executing path reaches the gate and one evaluator; forbidden canaries fail before execution.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Dynamic fixtures are strong but no durable entry-point inventory exists, and disabled real-server mode is not selected by maintained CI.
+- **Nonconformance:** No durable entry-point inventory exists, and maintained CI does not select disabled real-server mode.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 
@@ -132,7 +132,7 @@ These actions verify logical boundaries. Existing artifacts are not current pass
 - **Pass criterion:** Each pre/post-delivery case produces its documented result without silent mutation or continuation from desynchronized state.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend hub and frontend bridge unit suites exercise their state machines independently; no durable integration action drives every lease/revision/acknowledgement case across the live boundary.
+- **Nonconformance:** Hub and bridge unit suites run independently; none drives every lease/revision/acknowledgement case across the live boundary.
 
 ## INTV-013 — Verify MCP contract/dispatch/transport
 

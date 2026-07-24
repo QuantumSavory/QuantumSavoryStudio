@@ -53,11 +53,14 @@ Committed test artifacts are therefore at most `implemented`; no action is marke
   multi-instance operation are not specified. MCP itself is explicitly local-only.
 - Legacy project/API compatibility is public intent, but its support horizon and the
   stability of local-storage keys, MCP v1 results, and dynamic dependency catalogs are
-  unstated.
+  unstated. Non-integer and negative project schema-version handling is also unconfirmed.
+- Project replacement uses stale-generation guards around a transient cleared-graph
+  interval; required serialization or atomicity across that interval is unconfirmed.
 - Malformed lifecycle bodies can yield generic 500 responses; Swagger has known response
   type drift; frontend API error handling is mixed.
 - MCP operation-ID replay is bounded and does not bind an ID to its arguments despite
-  idempotent annotations. Direct run auto-preparation can omit the prepared revision.
+  idempotent annotations. Direct run auto-preparation can omit the prepared revision,
+  and advertised result resources are not all proven readable or URI-safe.
 - Cleanup is best effort, and exact failure/recovery guarantees remain unconfirmed.
 
 Resolve these through a mini-V: confirm intent, revise affected records, add or update

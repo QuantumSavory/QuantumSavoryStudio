@@ -1,30 +1,30 @@
 # Subsystem and Interface Contracts
 
-These records define logical boundaries without making file layout normative.
+These records define logical, topology-neutral boundaries.
 
 ## SUB-001 — Integrated boot and runtime ownership
 
-- **Normative statement:** The application host shall assemble the browser bundle, HTTP routes, simulation service, and collaboration adapters while keeping MCP transport dependencies outside the main runtime.
+- **Normative statement:** The application host shall expose the browser and simulation API together while keeping optional MCP transport lifecycle and failures isolated from ordinary operation.
 - **Parents:** SYS-001, SYS-011
-- **Acceptance criterion:** Normal startup serves UI/API without loading the MCP dependency; enabled startup adds the isolated sidecar bridge; root route wiring and package services initialize in the documented order.
+- **Acceptance criterion:** Normal startup serves UI/API without MCP transport; enabled startup adds the sidecar bridge without allowing sidecar startup or exit to replace the main HTTP runtime.
 - **Verification:** INTV-001 (test)
 - **Origin / risk:** Launcher architecture and dependency tests; low modularity risk
 - **Context:** [Backend architecture](../context/backend/architecture.md)
 
 ## SUB-002 — Project document and projection boundary
 
-- **Normative statement:** One codec boundary shall translate between hydrated browser models, durable project documents, collaboration snapshots, simulator payloads, and script-export payloads without mutating the source model.
+- **Normative statement:** Translation among hydrated browser models, durable project documents, collaboration snapshots, simulator payloads, and script-export payloads shall preserve declared semantics without mutating the source model.
 - **Parents:** SYS-002, SYS-003
-- **Acceptance criterion:** A discriminating fixture round-trips documented durable fields and identities; each projection includes only its declared fields; encoding/projection leaves the fixture unchanged.
+- **Acceptance criterion:** A discriminating fixture round-trips durable fields and identities; each projection includes only declared fields; encoding and projection leave the fixture unchanged.
 - **Verification:** INTV-002 (test)
 - **Origin / risk:** Frontend codec and unit evidence; high data-boundary risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 
 ## SUB-003 — Shared atomic authoring boundary
 
-- **Normative statement:** Every authoring operation advertised to MCP shall have one browser handler shared with its equivalent migrated GUI action, validate an isolated candidate, and reconcile either the whole valid result or no result into the live design.
+- **Normative statement:** Every authoring operation advertised to MCP shall have the same browser-visible semantics as its equivalent GUI action and shall reconcile either the whole valid result or no result into the live design.
 - **Parents:** SYS-002, SYS-012
-- **Acceptance criterion:** GUI and MCP entry points for each advertised operation reach the same registered semantics; an invalid mixed transaction leaves the live graph and durable identities unchanged; a valid one changes them once and marks unsaved.
+- **Acceptance criterion:** GUI and MCP entry points produce the same result and validation failures; an invalid mixed transaction preserves graph and identities; a valid one changes them once and marks unsaved.
 - **Verification:** INTV-003 (test)
 - **Origin / risk:** Public forward rule and command-service evidence; universal historical migration is not proven; high divergence risk
 - **Context:** [Authoring and inputs](../context/frontend/authoring-and-inputs.md)
@@ -69,16 +69,16 @@ These records define logical boundaries without making file layout normative.
 
 - **Normative statement:** Script generation shall validate canonical input and emit supported runtime mappings deterministically without mutating the server simulation registry or executing user source.
 - **Parents:** SYS-007
-- **Acceptance criterion:** Unit and HTTP fixtures prove stable text/filename, selected executable semantics, unchanged state namespace, and nonexecution of a source canary; unsupported GUI-only behavior is disclosed rather than silently simulated.
+- **Acceptance criterion:** Repeated component and HTTP requests return stable text/filename and executable semantics, preserve the state namespace, do not execute a source canary, and disclose unsupported GUI-only behavior.
 - **Verification:** INTV-008 (test)
 - **Origin / risk:** Export generator and route evidence; high code-generation risk
 - **Context:** [Script export](../context/backend/script-export.md)
 
 ## SUB-009 — HTTP route, documentation, and failure boundary
 
-- **Normative statement:** Each supported HTTP handler shall use the shared route/error boundary, keep its request and route-specific success response documented beside it, and translate classified failures into the standard envelope.
+- **Normative statement:** Each supported HTTP operation shall keep its request and route-specific success response synchronized with published documentation and translate classified failures into the standard envelope.
 - **Parents:** SYS-008
-- **Acceptance criterion:** Static/API inspection finds no direct bypass route; representative handlers match Swagger types and required fields; validation, not-found, policy, and unexpected paths contain the declared envelope.
+- **Acceptance criterion:** Generated API descriptions match handler types and required fields; validation, not-found, policy, and unexpected paths contain the declared envelope; no supported operation exposes an undocumented failure shape.
 - **Verification:** INTV-009 (inspection)
 - **Origin / risk:** Common wrapper and adjacent Swagger practice; known synchronization/malformed-input gaps; high client-integration risk
 - **Context:** [API routing and errors](../context/backend/api-routing-and-errors.md)

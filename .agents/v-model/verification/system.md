@@ -28,12 +28,12 @@ No product suite was run for this documentation-only change.
 
 - **Covers:** SYS-003
 - **Method:** test
-- **Procedure:** Import declared project fixtures in the browser, submit additive payload fixtures to the backend, and attempt malformed/future versions with a project open.
+- **Procedure:** Import declared project fixtures in the browser, submit additive payload fixtures to the backend, and attempt an integer future version with a project open.
 - **Environment / configuration:** Real browser and backend using an explicit compatibility-fixture registry
-- **Pass criterion:** Supported fixtures normalize without mutation and reach their expected result; malformed/future input does not replace the open project.
+- **Pass criterion:** Supported fixtures normalize without mutation and reach their expected result; the future-version input does not replace the open project.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Codec/session unit fixtures exist, but there is no declared compatibility set or black-box action spanning browser import and additive backend payloads.
+- **Nonconformance:** Codec/session unit fixtures exist, but there is no declared compatibility set or black-box action spanning browser import and additive backend payloads; malformed and negative version intent remains unresolved outside this action.
 
 ## SYSV-004 — Verify authoritative metadata-driven inputs
 
@@ -83,9 +83,9 @@ No product suite was run for this documentation-only change.
 
 - **Covers:** SYS-008
 - **Method:** inspection
-- **Procedure:** Enumerate supported handlers and compare route wrapper use, request requirements, response types, Swagger blocks, error codes, and external callers.
-- **Environment / configuration:** Pinned source plus generated Swagger for the current branch
-- **Pass criterion:** Every supported route is documented accurately, uses the shared failure boundary, and has durable checks for representative failure classes.
+- **Procedure:** Enumerate published operations and compare generated request/response descriptions with representative HTTP results and external callers.
+- **Environment / configuration:** Current generated API description plus black-box HTTP probes
+- **Pass criterion:** Every supported operation is documented accurately, and representative validation, not-found, policy, and unexpected failures match the common envelope.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Known Swagger type drift and malformed lifecycle 500 paths currently violate full-criterion alignment.

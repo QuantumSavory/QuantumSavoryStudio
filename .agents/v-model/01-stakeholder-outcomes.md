@@ -23,9 +23,9 @@ topology.
 
 ## STK-003 — Continue with standalone simulation source
 
-- **Normative statement:** A user shall be able to hand a configured visual project off as readable, editable standalone simulation source for further local exploration.
+- **Normative statement:** A user shall be able to hand a configured visual project off as documented, editable standalone simulation source for further local exploration.
 - **Parents:** None
-- **Acceptance criterion:** A representative supported project exports one source file that explains its purpose, can be edited independently of the web application, and follows its documented executable path.
+- **Acceptance criterion:** A representative supported project exports one source file containing explanatory setup, network-construction, protocol, and run/visualization sections; the file parses, follows its documented default execution path, and accepts an independent edit without contacting WebQuantumSavory.
 - **Verification:** ACC-003 (demonstration)
 - **Origin / risk:** Released Export Script feature and public onboarding language; medium fidelity risk
 - **Context:** [Script export](../context/backend/script-export.md)
