@@ -1,0 +1,120 @@
+# Subsystem and Interface Contracts
+
+These records define logical boundaries without making file layout normative.
+
+## SUB-001 — Integrated boot and runtime ownership
+
+- **Normative statement:** The application host shall assemble the browser bundle, HTTP routes, simulation service, and collaboration adapters while keeping MCP transport dependencies outside the main runtime.
+- **Parents:** SYS-001, SYS-011
+- **Acceptance criterion:** Normal startup serves UI/API without loading the MCP dependency; enabled startup adds the isolated sidecar bridge; root route wiring and package services initialize in the documented order.
+- **Verification:** INTV-001 (test)
+- **Origin / risk:** Launcher architecture and dependency tests; low modularity risk
+- **Context:** [Backend architecture](../context/backend/architecture.md)
+
+## SUB-002 — Project document and projection boundary
+
+- **Normative statement:** One codec boundary shall translate between hydrated browser models, durable project documents, collaboration snapshots, simulator payloads, and script-export payloads without mutating the source model.
+- **Parents:** SYS-002, SYS-003
+- **Acceptance criterion:** A discriminating fixture round-trips documented durable fields and identities; each projection includes only its declared fields; encoding/projection leaves the fixture unchanged.
+- **Verification:** INTV-002 (test)
+- **Origin / risk:** Frontend codec and unit evidence; high data-boundary risk
+- **Context:** [Project documents](../context/frontend/project-documents.md)
+
+## SUB-003 — Shared atomic authoring boundary
+
+- **Normative statement:** Every authoring operation advertised to MCP shall have one browser handler shared with its equivalent migrated GUI action, validate an isolated candidate, and reconcile either the whole valid result or no result into the live design.
+- **Parents:** SYS-002, SYS-012
+- **Acceptance criterion:** GUI and MCP entry points for each advertised operation reach the same registered semantics; an invalid mixed transaction leaves the live graph and durable identities unchanged; a valid one changes them once and marks unsaved.
+- **Verification:** INTV-003 (test)
+- **Origin / risk:** Public forward rule and command-service evidence; universal historical migration is not proven; high divergence risk
+- **Context:** [Authoring and inputs](../context/frontend/authoring-and-inputs.md)
+
+## SUB-004 — Canonical simulation payload and topology boundary
+
+- **Normative statement:** The simulator shall consume only a validated minimized project payload in which node-array order defines one-based simulator identity, only physical edges enter the simulation graph, and virtual-edge protocols remain metadata-gated.
+- **Parents:** SYS-003, SYS-004, SYS-005
+- **Acceptance criterion:** Validation rejects duplicate unordered physical pairs and invalid resolved values; parsing preserves node/source/target mapping; virtual edges are absent from the graph but retain only permitted protocols.
+- **Verification:** INTV-004 (test)
+- **Origin / risk:** Parser/export contracts and tests; high topology-correctness risk
+- **Context:** [Constructor and tag metadata](../context/backend/constructor-and-tag-metadata.md)
+
+## SUB-005 — Authoritative metadata and typed-input boundary
+
+- **Normative statement:** Dynamic constructor/tag catalogs and explicit representation/state allowlists shall supply authoritative wire semantics, placement, nullability, bounds, and safe type resolution to all client input paths.
+- **Parents:** SYS-004
+- **Acceptance criterion:** Backend and browser derive the same descriptor semantics from returned metadata; named-tag and explicit allowlist values resolve without source evaluation; unadvertised IDs and incompatible Variables fail.
+- **Verification:** INTV-005 (test)
+- **Origin / risk:** Metadata pipeline, tag codec, and frontend constructor tests; medium dependency risk
+- **Context:** [Constructor and tag metadata](../context/backend/constructor-and-tag-metadata.md)
+
+## SUB-006 — Serialized lifecycle transition boundary
+
+- **Normative statement:** Named simulation lifecycle transitions shall be serialized, shall not replace a healthy state until a candidate is valid, and shall keep task, progress, pause, error, and serialized phase fields mutually consistent.
+- **Parents:** SYS-005, SYS-010
+- **Acceptance criterion:** Concurrent invalid transitions fail without corrupting the retained state; one run task owns execution; pause acknowledgement stops it; cleanup and timeout transitions produce the documented nested state.
+- **Verification:** INTV-006 (test)
+- **Origin / risk:** Simulation service and lifecycle evidence; high state-consistency risk
+- **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
+
+## SUB-007 — Observation and live-resource boundary
+
+- **Normative statement:** Logs, panic diagnostics, slots, protocols, tags, and queries shall expose serializable representations tied to the retained simulation resources, with explicit purge and unavailable-state semantics.
+- **Parents:** SYS-006
+- **Acceptance criterion:** HTTP and MCP log reads apply their documented purge/bound behavior; representative result renderings contain no live Julia objects; live tag/query operations fail after resource cleanup.
+- **Verification:** INTV-007 (test)
+- **Origin / risk:** Route/service behavior and tests; production diagnostic-disclosure intent unresolved; medium observability risk
+- **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
+
+## SUB-008 — Side-effect-bounded script-generation boundary
+
+- **Normative statement:** Script generation shall validate canonical input and emit supported runtime mappings deterministically without mutating the server simulation registry or executing user source.
+- **Parents:** SYS-007
+- **Acceptance criterion:** Unit and HTTP fixtures prove stable text/filename, selected executable semantics, unchanged state namespace, and nonexecution of a source canary; unsupported GUI-only behavior is disclosed rather than silently simulated.
+- **Verification:** INTV-008 (test)
+- **Origin / risk:** Export generator and route evidence; high code-generation risk
+- **Context:** [Script export](../context/backend/script-export.md)
+
+## SUB-009 — HTTP route, documentation, and failure boundary
+
+- **Normative statement:** Each supported HTTP handler shall use the shared route/error boundary, keep its request and route-specific success response documented beside it, and translate classified failures into the standard envelope.
+- **Parents:** SYS-008
+- **Acceptance criterion:** Static/API inspection finds no direct bypass route; representative handlers match Swagger types and required fields; validation, not-found, policy, and unexpected paths contain the declared envelope.
+- **Verification:** INTV-009 (inspection)
+- **Origin / risk:** Common wrapper and adjacent Swagger practice; known synchronization/malformed-input gaps; high client-integration risk
+- **Context:** [API routing and errors](../context/backend/api-routing-and-errors.md)
+
+## SUB-010 — Restricted-source admission and execution boundary
+
+- **Normative statement:** Every source-bearing surface shall share one policy gate, complete-source parser, profile validator, server-owned lexical context, and evaluated-value contract before reaching the sole native evaluation boundary.
+- **Parents:** SYS-009
+- **Acceptance criterion:** An inventory of all source-bearing paths reaches the gate and exact-subtree validator; forbidden syntax/capability fails before execution; admitted source receives only placement-specific bindings and expected-type/range checks.
+- **Verification:** INTV-010 (test)
+- **Origin / risk:** Central policy/validator/evaluator and coverage tests; critical host-integrity risk
+- **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
+
+## SUB-011 — Local sidecar configuration and supervision boundary
+
+- **Normative statement:** The collaboration supervisor shall strictly validate enablement/locality/ports, spawn one isolated sidecar generation with an ephemeral backend capability, bound startup/stop, sanitize diagnostics, and revoke stale generation authority.
+- **Parents:** SYS-011
+- **Acceptance criterion:** Invalid configurations fail closed; concurrent start/stop and startup/exit cases produce one coherent generation; stale capabilities fail; diagnostic canaries are redacted and bounded.
+- **Verification:** INTV-011 (test)
+- **Origin / risk:** Configuration/supervisor code and focused tests; high local-control risk
+- **Context:** [Sidecar operations](../context/mcp/sidecar-operations.md)
+
+## SUB-012 — Browser lease, revision, and acknowledgement boundary
+
+- **Normative statement:** Collaboration shall coordinate one renewable browser binding, canonical design revision/hash, draft flush, serialized command delivery, and acknowledgement checks that desynchronize rather than continue from an impossible or unknown outcome.
+- **Parents:** SYS-011, SYS-012
+- **Acceptance criterion:** Binding ownership/expiry, stale revision, pre-delivery cancel, post-delivery unknown outcome, mismatched acknowledgement, GUI-originated revision, unbind, and rebind paths each yield the documented state and error.
+- **Verification:** INTV-012 (test)
+- **Origin / risk:** Hub/browser bridge and unit/system tests; high concurrent-edit risk
+- **Context:** [Browser collaboration](../context/mcp/browser-collaboration.md)
+
+## SUB-013 — MCP tool, resource, and simulation dispatch boundary
+
+- **Normative statement:** One versioned contract shall drive external tools; catalog reads shall use backend metadata, design and lifecycle mutations shall relay through the browser, and simulation reads shall use the transport-neutral service while verifying collaboration context.
+- **Parents:** SYS-012
+- **Acceptance criterion:** The advertised registry loads once from the contract; each tool group reaches its declared boundary; one session is enforced; stable errors cross transport; every advertised resource has a verified representation path.
+- **Verification:** INTV-013 (test)
+- **Origin / risk:** Contract loader/adapters and transport tests; resource/schema coverage incomplete; high interface risk
+- **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
