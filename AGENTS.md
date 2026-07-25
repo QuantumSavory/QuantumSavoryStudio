@@ -25,6 +25,18 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
 - All maintained check entry points and focused alternatives are in
   [repository workflows](.agents/context/repository-workflows.md).
 
+## Engineering workflow
+
+- Above all, compare plausible designs and favor simplicity, maintainability, and clear
+  separation of concerns; factor shared behavior into one owner rather than duplicate
+  it here or reimplement another library's responsibility.
+- Run relevant tests locally before each commit and before opening or updating a PR; do
+  not rely on remote CI alone.
+- Keep commits small, coherent, and easy to review; rebase each fixup into the commit it
+  corrects.
+- On every PR you create, post a detailed comment describing the initiating user prompts
+  (verbatim when useful) and scope-defining follow-ups.
+
 ## Root backend rules
 
 - Register HTTP handlers through the local `route(...)` wrapper in `routes.jl`.

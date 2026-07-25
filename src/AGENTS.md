@@ -28,6 +28,8 @@ Swagger remain governed by `../AGENTS.md` and `../routes.jl`.
 - Validate canonical project payloads before constructing simulation state.
 - Reuse the shared simulation, error, source-evaluation, and metadata boundaries; do
   not introduce package-internal HTTP or MCP variants.
+- If a needed simulator feature belongs in QuantumSavory.jl, propose the reusable
+  upstream addition instead of implementing a local substitute.
 - Preserve extension-activating imports in `WebQuantumSavory.jl` unless their runtime
   consumers are audited.
 - Keep exact machinery in context documents rather than expanding this router.

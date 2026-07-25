@@ -35,6 +35,6 @@ repository guidance in `../AGENTS.md`.
 - Preserve object identity used by map selections and edges; release MapLibre, DOM,
   timer, polling, and window resources on transition or unmount.
 - Add no new `window.*` access outside `legacyBridge`.
-- Use shared UI primitives, semantic `--app-*` tokens, Lucide icons, and explicit
-  component props/events.
+- Use shared UI primitives, Lucide icons, explicit props/events, and well-cascaded
+  semantic `--app-*` styling; never special-case individual elements or widgets.
 - Commit `package-lock.json` only for dependency changes; never commit npm/test output.
