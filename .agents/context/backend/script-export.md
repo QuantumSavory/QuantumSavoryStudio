@@ -10,9 +10,10 @@
 
 ## Product purpose
 
-Script export produces standalone, editable, pedagogical QuantumSavory Julia. It is an
-onboarding/handoff surface, not a serialized WebQuantumSavory runtime client and not a
-claim that every GUI-only feature has an equivalent script behavior.
+Script export produces standalone, editable, pedagogical QuantumSavory Julia. It should
+be as faithful as practical to the simulation defined in the GUI, but it is not a
+serialized WebQuantumSavory runtime client or a promise that every GUI feature has an
+equivalent script behavior. Script structure may require an independent implementation.
 
 ## Boundary guarantees
 
@@ -48,7 +49,10 @@ delay callables, context bindings, per-assignment expression Variables, and weig
 state/trace construction.
 
 The frontend Export Script tab only requests, displays, and downloads backend text; it
-must not implement project-to-QuantumSavory translation.
+must not implement project-to-QuantumSavory translation. Each omitted or simplified GUI
+feature must be stated clearly in the corresponding export help widget. The existing
+panel-level warning establishes the general pedagogical limitation; feature-specific
+omissions need matching help when introduced.
 
 ## Verification boundaries
 
@@ -65,7 +69,8 @@ download action remains planned.
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Browser evidence:** [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js).
 
-## Unresolved questions
+## Confirmed interpretation
 
-- Does acceptance require executable source for every supported project, or syntax-valid
-  pedagogical output with documented unsupported GUI-only features?
+Acceptance requires faithful executable output for the supported export subset, not
+parity with every GUI feature. Pedagogical simplification is allowed only when the
+corresponding help identifies what is unavailable or different.

@@ -5,7 +5,8 @@
   generated images, panels, accessibility, or browser-resource cleanup.
 - **Do not open when:** Changing project payloads, backend routes, or simulation
   algorithms.
-- **Related specification IDs:** SYS-002, SYS-006, SUB-003, SUB-007
+- **Related specification IDs:** SYS-002, SYS-006, SYS-008, SUB-003, SUB-007,
+  CMP-013
 - **Review when:** Shared presentation infrastructure, accessibility contracts, or
   component cleanup ownership changes.
 
@@ -57,7 +58,9 @@ state.
 The compact-viewport warning uses a native full-screen dialog at the current width/height
 thresholds and remembers dismissal only for the mount. The bottom Tools panel persists
 validated expanded size and supports keyboard-operable resizing/collapse. Log counts,
-filters, Markdown tooltips, and result disclosures have focused component tests.
+filters, Markdown tooltips, and result disclosures have focused component tests. The Log
+tab is also the required durable-in-session presentation surface for structured backend,
+project-transition, MCP, and cleanup failures, including severe degradation warnings.
 
 These exact thresholds, placements, colors, and panel dimensions are current machinery;
 do not promote them to V-model requirements without acceptance intent.

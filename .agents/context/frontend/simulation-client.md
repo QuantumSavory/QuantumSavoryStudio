@@ -4,7 +4,8 @@
 - **Open when:** Changing lifecycle phases/capabilities, API namespacing, Runner controls,
   polling, logs, panic handling, or simulation cleanup.
 - **Do not open when:** Changing backend simulation algorithms or project persistence.
-- **Related specification IDs:** SYS-005, SYS-006, SUB-006, SUB-007
+- **Related specification IDs:** SYS-005, SYS-006, SYS-008, SYS-012, SUB-006,
+  SUB-007, SUB-013, CMP-011, CMP-013
 - **Review when:** A backend state field, frontend phase, action capability, polling
   cadence, or lifecycle API call changes.
 
@@ -58,13 +59,24 @@ accessible progress.
 Live tag/query tooling is available only while the backend retains a usable parsed
 network. It is cleared for empty, blocked, purged, or execution-timeout states.
 
+The MCP `simulation_run` adapter must use this same Play capability/readiness path, not
+merely call a lower-level method. Incomplete designs return the same actionable issues,
+busy/disabled capability prevents dispatch, and implicit preparation records the same
+browser revision as explicit Prepare. Current MCP dispatch reaches
+`runSimulationWithSteps` but bypasses `capabilities.canRun`, collapses `false` to a
+generic error, and does not record the implicit prepared revision.
+
 ## Error boundary
 
-Frontend API behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
+Every backend validation, missing/invalid input, lifecycle, cleanup, and unexpected
+failure must reach the frontend as a structured error and be recorded in the Tools panel
+Log tab. Diagnostic details may be complete in both local and public deployments.
+
+Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
 responses through the shared JSON reader. Several legacy lifecycle/result calls parse or
 swallow transport failures and return `undefined` or fallback values. Startup uses
 settled capability requests and clears shell loading without one universal user-facing
-failure policy. Treat this as a specification gap, not a convention to copy.
+failure policy. These paths are conformance gaps, not conventions to copy.
 
 ## Anchors
 
@@ -79,4 +91,5 @@ failure policy. Treat this as a specification gap, not a convention to copy.
 - Should reset immediately stop liveness polling?
 - Is the 15-minute client timeout intentionally distinct from each ten-minute backend
   run segment?
-- What degraded-startup/error behavior is required when one metadata request fails?
+- The exact degraded-startup capability policy after one metadata failure is still an
+  implementation choice, but the failure itself must be structured and logged.

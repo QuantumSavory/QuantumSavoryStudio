@@ -22,9 +22,11 @@ untracked; the npm lockfile is committed.
 | MCP sidecar | `julia --startup-file=no --project=mcp -e 'using Pkg; Pkg.instantiate()'` | Needed only for MCP work |
 
 `./bin/server` installs the locked frontend dependencies, builds the GUI, and starts
-the integrated application. Node 18 or newer is documented for local use. CI currently
-exercises Julia 1.12, Node 24, Ubuntu, and Chromium; that matrix is evidence of tested
-configurations, not a complete support declaration.
+the integrated application. The maintained CI matrix is the support declaration for
+Julia and Node versions; it currently selects Julia 1.12 and Node 24. Product intent
+supports local hosts on Linux, macOS, and Windows and standards-compliant modern
+HTML5/JavaScript desktop browsers. Mobile browsers are unsupported. CI currently
+exercises Ubuntu and Chromium, so the broader host/browser matrix is not yet verified.
 
 ## Select the smallest check
 
@@ -93,7 +95,8 @@ as current passing execution evidence without a durable run record.
 - **Workflows:** [GitHub Actions](../../.github/workflows/ci.yml) and
   [Buildkite](../../.buildkite/pipeline.yml) — maintained job matrices.
 
-## Unresolved questions
+## Support evidence gap
 
-- The supported Julia, Node, browser, and operating-system ranges are not declared
-  independently of the local minimums and current CI matrix.
+The CI-selected Julia and Node versions are explicit, but maintained jobs do not yet
+exercise macOS, Windows, Firefox, or WebKit. Treat those environments as supported
+product intent with planned verification, not as currently passing evidence.

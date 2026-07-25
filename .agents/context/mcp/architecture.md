@@ -4,14 +4,17 @@
 - **Open when:** Understanding why the sidecar exists, which component owns design or
   simulation state, the local trust model, or cross-process failure behavior.
 - **Do not open when:** Looking up one tool schema or running the sidecar.
-- **Related specification IDs:** STK-004, STK-005, SYS-011, SUB-011, SUB-012, SUB-013
+- **Related specification IDs:** STK-004, STK-005, SYS-011, SYS-012, SYS-016,
+  SUB-011, SUB-012, SUB-013
 - **Review when:** Process isolation, browser authority, locality, dependency placement,
   or command/read ownership changes.
 
 ## One product, four actors
 
-MCP is an optional component of WebQuantumSavory, not an independently released product.
-The interaction has four actors:
+MCP is an optional local component of WebQuantumSavory, not an independently released
+product and not part of the public education deployment. It assists a user who continues
+working through a live GUI; it is not a headless or autonomous project controller. The
+interaction has four actors:
 
 ```text
 local MCP client
@@ -27,9 +30,10 @@ local MCP client
 | Sidecar | External MCP transport, tool/resource registration, backend request translation |
 | MCP client | Requests operations; never owns project persistence or backend capability secrets |
 
-Catalog reads can execute in the backend without a bound browser. Design reads/writes and
-lifecycle mutations require the browser. Simulation reads use the backend service but
-verify that the collaboration binding/design context did not change across the read.
+Catalog reads can execute in the backend before a browser bind because they do not own or
+mutate a project. Design reads/writes and lifecycle mutations require the browser.
+Simulation reads use the backend service but verify that the collaboration
+binding/design context did not change across the read.
 
 ## Why a separate process
 
@@ -66,7 +70,9 @@ command delivery can cancel safely; loss after a durable browser action may yiel
 
 Activity and supervisor diagnostics are bounded and redact recognized credentials,
 capabilities, session identifiers, binary bodies, and raw transcript fields. Redaction
-does not make arbitrary local project content private.
+does not make arbitrary local project content private. This operational-secret boundary
+is distinct from ordinary API/simulation diagnostics, which may expose complete
+exception and source details.
 
 ## Anchors
 
@@ -76,8 +82,10 @@ does not make arbitrary local project content private.
 - **Coordination:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
 - **Sidecar:** [`mcp/main.jl`](../../../mcp/main.jl).
 
-## Unresolved questions
+## Recovery boundary
 
-- Does “local-only” intentionally trust every process on the host?
-- After an unexpected sidecar exit, should a still-heartbeating browser binding survive
-  restart or require explicit rebind?
+Loopback, Origin checks, and the ephemeral capability do not exclude every process on
+the local host and are not user authentication. After a sidecar restart, the previous
+MCP session and its operation IDs are outside the retry scope: inspect the visible GUI,
+explicitly create a fresh browser binding for the new transport session, read current
+state, and use fresh IDs.

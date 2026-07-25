@@ -1,13 +1,26 @@
-# API Routing and Error Reference
+# Frontend-Support API and Error Reference
 
 - **Context need:** Reference
 - **Open when:** Adding or changing routes, request validation, response envelopes,
   Swagger, simulation naming, or error helpers.
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
-- **Related specification IDs:** SYS-008, SUB-009
+- **Related specification IDs:** SYS-006, SYS-008, SUB-007, SUB-009, CMP-013
 - **Review when:** A public/internal route, error code, status code, or Swagger schema
   changes.
+
+## Product boundary
+
+The HTTP API exists to support the bundled GUI. It is not a separately supported
+external-integration product, and route stability is not promised independently of the
+frontend release. Swagger and adjacent route documentation remain maintainability tools:
+keep them synchronized with the frontend-support contract without implying cross-release
+API compatibility.
+
+“Private” describes compatibility and product audience, not network access control. The
+public education deployment exposes the same routes with the GUI and intentionally adds
+no authentication. Browser UUID prefixes are collision-reducing namespaces, not user
+identities or authorization.
 
 ## Route boundary
 
@@ -28,6 +41,20 @@ Failure responses have this common core:
 The helper adds `error_code` only when it is nonempty and adds `details` only when it is
 not `nothing`; neither field is part of the required common core.
 
+The confirmed forward contract is stronger than this current implementation:
+
+- validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures
+  remain structured rather than becoming an opaque exception or swallowed value;
+- the GUI records the resulting classification, message, and available diagnostic
+  details in the Tools panel Log tab;
+- no particular HTTP status-code convention is promised beyond the structured
+  classification;
+- diagnostic content need not be sanitized in local or public deployments. Full
+  exception types, stack traces, paths, and evaluated source may be shown.
+
+Credential, session, and capability redaction in MCP operational transcripts is a
+separate secret-handling boundary and is not relaxed by the diagnostic-disclosure rule.
+
 Do not infer one universal success envelope. Representative current shapes are:
 
 | Operation | Success shape |
@@ -44,7 +71,7 @@ fields.
 
 ## Endpoint groups
 
-The maintained public surface includes:
+The maintained frontend-support surface includes:
 
 - metadata and capability catalogs;
 - parse, prepare, run, state, pause, and destroy lifecycle operations;
@@ -56,13 +83,15 @@ The maintained public surface includes:
 `/dev/*` behavior is environment-gated. Consult adjacent Swagger and callers instead of
 copying a route inventory into agent instructions.
 
-## Validation boundary
+## Validation boundary and current gaps
 
 Backend project validation enforces selected canonical topology, representation,
 physical-link, variable, and protocol conditions. It is not a complete JSON-schema
 validator. Nested malformed shapes may fail later. Lifecycle handlers currently index
 some required body fields directly; missing fields can become generic 500 responses.
-Do not document a universal 400 guarantee until that behavior and its tests change.
+Some frontend callers also swallow transport failures or replace them with fallback
+values. Those are nonconformances with structured Log-tab reporting, not conventions to
+copy.
 
 ## Known contract gaps
 
@@ -74,8 +103,8 @@ Do not document a universal 400 guarantee until that behavior and its tests chan
 - Request/response Swagger coverage is sampled, not mechanically synchronized with every
   handler.
 - Evaluation failures after admitted source reaches execution use HTTP 200 with
-  `success:false`; syntax/policy failures use 400 or 403. Whether that convention is a
-  lasting public contract is unresolved.
+  `success:false`; syntax/policy failures use 400 or 403. Status-code uniformity is not
+  required as long as the result remains structured.
 
 Treat these as visible gaps, not as documentation to normalize around current source.
 
@@ -92,10 +121,9 @@ Use [repository workflows](../repository-workflows.md) to select checks.
 - **Integration evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Frontend caller:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
 
-## Unresolved questions
+## Confirmed interpretation
 
-- Which routes and success shapes are stable for external API clients rather than only
-  the bundled frontend?
-- Should malformed lifecycle inputs consistently return 400, and is omitted
-  `time_units` invalid or intended to use the internal default?
-- Are production panic stack traces intentionally part of the API response?
+- No route or success shape is a stand-alone external-client compatibility promise.
+- Malformed and unexpected failures need structured classification; they do not require
+  one universal status code.
+- Production diagnostics may include full panic and evaluation internals.

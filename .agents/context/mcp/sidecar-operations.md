@@ -69,11 +69,14 @@ transport behavior and installs a safe logger.
 
 - Normal Stop unbinds the browser before stopping the sidecar.
 - On binding desynchronization or `OUTCOME_UNKNOWN`, inspect the visible project and
-  simulation state, then explicitly unbind/rebind; do not blindly replay.
+  simulation state, then explicitly create a fresh browser binding, read current state,
+  and use a fresh operation ID; the existing transport-session ledger still retains the
+  uncertain ID, so do not replay it.
 - On startup failure, use bounded sanitized supervisor diagnostics. Never paste or
   preserve capabilities/session IDs in documentation or committed logs.
-- Unexpected sidecar exit revokes its capability. Whether restart should preserve a
-  still-live browser lease remains unresolved.
+- Unexpected sidecar exit revokes its capability and ends the transport-session retry
+  scope. Restart requires a fresh browser binding, current-state read, and fresh
+  operation IDs.
 
 ## Anchors
 
@@ -83,7 +86,8 @@ transport behavior and installs a safe logger.
 - **Canonical checks:** [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh) and
   [`ci/browser.sh`](../../../ci/browser.sh).
 
-## Unresolved questions
+## Compatibility boundary
 
-- Should an unexpected exit require an explicit browser rebind before restart accepts
-  commands?
+The checked-in `contracts/mcp/v1/` version synchronizes the frontend, backend, and
+sidecar shipped together. It does not promise backward-compatible tools, schemas,
+resources, errors, or result fields across WebQuantumSavory releases.

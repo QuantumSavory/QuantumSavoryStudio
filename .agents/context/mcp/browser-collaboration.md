@@ -4,7 +4,8 @@
 - **Open when:** Changing browser binding, leases, canonical snapshots, revisions, draft
   flushing, command commit, GUI-originated changes, or lifecycle relay.
 - **Do not open when:** Starting/upgrading the sidecar or changing tool schemas alone.
-- **Related specification IDs:** SYS-011, SYS-012, SUB-003, SUB-012, CMP-002, CMP-008
+- **Related specification IDs:** SYS-011, SYS-012, SYS-016, SUB-003, SUB-012,
+  SUB-013, CMP-002, CMP-008, CMP-011
 - **Review when:** Binding ownership, revision/hash semantics, command execution, or
   collaboration teardown changes.
 
@@ -57,9 +58,14 @@ context around the read.
 ## Delivery failures
 
 Before browser delivery, lease loss or stop can cancel an operation safely. After a
-durable action may have executed, an acknowledgement failure unbinds the browser and
-returns nonretryable `OUTCOME_UNKNOWN`. The client must inspect/rebind instead of
-blindly retrying.
+durable action may have executed, an acknowledgement failure locks further editing,
+unbinds the browser, and returns nonretryable `OUTCOME_UNKNOWN`. The user inspects the
+visible GUI and explicitly rebinds before the agent reads current state and uses a fresh
+operation ID; the uncertain action is never replayed automatically.
+
+The operation ledger belongs to the external MCP transport session, not to one browser
+binding. Rebind does not free or forget prior IDs. A sidecar restart ends that namespace;
+the next session must inspect current GUI state and use fresh IDs.
 
 Impossible hash/revision acknowledgements also desynchronize the binding. This prevents
 the backend from accepting a subsequent mutation on an uncertain project version.
@@ -76,5 +82,6 @@ the backend from accepting a subsequent mutation on an uncertain project version
 
 - May the unclassified GUI-change watcher remain a supported fallback, or is it
   migration debt with a retirement trigger?
-- Are one session and one browser binding normative while exact lease/queue limits stay
-  implementation choices?
+
+One active MCP session and one browser binding are normative. Exact lease, polling, and
+queue sizes remain implementation choices.

@@ -49,11 +49,28 @@ updating frontend and MCP derivations.
 - Blocking refreshes activity. A later scan removes the retained record after it has
   then been idle for more than 300 minutes.
 
-These are cooperative, scan-bound current behaviors rather than exact deadline
-guarantees. The thresholds are not configurable, and whether the intended policy should
-instead enforce hard deadlines or exact boundary behavior is unresolved.
+The 10/30/300-minute values are fixed product policy and are not user- or
+deployment-configurable. Enforcement is intentionally approximate: cooperative
+step-bound checks and periodic scans may act at the first convenient opportunity after
+a threshold. Exact equality, interruption inside a simulation step, and precise scan
+deadlines are not contractual.
 
 ## Cleanup semantics
+
+The confirmed cleanup contract is destructive even on failure:
+
+1. attempt every remaining assigned-state release after any individual failure;
+2. discard all heavy state and remove the simulation record;
+3. preserve nothing for retry;
+4. return a structured overall failure if any release failed; and
+5. record a clear frontend Log-tab diagnostic that the server or GUI may now be
+   significantly degraded.
+
+A failure must never be reported as complete-release success. When the normal operation
+would retain a lightweight blocked record, a release failure instead removes that
+record.
+
+## Current cleanup nonconformance
 
 Cleanup attempts to trace out assigned state and clear network, mapping, graph, and
 payload references. Individual trace-out failures are logged and do not stop remaining
@@ -62,11 +79,9 @@ exception occurs, the current implementation logs success and returns `true` eve
 an individual trace-out failed. Explicit destroy then removes the registry entry, so
 that failure does not reach the caller as a cleanup warning.
 
-Cleanup also clears the references needed to retry an individual failed release.
-Therefore cleanup is best effort: neither a `true` return nor state removal proves every
-external/native resource was released, and a later invocation does not guarantee a
-retry. Caller-visible partial-failure reporting and retry semantics are unresolved
-desired guarantees, not observed current contracts.
+Cleanup also clears the references needed to retry an individual failed release. That
+matches the no-retry decision, but returning `true`, retaining a blocked record, and
+failing to surface severe degradation do not match the confirmed contract.
 
 ## Logs, panic, and live metadata
 
@@ -74,8 +89,8 @@ Starting a new target clears captured logs; resuming a paused target preserves t
 HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Live tags,
 queries, slots, and protocol rendering require a retained register/network and become
 unavailable after blocking or destruction. Panic state and structured logs may contain
-full exception messages and stack traces; production disclosure intent has not been
-confirmed.
+full exception messages and stack traces. That disclosure is permitted in local and
+public deployments and must remain available to the GUI Log tab.
 
 ## Anchors
 
@@ -85,10 +100,8 @@ confirmed.
 - **Component evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 
-## Unresolved questions
+## Confirmed interpretation
 
-- Is restart volatility an explicit non-goal?
-- Must a failed assigned-state release reach the caller, and should enough state be
-  retained to retry it?
-- Should time limits remain fixed or become deployment configuration, and are they
-  intended as hard/exact deadlines rather than cooperative scan-bound thresholds?
+- Simulation state is restart-volatile.
+- Cleanup failures reach the caller, remove the record, and retain no retry state.
+- Timing values are fixed; cooperative and scan-bound timing is sufficient.

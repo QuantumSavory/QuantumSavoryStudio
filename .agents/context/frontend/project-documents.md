@@ -5,7 +5,8 @@
   names, browser storage, or collaboration/simulation/script projections.
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
-- **Related specification IDs:** STK-006, SYS-003, SUB-002, CMP-001
+- **Related specification IDs:** STK-006, SYS-003, SYS-015, SUB-002, SUB-014,
+  CMP-001, CMP-010
 - **Review when:** A durable field, schema version, normalization, projection, storage
   key, or project-transition rule changes.
 
@@ -26,18 +27,22 @@ Encoding and projection helpers must not mutate their input. In memory, edges re
 
 ## Version and compatibility
 
-Current stored schema is version 1. The codec coerces a missing or non-integer
-`schemaVersion` (including `null`, strings, and non-integer numbers) to legacy schema 0
-and normalizes it. Negative integer versions also follow the legacy normalization path;
-only integer versions greater than the current version are rejected. Whether
-non-integer and negative values should instead be rejected as malformed is unresolved.
-Released behavior also accepts selected additive legacy physical payload fields when
-absent or `null`.
+Current stored schema is version 1, independently of the software version. There is no
+backward- or forward-compatibility guarantee for project documents between releases.
+For an older, newer, negative, missing, non-integer, or otherwise malformed
+`schemaVersion`, the interactive flow must:
 
-Compatibility is intentional in current public prose, but no retirement horizon is
-declared. Preserve unknown extension fields only if a specification explicitly says so;
-existing tests cover documented canonical fields rather than arbitrary lossless
-round-trip.
+1. emit a clear schema warning in the Tools panel Log tab;
+2. continue automatically with a best-effort decode/open; and
+3. report a structured failure if the document still cannot be opened.
+
+A version marker alone is never a hard-rejection condition. Normalization of old or
+additive shapes is opportunistic recovery, not a compatibility promise. Unknown
+extension fields need not round-trip unless separately specified.
+
+Current code instead coerces missing/non-integer markers to schema 0, normalizes negative
+versions, and rejects future integers. Existing software-major confirmation is also not
+the required schema warning. Treat these as current behavior and conformance gaps.
 
 The UI import preflight is stricter than the codec: it currently requires network node,
 edge, and protocol arrays before decoding. Do not claim that every codec-accepted partial
@@ -45,9 +50,9 @@ legacy document is accepted by the interactive import path.
 
 ## Browser persistence
 
-Named projects currently use browser `localStorage`, including a metadata index and
-recent-project pointer. The exact key strings are compatibility-sensitive implementation
-facts, not yet confirmed public interfaces.
+Named projects use browser `localStorage`, including a metadata index and recent-project
+pointer. Exact keys and contents are implementation details with no cross-release
+compatibility guarantee. There is no server-side saved-project store.
 
 Save As protects an existing different name unless overwrite is explicit, then aligns
 the stored name, active name, and simulation namespace. Unsaved state combines a
@@ -56,25 +61,19 @@ and never save automatically.
 
 ## Project transitions
 
-Open, demo-open, and import transitions through `commitCandidate` perform this ordering:
+Every active-project replacement—saved-project open, import, demo, reset/new/create, or
+another switch—disregards the current browser project as soon as replacement starts.
+The flow tears down session-owned GUI state before candidate fetch, preflight, warning,
+or decode. If any later step fails, the active session stays empty; it does not roll
+back. The failure is recorded clearly in the Log tab.
 
-1. preflight and decode the candidate before tearing down the current view;
-2. allocate a transition generation so that a later transition invalidates an older
-   completion rather than waiting for it through a serialization lock;
-3. await collaboration unbind and stop local state/log polling;
-4. clear session-owned UI state and release the old map graph for one Vue tick;
-5. install the candidate only if its generation is still current, while preserving its
-   canonical name.
+Transitions may use simple generation invalidation rather than exact serialization.
+Transient and final empty states are acceptable. The currently persisted old named
+project is not thereby deleted; this rule concerns the active browser session. Backend
+simulation records remain governed by their own destroy/retention lifecycle.
 
-The live graph is transiently cleared before the post-`nextTick` generation check. A
-superseding or reentrant operation in that interval can observe the cleared graph, and a
-stale transition returns without restoring its candidate. Current guards and tests do
-not establish serialized or atomic replacement across that interval. Whether project
-replacement must be atomic from the user/session perspective is unresolved.
-
-Current server cleanup targets the destination project namespace before installation,
-not the source project's server simulation. The source state may remain until reopening
-or automatic cleanup; intent is unresolved.
+Current code preflights and decodes before `commitCandidate` clears the graph, so failed
+open/import/demo operations can preserve the active project. That is a conformance gap.
 
 ## Frontend-only fields
 
@@ -90,13 +89,9 @@ derived attachment edges/bounds remain presentation data.
 - **Unit evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
   and [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js).
 
-## Unresolved questions
+## Confirmed interpretation
 
-- Must interactive import accept every partial v0/v1 shape accepted by the codec?
-- Are missing, non-integer, and negative `schemaVersion` values intentionally supported
-  as legacy schema 0, or should only an absent version select that path?
-- Must overlapping project replacement be serialized or otherwise atomic across the
-  transient cleared-graph interval?
-- Are exact local-storage keys a supported interface?
-- Is leaving the source project's backend simulation alive on a project switch
-  deliberate?
+- Interactive import attempts every structurally recoverable shape after warning.
+- Schema markers do not gate the attempt.
+- Replacement is destructive-on-start and need not be atomic.
+- Local-storage keys are not a supported compatibility interface.

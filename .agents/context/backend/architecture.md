@@ -4,7 +4,7 @@
 - **Open when:** Tracing Genie boot, root/package ownership, process-local state,
   generated assets, or the backend's frontend/MCP boundaries.
 - **Do not open when:** Looking up one endpoint shape or selecting a test command.
-- **Related specification IDs:** SYS-001, SYS-010, SUB-001, SUB-006
+- **Related specification IDs:** SYS-001, SYS-010, SYS-013, SUB-001, SUB-006
 - **Review when:** Boot order, module composition, state ownership, process boundaries,
   or generated frontend serving changes.
 
@@ -24,8 +24,10 @@ bin/server
 ```
 
 `routes.jl` is the HTTP composition root. `src/WebQuantumSavory.jl` loads package
-services and owns the process-global state registry. The state is in memory and is lost
-on restart; current code does not provide a persistent or distributed simulation store.
+services and owns the process-global state registry. Simulation state is intentionally
+in memory and is lost on restart. The product has no accounts, authentication, durable
+server-project store, or distributed simulation store; named project persistence belongs
+to browser `localStorage`.
 
 ## Responsibility boundaries
 
@@ -37,6 +39,12 @@ on restart; current code does not provide a persistent or distributed simulation
 | Simulation lifecycle reads/mutations | `SimulationService` plus state functions | HTTP and MCP reads can share a transport-neutral service |
 | MCP coordination | Backend collaboration/config/supervisor adapters | The optional sidecar stays out of the main dependency graph |
 | External MCP transport | Isolated `mcp/` process | Process-global MCP logging and session lifecycle cannot alter Genie |
+
+The HTTP API is a private frontend-support boundary rather than an independently
+supported client product. The primary deployment is a loopback server used from a
+desktop browser. A public educational GUI may use the same backend in a Podman
+container, but MCP remains local-only. See
+[product boundary and deployment](../product-boundary-and-deployment.md).
 
 The backend dynamically derives most constructor catalogs from QuantumSavory. Explicit
 allowlists remain for representations and States Zoo recipes. These are different
@@ -71,7 +79,8 @@ search can change runtime catalogs or rendering.
   and [`src/mcp_adapters.jl`](../../../src/mcp_adapters.jl).
 - **Warmup:** [`src/startup_warmup.jl`](../../../src/startup_warmup.jl).
 
-## Unresolved questions
+## Known boundary
 
-- Whether restart-volatile, single-process state and multi-instance deployment are
-  deliberate product exclusions remains unconfirmed.
+Restart volatility, lack of user management, and lack of multi-instance project
+coordination are deliberate product boundaries. A public deployment does not change
+browser-local project ownership.

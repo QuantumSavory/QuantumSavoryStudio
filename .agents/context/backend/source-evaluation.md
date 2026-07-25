@@ -13,10 +13,13 @@
 
 `WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION` is the sole operator opt-in. Evaluation is
 disabled in every environment unless its value is explicitly true. The restricted
-language reduces accidental capability but is not a security sandbox: accepted Julia
-executes natively in the server process without memory, operation, or safely
-interruptible in-process time metering. Enable it only when every caller and payload is
-trusted.
+language reduces risk but is not a security sandbox: accepted Julia executes natively
+in the server process without memory, operation, or safely interruptible in-process time
+metering.
+
+Both the local and public education profiles may enable the opt-in. A public deployment
+that does so must run the application inside an external container/host sandbox. The
+whitelist is defense in depth and cannot replace that deployment boundary.
 
 Safe non-source paths include ordinary numeric/intrinsic conversion, known predefined
 functions, structured States Zoo recipes, pure script-source validation/emission, and
@@ -58,9 +61,9 @@ as deferred without executing until an assignment supplies concrete context.
 
 Disabled evaluation produces the stable 403 policy error. Syntax/profile failures are
 client errors. An execution failure after admitted source currently returns a
-`success:false` result, usually with HTTP 200; production suppresses evaluated exception
-internals while development/test may include them. This split is current behavior, not
-yet a confirmed compatibility promise.
+`success:false` result, usually with HTTP 200. The confirmed product contract permits
+full diagnostics in every deployment, including exception types, stack traces, paths,
+and evaluated source. Current production redaction is therefore a conformance gap.
 
 ## Verification gap
 
@@ -77,7 +80,9 @@ V-model.
 - **Unit evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 
-## Unresolved questions
+## Verification gaps
 
-- Is the current HTTP 200 execution-failure convention intentional?
-- Must a real disabled deployment be a continuously required CI configuration?
+- Status-code uniformity is not required, but every failure still needs a structured
+  result recorded in the GUI Log tab.
+- Maintained CI lacks both a real disabled-server action and a public-container
+  external-sandbox action.
