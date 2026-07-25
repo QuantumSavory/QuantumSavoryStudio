@@ -39,7 +39,7 @@ derived or coordinated boundaries.
 | --- | --- |
 | Stored documents and derived payload projections | `projectCodec.js` |
 | Browser-local named persistence | `ProjectStore` |
-| Project switching/import/reset teardown | `useProjectSession` |
+| Project-session transitions and teardown | `useProjectSession` |
 | Atomic transport-neutral authoring operations | `DesignCommandService` |
 | Simulation phase/capabilities | `simulationLifecycle.js` |
 | API commands, polling, final log drain, cleanup | `useSimulationController` |

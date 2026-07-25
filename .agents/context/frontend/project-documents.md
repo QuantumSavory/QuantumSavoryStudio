@@ -32,6 +32,10 @@ use IDs and plain data. `projectCodec.js` is the canonical translation boundary.
 
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
+The target excludes transient editor metadata, but current constructor normalization
+retains string `latex` and the codec clones unrecognized additive fields. Imported
+constructor preview/error fields can therefore round-trip today; treat that as a current
+exception, not permission to add more durable UI state.
 
 ## Version and compatibility
 
@@ -71,8 +75,10 @@ and [CMP-010](../../v-model/04-component-contracts.md#cmp-010--destructive-proje
 They concern the active browser session, not deletion of a previously persisted named
 project; backend simulation records have their own destroy/retention lifecycle.
 
-Current code preflights and decodes before `commitCandidate` clears the graph, so failed
-open/import/demo operations can preserve the active project. That is a conformance gap.
+Current open/import/demo preflight and decode, and new-project creation/storage, occur
+before active-session teardown. Rejection or failure can therefore preserve the active
+project; an overlapping create may also leave its stored candidate. That ordering is a
+conformance gap.
 
 ## Frontend-only fields
 

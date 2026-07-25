@@ -34,7 +34,7 @@ planned until a durable acceptance record exists.
 - **Pass criterion:** The file is readable, independently editable, faithful for every selected supported feature, executable without WebQuantumSavory, and explicit in help about every selected omission/simplification.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend and mocked-browser evidence are separate; complete fidelity and feature-specific help are not demonstrated.
+- **Nonconformance:** Real-route browser evidence inspects selected semantics, but no real-backend download is edited/run and complete fidelity plus feature-specific help are not demonstrated.
 
 ## ACC-004 — Validate human-controlled local AI collaboration
 
@@ -56,7 +56,7 @@ planned until a durable acceptance record exists.
 - **Pass criterion:** Default mode executes no source canary and retains safe paths; enabled mode admits only the restricted subset; backend-produced diagnostics remain complete in both profiles; a public canary cannot cross the external sandbox boundary.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Component tests cover gate/profile portions, but no public-container sandbox artifact exists and production currently redacts evaluation internals.
+- **Nonconformance:** Component tests cover gate/guard portions, but absent `dev`/`test` overrides enable evaluation, the complex-parameter fallback is unguarded, no public sandbox artifact exists, and production redacts evaluation internals.
 
 ## ACC-006 — Validate warning and best-effort project recovery
 

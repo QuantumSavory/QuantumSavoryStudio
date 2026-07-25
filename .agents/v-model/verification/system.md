@@ -44,7 +44,7 @@ No product suite was run for this documentation-only update.
 - **Pass criterion:** Choices derive from returned metadata or explicit allowlists; advertised values round-trip and unsupported values fail.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend catalog and frontend descriptor tests remain separate; browser protocol scenarios intercept catalogs.
+- **Nonconformance:** A real-browser background-noise scenario crosses its catalog through descriptors, persistence, simulation, and export; other catalogs/input kinds and explicit unsupported values remain separate or mocked.
 
 ## SYSV-005 — Verify GUI simulation lifecycle
 
@@ -77,7 +77,7 @@ No product suite was run for this documentation-only update.
 - **Pass criterion:** Text/filename are stable, source parses/runs its supported path, registry and canary remain unchanged, and every selected simplification has corresponding help.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend export and mocked browser download are covered separately; no real browser/backend fidelity action exists.
+- **Nonconformance:** A background-noise scenario reaches the real route and inspects selected output, but no action combines that real response with download, parse/run, disabled-backend canary/registry checks, and feature-specific help.
 
 ## SYSV-008 — Verify structured API failures in the Tools Log
 

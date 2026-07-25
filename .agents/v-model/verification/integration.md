@@ -4,7 +4,7 @@
 
 - **Covers:** SUB-001
 - **Method:** test
-- **Procedure:** Start normal local, MCP-enabled local, and public profiles; inspect loaded processes/dependencies and account/project-storage surfaces.
+- **Procedure:** Start local, MCP-enabled local, and public profiles; inspect processes and account/project-storage surfaces.
 - **Environment / configuration:** Clean local environments plus public Podman container
 - **Pass criterion:** Normal/public modes serve GUI/API without MCP or account/project stores; local enablement uses the sidecar; sidecar failure leaves the main runtime available.
 - **Status:** planned
@@ -15,9 +15,9 @@
 
 - **Covers:** SUB-002
 - **Method:** test
-- **Procedure:** Apply all projections to asymmetric fixtures across every schema-marker class; compare warnings, output, and input identity/content.
+- **Procedure:** Project asymmetric fixtures for every schema-marker class; compare warnings, output, and source identity/content.
 - **Environment / configuration:** Vitest/jsdom with real codec and warning adapter
-- **Pass criterion:** Every differing/malformed marker warns without version-only rejection; structurally usable fixtures reach decode and hydrate durable fields; projection exclusions hold; no helper mutates source values.
+- **Pass criterion:** Every differing/malformed marker warns without version-only rejection; usable fixtures decode/hydrate; exclusions hold; sources remain unchanged.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current codec tests hard-reject future integers and omit required warnings.
@@ -53,7 +53,7 @@
 - **Pass criterion:** Wire types, placement, nullability, bounds, and safe resolution match across the boundary; unsupported values fail.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Backend metadata and frontend descriptors are tested separately.
+- **Nonconformance:** One real-browser background scenario covers its catalog/descriptors; other catalogs, input kinds, and unsupported values remain separate or mocked.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
@@ -72,7 +72,7 @@
 - **Method:** test
 - **Procedure:** Read observations through lifecycle states, trigger distinct backend errors, and inject an assigned-state release failure while observing GUI records.
 - **Environment / configuration:** Real backend/frontend with release injection and Tools Log
-- **Pass criterion:** Representations are serializable; availability changes after cleanup; all error fields reach the Log; failed cleanup attempts all releases, removes the record, and reports severe degradation.
+- **Pass criterion:** Representations serialize; cleanup changes availability; errors reach the Log; failed cleanup attempts all releases, removes the record, and reports severe degradation.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current artifacts cover selected observations; no release injection or complete cross-boundary error fixture exists.
@@ -85,8 +85,8 @@
 - **Environment / configuration:** Backend unit/HTTP tests plus browser export-help scenario
 - **Pass criterion:** Source/filename are deterministic and valid, registry names stay unchanged, canaries do not execute, supported mappings run, and selected omissions are disclosed.
 - **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js)
-- **Nonconformance:** The cited generator tests do not supply a source-bearing execution canary; the browser endpoint is mocked, help is general, and no maintained feature-to-omission inventory establishes exhaustive disclosure.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
+- **Nonconformance:** The panel scenario mocks its endpoint; the background scenario reaches the real route for selected semantics. Help is general, with no exhaustive feature/omission inventory.
 
 ## INTV-009 — Verify private route/error/log boundary
 
@@ -103,29 +103,29 @@
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Inventory source entries, exercise parser/profile/gate/evaluator in both states, and run public-sandbox canaries.
+- **Procedure:** Inventory source entries, exercise parser/allowlist/gate/evaluator in both states, and run public-sandbox canaries.
 - **Environment / configuration:** Pinned source, dynamic unit/HTTP fixtures, public Podman sandbox
-- **Pass criterion:** Every source reaches its applicable parser/profile; executing paths reach one gate/evaluator; forbidden canaries fail; pure export works disabled; public canaries cannot escape external containment.
+- **Pass criterion:** Every executing source reaches the gate and allowlist before evaluation; forbidden canaries fail; pure export works disabled; public canaries cannot escape external containment.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** No durable entry inventory, disabled real-server CI mode, or public sandbox artifact exists.
+- **Nonconformance:** No entry inventory, disabled-server mode, or public sandbox artifact exists; `dev`/`test` defaults bypass explicit opt-in, and the complex-parameter fallback bypasses the allowlist.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 
 - **Covers:** SUB-011
 - **Method:** test
-- **Procedure:** Exercise strict flags/ports/locality, concurrent start/stop, startup failure, generation replacement, capability checks, unexpected exit, and secret canaries.
+- **Procedure:** Exercise strict configuration, concurrent start/stop, failure/exit, generation replacement, capabilities, and secret canaries.
 - **Environment / configuration:** Backend MCP configuration and fake/real sidecar processes
 - **Pass criterion:** Invalid cases fail closed, one generation owns authority, stale capabilities fail, cleanup is bounded, and secrets/raw transcripts are absent.
 - **Status:** implemented
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`test/test_sidecar_supervisor.jl`](../../../test/test_sidecar_supervisor.jl)
-- **Nonconformance:** Unexpected exit with a live browser lacks cross-stack recovery evidence, and current blocking-cleanup fixtures are manually released rather than proving a hung cleanup is bounded.
+- **Nonconformance:** Live-browser unexpected-exit recovery is untested; blocking-cleanup fixtures are manually released instead of proving a bound.
 
 ## INTV-012 — Verify editor revision and operation-recovery protocol
 
 - **Covers:** SUB-012
 - **Method:** test
-- **Procedure:** Exercise bind/heartbeat/expiry, GUI/MCP revisions, exact/conflicting IDs, more than 256 outcomes, delivery/commit, acknowledgement loss, unbind/rebind, and restart.
+- **Procedure:** Exercise binding/expiry, revisions, exact/conflicting IDs, 257 outcomes, delivery/acknowledgement loss, rebind, and restart.
 - **Environment / configuration:** Real backend hub/browser bridge with controllable lease and delivery
 - **Pass criterion:** Every pre/post-delivery case yields its documented result without duplicate mutation; the session ledger survives browser rebind and ends only with transport-session restart.
 - **Status:** planned

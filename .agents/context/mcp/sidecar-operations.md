@@ -23,10 +23,11 @@ Start the integrated application:
 WEBQUANTUMSAVORY_ENABLE_MCP=true ./bin/server
 ```
 
-The feature flag accepts only Boolean text. `WEBQUANTUMSAVORY_MCP_PORT` overrides the
-default sidecar port. The sidecar does not start merely because the feature is available;
-the supported browser flow explicitly initializes it. A headerless local caller can
-reach the backend start route, so this is user-flow gating rather than authentication.
+The feature flag accepts exactly lowercase `true` or `false`.
+`WEBQUANTUMSAVORY_MCP_PORT` overrides the default sidecar port. The sidecar does not
+start merely because the feature is available; the supported browser flow explicitly
+initializes it. A headerless local caller can reach the backend start route, so this is
+user-flow gating rather than authentication.
 
 ## Work on the isolated application
 
@@ -70,8 +71,10 @@ transport behavior and installs a safe logger.
 - Normal Stop unbinds the browser before stopping the sidecar.
 - On binding desynchronization or `OUTCOME_UNKNOWN`, inspect the visible project and
   simulation state, then explicitly create a fresh browser binding, read current state,
-  and use a fresh operation ID; the existing transport-session ledger still retains the
-  uncertain ID, so do not replay it.
+  and use a fresh operation ID. The baselined transport-session ledger must retain the
+  uncertain ID so it cannot replay; current code instead clears pending commands and its
+  success cache on unbind/rebind, so treat the old ID as burned even though the server
+  forgets it.
 - On startup failure, use bounded sanitized supervisor diagnostics. Never paste or
   preserve capabilities/session IDs in documentation or committed logs.
 - Unexpected sidecar exit revokes its capability and ends the transport-session retry

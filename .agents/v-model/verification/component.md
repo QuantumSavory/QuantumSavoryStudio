@@ -55,16 +55,16 @@
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** Failure behavior requires UNITV-012; no current execution record exists.
 
-## UNITV-006 — Verify dynamic exact-subtree evaluation
+## UNITV-006 — Verify restricted-source guard and evaluation
 
 - **Covers:** CMP-006
 - **Method:** test
-- **Procedure:** Run allowed/forbidden syntax, complexity, macro/lowering, namespace/capability, context-name, target-type, range, and filesystem-canary fixtures in both policy states.
+- **Procedure:** Run permitted and rejected identifiers/heads, property/module access, macros, imports, commands, local/context bindings, symbolic names, target-type/range, and filesystem canaries in both policy states.
 - **Environment / configuration:** Julia backend unit environment with evaluation disabled and enabled
-- **Pass criterion:** Parsed-source equality, fresh-module behavior, placement bindings, type/range checks, and denial-before-execution match every fixture.
+- **Pass criterion:** Permitted forms and placement bindings work in fresh modules; every forbidden/capability fixture is denied before evaluation; target-type/range checks match each fixture.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
-- **Nonconformance:** Evaluation-site completeness requires UNITV-013.
+- **Nonconformance:** Fixtures lack direct import/using and discriminating command/macro-head cases; the complex-parameter fallback in `parser.jl` bypasses the allowlist. Complete site coverage requires UNITV-013.
 
 ## UNITV-007 — Verify deterministic export bindings
 

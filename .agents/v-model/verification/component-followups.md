@@ -40,12 +40,12 @@ the current component suites.
 
 - **Covers:** CMP-006
 - **Method:** inspection
-- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value to the validated subtree and server-owned lexical wrapper.
+- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value through the environment gate, parser, allowlist guard, and server-owned context.
 - **Environment / configuration:** Pinned source with a durable evaluator inventory
-- **Pass criterion:** Exactly one user-controlled evaluation site receives the validated subtree unchanged; no path bypasses policy/context.
+- **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** No durable evaluator inventory is stored.
+- **Nonconformance:** No durable inventory covers the guarded paths in `types.jl` and `Sandbox.jl`; the complex-parameter fallback in `parser.jl` is gated but unguarded.
 
 ## UNITV-014 — Verify hash-only acknowledgement uncertainty
 

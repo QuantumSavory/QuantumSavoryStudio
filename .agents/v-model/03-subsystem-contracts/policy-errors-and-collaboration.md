@@ -23,9 +23,9 @@ replacement.
 
 ## SUB-010 — Restricted-source admission and containment boundary
 
-- **Normative statement:** All source-bearing surfaces shall use complete-source parsing and profile validation; executing surfaces shall additionally use the environment gate, server-owned context, and sole native evaluation boundary, while public containment remains an external deployment responsibility.
+- **Normative statement:** Every executing user-source surface shall parse source, apply the identifier allowlist and explicit forbidden-head guard before native evaluation, use only server-owned context, and require the environment opt-in, while public containment remains an external deployment responsibility.
 - **Parents:** SYS-009
-- **Acceptance criterion:** Forbidden syntax fails on every path; non-executing export works with evaluation disabled; execution denies unless enabled and limits admitted source to declared bindings/type/range; public enablement supplies independent host/container isolation.
+- **Acceptance criterion:** Every executing path rejects forbidden syntax, capability names, and undeclared identifiers before evaluation; non-executing export works with evaluation disabled; execution denies unless explicitly enabled and enforces declared context/type/range; public enablement supplies independent host/container isolation.
 - **Verification:** INTV-010 (test)
 - **Origin / risk:** Central validator/evaluator plus maintainer-confirmed sandbox boundary; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../../context/backend/source-evaluation.md)

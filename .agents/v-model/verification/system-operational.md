@@ -12,7 +12,7 @@ destructive transitions. No product suite was run for this documentation update.
 - **Pass criterion:** Disabled mode executes no canary; enabled mode admits only restricted source; safe/pure paths work in both; public canaries cannot cross the external sandbox; full diagnostics remain observable.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Component tests cover gate values, but server CI forces true, production redacts evaluation internals, and no public sandbox artifact exists.
+- **Nonconformance:** Component tests cover gate values, but absent `dev`/`test` overrides enable evaluation, the complex-parameter fallback is unguarded, server-backed CI sets `GENIE_ENV=test`, production redacts internals, and no public sandbox artifact exists.
 
 ## SYSV-010 — Verify execution, retention, and failed cleanup
 

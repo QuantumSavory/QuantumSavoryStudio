@@ -46,13 +46,13 @@ logical boundaries.
 - **Verification:** UNITV-005 (test), UNITV-012 (test)
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
-## CMP-006 — Exact-subtree evaluation invariant
+## CMP-006 — Restricted-source admission and evaluation invariant
 
-- **Normative statement:** Native evaluation shall receive the same validated source subtree embedded in a server-owned lexical wrapper inside a fresh bare module, with no lowering, macro expansion, caller-created expression, import, or alternate user-controlled evaluation site.
+- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the environment gate.
 - **Parents:** SUB-010
-- **Acceptance criterion:** Static inventory and adversarial syntax/context tests prove one evaluation site, exact-subtree preservation, bounded forms, placement-specific names, and denial before execution for forbidden capability canaries.
+- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the gate and guard; permitted forms and placement names work; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; numeric type/range checks remain enforced.
 - **Verification:** UNITV-006 (test), UNITV-013 (inspection)
-- **Origin / risk:** Restricted evaluator design and tests; critical host-integrity risk
+- **Origin / risk:** Restricted allowlist/evaluator design and tests; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
 
 ## CMP-007 — Deterministic script binding and imports

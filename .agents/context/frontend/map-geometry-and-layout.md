@@ -30,6 +30,13 @@ sampled geographic route, not projected Cartesian Bézier length. `physicalParam
 owns units, defaults, bounds, explicit delay/loss/transmissivity formulas, overrides,
 and resolved fields; `edgeGeometry.js` adapts routes and distances.
 
+After adaptive curve sampling, physical routes densify every guide leg so no finalized
+geodesic segment exceeds 100 km. Antimeridian longitudes are then transiently unwrapped
+to keep one finite short path without changing canonical endpoint coordinates. Drawing,
+hit testing, physical distance/delay, and midpoint must all consume that same finalized
+LineString; the midpoint is inserted into its render coordinates. Curve-editing mode
+changes handles, not the finalized route.
+
 Only physical edges expose physical controls, badges, curve handles, and resolved
 payload values. Virtual edges remain straight and carry no physical fields. Reject a
 second unordered physical link between the same endpoints because the backend graph
@@ -71,6 +78,7 @@ focus.
   and [`gui/src/utils/annotationGeometry.js`](../../../gui/src/utils/annotationGeometry.js).
 - **Layers/markers:** [`gui/src/utils/mapLayers.js`](../../../gui/src/utils/mapLayers.js)
   and [`gui/src/composables/useMaplibreMarker.js`](../../../gui/src/composables/useMaplibreMarker.js).
+- **Geometry evidence:** [`gui/tests/unit/edgeGeometry.test.js`](../../../gui/tests/unit/edgeGeometry.test.js).
 
 ## Unresolved questions
 

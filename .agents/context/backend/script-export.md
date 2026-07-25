@@ -64,8 +64,10 @@ inventory currently proves exhaustive corresponding help.
 
 Backend unit tests cover deterministic generation, parsing, selected execution
 semantics, and no registry mutation. HTTP tests cover response/filename and namespace
-behavior. The browser scenario uses a mocked export endpoint. A real browser-to-backend
-download action remains planned.
+behavior. The dedicated export-panel scenario mocks its endpoint; the background-noise
+browser scenario reaches the real route and inspects selected generated semantics.
+No single action downloads a real backend response and then independently edits/runs
+it, so that action remains planned.
 
 ## Anchors
 
@@ -75,3 +77,4 @@ download action remains planned.
 - **Component evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Browser evidence:** [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js).
+- **Real-route browser evidence:** [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js).

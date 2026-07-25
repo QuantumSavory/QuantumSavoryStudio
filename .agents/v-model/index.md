@@ -6,7 +6,7 @@
   private frontend-support HTTP API/backend, and optional local MCP sidecar
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Product source at
-  `da3c22470896d554d2e480ec4a1ed06aeb9fa8d9`
+  `49cae5fed84ca143a35975de4c04fc7e601a1bbf`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-25 maintainer interview
 - **Last reviewed:** 2026-07-25
@@ -71,6 +71,8 @@ artifacts are therefore at most `implemented`; no action is marked `passing`.
   several marker classes, and current project transitions preflight before teardown.
 - Error handling is mixed: generic backend/client paths can lose diagnostics or avoid
   the Tools Log, and production evaluation details are currently redacted.
+- Evaluation is implicitly enabled in `dev`/`test` when the opt-in variable is absent,
+  contrary to the explicit opt-in baseline.
 - Cleanup continues after individual release failures but can report success, retain a
   blocked record, and omit the required severe-degradation result.
 - No public Podman/sandbox artifact or maintained macOS/Windows/Firefox/WebKit matrix

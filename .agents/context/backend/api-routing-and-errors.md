@@ -75,7 +75,7 @@ The maintained frontend-support surface includes:
 - parse, prepare, run, state, pause, and destroy lifecycle operations;
 - slots, protocols, logs, tags/queries, and rendered previews;
 - script export and restricted-source validation;
-- health, platform/source-language information, and Swagger UI.
+- health, platform/capability information, and Swagger UI.
 
 `/_mcp/*` is an optional internal/browser control surface, not a general remote API.
 `/dev/*` behavior is environment-gated. Consult adjacent Swagger and callers instead of
@@ -100,9 +100,13 @@ copy.
 - `/platform_info` retains older “raw Julia code” wording for the restricted language.
 - Request/response Swagger coverage is sampled, not mechanically synchronized with every
   handler.
-- Evaluation failures after admitted source reaches execution use HTTP 200 with
-  `success:false`; syntax/policy failures use 400 or 403. Status-code uniformity is not
-  required as long as the result remains structured.
+- The three restricted-source test handlers generally return parse, allowlist, and
+  evaluation failures with HTTP 200 and `success:false`; validated malformed DTO cases
+  use 400 and policy denial uses 403. Non-string source fields and some missing
+  lifecycle inputs can still become generic 500s. `/test_symbolic_expression` Swagger
+  advertises 400 for an evaluation failure although its handler returns the ordinary
+  200 JSON response. Status-code uniformity is not required as long as the result
+  remains structured.
 
 Treat these as visible gaps, not as documentation to normalize around current source.
 
