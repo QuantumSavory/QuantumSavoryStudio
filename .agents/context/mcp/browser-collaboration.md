@@ -9,6 +9,13 @@
 - **Review when:** Binding ownership, revision/hash semantics, command execution, or
   collaboration teardown changes.
 
+Normative browser authority, revision, operation-recovery, and Play behavior is defined
+by [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
+[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely),
+[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-operation-recovery-boundary),
+and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+This reference describes the current bridge/hub machinery and its gaps.
+
 ## Binding
 
 One browser editor owns a renewable lease. The browser binds:
@@ -45,30 +52,26 @@ durable ID formats. GUI-originated design changes publish snapshots into the sam
 revision stream.
 
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
-unclassified deep-watch synchronization fallback. The normative forward rule is that
-new MCP operations migrate their GUI equivalent to one shared handler.
+unclassified deep-watch synchronization fallback. The shared-handler requirement for
+new MCP operations is specified by SUB-003/CMP-002.
 
 ## Lifecycle and reads
 
-Lifecycle mutations relay through the existing browser simulation controller so user
-controls and MCP use one phase/capability path. Catalog reads and simulation-result reads
-do not mutate the design; simulation reads use backend services and verify collaboration
-context around the read.
+Lifecycle mutations currently relay through the existing browser simulation controller,
+although direct Run bypasses part of the GUI capability/readiness path described in
+[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+Catalog reads and simulation-result reads do not mutate the design; simulation reads use
+backend services and verify collaboration context around the read.
 
 ## Delivery failures
 
-Before browser delivery, lease loss or stop can cancel an operation safely. After a
-durable action may have executed, an acknowledgement failure locks further editing,
-unbinds the browser, and returns nonretryable `OUTCOME_UNKNOWN`. The user inspects the
-visible GUI and explicitly rebinds before the agent reads current state and uses a fresh
-operation ID; the uncertain action is never replayed automatically.
-
-The operation ledger belongs to the external MCP transport session, not to one browser
-binding. Rebind does not free or forget prior IDs. A sidecar restart ends that namespace;
-the next session must inspect current GUI state and use fresh IDs.
-
-Impossible hash/revision acknowledgements also desynchronize the binding. This prevents
-the backend from accepting a subsequent mutation on an uncertain project version.
+The required pre-delivery, post-delivery, rebind, and restart outcomes are specified by
+[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely)
+and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
+Current code can cancel selected pre-delivery cases and desynchronize a binding after
+impossible acknowledgement, but its bounded binding-scoped success cache does not retain
+the required terminal outcomes across rebind. See [tool contract](tool-contract.md) for
+the complete current delta.
 
 ## Anchors
 
@@ -83,5 +86,5 @@ the backend from accepting a subsequent mutation on an uncertain project version
 - May the unclassified GUI-change watcher remain a supported fallback, or is it
   migration debt with a retirement trigger?
 
-One active MCP session and one browser binding are normative. Exact lease, polling, and
-queue sizes remain implementation choices.
+Current lease, polling, and queue sizes remain implementation choices; the supported
+session/binding cardinality is defined by SYS-011/SYS-012.

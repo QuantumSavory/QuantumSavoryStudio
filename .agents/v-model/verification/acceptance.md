@@ -53,7 +53,7 @@ planned until a durable acceptance record exists.
 - **Method:** demonstration
 - **Procedure:** Run local and public-style profiles with the opt-in absent and true, exercise source and safe structured paths, inspect full diagnostics, and probe the external public sandbox boundary.
 - **Environment / configuration:** Local host plus externally sandboxed public Podman deployment
-- **Pass criterion:** Default mode executes no source canary and retains safe paths; enabled mode admits only the restricted subset; diagnostics may remain complete; a public canary cannot cross the external sandbox boundary.
+- **Pass criterion:** Default mode executes no source canary and retains safe paths; enabled mode admits only the restricted subset; backend-produced diagnostics remain complete in both profiles; a public canary cannot cross the external sandbox boundary.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Component tests cover gate/profile portions, but no public-container sandbox artifact exists and production currently redacts evaluation internals.
@@ -63,8 +63,8 @@ planned until a durable acceptance record exists.
 - **Covers:** STK-006
 - **Method:** demonstration
 - **Procedure:** With a populated active project, start imports for usable and unusable documents carrying older, newer, negative, missing, non-integer, and malformed schema markers.
-- **Environment / configuration:** Supported desktop browser with a warning/log observer
-- **Pass criterion:** Every marker class warns and enters decode rather than hard rejection; usable content opens; unusable content logs structured failure; the prior active session is discarded once each import starts.
+- **Environment / configuration:** Supported desktop browser with a user-visible warning observer and Tools Log
+- **Pass criterion:** Every marker class warns and proceeds through ordinary structural validation rather than hard rejection; usable content reaches decode and opens; structurally unusable content logs a structured failure; the prior active session is discarded once each import starts.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current code/tests reject future versions and preserve the active project on preflight failure.
@@ -84,7 +84,7 @@ planned until a durable acceptance record exists.
 
 - **Covers:** STK-008
 - **Method:** demonstration
-- **Procedure:** Start the localhost profile and a public Podman profile, save projects in two browser profiles, create live simulations, restart the servers, and inspect services and persistence.
+- **Procedure:** Start the localhost profile and a public Podman profile, complete the primary educational GUI flow anonymously, save projects in two browser profiles, create live simulations, restart the servers, and inspect services and persistence.
 - **Environment / configuration:** Local host and Internet-reachable Podman test deployment
 - **Pass criterion:** Both profiles require no account; each browser owns only its local saved projects; backend restart removes live simulations; no server project database appears; public mode starts no MCP service.
 - **Status:** planned
@@ -95,8 +95,8 @@ planned until a durable acceptance record exists.
 
 - **Covers:** STK-009
 - **Method:** demonstration
-- **Procedure:** Install/start the local application and complete the primary modeling/Play/save workflow across the supported host and representative desktop-browser matrix.
-- **Environment / configuration:** Linux, macOS, Windows; CI-selected Julia/Node versions; representative Chromium, Firefox, and WebKit-class desktop engines
+- **Procedure:** Install/start the local application on each host family and complete the primary modeling/Play/save workflow with every browser build selected by the committed Playwright lock.
+- **Environment / configuration:** Linux, macOS, Windows; CI-selected Julia/Node versions; lock-selected Chromium, Firefox, and WebKit
 - **Pass criterion:** Every host starts the product and every engine completes the workflow without a platform-specific blocker; no mobile run is required.
 - **Status:** planned
 - **Evidence:** None

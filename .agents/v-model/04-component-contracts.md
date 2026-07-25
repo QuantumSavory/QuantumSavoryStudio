@@ -7,7 +7,7 @@ logical boundaries.
 
 - **Normative statement:** Project decoding shall classify every differing/missing/malformed schema marker as a warning, shall not throw solely for version classification, and shall attempt independent nonmutating normalization and endpoint-reference hydration.
 - **Parents:** SUB-002
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers return warning diagnostics and enter normalization; documented recoverable inputs hydrate references into independent values without mutating their source.
+- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers return warning diagnostics without version-only rejection; documented structurally recoverable inputs enter normalization and hydrate references into independent values without mutating their source.
 - **Verification:** UNITV-001 (test)
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 
@@ -85,7 +85,7 @@ logical boundaries.
 
 - **Normative statement:** A project replacement shall invalidate the old transition generation, tear down all active-session owners, publish an empty graph/name/selection before awaiting candidate work, and never restore the old session after candidate cancel or failure.
 - **Parents:** SUB-014
-- **Acceptance criterion:** Every replacement entry point observes empty active state during delayed fetch/preflight/decode; superseded completions cannot install; each failure leaves empty state and appends one structured Tools Log record.
+- **Acceptance criterion:** Every replacement entry point observes empty active state during delayed fetch/preflight/decode; a superseded completion cannot displace the latest result; cancellation or failure of the latest transition leaves empty state, and each failure appends at least one structured Tools Log record.
 - **Verification:** UNITV-015 (test)
 - **Context:** [Project documents](../context/frontend/project-documents.md)
 

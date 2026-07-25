@@ -9,6 +9,12 @@
 - **Review when:** A backend state field, frontend phase, action capability, polling
   cadence, or lifecycle API call changes.
 
+Normative lifecycle, diagnostic, and MCP Play behavior is defined by
+[SYS-005](../../v-model/02-system-requirements/gui-and-simulation.md#sys-005--control-the-simulation-lifecycle),
+[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
+and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+This reference records the current frontend controller and its gaps.
+
 ## Phase and capabilities
 
 The pure lifecycle reducer derives:
@@ -59,18 +65,18 @@ accessible progress.
 Live tag/query tooling is available only while the backend retains a usable parsed
 network. It is cleared for empty, blocked, purged, or execution-timeout states.
 
-The MCP `simulation_run` adapter must use this same Play capability/readiness path, not
-merely call a lower-level method. Incomplete designs return the same actionable issues,
-busy/disabled capability prevents dispatch, and implicit preparation records the same
-browser revision as explicit Prepare. Current MCP dispatch reaches
-`runSimulationWithSteps` but bypasses `capabilities.canRun`, collapses `false` to a
-generic error, and does not record the implicit prepared revision.
+The target GUI/MCP equivalence is in
+[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+Current MCP dispatch reaches `runSimulationWithSteps` but bypasses
+`capabilities.canRun`, collapses `false` to a generic error, and does not record the
+implicit prepared revision.
 
 ## Error boundary
 
-Every backend validation, missing/invalid input, lifecycle, cleanup, and unexpected
-failure must reach the frontend as a structured error and be recorded in the Tools panel
-Log tab. Diagnostic details may be complete in both local and public deployments.
+The required structured handoff for failures delivered to or polled by the GUI is in
+[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
+Backend-produced diagnostic details are retained across local/public profiles under
+that contract.
 
 Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
 responses through the shared JSON reader. Several legacy lifecycle/result calls parse or
@@ -82,6 +88,7 @@ failure policy. These paths are conformance gaps, not conventions to copy.
 
 - **Reducer:** [`gui/src/composables/simulationLifecycle.js`](../../../gui/src/composables/simulationLifecycle.js).
 - **Controller:** [`gui/src/composables/useSimulationController.js`](../../../gui/src/composables/useSimulationController.js).
+- **MCP relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js).
 - **API client:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
 - **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
   and [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js).
@@ -92,4 +99,4 @@ failure policy. These paths are conformance gaps, not conventions to copy.
 - Is the 15-minute client timeout intentionally distinct from each ten-minute backend
   run segment?
 - The exact degraded-startup capability policy after one metadata failure is still an
-  implementation choice, but the failure itself must be structured and logged.
+  implementation choice; its diagnostic obligation remains governed by SYS-008.

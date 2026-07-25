@@ -23,9 +23,10 @@ Simulation-affecting operations are rejected while editing is locked. A transact
 containing any such operation is rejected as a whole. Descriptions and annotations
 remain editable because their project projections do not affect simulation.
 
-The supported rule is prospective: every new MCP authoring tool gets one shared handler
-and migrates its equivalent GUI action before advertisement. Do not use the old router's
-universal claim that all historical GUI mutations are already migrated.
+The prospective shared-handler rule is defined by
+[SUB-003](../../v-model/03-subsystem-contracts/core-application.md#sub-003--shared-atomic-authoring-boundary).
+Current migration remains incomplete; do not use the old router's universal claim that
+all historical GUI mutations already use the service.
 
 ## Constructor descriptors
 

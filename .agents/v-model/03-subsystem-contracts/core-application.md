@@ -16,7 +16,7 @@ requirements.
 
 - **Normative statement:** Translation among hydrated browser models, browser-owned durable documents, collaboration snapshots, simulator payloads, and script-export payloads shall preserve declared semantics without mutating the source, while schema markers only trigger warning and best-effort recovery.
 - **Parents:** SYS-002, SYS-003
-- **Acceptance criterion:** A discriminating fixture round-trips durable fields in the same release; every differing/malformed marker emits a warning and reaches decode; each projection includes only declared fields; source values remain unchanged.
+- **Acceptance criterion:** A discriminating fixture round-trips durable fields in the same release; every differing/malformed marker emits a warning and does not block ordinary structural validation/decode solely by classification; each projection includes only declared fields; source values remain unchanged.
 - **Verification:** INTV-002 (test)
 - **Origin / risk:** Maintainer-confirmed schema policy and frontend codec boundary; high data-boundary risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)
@@ -61,7 +61,7 @@ requirements.
 
 - **Normative statement:** Logs, panic diagnostics, results, tags, queries, and cleanup failures shall cross backend/GUI boundaries as structured serializable records, with complete diagnostic disclosure and explicit unavailable/degraded states.
 - **Parents:** SYS-006, SYS-008, SYS-010
-- **Acceptance criterion:** Results contain no live Julia objects; live-only operations fail after cleanup; every backend failure preserves classification/message/details in the Tools Log; any release failure attempts all releases, removes the record, and logs severe degradation.
+- **Acceptance criterion:** Results contain no live Julia objects; live-only operations fail after cleanup; every failure delivered to or polled by the GUI preserves classification/message/details in the Tools Log; any release failure attempts all releases, removes the record, and logs severe degradation.
 - **Verification:** INTV-007 (test)
 - **Origin / risk:** Maintainer-confirmed error and cleanup behavior; high observability/resource risk
 - **Context:** [Simulation runtime](../../context/backend/simulation-runtime.md)

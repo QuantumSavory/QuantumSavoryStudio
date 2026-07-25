@@ -9,6 +9,13 @@
 - **Review when:** State fields, lifecycle transitions, time limits, cleanup policy, or
   live-result availability changes.
 
+Normative lifecycle, observation, and retention behavior is defined by
+[SYS-005](../../v-model/02-system-requirements/gui-and-simulation.md#sys-005--control-the-simulation-lifecycle),
+[SYS-006](../../v-model/02-system-requirements/gui-and-simulation.md#sys-006--observe-simulations-and-diagnostics),
+[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources),
+and [SUB-007](../../v-model/03-subsystem-contracts/core-application.md#sub-007--observation-diagnostics-and-cleanup-boundary).
+This reference records current runtime mechanics and known deltas.
+
 ## State and lifecycle
 
 Simulation records live in a process-global in-memory registry. `SimulationService`
@@ -49,28 +56,15 @@ updating frontend and MCP derivations.
 - Blocking refreshes activity. A later scan removes the retained record after it has
   then been idle for more than 300 minutes.
 
-The 10/30/300-minute values are fixed product policy and are not user- or
-deployment-configurable. Enforcement is intentionally approximate: cooperative
-step-bound checks and periodic scans may act at the first convenient opportunity after
-a threshold. Exact equality, interruption inside a simulation step, and precise scan
-deadlines are not contractual.
+The current 10/30/300-minute constants are not configurable. Their baselined
+fixed-but-approximate semantics are specified by
+[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources).
 
-## Cleanup semantics
+## Cleanup target and current delta
 
-The confirmed cleanup contract is destructive even on failure:
-
-1. attempt every remaining assigned-state release after any individual failure;
-2. discard all heavy state and remove the simulation record;
-3. preserve nothing for retry;
-4. return a structured overall failure if any release failed; and
-5. record a clear frontend Log-tab diagnostic that the server or GUI may now be
-   significantly degraded.
-
-A failure must never be reported as complete-release success. When the normal operation
-would retain a lightweight blocked record, a release failure instead removes that
-record.
-
-## Current cleanup nonconformance
+The destructive failed-cleanup outcome is specified by
+[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources)
+and [SUB-007](../../v-model/03-subsystem-contracts/core-application.md#sub-007--observation-diagnostics-and-cleanup-boundary).
 
 Cleanup attempts to trace out assigned state and clear network, mapping, graph, and
 payload references. Individual trace-out failures are logged and do not stop remaining
@@ -81,7 +75,7 @@ that failure does not reach the caller as a cleanup warning.
 
 Cleanup also clears the references needed to retry an individual failed release. That
 matches the no-retry decision, but returning `true`, retaining a blocked record, and
-failing to surface severe degradation do not match the confirmed contract.
+failing to surface severe degradation do not match SYS-010/SUB-007.
 
 ## Logs, panic, and live metadata
 
@@ -89,8 +83,9 @@ Starting a new target clears captured logs; resuming a paused target preserves t
 HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Live tags,
 queries, slots, and protocol rendering require a retained register/network and become
 unavailable after blocking or destruction. Panic state and structured logs may contain
-full exception messages and stack traces. That disclosure is permitted in local and
-public deployments and must remain available to the GUI Log tab.
+full exception messages and stack traces. The required disclosure and GUI handoff are
+specified by [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable);
+current production evaluation redaction is a separate gap.
 
 ## Anchors
 
@@ -99,9 +94,3 @@ public deployments and must remain available to the GUI Log tab.
 - **Automatic cleanup:** [`src/services.jl`](../../../src/services.jl).
 - **Component evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
-
-## Confirmed interpretation
-
-- Simulation state is restart-volatile.
-- Cleanup failures reach the caller, remove the record, and retain no retry state.
-- Timing values are fixed; cooperative and scan-bound timing is sufficient.

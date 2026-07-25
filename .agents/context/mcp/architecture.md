@@ -9,6 +9,12 @@
 - **Review when:** Process isolation, browser authority, locality, dependency placement,
   or command/read ownership changes.
 
+Normative product scope and collaboration behavior is defined by
+[STK-004](../../v-model/01-stakeholder-outcomes.md#stk-004--collaborate-with-a-local-ai-while-retaining-gui-control),
+[SYS-011](../../v-model/02-system-requirements/operations-and-deployment.md#sys-011--gate-local-collaboration-explicitly),
+and [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work).
+This explanation records why the current process split exists.
+
 ## One product, four actors
 
 MCP is an optional local component of WebQuantumSavory, not an independently released
@@ -64,9 +70,10 @@ multi-user security boundary.
 ## Failure model
 
 Backend generations serialize start/stop and revoke stale capabilities. One external
-session and one renewable browser binding are currently supported. Lease loss before
-command delivery can cancel safely; loss after a durable browser action may yield
-`OUTCOME_UNKNOWN`, requiring inspection/rebind rather than automatic replay.
+session and one renewable browser binding are currently supported. The required
+pre-/post-delivery recovery behavior is defined by
+[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely);
+the current bounded binding-scoped replay cache does not fully implement it.
 
 Activity and supervisor diagnostics are bounded and redact recognized credentials,
 capabilities, session identifiers, binary bodies, and raw transcript fields. Redaction
@@ -85,7 +92,6 @@ exception and source details.
 ## Recovery boundary
 
 Loopback, Origin checks, and the ephemeral capability do not exclude every process on
-the local host and are not user authentication. After a sidecar restart, the previous
-MCP session and its operation IDs are outside the retry scope: inspect the visible GUI,
-explicitly create a fresh browser binding for the new transport session, read current
-state, and use fresh IDs.
+the local host and are not user authentication. Restart/rebind recovery is normative in
+SYS-016 and described with its current implementation delta in
+[browser collaboration](browser-collaboration.md).

@@ -29,8 +29,8 @@ No product suite was run for this documentation-only update.
 - **Covers:** SYS-003
 - **Method:** test
 - **Procedure:** Import structurally usable and unusable documents carrying older, newer, negative, missing, non-integer, and malformed schema markers through a real browser.
-- **Environment / configuration:** Supported desktop browser with real project codec, session, and Tools Log
-- **Pass criterion:** Each noncurrent/malformed marker logs a warning and reaches decode; usable documents open; unusable ones log a structured failure; none fails solely from version classification.
+- **Environment / configuration:** Supported desktop browser with real project codec, session, user-visible warning observer, and Tools Log
+- **Pass criterion:** Each noncurrent/malformed marker warns before ordinary structural validation; usable documents reach decode and open; structurally unusable ones log a structured failure; none fails solely from version classification.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current codec/tests silently normalize several classes and hard-reject a future integer.
@@ -85,7 +85,7 @@ No product suite was run for this documentation-only update.
 - **Method:** test
 - **Procedure:** Trigger discriminating validation, missing-field, policy, not-found, cleanup, and unexpected backend failures through real GUI actions.
 - **Environment / configuration:** Real backend/frontend with diagnostic canary fields in each envelope
-- **Pass criterion:** Classification/code, message, status, details, and transmitted diagnostics retain their values in one Tools Log record per failure; no path becomes an opaque exception or silent fallback.
+- **Pass criterion:** Classification/code, message, status, details, and transmitted diagnostics retain their values in at least one Tools Log record per delivered failure; no path redacts by deployment profile or becomes an opaque exception or silent fallback.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Common backend envelopes and some lifecycle logs exist, but connector paths discard bodies and other callers use alert/inline-only handling.

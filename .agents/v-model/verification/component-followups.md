@@ -64,7 +64,7 @@ the current component suites.
 - **Method:** test
 - **Procedure:** From a populated session, start every replacement class with delayed and failing fetch/preflight/decode plus a superseding transition.
 - **Environment / configuration:** Node 24 Vitest/jsdom project-session harness
-- **Pass criterion:** Active graph/name/selection/session owners clear before awaits; stale candidates cannot install; each cancellation/failure remains empty and logs one structured error.
+- **Pass criterion:** Active graph/name/selection/session owners clear before awaits; stale candidates cannot displace the latest result; cancellation or failure of the latest transition remains empty, and each failure logs at least one structured error.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current tests require failed preflight to preserve the active project.
@@ -97,7 +97,7 @@ the current component suites.
 - **Method:** test
 - **Procedure:** Feed validation, policy, missing, cleanup, and unexpected envelopes with distinct nested canaries through JSON reader, API methods, controllers, and log normalization.
 - **Environment / configuration:** Node 24 Vitest/jsdom frontend utilities and composables
-- **Pass criterion:** Code/classification, message, status, details, and diagnostic values reach one Log record unchanged; no envelope becomes message-only, `undefined`, or a fallback success.
+- **Pass criterion:** Code/classification, message, status, details, and diagnostic values reach at least one Log record unchanged; no envelope is deployment-redacted or becomes message-only, `undefined`, or a fallback success.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current shared JSON reader throws a message-only `Error`, and several legacy calls swallow or replace failures.

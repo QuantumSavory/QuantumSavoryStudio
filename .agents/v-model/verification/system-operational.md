@@ -73,8 +73,8 @@ destructive transitions. No product suite was run for this documentation update.
 
 - **Covers:** SYS-014
 - **Method:** test
-- **Procedure:** Install/start and complete the primary GUI workflow on each supported host family and representative desktop engine.
-- **Environment / configuration:** Linux, macOS, Windows; CI-selected Julia/Node; Chromium, Firefox, WebKit-class desktop browsers
+- **Procedure:** Install/start on each host family and run the primary GUI workflow with every browser build selected by the committed Playwright lock.
+- **Environment / configuration:** Linux, macOS, Windows; CI-selected Julia/Node; lock-selected Chromium, Firefox, and WebKit
 - **Pass criterion:** Every matrix entry starts and completes model/save/Play without a platform-specific failure.
 - **Status:** planned
 - **Evidence:** None
@@ -84,20 +84,20 @@ destructive transitions. No product suite was run for this documentation update.
 
 - **Covers:** SYS-015
 - **Method:** test
-- **Procedure:** From a populated project, start saved-open, import, demo, reset/new/create, and overlapping replacements with delayed, cancelled, invalid, and failing candidates.
+- **Procedure:** From a populated project, start saved-project open, import, demo, create/new-project, and overlapping replacements with delayed, cancelled, invalid, and failing candidates.
 - **Environment / configuration:** Real desktop browser with transition instrumentation and Tools Log
-- **Pass criterion:** Each operation clears active state before candidate work; stale completions never install; every cancel/failure leaves an empty session and one structured failure record.
+- **Pass criterion:** Each operation clears active state before candidate work; stale completions cannot displace the latest result; cancellation or failure of the latest transition leaves an empty session, and every failure produces at least one structured error record.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current source/tests preflight first and preserve the active project on rejection/failure.
 
 ## SYSV-017 — Verify session operation identity and recovery
 
-- **Covers:** SYS-016
+- **Covers:** SYS-012, SYS-016
 - **Method:** test
 - **Procedure:** Exercise concurrent/later exact replay, same-ID different tool/arguments, rejected and unknown outcomes, more than 256 IDs, browser rebind, and sidecar restart.
 - **Environment / configuration:** Real local MCP stack with delivery/acknowledgement fault injection
-- **Pass criterion:** Exact retries return original outcomes without delivery; conflicts return `OPERATION_ID_CONFLICT` without mutation; all IDs survive rebind and no eviction; unknown work never replays; restart requires state read and fresh IDs.
+- **Pass criterion:** Exact retries return original outcomes without delivery; conflicts return `OPERATION_ID_CONFLICT` without mutation; all IDs survive rebind and no eviction; unknown work never replays, locks edits until visible-GUI inspection and rebind, and remains terminal after rebind; restart requires state inspection and fresh IDs.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current cache retains only 256 successful ID-only results, clears on bind/unbind, and does not store rejection or uncertainty.

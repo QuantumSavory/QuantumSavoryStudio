@@ -36,10 +36,12 @@ acceptance decisions.
 | Local | Primary use; one user starts the server and opens it on localhost | Backend and optional MCP are loopback services; projects persist in browser storage |
 | Public education | Onboarding/demo GUI served from a Podman container | No MCP; no accounts, authentication, or server-side saved-project store; browser storage remains client-local |
 
-The public profile does not add collaborative accounts, durable server projects,
-per-visitor server-state isolation, or multi-instance coordination. Live simulations
-remain process-local and restart-volatile. Do not introduce user management merely
-because the GUI is reachable over the Internet.
+The confirmed public profile promises no collaborative accounts, durable server
+projects, application-level per-visitor isolation for live simulation state, or
+multi-instance coordination. Current name-addressed simulations share one process-global
+registry. This is an absence of a product guarantee, not a prohibition on adding
+isolation later, and browser-local project persistence must not be mistaken for
+server-state isolation.
 
 Restricted Julia evaluation is independently opt-in through its environment variable in
 either profile. Its whitelist reduces risk but is not a security boundary. A public
@@ -50,12 +52,14 @@ container/host sandbox; the application cannot supply that isolation itself.
 
 - Local hosts: Linux, macOS, and Windows.
 - Runtime versions: the maintained CI matrix defines supported Julia and Node versions.
-- Clients: modern standards-compliant HTML5/JavaScript desktop browsers.
+- Clients: standards-compliant HTML5/JavaScript desktop browsers.
 - Mobile browsers are unsupported.
 
 Current CI exercises Ubuntu and Chromium only. The broader operating-system and browser
 support statement is maintainer-confirmed intent, while representative cross-platform
-and cross-engine acceptance evidence remains planned.
+and cross-engine acceptance evidence remains planned. Planned evidence uses browser
+builds selected by the committed Playwright lock; no independent minimum version policy
+is declared.
 
 ## Persistence and compatibility
 

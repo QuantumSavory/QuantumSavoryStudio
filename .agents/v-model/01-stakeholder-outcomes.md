@@ -52,7 +52,7 @@ file topology.
 
 - **Normative statement:** A GUI user shall receive a clear warning and a best-effort open attempt for a project whose schema marker differs from, is missing from, or is malformed for the current release, without a backward- or forward-compatibility guarantee.
 - **Parents:** None
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed schema markers each produce a warning and proceed to decode; a version classification alone never hard-rejects the document.
+- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed schema markers each produce a warning and proceed through ordinary structural validation toward decode; a version classification alone never hard-rejects the document.
 - **Verification:** ACC-006 (demonstration)
 - **Origin / risk:** Maintainer interview overriding earlier inferred compatibility intent; high user-data risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
@@ -66,20 +66,20 @@ file topology.
 - **Origin / risk:** Maintainer-confirmed timing and cleanup policy; high availability/resource risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
-## STK-008 — Operate without user management
+## STK-008 — Offer account-free local and public GUI access
 
-- **Normative statement:** An operator shall be able to run the primary localhost application and a public educational GUI without accounts, authentication, or a server-side saved-project store.
+- **Normative statement:** An operator shall be able to run the primary localhost application and an Internet-reachable educational deployment where an anonymous learner can use the GUI without accounts, authentication, or a server-side saved-project store.
 - **Parents:** None
-- **Acceptance criterion:** Local and public Podman profiles serve the same GUI/backend product; named projects persist only in each browser, process restart loses live simulations, and the public profile starts no MCP service.
+- **Acceptance criterion:** Local and public Podman profiles serve the same GUI/backend product; an unauthenticated public browser completes the primary educational GUI flow; named projects persist only in each browser, process restart loses live simulations, and the public profile starts no MCP service.
 - **Verification:** ACC-008 (demonstration)
 - **Origin / risk:** Maintainer interview; medium deployment/isolation risk
 - **Context:** [Product boundary and deployment](../context/product-boundary-and-deployment.md)
 
 ## STK-009 — Use supported desktop environments
 
-- **Normative statement:** A GUI user shall be able to use WebQuantumSavory from a modern standards-compliant desktop browser with a local host on Linux, macOS, or Windows.
+- **Normative statement:** A GUI user shall be able to use WebQuantumSavory from a standards-compliant HTML5/JavaScript desktop browser with a local host on Linux, macOS, or Windows.
 - **Parents:** None
-- **Acceptance criterion:** The maintained Julia/Node matrix installs and starts on each host family, and representative modern desktop engines complete the primary GUI workflow; mobile operation is not required.
+- **Acceptance criterion:** The maintained Julia/Node matrix installs and starts on each host family, and the Chromium, Firefox, and WebKit browser builds selected by the committed Playwright lock complete the primary GUI workflow; mobile operation is not required.
 - **Verification:** ACC-009 (demonstration)
 - **Origin / risk:** Maintainer interview; medium portability risk
 - **Context:** [Product boundary and deployment](../context/product-boundary-and-deployment.md)
@@ -95,7 +95,8 @@ file topology.
 
 - The HTTP API is not an independently supported external-client product.
 - MCP is not remote, public, headless, multi-user, or an automatic-save service.
-- Public deployment provides no account or per-visitor server-state isolation.
+- Public deployment makes no application-level per-visitor live-state isolation or
+  multi-instance coordination promise.
 - Project schemas, local-storage keys, and MCP contracts have no cross-release
   compatibility guarantee.
 - The restricted Julia language is not a security sandbox or metered execution service.

@@ -59,9 +59,9 @@ replacement.
 
 ## SUB-014 — Destructive active-project transition boundary
 
-- **Normative statement:** Every active-project replacement shall tear down the current browser session before candidate retrieval, validation, warning, or decode and shall leave the session empty when the candidate is cancelled, superseded, or fails.
+- **Normative statement:** Every active-project replacement shall tear down the current browser session before candidate retrieval, validation, warning, or decode; cancellation or failure of the latest transition shall leave the session empty, while a superseded completion shall be unable to install or restore its candidate.
 - **Parents:** SYS-015
-- **Acceptance criterion:** Open, import, demo, reset/new/create, and a competing transition each clear graph, active name, selection, polling, result windows, and collaboration ownership first; failure logs its structured reason and restores none of that active state.
+- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, and competing transitions each clear graph, active name, selection, polling, result windows, and collaboration ownership first; a stale completion cannot displace the newer result, and a failing latest transition logs its structured reason while restoring none of the old active state.
 - **Verification:** INTV-014 (test)
 - **Origin / risk:** Maintainer interview; current transition order is opposite; high state/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

@@ -52,11 +52,11 @@ initialization also occurs in `App.vue`, not `main.js`.
 
 ## Shared authoring direction
 
-New MCP authoring tools must first gain a validated shared design operation and migrate
-the equivalent GUI action. Do not claim every historical GUI edit already uses that
-service: a deep snapshot watcher still publishes an “Unclassified GUI design change”
-for retained paths. That fallback is evidence of transitional coverage, not a second
-recommended command architecture.
+The prospective shared-handler rule is defined by
+[SUB-003](../../v-model/03-subsystem-contracts/core-application.md#sub-003--shared-atomic-authoring-boundary).
+Not every historical GUI edit already uses that service: a deep snapshot watcher still
+publishes an “Unclassified GUI design change” for retained paths. That fallback is
+evidence of transitional coverage, not a second command architecture.
 
 ## Resource topology
 

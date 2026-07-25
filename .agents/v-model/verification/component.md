@@ -20,7 +20,7 @@
 - **Pass criterion:** Invalid candidates leave no mutation; valid candidates allocate fresh IDs, resolve aliases, and preserve asserted live identities/references.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js)
-- **Nonconformance:** No current execution record exists.
+- **Nonconformance:** No current execution record exists, and no fixture starts with an existing generated ID that collides with the allocator's next candidate.
 
 ## UNITV-003 — Verify asymmetric topology and edge-role mapping
 

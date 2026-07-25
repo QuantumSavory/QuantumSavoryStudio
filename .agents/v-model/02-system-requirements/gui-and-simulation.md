@@ -26,7 +26,7 @@ actions.
 
 - **Normative statement:** The product shall clearly warn about every differing, missing, or malformed project schema marker and then attempt a best-effort decode without rejecting solely because of version classification.
 - **Parents:** STK-006
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers each create a Tools Log warning and enter the same best-effort decode path; usable content opens and unusable content ends with a structured failure.
+- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers each create a user-visible warning and proceed through ordinary structural validation and best-effort decode; usable content opens, structurally unusable content ends with a structured Tools Log failure, and version classification alone never rejects a document.
 - **Verification:** SYSV-003 (test)
 - **Origin / risk:** Maintainer interview; current future-version rejection is nonconformant; high data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)
@@ -69,9 +69,9 @@ actions.
 
 ## SYS-008 — Keep the private GUI/API boundary structured and observable
 
-- **Normative statement:** The frontend-support HTTP boundary shall return classified structured failures and the GUI shall record their message and available details in the Tools Log without requiring diagnostic sanitization.
+- **Normative statement:** The frontend-support HTTP boundary shall return classified structured failures without deployment-dependent redaction of backend-produced diagnostics, and the GUI shall preserve their message and available details in the Tools Log.
 - **Parents:** STK-001, STK-002
-- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures retain a code/classification, message, and available details through the GUI; none becomes an opaque exception or silent fallback.
+- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures delivered to or polled by the GUI retain a code/classification, message, and available details in at least one Log record; none becomes redacted by deployment profile, an opaque exception, or a silent fallback.
 - **Verification:** SYSV-008 (test)
 - **Origin / risk:** Maintainer interview; current route/client behavior is mixed; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)

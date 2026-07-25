@@ -24,7 +24,7 @@ untracked; the npm lockfile is committed.
 `./bin/server` installs the locked frontend dependencies, builds the GUI, and starts
 the integrated application. The maintained CI matrix is the support declaration for
 Julia and Node versions; it currently selects Julia 1.12 and Node 24. Product intent
-supports local hosts on Linux, macOS, and Windows and standards-compliant modern
+supports local hosts on Linux, macOS, and Windows and standards-compliant
 HTML5/JavaScript desktop browsers. Mobile browsers are unsupported. CI currently
 exercises Ubuntu and Chromium, so the broader host/browser matrix is not yet verified.
 

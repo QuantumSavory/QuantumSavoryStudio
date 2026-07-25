@@ -56,7 +56,9 @@ States Zoo PNGs. Watermark failure must not expose unwatermarked bytes.
 - **Backend evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **Browser evidence:** [`gui/tests/e2e/states-zoo.spec.js`](../../../gui/tests/e2e/states-zoo.spec.js).
 
-## Unresolved questions
+## Compatibility boundary
 
-- The compatibility lifetime for stable state IDs and recipe parameters is not
-  independently declared.
+State IDs and recipe parameters have no guaranteed cross-release lifetime under the
+project-schema policy. Within one shipped release, the current metadata, frontend,
+codec, simulator, and exporter all depend on the same registry IDs and parameter
+descriptors; no stronger compatibility period is presently declared.

@@ -9,6 +9,12 @@
 - **Review when:** A public/internal route, error code, status code, or Swagger schema
   changes.
 
+Normative failure handoff and diagnostic disclosure is defined by
+[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
+[SUB-009](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-009--private-http-contract-and-failure-handoff),
+and [CMP-013](../../v-model/04-component-contracts.md#cmp-013--frontend-error-envelope-preservation).
+This reference records the current HTTP machinery and known drift.
+
 ## Product boundary
 
 The HTTP API exists to support the bundled GUI. It is not a separately supported
@@ -41,19 +47,11 @@ Failure responses have this common core:
 The helper adds `error_code` only when it is nonempty and adds `details` only when it is
 not `nothing`; neither field is part of the required common core.
 
-The confirmed forward contract is stronger than this current implementation:
-
-- validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures
-  remain structured rather than becoming an opaque exception or swallowed value;
-- the GUI records the resulting classification, message, and available diagnostic
-  details in the Tools panel Log tab;
-- no particular HTTP status-code convention is promised beyond the structured
-  classification;
-- diagnostic content need not be sanitized in local or public deployments. Full
-  exception types, stack traces, paths, and evaluated source may be shown.
-
-Credential, session, and capability redaction in MCP operational transcripts is a
-separate secret-handling boundary and is not relaxed by the diagnostic-disclosure rule.
+The baselined contract linked above is stronger than this current implementation. It
+does not impose one universal HTTP status/success-envelope convention, but it does
+require preservation of backend-produced diagnostic fields across deployment profiles.
+Credential, session, and capability redaction in MCP operational transcripts remains a
+separate secret-handling boundary.
 
 Do not infer one universal success envelope. Representative current shapes are:
 
@@ -120,10 +118,3 @@ Use [repository workflows](../repository-workflows.md) to select checks.
 - **Error model:** [`src/errors.jl`](../../../src/errors.jl).
 - **Integration evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Frontend caller:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
-
-## Confirmed interpretation
-
-- No route or success shape is a stand-alone external-client compatibility promise.
-- Malformed and unexpected failures need structured classification; they do not require
-  one universal status code.
-- Production diagnostics may include full panic and evaluation internals.

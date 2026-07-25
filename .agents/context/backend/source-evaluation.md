@@ -9,6 +9,12 @@
 - **Review when:** Any source-bearing entry point, allowlist, context binding, error
   disclosure rule, or evaluation gate changes.
 
+Normative admission, opt-in, containment, and disclosure behavior is defined by
+[STK-005](../../v-model/01-stakeholder-outcomes.md#stk-005--control-native-source-risk),
+[SYS-009](../../v-model/02-system-requirements/operations-and-deployment.md#sys-009--default-deny-and-externally-contain-native-source-execution),
+and [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
+This reference records the current evaluator and its gaps.
+
 ## Trust boundary
 
 `WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION` is the sole operator opt-in. Evaluation is
@@ -61,9 +67,9 @@ as deferred without executing until an assignment supplies concrete context.
 
 Disabled evaluation produces the stable 403 policy error. Syntax/profile failures are
 client errors. An execution failure after admitted source currently returns a
-`success:false` result, usually with HTTP 200. The confirmed product contract permits
-full diagnostics in every deployment, including exception types, stack traces, paths,
-and evaluated source. Current production redaction is therefore a conformance gap.
+`success:false` result, usually with HTTP 200. SYS-008 requires backend-produced
+diagnostic fields to survive deployment-profile handoff; current production redaction
+is therefore a conformance gap.
 
 ## Verification gap
 

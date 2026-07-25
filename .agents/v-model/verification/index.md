@@ -12,11 +12,12 @@ did not execute product suites or create a stable run record.
 
 ## Status policy
 
-- `planned`: the full action is designed but no durable action artifact covers every
-  clause.
-- `implemented`: durable artifacts encode every clause of that action, but a current
-  full-criterion execution record is absent.
-- `passing`: current durable evidence demonstrates every criterion clause.
+- `planned`: the full action is designed but its durable test, analysis, inspection, or
+  demonstration is not yet implemented.
+- `implemented`: a durable action artifact exists, but current full-criterion execution
+  evidence is absent or incomplete.
+- `passing`: current durable evidence demonstrates every pass-criterion clause in the
+  named environment.
 - `failing`, `blocked`, and `waived`: use only with the concrete evidence, blocker, or
   maintainer approval required by the documentation skill.
 

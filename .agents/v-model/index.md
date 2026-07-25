@@ -11,10 +11,9 @@
 - **Intent confirmed:** 2026-07-25 maintainer interview
 - **Last reviewed:** 2026-07-25
 
-This repository-specific specification and evidence map is not a claim of compliance
-with NASA, FDA, ECSS, or V-Modell XT. Maintainer interview answers define intended
-behavior. Code, tests, public prose, and release history supply implementation/evidence
-context but do not override confirmed intent.
+This repository-specific map claims no external framework compliance. Maintainer
+interview answers define intent; code, tests, public prose, and history supply context
+without overriding it.
 
 ## Left-side specification
 
@@ -43,8 +42,8 @@ artifacts are therefore at most `implemented`; no action is marked `passing`.
 - Confirmed intent: maintainer interview on primary actors, deployment, source risk,
   project replacement/schema behavior, error disclosure, cleanup/timing, MCP
   retries/Run/resources/versioning, export fidelity, and supported environments.
-- Public/current prose: `README.md`, `gui/README.md`, `CHANGELOG.md`, manifests, and
-  first-public-release history from 1.5.0 onward.
+- Public prose: `README.md`, `gui/README.md`, `CHANGELOG.md`, manifests, and release
+  history from 1.5.0 onward.
 - Current behavior: root/`src/`, `gui/`, `mcp/`, and the co-shipped MCP contract.
 - Verification design: `test/`, `gui/tests/`, `mcp/test/`, `ci/`, GitHub Actions, and
   Buildkite.
@@ -53,17 +52,18 @@ artifacts are therefore at most `implemented`; no action is marked `passing`.
 
 ## Confirmed product boundaries
 
-- GUI users are primary. The reachable HTTP API is an internal compatibility boundary,
-  not an independently supported integration product.
+- GUI users are primary. The HTTP API is a co-shipped integration boundary, not an
+  independently supported product.
 - Local localhost use is primary. The public Podman profile is account-free,
-  stateless for saved projects, unauthenticated, and has no MCP support or per-visitor
-  server-state isolation promise.
+  stateless for saved projects, unauthenticated, has no MCP support, and promises no
+  application-level per-visitor isolation for live server state.
 - Saved projects live in browser storage; live simulation state is process-local.
 - Schema, local-storage, and MCP contract compatibility across releases is not promised.
 - Restricted Julia may be enabled locally or publicly, but the whitelist is not a
   sandbox and public enablement requires external containment.
-- Maintained CI selects supported Julia/Node versions. Linux, macOS, Windows, and modern
-  standards-compliant desktop browsers are intended; mobile browsers are excluded.
+- Maintained CI selects supported Julia/Node versions. Linux, macOS, Windows, and
+  standards-compliant HTML5/JavaScript desktop browsers are intended; mobile browsers
+  are excluded.
 
 ## Current implementation and evidence gaps
 

@@ -35,7 +35,7 @@ platform support, and destructive transitions.
 - **Normative statement:** The current shipped MCP contract shall expose collaborative design, catalog, lifecycle, result, and resource capabilities while preserving the visible browser as authority and preventing duplicate or uncertain mutation.
 - **Parents:** STK-004
 - **Acceptance criterion:** One session binds one browser; valid edits are visible and unsaved; stale or conflicting operation IDs do not mutate; exact retries return the original result; Run follows GUI Play; HTML and PNG results are readable; uncertain delivery returns `OUTCOME_UNKNOWN` and locks edits until human inspection and rebind.
-- **Verification:** SYSV-012 (test), SYSV-013 (test)
+- **Verification:** SYSV-012 (test), SYSV-013 (test), SYSV-017 (test)
 - **Origin / risk:** Maintainer interview and current MCP workflow; high concurrency/data-loss risk
 - **Context:** [MCP tool contract](../../context/mcp/tool-contract.md)
 
@@ -50,18 +50,18 @@ platform support, and destructive transitions.
 
 ## SYS-014 — Support declared desktop environments
 
-- **Normative statement:** The local application shall support Linux, macOS, and Windows hosts using the Julia and Node versions selected by maintained CI, and shall support modern standards-compliant HTML5/JavaScript desktop browsers.
+- **Normative statement:** The local application shall support Linux, macOS, and Windows hosts using the Julia and Node versions selected by maintained CI, and shall support standards-compliant HTML5/JavaScript desktop browsers.
 - **Parents:** STK-009
-- **Acceptance criterion:** Installation/startup and the primary GUI workflow succeed on each host family and representative desktop browser engine using the CI-selected runtimes; no mobile-browser criterion applies.
+- **Acceptance criterion:** Installation/startup succeeds on each host family using CI-selected runtimes, and the primary GUI workflow succeeds with the Chromium, Firefox, and WebKit builds selected by the committed Playwright lock; no mobile-browser criterion applies.
 - **Verification:** SYSV-015 (test)
 - **Origin / risk:** Maintainer interview; current CI covers only Ubuntu/Chromium; medium portability risk
 - **Context:** [Product boundary and deployment](../../context/product-boundary-and-deployment.md)
 
 ## SYS-015 — Discard the active project when replacement starts
 
-- **Normative statement:** Every open, import, demo, reset/new/create, or other active-project replacement shall disregard the current browser project as soon as the replacement begins and shall not restore it after cancel, supersession, or failure.
+- **Normative statement:** Every saved-project open, import, demo, create/new-project, or other active-project replacement shall disregard the current browser project as soon as replacement begins and shall not restore it after cancellation or failure; a superseded completion shall not install or restore its candidate over the newer owning transition.
 - **Parents:** STK-001, STK-006
-- **Acceptance criterion:** With a populated project, each replacement class clears active graph, name, selection, and session-owned state before candidate work; failure leaves an empty session and records a structured Tools Log error; transient empty states and approximate ordering are allowed.
+- **Acceptance criterion:** With a populated project, each replacement class completes teardown of active graph, name, selection, and session-owned state before candidate work; cancellation or failure of the latest transition leaves an empty session, each failure records a structured Tools Log error, and a stale completion cannot displace a newer transition's result.
 - **Verification:** SYSV-016 (test)
 - **Origin / risk:** Maintainer interview; current preflight-before-teardown is opposite; high data-loss/state risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

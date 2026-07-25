@@ -8,12 +8,18 @@
 - **Review when:** A project payload field, constructor mapping, lexical source context,
   representation, physical-link rule, or generated example changes.
 
+Normative export fidelity, side-effect, and help behavior is defined by
+[STK-003](../../v-model/01-stakeholder-outcomes.md#stk-003--continue-with-standalone-simulation-source),
+[SYS-007](../../v-model/02-system-requirements/gui-and-simulation.md#sys-007--generate-faithful-pedagogical-source),
+[SUB-008](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-008--side-effect-bounded-script-generation-boundary),
+and [CMP-007](../../v-model/04-component-contracts.md#cmp-007--deterministic-script-binding-and-imports).
+This reference records the current generator and evidence gaps.
+
 ## Product purpose
 
-Script export produces standalone, editable, pedagogical QuantumSavory Julia. It should
-be as faithful as practical to the simulation defined in the GUI, but it is not a
-serialized WebQuantumSavory runtime client or a promise that every GUI feature has an
-equivalent script behavior. Script structure may require an independent implementation.
+The current generator produces standalone, editable, pedagogical QuantumSavory Julia
+through a separately structured implementation rather than serializing the running web
+client.
 
 ## Boundary guarantees
 
@@ -48,11 +54,11 @@ Notable mapped concerns include ordered nodes, physical/virtual topology, both c
 delay callables, context bindings, per-assignment expression Variables, and weighted
 state/trace construction.
 
-The frontend Export Script tab only requests, displays, and downloads backend text; it
-must not implement project-to-QuantumSavory translation. Each omitted or simplified GUI
-feature must be stated clearly in the corresponding export help widget. The existing
-panel-level warning establishes the general pedagogical limitation; feature-specific
-omissions need matching help when introduced.
+The frontend Export Script tab currently only requests, displays, and downloads backend
+text. The target feature-specific disclosure rule is in
+[SYS-007](../../v-model/02-system-requirements/gui-and-simulation.md#sys-007--generate-faithful-pedagogical-source).
+The existing panel-level warning is general; no maintained supported/omitted-feature
+inventory currently proves exhaustive corresponding help.
 
 ## Verification boundaries
 
@@ -65,12 +71,7 @@ download action remains planned.
 
 - **Generator:** [`src/script_export.jl`](../../../src/script_export.jl).
 - **Route:** [`routes.jl`](../../../routes.jl).
+- **Export help:** [`gui/src/components/panels/ExportScriptPanel.vue`](../../../gui/src/components/panels/ExportScriptPanel.vue).
 - **Component evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Browser evidence:** [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js).
-
-## Confirmed interpretation
-
-Acceptance requires faithful executable output for the supported export subset, not
-parity with every GUI feature. Pedagogical simplification is allowed only when the
-corresponding help identifies what is unavailable or different.
