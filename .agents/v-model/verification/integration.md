@@ -99,7 +99,9 @@
 - **Pass criterion:** Active schemas match handlers including endpoint-specific configuration and all nested request definitions; routes use canonical errors; generated callers resolve operation IDs; Log diagnostics equal transmitted values.
 - **Status:** implemented
 - **Evidence:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl)
-- **Nonconformance:** Separate artifacts omit one real-browser cleanup/failure matrix in the visible Log; SYSV-008 retains it.
+- **Nonconformance:** Corrected exact lifecycle-request cases have not executed in the
+  named environment. Separate artifacts omit one real-browser cleanup/failure matrix
+  in the visible Log; SYSV-008 retains it.
 
 ## INTV-010 — Verify local source admission and public denial
 

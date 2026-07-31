@@ -913,6 +913,44 @@
       @test data["error"]["message"] == "Simulation not found"
   end
 
+  @testset "Lifecycle request bodies are exact" begin
+      for path in (
+        "/prepare_simulation",
+        "/pause_simulation",
+        "/destroy_simulation",
+      )
+        response = make_request(
+          "POST",
+          path,
+          body=Dict("name" => "not-looked-up", "legacy" => true),
+        )
+        @test response.status == 400
+        data = parse_response(response)
+        @test data["error"]["code"] == "VALIDATION_ERROR"
+        @test contains(data["error"]["message"], "fields do not match")
+      end
+
+      for body in (
+        Dict("name" => "not-looked-up", "time_units" => true),
+        Dict("name" => "not-looked-up", "time_units" => 5, "legacy" => true),
+        Dict("name" => "  ", "time_units" => 5),
+      )
+        response = make_request("POST", "/run_simulation", body=body)
+        @test response.status == 400
+        @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+      end
+
+      for path in (
+        "/prepare_simulation",
+        "/pause_simulation",
+        "/destroy_simulation",
+      )
+        response = make_request("POST", path, body=Dict("name" => "  "))
+        @test response.status == 400
+        @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+      end
+  end
+
   @testset "Run Simulation - Success" begin
             # First create and prepare a network
       payload = deepcopy(test_payload)

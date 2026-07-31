@@ -134,6 +134,11 @@ reject extras. Parse accepts representation configuration only; export also requ
 positive `time` and `timeStep`. Physical edges require every resolved physical field,
 while virtual edges forbid them.
 
+Prepare, run, pause, and destroy also reject every undeclared body field before a
+simulation lookup. Their shared name is a nonblank string; run requires exactly one
+`time_units` number or numeric string, rejects booleans, and admits only a finite parsed
+value before lifecycle validation.
+
 Nonblank string IDs, names, and endpoint references retain their exact wire value.
 Validation neither coerces nor trims them, and endpoint matching compares the retained
 strings exactly.

@@ -172,7 +172,17 @@ end
 ########################################################
 
 operation_route("prepareSimulation") do
-  simulation_name = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())["name"]
+  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+  _require_exact_object_fields(
+    payload,
+    ("name",);
+    context="Prepare simulation request",
+  )
+  simulation_name = _required_nonempty_string(
+    payload,
+    "name",
+    "Prepare simulation request",
+  )
 
   # Prepare the simulation, logging unexpected errors to the simulation's log stream
   simulation_state = try
@@ -200,32 +210,40 @@ end
 ########################################################
 
 function _parse_time_input(time_units_raw)
-  # Handle time_units parameter with proper type conversion
-  time_units = 10.0  # default value
-  if time_units_raw !== nothing
-    try
-      if isa(time_units_raw, String)
-        time_units = parse(Float64, time_units_raw)
-      elseif isa(time_units_raw, Number)
-        time_units = Float64(time_units_raw)
-      else
-        throw(validation_error("time_units must be a number or string", Dict("received_type" => string(typeof(time_units_raw)))))
-      end
-    catch e
-      if isa(e, APIError)
-        rethrow(e)
-      else
-        throw(validation_error("Invalid time_units value: $(time_units_raw)", Dict("error" => string(e))))
-      end
+  time_units = try
+    if time_units_raw isa AbstractString
+      parse(Float64, time_units_raw)
+    elseif time_units_raw isa Real && !(time_units_raw isa Bool)
+      Float64(time_units_raw)
+    else
+      throw(validation_error(
+        "time_units must be a number or string",
+        Dict("received_type" => string(typeof(time_units_raw))),
+      ))
     end
+  catch e
+    isa(e, APIError) && rethrow(e)
+    throw(validation_error(
+      "Invalid time_units value: $(time_units_raw)",
+      Dict("error" => string(e)),
+    ))
   end
-
-  time_units
+  isfinite(time_units) || throw(validation_error("time_units must be finite"))
+  return time_units
 end
 
 operation_route("runSimulation") do
   payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-  simulation_name = payload["name"]
+  _require_exact_object_fields(
+    payload,
+    ("name", "time_units");
+    context="Run simulation request",
+  )
+  simulation_name = _required_nonempty_string(
+    payload,
+    "name",
+    "Run simulation request",
+  )
   time_units = _parse_time_input(payload["time_units"])
 
   simulation_state = try
@@ -274,7 +292,17 @@ end
 ########################################################
 
 operation_route("pauseSimulation") do
-  simulation_name = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())["name"]
+  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+  _require_exact_object_fields(
+    payload,
+    ("name",);
+    context="Pause simulation request",
+  )
+  simulation_name = _required_nonempty_string(
+    payload,
+    "name",
+    "Pause simulation request",
+  )
 
   try
     state = WebQuantumSavory.simulation_pause!(simulation_name)
@@ -298,7 +326,17 @@ end
 ########################################################
 
 operation_route("destroySimulation") do
-  simulation_name = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())["name"]
+  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+  _require_exact_object_fields(
+    payload,
+    ("name",);
+    context="Destroy simulation request",
+  )
+  simulation_name = _required_nonempty_string(
+    payload,
+    "name",
+    "Destroy simulation request",
+  )
 
   WebQuantumSavory.simulation_destroy!(simulation_name)
   json(Dict(:success => true, :message => "Simulation destroyed and resources cleaned up"))
