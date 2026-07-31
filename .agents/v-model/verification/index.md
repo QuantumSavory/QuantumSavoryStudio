@@ -3,8 +3,10 @@
 The strict project-schema and candidate-first replacement slices have passing component
 and integration evidence plus implemented but incomplete browser-system evidence. MCP
 metadata/result resources have passing component evidence; MCP recovery and transport
-have implemented but incomplete integration/system artifacts. Other release-2.0 actions
-retain their recorded status; no acceptance demonstration is passing.
+have implemented but incomplete integration/system artifacts. Exact simulation-request
+projection, admission, and contract parity have passing component and integration
+evidence. Other release-2.0 actions retain their recorded status; no acceptance
+demonstration is passing.
 
 ## Action routes
 
@@ -15,7 +17,8 @@ retain their recorded status; no acceptance demonstration is passing.
   [current boundaries](integration.md);
   [release-2.0 follow-ups](integration-followups.md)
 - Component evidence: [current partial suites](component.md);
-  [release-2.0 follow-ups](component-followups.md)
+  [release-2.0 follow-ups](component-followups.md);
+  [exact simulation payload](component-exact-payload.md)
 
 ## Status policy
 

@@ -5,18 +5,18 @@ active-project replacement.
 
 ## SUB-008 — Side-effect-bounded script-generation boundary
 
-- **Normative statement:** Script generation shall validate canonical input and emit supported runtime mappings deterministically without mutating the server registry or executing user source, while export help identifies unsupported or simplified GUI behavior.
+- **Normative statement:** Script generation shall admit the exact export payload with explicit representations and positive timing, emit supported runtime mappings deterministically without mutating the server registry or executing user source, and identify unsupported or simplified GUI behavior in export help.
 - **Parents:** SYS-007
-- **Acceptance criterion:** Repeated component and HTTP requests return stable text/filename and executable supported semantics, preserve the state namespace, do not execute a source canary, and pair every simplified or omitted GUI feature with corresponding help.
+- **Acceptance criterion:** Missing, extra, defaulted, or invalid export configuration fails before generation; repeated valid component and HTTP requests return stable text/filename and executable supported semantics, preserve the state namespace, do not execute a source canary, and pair every simplified or omitted GUI feature with corresponding help.
 - **Verification:** INTV-008 (test)
 - **Origin / risk:** Export generator, help widget, and maintainer-confirmed fidelity boundary; high code-generation risk
 - **Context:** [Script export](../../context/backend/script-export.md)
 
 ## SUB-009 — Private HTTP contract and failure handoff
 
-- **Normative statement:** One OpenAPI 3.1 source shall own every supported operation ID, method, path, exposure, request schema, success schema, and canonical default error; route registration and co-shipped callers shall derive from that registry, and every classified or unexpected non-2xx failure shall use the exact SYS-008 envelope that frontend callers preserve into the Tools Log.
+- **Normative statement:** One OpenAPI 3.1 source shall own every supported operation ID, method, path, exposure, endpoint-specific request schema, success schema, and canonical default error; route registration and co-shipped callers shall derive from that registry, runtime admission shall mirror closed application-owned request trees, and every classified or unexpected non-2xx failure shall use the exact SYS-008 envelope that frontend callers preserve into the Tools Log.
 - **Parents:** SYS-008
-- **Acceptance criterion:** Route/profile parity is mechanically checked; active documentation contains only reachable operations/tags/components; body-carrying operations and their one explicit success response use endpoint-specific schemas; representative 400/403/404/500 and cleanup paths retain code, message, status, details, and request diagnostics through connector/controller/log records; no cross-release external compatibility is implied.
+- **Acceptance criterion:** Route/profile parity is mechanically checked; active documentation contains only reachable operations/tags/components; parse and export use distinct closed schemas that match runtime rejection of every owned extra/omission while retaining declared simulator extension points; body-carrying operations and their one explicit success response use endpoint-specific schemas; representative 400/403/404/500 and cleanup paths retain code, message, status, details, and request diagnostics through connector/controller/log records; no cross-release external compatibility is implied.
 - **Verification:** INTV-009 (test), INTV-018 (inspection)
 - **Origin / risk:** Maintainer-confirmed internal API role and canonical OpenAPI/error feature mini-V; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)

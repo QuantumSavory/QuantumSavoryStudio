@@ -9,7 +9,8 @@
   `91d620084c08ee836b08120aa9bc3d9e4bea845a`, candidate-first replacement slice reviewed
   at `3f2de0ae916fd0faa81177d293caf714b8e73e69`, and shared Play implementation/evidence
   reviewed at `e712077195009351558b7b1941b236a019b72b3b`; MCP v2 readback/result-resource
-  component slice reviewed at `ca28713`
+  component slice reviewed at `ca28713`; exact simulation-request implementation and
+  evidence are recorded at `9268147` and `3e63cb2`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -23,6 +24,8 @@ integration evidence. Candidate-first browser-system evidence is implemented but
 not cover the full named matrix. Shared Play readiness has passing component evidence
 and implemented browser-system evidence. MCP metadata/result resources have passing
 component evidence; readback recovery has implemented component/integration artifacts.
+Exact parse/export projection, nested admission, and OpenAPI parity have passing
+component and integration evidence.
 The dependency-owned structured resource-error boundary and consolidated MCP
 integration/system fault/resource matrices remain incomplete, as does cleanup.
 
@@ -45,7 +48,8 @@ integration/system fault/resource matrices remain incomplete, as does cleanup.
     [release-2.0 follow-ups](verification/integration-followups.md)
   - Component verification:
     [current partial suites](verification/component.md);
-    [release-2.0 follow-ups](verification/component-followups.md)
+    [release-2.0 follow-ups](verification/component-followups.md);
+    [exact simulation payload](verification/component-exact-payload.md)
 
 The strict-schema mini-V executed the frontend unit/build path and focused serial
 Chromium flows. UNITV-019 and INTV-015 are `passing`; SYSV-018 is `implemented` with an
@@ -58,6 +62,11 @@ The MCP mini-V executed frontend contract/bridge checks, focused hub/resource ch
 and isolated sidecar checks. UNITV-016 and UNITV-017 are `passing`; UNITV-021,
 INTV-012, INTV-013, INTV-017, SYSV-012, and SYSV-013 have durable but incomplete
 artifacts. SYSV-020 and acceptance remain `planned`.
+
+The exact simulation-request mini-V executed frontend codec/unit/build checks and
+backend unit, OpenAPI-contract, and live HTTP integration checks against the exact
+QuantumSavory revision. UNITV-022, INTV-002, and INTV-004 are `passing`; broader
+script-help and visible browser-error matrices remain tracked by INTV-008 and INTV-009.
 
 ## Source basis
 

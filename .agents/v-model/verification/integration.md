@@ -15,14 +15,12 @@
 
 - **Covers:** SUB-002
 - **Method:** test
-- **Procedure:** Round-trip an asymmetric project and derive every projection without source mutation.
+- **Procedure:** Round-trip an asymmetric project, derive the exact parse and export projections with additive field canaries, and mutate the outputs without source mutation.
 - **Environment / configuration:** Vitest/jsdom with real codec and projection helpers
-- **Pass criterion:** Fields round-trip, hydration is independent, projections select declared fields, and inputs remain unchanged.
-- **Status:** implemented
-- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
-- **Nonconformance:** Current fixtures use schema version 2 and assert the projection
-  clauses separately; no single discriminating fixture covers every projection and
-  source-identity clause together.
+- **Pass criterion:** Fields round-trip, hydration is independent, parse carries explicit representations but no timing, export carries only positive timing plus the parse semantics, undeclared fields do not cross, and inputs remain unchanged under output mutation.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this integration boundary.
 
 ## INTV-003 — Verify shared atomic authoring
 
@@ -39,12 +37,12 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build asymmetric endpoints, both edge roles, reversed duplicates, invalid values, and placement-gated protocols through HTTP.
+- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed duplicates, field mutations at every owned level, tagged/opaque constructor values, resolved physical values, and placement-gated protocols through HTTP.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Roles persist, only physical edges enter the graph, permitted virtual protocols remain, and invalid fixtures fail.
-- **Status:** implemented
-- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
-- **Nonconformance:** UNITV-010 covers reordered nodes; some malformed shapes escape early validation.
+- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five required resolved fields; permitted virtual protocols remain without physical fields; exact tags and untagged simulator values follow their declared branches; every owned malformed fixture fails before construction.
+- **Status:** passing
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
+- **Nonconformance:** None at this integration boundary; reordered-node discrimination remains the separate planned UNITV-010 action.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
@@ -83,9 +81,9 @@
 
 - **Covers:** SUB-008
 - **Method:** test
-- **Procedure:** Generate the complete mapping/omission inventory repeatedly with canaries; inspect help.
+- **Procedure:** Reject malformed or default-dependent export request trees, generate the complete mapping/omission inventory repeatedly with canaries, and inspect help.
 - **Environment / configuration:** Backend unit/HTTP tests plus browser export-help scenario
-- **Pass criterion:** Output is stable and valid, state/canaries stay unchanged, mappings run, and omissions are disclosed.
+- **Pass criterion:** Exact explicit configuration is required; output is stable and valid, state/canaries stay unchanged, mappings run, and omissions are disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
 - **Nonconformance:** The panel mocks its route; one real-route scenario covers selected semantics; no exhaustive feature/help inventory exists.
@@ -94,9 +92,9 @@
 
 - **Covers:** SUB-009
 - **Method:** test
-- **Procedure:** Check OpenAPI profiles against routes/callers; pass backend, network, malformed, and cleanup failures through client/log models.
+- **Procedure:** Check OpenAPI profiles and closed parse/export schemas against routes, runtime admission, and callers; pass backend, network, malformed, and cleanup failures through client/log models.
 - **Environment / configuration:** Contract, backend integration, and frontend/sidecar harnesses
-- **Pass criterion:** Active schemas match handlers; routes use canonical errors; generated callers resolve operation IDs; Log diagnostics equal transmitted values.
+- **Pass criterion:** Active schemas match handlers including endpoint-specific configuration and all nested request definitions; routes use canonical errors; generated callers resolve operation IDs; Log diagnostics equal transmitted values.
 - **Status:** implemented
 - **Evidence:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl)
 - **Nonconformance:** Separate artifacts omit one real-browser cleanup/failure matrix in the visible Log; SYSV-008 retains it.
