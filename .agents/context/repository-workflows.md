@@ -66,10 +66,17 @@ readiness checks, diagnostics, and cleanup.
 5. Use `./ci/mcp-unit.sh` plus the MCP browser scenario for contract, bridge, transport,
    supervisor, or dependency-pin changes.
 
-Server-backed test jobs opt into restricted evaluation explicitly. The production
-browser job keeps evaluation and MCP disabled and serves the production bundle from the
-backend. Secondary Firefox/WebKit and Windows/macOS checks do not alter the release
-support declaration.
+Server-backed integration jobs declare the `local` profile and explicitly enable
+restricted source evaluation. The public-profile startup smoke sets the opt-in to `true`,
+then verifies that `/platform_info` reports evaluation disabled, `/test_code` returns
+the stable 403 policy error, local-only MCP/development routes are absent, and the
+diagnostic protocol stays hidden.
+Real-server missing/false local opt-in checks remain a verification gap. The general
+browser wrapper uses Vite's development server; the production-browser job separately
+keeps evaluation and MCP disabled and serves the built frontend from the backend.
+Ubuntu/Chromium is the required release path. Secondary Firefox/WebKit and
+Windows/macOS checks are advisory portability signals and do not expand that support
+declaration.
 
 ## Keep generated state out of commits
 

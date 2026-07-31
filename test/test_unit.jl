@@ -9,6 +9,12 @@
   using ConcurrentSim
   using Dates
 
+  ServerLauncherFixture = Module(:ServerLauncherFixture)
+  Base.include(
+    ServerLauncherFixture,
+    joinpath(@__DIR__, "..", "bin", "server.jl"),
+  )
+
   @eval begin
     """A test-only background used to exercise non-Float64 catalog fields."""
     Base.@kwdef struct ContextualIntegerBackground
@@ -1608,8 +1614,10 @@
 
   @testset "Protocol Types" begin
       @test !WebQuantumSavory.mock_broken_protocol_enabled(override=nothing)
-      @test WebQuantumSavory.mock_broken_protocol_enabled(override=" TRUE ")
-      @test !WebQuantumSavory.mock_broken_protocol_enabled(override="False")
+      @test WebQuantumSavory.mock_broken_protocol_enabled(override="true")
+      @test !WebQuantumSavory.mock_broken_protocol_enabled(override="false")
+      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override=" TRUE ")
+      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="False")
       @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="1")
       @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="yes")
 
@@ -3299,59 +3307,59 @@
 
   @testset "Unsafe Evaluation Policy" begin
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="local",
+      profile="local",
       override=nothing,
     )
     @test WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="local",
+      profile="local",
       override="true",
     )
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="local",
+      profile="local",
       override="false",
     )
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="public",
+      profile="public",
       override=nothing,
     )
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="public",
+      profile="public",
       override="false",
     )
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile="public",
+      profile="public",
       override="true",
     )
 
     for malformed in (" TRUE ", "False", "1", "yes", "")
       @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
-        deployment_profile="local",
+        profile="local",
         override=malformed,
       )
       @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
-        deployment_profile="public",
+        profile="public",
         override=malformed,
       )
     end
     @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
-      deployment_profile=nothing,
+      profile=nothing,
       override="false",
     )
     for malformed in ("dev", "test", "prod", "LOCAL", " public ", "")
       @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
-        deployment_profile=malformed,
+        profile=malformed,
         override="false",
       )
     end
 
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "local",
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
     ) do
       @test WebQuantumSavory.unsafe_code_evaluation_enabled()
     end
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "public",
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "public",
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
     ) do
       @test !WebQuantumSavory.unsafe_code_evaluation_enabled()
@@ -3369,28 +3377,69 @@
       end
     end
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "local",
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => nothing,
     ) do
       @test !WebQuantumSavory.unsafe_code_evaluation_enabled()
     end
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => nothing,
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => nothing,
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
     ) do
       @test_throws ArgumentError WebQuantumSavory.main()
     end
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "staging",
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "staging",
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
     ) do
       @test_throws ArgumentError WebQuantumSavory.main()
     end
     withenv(
-      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "local",
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "yes",
     ) do
       @test_throws ArgumentError WebQuantumSavory.main()
+    end
+
+    local_environment = Dict(
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.GENIE_ENV_VAR => "test",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+      WebQuantumSavory.MCP_ENABLE_ENV_VAR => "true",
+      WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "true",
+    )
+    @test WebQuantumSavory.validate_deployment_configuration(local_environment) ==
+      WebQuantumSavory.LOCAL_DEPLOYMENT_PROFILE
+
+    public_environment = Dict(
+      WebQuantumSavory.DEPLOYMENT_PROFILE_ENV_VAR => "public",
+      WebQuantumSavory.GENIE_ENV_VAR => "prod",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+      WebQuantumSavory.MCP_ENABLE_ENV_VAR => "false",
+      WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "false",
+    )
+    @test WebQuantumSavory.validate_deployment_configuration(public_environment) ==
+      WebQuantumSavory.PUBLIC_DEPLOYMENT_PROFILE
+
+    for (variable, value) in (
+      WebQuantumSavory.GENIE_ENV_VAR => "test",
+      WebQuantumSavory.MCP_ENABLE_ENV_VAR => "true",
+      WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "true",
+    )
+      invalid_environment = copy(public_environment)
+      invalid_environment[variable] = value
+      @test_throws ArgumentError WebQuantumSavory.validate_deployment_configuration(
+        invalid_environment,
+      )
+
+      preparation_actions = Symbol[]
+      @test_throws ArgumentError ServerLauncherFixture.prepare_server(
+        String[];
+        environment=invalid_environment,
+        instantiate_mcp_fn=_ -> push!(preparation_actions, :mcp),
+        build_frontend_fn=() -> push!(preparation_actions, :frontend),
+      )
+      @test isempty(preparation_actions)
     end
 
     failure = WebQuantumSavory.evaluation_failure_response(

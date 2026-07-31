@@ -1,4 +1,3 @@
-const MCP_ENABLE_ENV_VAR = "WEBQUANTUMSAVORY_ENABLE_MCP"
 const MCP_PORT_ENV_VAR = "WEBQUANTUMSAVORY_MCP_PORT"
 const DEFAULT_MCP_PORT = 8001
 const MCP_CONTRACT_VERSION = 1
@@ -57,13 +56,6 @@ function effective_genie_server_endpoint(
     host,
     port=parse(Int, port),
   )
-end
-
-function _strict_environment_boolean(value, variable_name::AbstractString)
-  value === nothing && return false
-  value == "true" && return true
-  value == "false" && return false
-  throw(ArgumentError("$variable_name must be exactly \"true\" or \"false\""))
 end
 
 function _configured_port(value, variable_name::AbstractString, fallback::Int)

@@ -1,20 +1,10 @@
-const MOCK_BROKEN_PROTOCOL_ENV_VAR = "WEBQUANTUMSAVORY_MOCK_BROKEN"
 const MOCK_BROKEN_PROTOCOL_TYPE = "WebQuantumSavory.MockBrokenProtocol"
-
-"""Parse the diagnostic-protocol override, accepting only `true` or `false`."""
-function _parse_mock_broken_override(value::AbstractString)
-  normalized = lowercase(strip(value))
-  normalized == "true" && return true
-  normalized == "false" && return false
-  throw(ArgumentError("$MOCK_BROKEN_PROTOCOL_ENV_VAR must be 'true' or 'false'"))
-end
 
 """Return whether the intentionally broken diagnostic protocol is enabled."""
 function mock_broken_protocol_enabled(;
   override::Union{Nothing,AbstractString}=get(ENV, MOCK_BROKEN_PROTOCOL_ENV_VAR, nothing),
 )
-  override === nothing && return false
-  return _parse_mock_broken_override(override)
+  return _strict_environment_boolean(override, MOCK_BROKEN_PROTOCOL_ENV_VAR)
 end
 
 """

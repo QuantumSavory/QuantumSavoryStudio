@@ -24,6 +24,12 @@ function successful_response(response)
            startswith(response, "HTTP/1.0 200")
 end
 
+function missing_response(response)
+    response === nothing && return false
+    return startswith(response, "HTTP/1.1 404") ||
+           startswith(response, "HTTP/1.0 404")
+end
+
 function status_ready(port::Int)
     response = http_response(
         port,
@@ -54,6 +60,26 @@ function source_evaluation_request_denied(port::Int)
     denied = startswith(response, "HTTP/1.1 403") ||
              startswith(response, "HTTP/1.0 403")
     return denied && occursin("\"UNSAFE_EVALUATION_DISABLED\"", response)
+end
+
+function local_only_routes_absent(port::Int)
+    for path in ("/_mcp/status", "/dev/manipulate_state")
+        response = http_response(
+            port,
+            "GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+        )
+        missing_response(response) || return false
+    end
+    return true
+end
+
+function diagnostic_protocol_absent(port::Int)
+    response = http_response(
+        port,
+        "GET /protocol_types HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    )
+    return successful_response(response) &&
+           !occursin("WebQuantumSavory.MockBrokenProtocol", response)
 end
 
 function startup_smoke()
@@ -87,6 +113,12 @@ function startup_smoke()
                 )
                 source_evaluation_request_denied(port) || error(
                     "public profile accepted a source-evaluation request",
+                )
+                local_only_routes_absent(port) || error(
+                    "public profile exposed a local-only route",
+                )
+                diagnostic_protocol_absent(port) || error(
+                    "public profile exposed the diagnostic protocol",
                 )
                 return
             end

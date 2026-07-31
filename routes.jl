@@ -2651,7 +2651,8 @@ end
 
 ########################################################
 
-@swagger """
+if Genie.Configuration.isdev() || Genie.Configuration.istest()
+  @swagger """
 /dev/manipulate_state:
   post:
     summary: Dev-only endpoint to manipulate simulation state for testing
@@ -2713,22 +2714,19 @@ end
       '500':
         description: Internal server error or not in dev mode
 """
-# Dev/test-only endpoint for test support
-route("/dev/manipulate_state", method="POST") do
-  if !(Genie.Configuration.isdev() || Genie.Configuration.istest())
-    throw(server_error("This endpoint is only available in dev or test environment"))
+  # Dev/test-only endpoint for test support
+  route("/dev/manipulate_state", method="POST") do
+    payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+
+    if !haskey(payload, "name")
+      throw(validation_error("Missing required field: 'name'"))
+    end
+
+    simulation_name = payload["name"]
+    WebQuantumSavory.simulation_update_for_test!(simulation_name, payload)
+
+    json(Dict(:success => true, :message => "State updated", :name => simulation_name))
   end
-
-  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-  
-  if !haskey(payload, "name")
-    throw(validation_error("Missing required field: 'name'"))
-  end
-
-  simulation_name = payload["name"]
-  WebQuantumSavory.simulation_update_for_test!(simulation_name, payload)
-
-  json(Dict(:success => true, :message => "State updated", :name => simulation_name))
 end
 
 ########################################################

@@ -17,9 +17,11 @@ This reference records the current evaluator and its gaps.
 
 ## Trust boundary
 
-`WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in. The exact strings
-`true` and `false` are accepted; the variable being absent disables evaluation in
-every environment.
+`WQS_DEPLOYMENT_PROFILE` is the product-wide startup profile and accepts only the exact
+values `local` and `public`. Missing or malformed values fail startup. In the `local` profile,
+`WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in; the exact strings
+`true` and `false` are accepted, a missing value disables evaluation, and a malformed
+value fails startup. The `public` profile denies evaluation regardless of the opt-in.
 
 The restricted language reduces risk but is not a security sandbox: accepted Julia
 executes natively in the server process without memory, operation, or safely

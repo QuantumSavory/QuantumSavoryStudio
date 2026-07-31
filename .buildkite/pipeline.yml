@@ -82,3 +82,17 @@ steps:
           version: "2026.7.2"
     artifact_paths: "ci-artifacts/**/*"
     timeout_in_minutes: 60
+
+  - label: ":shield: Public profile"
+    key: public-profile
+    command: julia --startup-file=no ci/startup-smoke.jl
+    concurrency: 1
+    concurrency_group: "webquantumsavory/public-profile-server"
+    env:
+      WEBQUANTUMSAVORY_CI_SERVER_PORT: "8005"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.12"
+      - mise#v1.1.4:
+          version: "2026.7.2"
+    timeout_in_minutes: 30

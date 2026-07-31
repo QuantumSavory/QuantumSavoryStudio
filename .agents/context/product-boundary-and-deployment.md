@@ -40,9 +40,13 @@ process-global simulation state and no multi-instance coordination. The maintain
 Podman profile is a concrete single-process deployment artifact; broader hosting remains
 an operator choice.
 
-Restricted Julia evaluation is local-only and independently opt-in. Public mode denies
-native-source execution regardless of the opt-in; the restricted language is still not
-a security sandbox.
+Every launch must declare `WQS_DEPLOYMENT_PROFILE=local` or `public`. Restricted Julia
+evaluation is independently opt-in only in the local profile; the public profile denies
+it even when the opt-in is true. The allowlist reduces risk but is not a security
+boundary, so the local profile is appropriate only when every caller and payload is
+trusted. The public profile also requires `GENIE_ENV=prod` and rejects MCP or the
+diagnostic protocol before launcher preparation, route loading, or serving. Production
+route loading omits the development state-manipulation endpoint.
 
 ## Approved release-2.0 support boundary
 

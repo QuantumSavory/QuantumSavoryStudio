@@ -31,6 +31,7 @@ Base.showerror(io::IO, e::APIError) = print(io, "APIError: $(e.message) (status:
 
 
 include("errors.jl")
+include("deployment_policy.jl")
 include("evaluation_policy.jl")
 include("mcp_config.jl")
 include("platform_info.jl")
@@ -113,11 +114,8 @@ end
 include("tag_metadata.jl")
 
 function main()
-  # Validate the deployment profile and explicit override before Genie starts
-  # and handles route-loading errors internally.
-  unsafe_code_evaluation_enabled()
-  # Fail before Genie starts if the diagnostic-protocol flag is malformed.
-  mock_broken_protocol_enabled()
+  # Fail before Genie starts and handles route-loading errors internally.
+  validate_deployment_configuration()
   mcp_settings = _read_mcp_environment_settings(ENV)
   if !mcp_settings.enabled
     _configure_mcp!(

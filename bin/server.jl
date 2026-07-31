@@ -1,14 +1,6 @@
 using WebQuantumSavory
 
 const APP_ROOT = normpath(joinpath(@__DIR__, ".."))
-const MCP_ENV_VAR = "WEBQUANTUMSAVORY_ENABLE_MCP"
-
-function checked_boolean_environment(name::AbstractString)
-    value = get(ENV, name, "")
-    value in ("", "false") && return false
-    value == "true" && return true
-    throw(ArgumentError("$name must be 'true' or 'false'"))
-end
 
 function run_in_app(command::Cmd)
     run(Cmd(command; dir=APP_ROOT))
@@ -20,17 +12,23 @@ function build_frontend()
     run_in_app(`$npm --prefix $(joinpath(APP_ROOT, "gui")) run build`)
 end
 
-function instantiate_mcp()
-    checked_boolean_environment(MCP_ENV_VAR) || return
+function instantiate_mcp(environment=ENV)
+    WebQuantumSavory._read_mcp_environment_settings(environment).enabled || return
     run_in_app(
         `$(Base.julia_cmd()) --startup-file=no --project=$(joinpath(APP_ROOT, "mcp")) -e
           "using Pkg; Pkg.instantiate()"`,
     )
 end
 
-function prepare_server(arguments::Vector{String}=ARGS)
-    instantiate_mcp()
-    build_frontend()
+function prepare_server(
+    arguments::Vector{String}=ARGS;
+    environment=ENV,
+    instantiate_mcp_fn=instantiate_mcp,
+    build_frontend_fn=build_frontend,
+)
+    WebQuantumSavory.validate_deployment_configuration(environment)
+    instantiate_mcp_fn(environment)
+    build_frontend_fn()
     effective_arguments = ["-s=true"; arguments]
     empty!(ARGS)
     append!(ARGS, effective_arguments)

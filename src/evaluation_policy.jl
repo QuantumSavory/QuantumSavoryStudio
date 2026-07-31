@@ -1,43 +1,14 @@
-const UNSAFE_EVALUATION_ENV_VAR = "WQS_ENABLE_SOURCE_EVALUATION"
-const SOURCE_EVALUATION_PROFILE_ENV_VAR = "WQS_DEPLOYMENT_PROFILE"
-const LOCAL_SOURCE_EVALUATION_PROFILE = "local"
-const PUBLIC_SOURCE_EVALUATION_PROFILE = "public"
-const SOURCE_EVALUATION_PROFILES = (
-  LOCAL_SOURCE_EVALUATION_PROFILE,
-  PUBLIC_SOURCE_EVALUATION_PROFILE,
-)
 const UNSAFE_EVALUATION_DISABLED_CODE = "UNSAFE_EVALUATION_DISABLED"
 const EVALUATION_FAILED_CODE = "EVALUATION_FAILED"
 
-"""Parse the source-evaluation override, accepting exact `true` or `false`."""
-function _parse_unsafe_evaluation_override(value::AbstractString)
-  value == "true" && return true
-  value == "false" && return false
-
-  throw(ArgumentError("$UNSAFE_EVALUATION_ENV_VAR must be 'true' or 'false'"))
-end
-
-"""Validate the product deployment profile used by the source-evaluation policy."""
-function _parse_source_evaluation_profile(value::Union{Nothing,AbstractString})
-  value in SOURCE_EVALUATION_PROFILES && return String(value)
-
-  throw(ArgumentError(
-    "$SOURCE_EVALUATION_PROFILE_ENV_VAR is required and must be 'local' or 'public'",
-  ))
-end
-
 """Return whether server-process Julia evaluation is enabled for this profile."""
 function unsafe_code_evaluation_enabled(;
-  deployment_profile::Union{Nothing,AbstractString}=get(
-    ENV,
-    SOURCE_EVALUATION_PROFILE_ENV_VAR,
-    nothing,
-  ),
+  profile::Union{Nothing,AbstractString}=deployment_profile(),
   override::Union{Nothing,AbstractString}=get(ENV, UNSAFE_EVALUATION_ENV_VAR, nothing),
 )
-  profile = _parse_source_evaluation_profile(deployment_profile)
-  opted_in = override === nothing ? false : _parse_unsafe_evaluation_override(override)
-  return profile == LOCAL_SOURCE_EVALUATION_PROFILE && opted_in
+  parsed_profile = _parse_deployment_profile(profile)
+  opted_in = _strict_environment_boolean(override, UNSAFE_EVALUATION_ENV_VAR)
+  return parsed_profile == LOCAL_DEPLOYMENT_PROFILE && opted_in
 end
 
 function unsafe_evaluation_disabled_error()
@@ -47,7 +18,7 @@ function unsafe_evaluation_disabled_error()
     UNSAFE_EVALUATION_DISABLED_CODE,
     Dict{String,Any}(
       "configuration_variable" => UNSAFE_EVALUATION_ENV_VAR,
-      "deployment_profile_variable" => SOURCE_EVALUATION_PROFILE_ENV_VAR,
+      "deployment_profile_variable" => DEPLOYMENT_PROFILE_ENV_VAR,
     ),
   )
 end
