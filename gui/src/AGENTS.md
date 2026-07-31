@@ -19,11 +19,9 @@ This applies to source under `gui/src/`. Components inherit `components/AGENTS.m
 
 ## Source rules
 
-- Route project encoding and projections through `projectCodec`; route active-project
-  replacements through the candidate-first project-session owner. Never persist or
-  tear down during preparation, cancel an acquired commit, or give ordinary open the
-  bootstrap-only stale-recent-pointer exception. After disposal, admit no mutation;
-  let an acquired owner settle once.
+- Route project encoding/projections through `projectCodec` and replacements through
+  the candidate-first project-session owner; preserve its prepare, commit, and disposal
+  boundaries.
 - Admit raw project documents against `contracts/project/v2.schema.json` before
   normalization, hydration, conflict lookup, storage, platform fetches, or session
   effects. Do not add old-schema coercion or migration.
