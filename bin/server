@@ -2,18 +2,5 @@
 set -eu
 
 app_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-
-case "${WEBQUANTUMSAVORY_ENABLE_MCP-}" in
-  true)
-    julia --startup-file=no --project="$app_root/mcp" -e \
-      'using Pkg; Pkg.instantiate()'
-    ;;
-  ""|false)
-    ;;
-esac
-
-npm --prefix "$app_root/gui" ci --include=dev
-npm --prefix "$app_root/gui" run build
-
-exec julia --color=yes --depwarn=no --project="$app_root" -q -i -- \
-  "$app_root/bootstrap.jl" -s=true "$@"
+exec julia --startup-file=no --project="$app_root" \
+  "$app_root/bin/server.jl" "$@"
