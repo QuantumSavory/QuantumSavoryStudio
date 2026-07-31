@@ -5,6 +5,7 @@ COPY Project.toml CHANGELOG.md ./
 COPY public/robots.txt public/robots.txt
 COPY gui/package.json gui/package-lock.json gui/
 RUN npm --prefix gui ci --include=dev
+COPY contracts contracts
 COPY gui gui
 RUN npm --prefix gui run build
 
