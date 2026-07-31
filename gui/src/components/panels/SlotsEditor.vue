@@ -22,8 +22,8 @@
             <SlotIcon
               :register-slot="slot"
               :node="node"
-              :class="{ 'slot-type-icon--disabled': disabled }"
-              :style="{ cursor: disabled ? 'not-allowed' : 'pointer' }"
+              :class="{ 'slot-type-icon--disabled': disabled || slotTypes.length === 0 }"
+              :style="{ cursor: disabled || slotTypes.length === 0 ? 'not-allowed' : 'pointer' }"
               @click="switchSlotType(slot)"
             />
           </div>
@@ -32,7 +32,7 @@
               class="bg-noise-select"
               :aria-label="`Background noise for slot ${slot.id}`"
               :value="slot.backgroundNoise.type"
-              :disabled="disabled"
+              :disabled="disabled || backgroundNoiseOptions.length === 0"
               @change="updateSlotBackground(slot, $event)"
             >
               <option
@@ -91,7 +91,7 @@
     <button
       type="button"
       class="add-slot-btn noborder"
-      :disabled="disabled"
+      :disabled="disabled || slotTypes.length === 0 || backgroundNoiseOptions.length === 0"
       @click="addSlot"
     >
       <Plus :size="14" aria-hidden="true" />
@@ -163,11 +163,12 @@ const emit = defineEmits([
 
 const expandedSlotIds = ref(new Set())
 const backgroundDrafts = reactive(new Map())
-const backgroundNoiseOptions = computed(() => (
-  api.config.value.bgNoiseOptions?.length
-    ? api.config.value.bgNoiseOptions
-    : [api.getDefaultBgNoise()]
-))
+const backgroundNoiseOptions = computed(() => {
+  const configured = api.config.value.bgNoiseOptions
+  return Array.isArray(configured)
+    ? configured.filter(option => typeof option?.type === 'string' && option.type)
+    : []
+})
 const resolvedNumericExpressionContext = computed(() => (
   props.numericExpressionContext
     ?? (
@@ -180,14 +181,30 @@ const slotTypes = computed(() => {
   const configured = (api.config.value.slotTypes || [])
     .map(type => typeof type === 'string' ? type : type?.type)
     .filter(Boolean)
-  return configured.length ? configured : ['Qubit', 'Qumode']
+  return configured
 })
 
+function newBackgroundNoise(definition) {
+  const backgroundNoise = deepClone(definition)
+  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
+    ...deepClone(parameter),
+    selectedType: 'default',
+    value: null,
+  }))
+  return backgroundNoise
+}
+
 function addSlot() {
-  if (props.disabled) return
+  if (
+    props.disabled
+    || slotTypes.value.length === 0
+    || backgroundNoiseOptions.value.length === 0
+  ) return
+  const definition = backgroundNoiseOptions.value.find(option => option.type === 'default')
+    ?? backgroundNoiseOptions.value[0]
   emit('add-slot', {
     type: slotTypes.value[0],
-    backgroundNoise: api.getDefaultBgNoise(),
+    backgroundNoise: newBackgroundNoise(definition),
   })
 }
 
@@ -204,7 +221,7 @@ function moveSlot(slot, offset) {
 }
 
 function switchSlotType(slot) {
-  if (props.disabled) return
+  if (props.disabled || slotTypes.value.length === 0) return
   const index = slotTypes.value.indexOf(slot.type)
   const type = slotTypes.value[(index + 1) % slotTypes.value.length]
   emit('update-slot', { slot, value: { type } })
@@ -215,12 +232,7 @@ function updateSlotBackground(slot, event) {
     option => option.type === event.target.value,
   )
   if (!definition) return
-  const backgroundNoise = deepClone(definition)
-  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
-    ...deepClone(parameter),
-    selectedType: 'default',
-    value: null,
-  }))
+  const backgroundNoise = newBackgroundNoise(definition)
   backgroundDrafts.set(slot.id, deepClone(backgroundNoise))
   emit('update-slot', {
     slot,

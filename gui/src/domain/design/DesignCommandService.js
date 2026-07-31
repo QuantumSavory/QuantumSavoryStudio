@@ -375,7 +375,7 @@ export class DesignCommandService {
     idGenerator = generateUUid,
     editingDisabled = () => false,
     defaultBackgroundNoise = () => ({ type: 'default', parameters: [] }),
-    slotCatalog = () => ['Qubit', 'Qumode'],
+    slotCatalog = () => [],
     backgroundCatalog = () => [],
     protocolCatalog = () => ({ node: [], edge: [], floating: [] }),
     statesCatalog = () => [],
@@ -892,7 +892,7 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', `Slot ID already exists: ${id}`)
     }
     const value = operation.value || operation
-    this.requireSlotType(value.type || 'Qubit')
+    const type = this.requireSlotType(value.type)
     const backgroundNoise = await this.requireBackgroundNoise(
       value.backgroundNoise || this.defaultBackgroundNoise(),
       {
@@ -903,7 +903,7 @@ export class DesignCommandService {
     )
     collection.push({
       id,
-      type: value.type || 'Qubit',
+      type,
       backgroundNoise,
       isLocked: false,
       assignment: false,
@@ -976,10 +976,14 @@ export class DesignCommandService {
   }
 
   requireSlotType(type) {
-    const normalized = requireString(type, 'Slot type')
-    const types = this.slotCatalog().map(entry => (
+    const catalog = this.slotCatalog()
+    const types = (Array.isArray(catalog) ? catalog : []).map(entry => (
       typeof entry === 'string' ? entry : entry?.type
-    ))
+    )).filter(entry => typeof entry === 'string' && entry.length)
+    if (!types.length) {
+      throw new DesignCommandError('VALIDATION_FAILED', 'Slot catalog is unavailable.')
+    }
+    const normalized = requireString(type, 'Slot type')
     if (!types.includes(normalized)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Unknown slot type: ${normalized}`)
     }
@@ -1930,6 +1934,7 @@ export class DesignCommandService {
     // the candidate network, then commit the transaction only if all pass.
     for (const node of result.generatedNodes || []) {
       for (const slot of node.data?.slots || []) {
+        slot.type = this.requireSlotType(slot.type)
         slot.backgroundNoise = await this.requireBackgroundNoise(
           slot.backgroundNoise,
           {

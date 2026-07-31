@@ -93,10 +93,20 @@
             <!-- Template Row -->
             <div class="add-slots-row">
               <div class="slot-cell type-cell">
-                <span @click="switchSlotTemplateType" class="type-icon" v-html="typeIcon(slotTemplate.type)"></span>
+                <span
+                  class="type-icon"
+                  :class="{ 'type-icon--disabled': slotTypes.length === 0 }"
+                  @click="switchSlotTemplateType"
+                  v-html="typeIcon(slotTemplate.type)"
+                ></span>
               </div>
               <div class="slot-cell bg-noise-cell">
-                <select :value="slotTemplate.backgroundNoise.type" @change="updateSlotTemplate('backgroundNoise', slotTemplate.backgroundNoise, $event)" class="bg-noise-select">
+                <select
+                  :value="slotTemplate.backgroundNoise.type"
+                  :disabled="bgNoiseOptions.length === 0"
+                  @change="updateSlotTemplate('backgroundNoise', slotTemplate.backgroundNoise, $event)"
+                  class="bg-noise-select"
+                >
                   <option v-for="opt in bgNoiseOptions" :key="opt.type" :value="opt.type">{{ opt.type == 'default' ? 'No background noise' : opt.type }}</option>
                 </select>
               </div>
@@ -116,7 +126,14 @@
           
           <div class="form-buttons">
             <button type="button" class="cancel-btn" @click="cancelAddNSlots">Cancel</button>
-            <button type="button" class="" @click="executeAddNSlots">Add {{ numberOfSlotsToAdd }} Slot{{ numberOfSlotsToAdd !== 1 ? 's' : '' }}</button>
+            <button
+              type="button"
+              class=""
+              :disabled="!slotTemplateIsAdmissible"
+              @click="executeAddNSlots"
+            >
+              Add {{ numberOfSlotsToAdd }} Slot{{ numberOfSlotsToAdd !== 1 ? 's' : '' }}
+            </button>
           </div>
         </div>
         
@@ -140,7 +157,10 @@
                 <span 
                   @click="switchBatchEditTemplateType" 
                   class="type-icon" 
-                  :class="{ 'changed-property': changedProperties.has('type') }"
+                  :class="{
+                    'changed-property': changedProperties.has('type'),
+                    'type-icon--disabled': slotTypes.length === 0,
+                  }"
                   v-html="typeIcon(batchEditTemplate.type)"
                 ></span>
               </div>
@@ -150,6 +170,7 @@
                   @change="updateBatchEditTemplate('backgroundNoise', batchEditTemplate.backgroundNoise, $event)"
                   class="bg-noise-select"
                   :class="{ 'changed-property': changedProperties.has('backgroundNoise') }"
+                  :disabled="bgNoiseOptions.length === 0"
                 >
                   <option v-for="opt in bgNoiseOptions" :key="opt.type" :value="opt.type">{{ opt.type == 'default' ? 'No background noise' : opt.type }}</option>
                 </select>
@@ -179,7 +200,7 @@
               type="button"
               class="" 
               @click="executeBatchEdit"
-              :disabled="changedProperties.size === 0 || selectedSlots.size === 0"
+              :disabled="!batchEditCanApply"
             >
               {{ selectedSlots.size > 0 ? `Apply to ${selectedSlots.size} Slot${selectedSlots.size !== 1 ? 's' : ''}` : 'Apply' }}
             </button>
@@ -273,11 +294,43 @@ const emit = defineEmits([
 ])
 const { showAlert } = useUiServices()
 
-const bgNoiseOptions = computed(() => (
-  api.config.value.bgNoiseOptions?.length
-    ? api.config.value.bgNoiseOptions
-    : [api.getDefaultBgNoise()]
-))
+const bgNoiseOptions = computed(() => {
+  const configured = api.config.value.bgNoiseOptions
+  return Array.isArray(configured)
+    ? configured.filter(option => typeof option?.type === 'string' && option.type)
+    : []
+})
+const slotTypes = computed(() => {
+  const configured = Array.isArray(api.config.value.slotTypes)
+    ? api.config.value.slotTypes
+    : []
+  return configured
+    .map(type => typeof type === 'string' ? type : type?.type)
+    .filter(type => typeof type === 'string' && type)
+})
+
+function newBackgroundNoise(definition) {
+  if (!definition) return { type: '', parameters: [] }
+  const backgroundNoise = structuredClone(toRaw(definition))
+  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
+    ...structuredClone(toRaw(parameter)),
+    selectedType: 'default',
+    value: null,
+  }))
+  return backgroundNoise
+}
+
+function newSlotTemplate() {
+  const backgroundDefinition = bgNoiseOptions.value.find(option => option.type === 'default')
+    ?? bgNoiseOptions.value[0]
+  return {
+    type: slotTypes.value[0] ?? '',
+    backgroundNoise: newBackgroundNoise(backgroundDefinition),
+    lastOperationTime: 0,
+    assignment: false,
+    isLocked: false,
+  }
+}
 
 // Helper: get icon for the add-many and batch-edit slot templates.
 function typeIcon(type) {
@@ -387,26 +440,34 @@ const showOptionsDropdown = ref(false)
 // Add N Slots form logic
 const showAddNSlotsForm = ref(false)
 const numberOfSlotsToAdd = ref(1)
-const slotTemplate = ref({
-  type: 'Qubit',
-  backgroundNoise: api.getDefaultBgNoise(), 
-  lastOperationTime: 0,
-  assignment: false,
-  isLocked: false
-})
+const slotTemplate = ref(newSlotTemplate())
 
 // Batch Edit logic
 const batchEditMode = ref(false)
 const selectedSlots = ref(new Set())
 const showBatchEditForm = ref(false)
-const batchEditTemplate = ref({
-  type: 'Qubit',
-  backgroundNoise: api.getDefaultBgNoise(), 
-  lastOperationTime: 0,
-  assignment: false,
-  isLocked: false
-})
+const batchEditTemplate = ref(newSlotTemplate())
 const changedProperties = ref(new Set())
+const slotTemplateIsAdmissible = computed(() => (
+  slotTypes.value.includes(slotTemplate.value.type)
+  && bgNoiseOptions.value.some(option => (
+    option.type === slotTemplate.value.backgroundNoise.type
+  ))
+))
+const batchEditCanApply = computed(() => (
+  changedProperties.value.size > 0
+  && selectedSlots.value.size > 0
+  && (
+    !changedProperties.value.has('type')
+    || slotTypes.value.includes(batchEditTemplate.value.type)
+  )
+  && (
+    !changedProperties.value.has('backgroundNoise')
+    || bgNoiseOptions.value.some(option => (
+      option.type === batchEditTemplate.value.backgroundNoise.type
+    ))
+  )
+))
 
 function hideOptionsDropdown() {
   showOptionsDropdown.value = false
@@ -414,6 +475,7 @@ function hideOptionsDropdown() {
 
 function addNSlots() {
   console.log( 'addNSlots' );
+  slotTemplate.value = newSlotTemplate()
   showAddNSlotsForm.value = true
   hideOptionsDropdown()
 }
@@ -422,13 +484,7 @@ function cancelAddNSlots() {
   showAddNSlotsForm.value = false
   // Reset form values
   numberOfSlotsToAdd.value = 1
-  slotTemplate.value = {
-    type: 'Qubit',
-    backgroundNoise: api.getDefaultBgNoise(), 
-    lastOperationTime: 0,
-    assignment: false,
-    isLocked: false
-  }
+  slotTemplate.value = newSlotTemplate()
 }
 
 function executeAddNSlots() {
@@ -438,7 +494,7 @@ function executeAddNSlots() {
     return
   }
 
-  if (numberOfSlotsToAdd.value > 0) {
+  if (numberOfSlotsToAdd.value > 0 && slotTemplateIsAdmissible.value) {
     emit(
       'design-operations',
       Array.from({ length: numberOfSlotsToAdd.value }, () => ({
@@ -457,28 +513,15 @@ function executeAddNSlots() {
 function updateSlotTemplate(key, value, event) {
   const bgType = event.target.value;
   const bgTypeDefinition = bgNoiseOptions.value.find(opt => opt.type === bgType);
-  slotTemplate.value.backgroundNoise = {
-    type: bgTypeDefinition.type,
-    doc: bgTypeDefinition.doc,
-    parameters: bgTypeDefinition.parameters.map(param => ({
-      field: param.field,
-      type: param.type,
-      doc: param.doc, 
-      selectedType: 'default',
-      value: null,
-    }))
-  }
+  if (!bgTypeDefinition) return
+  slotTemplate.value.backgroundNoise = newBackgroundNoise(bgTypeDefinition)
 }
 
 function switchSlotTemplateType() {
-  const slot = slotTemplate.value;
-  if (slot.type == 'Qubit') {
-    slot.type = 'Qumode'
-  } else if (slot.type == 'Qumode') {
-    slot.type = 'Qubit'
-  } else {
-    slot.type = 'Qubit'
-  }
+  if (slotTypes.value.length === 0) return
+  const slot = slotTemplate.value
+  const index = slotTypes.value.indexOf(slot.type)
+  slot.type = slotTypes.value[(index + 1) % slotTypes.value.length]
 }
 
 // Batch Edit Functions
@@ -506,41 +549,24 @@ function toggleSlotSelection(slotId) {
 }
 
 function resetBatchEditTemplate() {
-  batchEditTemplate.value = {
-    type: 'Qubit',
-    backgroundNoise: api.getDefaultBgNoise(), 
-    lastOperationTime: 0,
-    assignment: false,
-    isLocked: false
-  }
+  batchEditTemplate.value = newSlotTemplate()
   changedProperties.value.clear()
 }
 
 function updateBatchEditTemplate(key, value, event) {
   const bgType = event.target.value;
   const bgTypeDefinition = bgNoiseOptions.value.find(opt => opt.type === bgType);
-  batchEditTemplate.value.backgroundNoise = {
-    type: bgTypeDefinition.type,
-    doc: bgTypeDefinition.doc,
-    parameters: bgTypeDefinition.parameters.map(param => ({
-      field: param.field,
-      type: param.type,
-      doc: param.doc, 
-      selectedType: 'default',
-      value: null,
-    }))
-  }
+  if (!bgTypeDefinition) return
+  batchEditTemplate.value.backgroundNoise = newBackgroundNoise(bgTypeDefinition)
   changedProperties.value.add(key);
 }
 
 function switchBatchEditTemplateType() {
-  if (batchEditTemplate.value.type == 'Qubit') {
-    batchEditTemplate.value.type = 'Qumode'
-  } else if (batchEditTemplate.value.type == 'Qumode') {
-    batchEditTemplate.value.type = 'Qubit'
-  } else {
-    batchEditTemplate.value.type = 'Qubit'
-  }
+  if (slotTypes.value.length === 0) return
+  const index = slotTypes.value.indexOf(batchEditTemplate.value.type)
+  batchEditTemplate.value.type = slotTypes.value[
+    (index + 1) % slotTypes.value.length
+  ]
   changedProperties.value.add('type')
 }
 
@@ -552,6 +578,7 @@ function cancelBatchEdit() {
 }
 
 function executeBatchEdit() {
+  if (props.editingLocked || !batchEditCanApply.value) return
   const slotsToUpdate = props.node.data.slots.filter(slot => selectedSlots.value.has(slot.id))
   const value = Object.fromEntries(
     [...changedProperties.value].map(property => [
@@ -715,6 +742,11 @@ if (props.justCreated) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.type-icon--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
  
 

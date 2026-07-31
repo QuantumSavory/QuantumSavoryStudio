@@ -129,6 +129,28 @@ describe('NodePanel background constructor drafts', () => {
     vi.restoreAllMocks()
   })
 
+  it('offers no slot or background fallback before simulator catalogs load', async () => {
+    api.updateConfig({
+      slotTypes: [],
+      bgNoiseOptions: [],
+    })
+    const wrapper = mountPanel()
+
+    const addSlot = wrapper.get('.add-slot-btn')
+    expect(addSlot.attributes('disabled')).toBeDefined()
+    await addSlot.trigger('click')
+    expect(wrapper.emitted('design-operations')).toBeUndefined()
+
+    await wrapper.get('.menu-stub button:nth-child(2)').trigger('click')
+    const form = wrapper.get('.add-n-slots-form')
+    expect(form.get('.bg-noise-select').attributes('disabled')).toBeDefined()
+    expect(form.findAll('.bg-noise-select option')).toHaveLength(0)
+    const addMany = buttonNamed(form, 'Add 1 Slot')
+    expect(addMany.attributes('disabled')).toBeDefined()
+    await addMany.trigger('click')
+    expect(wrapper.emitted('design-operations')).toBeUndefined()
+  })
+
   it('uses concrete node context and clones validated add-many backgrounds', async () => {
     const wrapper = mountPanel()
     await wrapper.get('.menu-stub button:nth-child(2)').trigger('click')

@@ -28,6 +28,7 @@ function serviceFor(project, options = {}) {
     getProject: () => project,
     idGenerator: prefix => `${prefix}_${++nextId}`,
     defaultBackgroundNoise: () => ({ type: 'NoNoise', parameters: [] }),
+    slotCatalog: () => ['Qubit', 'Qumode'],
     backgroundCatalog: () => DEFAULT_BACKGROUND_CATALOG,
     ...options,
   })
@@ -48,6 +49,148 @@ describe('DesignCommandService', () => {
         value: { name: 'Alice', position: [1, 2] },
       }],
     })).toEqual(operations)
+  })
+
+  it('admits slot types only from a live catalog across direct, template, and generated paths', async () => {
+    const directProject = createEmptyProject('Direct slot catalog')
+    directProject.net.nodes.push(new Node({
+      id: 'node_direct',
+      name: 'Direct',
+      position: [0, 0],
+      data: { type: 'City', slots: [], protocols: [] },
+    }))
+    const directDirty = vi.fn()
+    const directCommitted = vi.fn()
+    const directService = serviceFor(directProject, {
+      slotCatalog: () => [],
+      markDirty: directDirty,
+      onCommitted: directCommitted,
+    })
+    const directBefore = encodeDesignDocument(directProject)
+
+    await expect(directService.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'slots.create',
+        node_id: 'node_direct',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: { type: 'NoNoise', parameters: [] },
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Slot catalog is unavailable.',
+    })
+    expect(encodeDesignDocument(directProject)).toEqual(directBefore)
+    expect(directDirty).not.toHaveBeenCalled()
+    expect(directCommitted).not.toHaveBeenCalled()
+
+    const exactCatalogService = serviceFor(directProject, {
+      slotCatalog: () => ['Qubit'],
+      markDirty: directDirty,
+      onCommitted: directCommitted,
+    })
+    await expect(exactCatalogService.execute({
+      origin: 'mcp',
+      operations: [
+        {
+          kind: 'topology.update_node',
+          node_id: 'node_direct',
+          value: { name: 'Must remain Direct' },
+        },
+        {
+          kind: 'slots.create',
+          node_id: 'node_direct',
+          value: {
+            type: 'Qumode',
+            backgroundNoise: { type: 'NoNoise', parameters: [] },
+          },
+        },
+      ],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Unknown slot type: Qumode',
+    })
+    expect(encodeDesignDocument(directProject)).toEqual(directBefore)
+    expect(directDirty).not.toHaveBeenCalled()
+    expect(directCommitted).not.toHaveBeenCalled()
+
+    const templateProject = createEmptyProject('Template slot catalog')
+    await serviceFor(templateProject).execute({
+      operations: [{
+        kind: 'slots.create',
+        template: true,
+        value: {
+          type: 'Qubit',
+          backgroundNoise: { type: 'NoNoise', parameters: [] },
+        },
+      }],
+    })
+    const templateDirty = vi.fn()
+    const templateCommitted = vi.fn()
+    const templateService = serviceFor(templateProject, {
+      slotCatalog: () => [],
+      markDirty: templateDirty,
+      onCommitted: templateCommitted,
+    })
+    const templateBefore = encodeDesignDocument(templateProject)
+
+    await expect(templateService.execute({
+      operations: [{
+        kind: 'topology.create_node',
+        value: { name: 'Clone', position: [1, 2] },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Slot catalog is unavailable.',
+    })
+    expect(encodeDesignDocument(templateProject)).toEqual(templateBefore)
+    expect(templateDirty).not.toHaveBeenCalled()
+    expect(templateCommitted).not.toHaveBeenCalled()
+
+    const generatedProject = createEmptyProject('Generated slot catalog')
+    const generatedDirty = vi.fn()
+    const generatedCommitted = vi.fn()
+    const generatedService = serviceFor(generatedProject, {
+      slotCatalog: () => ['Qubit'],
+      markDirty: generatedDirty,
+      onCommitted: generatedCommitted,
+      generators: {
+        rogue: async net => {
+          const node = new Node({
+            id: 'generated_node',
+            name: 'Generated',
+            position: [5, 5],
+            data: {
+              type: 'City',
+              slots: [{
+                id: 'generated_slot',
+                type: 'Qumode',
+                backgroundNoise: { type: 'NoNoise', parameters: [] },
+              }],
+              protocols: [],
+            },
+          })
+          net.nodes.push(node)
+          return { generatedNodes: [node], generatedEdges: [] }
+        },
+      },
+    })
+    const generatedBefore = encodeDesignDocument(generatedProject)
+
+    await expect(generatedService.execute({
+      operations: [{
+        kind: 'network.generate',
+        value: { generator: 'rogue' },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Unknown slot type: Qumode',
+    })
+    expect(encodeDesignDocument(generatedProject)).toEqual(generatedBefore)
+    expect(generatedDirty).not.toHaveBeenCalled()
+    expect(generatedCommitted).not.toHaveBeenCalled()
   })
 
   it('validates partial physical-default updates through one design command', async () => {

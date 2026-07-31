@@ -465,11 +465,7 @@ designCommands = new DesignCommandService({
   getProject: () => projectData.value,
   editingDisabled: () => isNetworkEditingDisabled.value,
   defaultBackgroundNoise: () => api.getDefaultBgNoise(),
-  slotCatalog: () => (
-    api.config.value.slotTypes?.length
-      ? api.config.value.slotTypes
-      : ['Qubit', 'Qumode']
-  ),
+  slotCatalog: () => api.config.value.slotTypes || [],
   backgroundCatalog: () => api.config.value.bgNoiseOptions || [],
   protocolCatalog: () => api.config.value.protocolTypes || {},
   statesCatalog: () => api.config.value.statesZooTypes || [],
