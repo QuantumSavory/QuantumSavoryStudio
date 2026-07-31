@@ -101,7 +101,7 @@
               "parameters": [
                 {
                   "name": "pairstate",
-                  "type": "SymbolicUtils.Symbolic{<:Union{QuantumInterface.AbstractBra, QuantumInterface.AbstractKet, QuantumInterface.AbstractOperator, QuantumInterface.AbstractSuperOperator}}"
+                  "type": "Symbolic"
                 },
                 {
                   "name": "success_prob",
