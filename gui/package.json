@@ -10,6 +10,8 @@
     "test": "playwright test --project=chromium",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "generate:http-operations": "node scripts/generate-http-operations.mjs",
+    "check:http-contract": "node scripts/generate-http-operations.mjs --check",
     "test:headed": "playwright test --project=chromium --headed",
     "test:headless": "playwright test --project=chromium",
     "test:ui": "playwright test --ui",

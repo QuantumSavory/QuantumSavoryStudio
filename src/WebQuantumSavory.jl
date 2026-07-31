@@ -35,6 +35,7 @@ include("deployment_policy.jl")
 include("evaluation_policy.jl")
 include("mcp_config.jl")
 include("platform_info.jl")
+include("http_contract.jl")
 include("types.jl")
 # After types.jl so the guard can derive its context-name allowlist from the
 # authoritative EDGE_CONTEXT_DESCRIPTORS-based binding catalog. types.jl only

@@ -924,92 +924,65 @@
   end
 
   @testset "API Documentation" begin
-      # Test that the Swagger docs endpoint is accessible
-      response = make_request("GET", "/docs")
-      @test response.status == 200
-      # The response should contain HTML content
-      body = String(response.body)
-      @test contains(body, "html") || contains(body, "swagger") || contains(body, "api")
-      @test contains(body, "\"version\":\"$(platform_info["versions"]["app"])\"")
+      contract_response = make_request("GET", "/openapi.json")
+      @test contract_response.status == 200
+      contract = parse_response(contract_response)
+      @test contract["openapi"] == "3.1.0"
+      @test contract["info"]["version"] == platform_info["versions"]["app"]
 
-      options_match = match(r"const options = (\{.*\})", body)
-      @test options_match !== nothing
-      if options_match !== nothing
-        swagger = JSON.parse(only(options_match.captures))["swaggerDoc"]
-        edge_data_schema =
-          swagger["paths"]["/parse_network_graph"]["post"]["requestBody"]["content"][
-            "application/json"
-          ]["schema"]["properties"]["net"]["properties"]["edges"]["items"]["properties"][
-            "data"
-          ]
-        edge_properties = edge_data_schema["properties"]
-        required_edge_data = Set(get(edge_data_schema, "required", Any[]))
+      operation_ids = Set(
+        operation["operationId"]
+        for path_item in values(contract["paths"])
+        for operation in values(path_item)
+        if haskey(operation, "operationId")
+      )
+      @test length(operation_ids) == 32
+      @test "serveOpenApi" in operation_ids
+      @test "serveApiDocs" in operation_ids
+      @test "manipulateSimulationState" in operation_ids
+      @test !("getMcpStatus" in operation_ids)
 
-        for field in (
-          "distanceMeters",
-          "propagationDelaySeconds",
-          "refractiveIndex",
-          "lossDbPerKm",
-          "transmissivity",
-        )
-          @test haskey(edge_properties, field)
-          @test edge_properties[field]["type"] == "number"
-          @test !(field in required_edge_data)
-          @test contains(edge_properties[field]["description"], "finite")
-        end
-        @test edge_properties["distanceMeters"]["minimum"] == 0
-        @test edge_properties["distanceMeters"]["nullable"] == true
-        @test contains(edge_properties["distanceMeters"]["description"], "meters")
-        @test contains(edge_properties["distanceMeters"]["description"], "omission or null")
-        @test edge_properties["propagationDelaySeconds"]["minimum"] == 0
-        @test get(edge_properties["propagationDelaySeconds"], "nullable", false) == false
-        @test contains(edge_properties["propagationDelaySeconds"]["description"], "seconds")
-        @test contains(edge_properties["propagationDelaySeconds"]["description"], "defaults to zero")
-        @test edge_properties["refractiveIndex"]["minimum"] == 0
-        @test edge_properties["refractiveIndex"]["exclusiveMinimum"] == true
-        @test edge_properties["refractiveIndex"]["nullable"] == true
-        @test contains(edge_properties["refractiveIndex"]["description"], "dimensionless")
-        @test contains(edge_properties["refractiveIndex"]["description"], "omission or null")
-        @test edge_properties["lossDbPerKm"]["minimum"] == 0
-        @test edge_properties["lossDbPerKm"]["nullable"] == true
-        @test contains(edge_properties["lossDbPerKm"]["description"], "dB/km")
-        @test edge_properties["transmissivity"]["minimum"] == 0
-        @test edge_properties["transmissivity"]["maximum"] == 1
-        @test edge_properties["transmissivity"]["nullable"] == true
-        @test contains(edge_properties["transmissivity"]["description"], "dimensionless")
+      error_envelope = contract["components"]["schemas"]["ErrorEnvelope"]
+      error_body = contract["components"]["schemas"]["ErrorBody"]
+      @test error_envelope["required"] == ["error"]
+      @test error_envelope["additionalProperties"] == false
+      @test Set(error_body["required"]) == Set(["code", "message", "details"])
+      @test error_body["additionalProperties"] == false
 
-        numeric_operation = swagger["paths"]["/test_numeric_expression"]["post"]
-        numeric_schema = numeric_operation["requestBody"]["content"]["application/json"]["schema"]
-        @test Set(numeric_schema["required"]) ==
-          Set(["expression", "target_type", "placement"])
-        @test numeric_schema["additionalProperties"] == false
-        @test numeric_schema["properties"]["target_type"]["enum"] ==
-          ["Float64", "Int64"]
-        @test numeric_schema["properties"]["placement"]["enum"] ==
-          ["node", "edge", "floating", "variable"]
-        context_schemas = numeric_schema["properties"]["context"]["oneOf"]
-        @test length(context_schemas) == 3
-        @test all(schema -> schema["additionalProperties"] == false, context_schemas)
-        @test Set(context_schemas[1]["required"]) == Set(["node_names"])
-        @test Set(context_schemas[2]["required"]) == Set(["node_names", "self"])
-        @test Set(context_schemas[3]["required"]) == Set([
-          "node_names",
-          "distance",
-          "delay",
-          "refractive_index",
-          "loss",
-          "transmissivity",
-          "node_a",
-          "node_b",
-        ])
-        @test context_schemas[3]["properties"]["distance"]["nullable"] == true
-        @test context_schemas[3]["properties"]["delay"]["nullable"] == true
-        @test context_schemas[3]["properties"]["refractive_index"]["nullable"] == true
-        @test context_schemas[3]["properties"]["loss"]["nullable"] == true
-        @test context_schemas[3]["properties"]["transmissivity"]["nullable"] == true
-        @test context_schemas[3]["properties"]["transmissivity"]["maximum"] == 1
-        @test haskey(numeric_operation["responses"], "403")
-      end
+      edge_properties =
+        contract["components"]["schemas"]["PhysicalEdgeData"]["properties"]
+      @test edge_properties["distanceMeters"]["type"] == ["number", "null"]
+      @test edge_properties["distanceMeters"]["minimum"] == 0
+      @test edge_properties["propagationDelaySeconds"]["type"] == "number"
+      @test edge_properties["propagationDelaySeconds"]["minimum"] == 0
+      @test edge_properties["refractiveIndex"]["type"] == ["number", "null"]
+      @test edge_properties["refractiveIndex"]["exclusiveMinimum"] == 0
+      @test edge_properties["lossDbPerKm"]["type"] == ["number", "null"]
+      @test edge_properties["lossDbPerKm"]["minimum"] == 0
+      @test edge_properties["transmissivity"]["type"] == ["number", "null"]
+      @test edge_properties["transmissivity"]["minimum"] == 0
+      @test edge_properties["transmissivity"]["maximum"] == 1
+
+      numeric_schema =
+        contract["components"]["schemas"]["NumericExpressionRequest"]
+      @test Set(numeric_schema["required"]) ==
+        Set(["expression", "target_type", "placement"])
+      @test numeric_schema["additionalProperties"] == false
+      @test numeric_schema["properties"]["target_type"]["enum"] ==
+        ["Float64", "Int64"]
+      context_schemas = numeric_schema["properties"]["context"]["oneOf"]
+      @test length(context_schemas) == 3
+      @test all(schema -> schema["additionalProperties"] == false, context_schemas)
+      @test context_schemas[3]["properties"]["distance"]["type"] ==
+        ["number", "null"]
+      @test context_schemas[3]["properties"]["transmissivity"]["maximum"] == 1
+
+      docs_response = make_request("GET", "/docs")
+      @test docs_response.status == 200
+      docs_body = String(docs_response.body)
+      @test contains(docs_body, "<title>WebQuantumSavory API</title>")
+      @test contains(docs_body, "\"openapi\":\"3.1.0\"")
+      @test contains(docs_body, "\"operationId\":\"serveOpenApi\"")
   end
 
   @testset "Test Code Endpoint" begin

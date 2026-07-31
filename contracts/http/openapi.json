@@ -1,0 +1,957 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "WebQuantumSavory HTTP API",
+    "version": "1.10.1",
+    "description": "Canonical HTTP contract for the browser API, opt-in local MCP control plane, and test-only lifecycle support."
+  },
+  "tags": [
+    { "name": "Catalogs" },
+    { "name": "Tags" },
+    { "name": "Simulation" },
+    { "name": "Validation" },
+    { "name": "Platform" },
+    { "name": "Documentation" },
+    { "name": "Local MCP" },
+    { "name": "Test support" }
+  ],
+  "paths": {
+    "/background_types": {
+      "get": {
+        "operationId": "listBackgroundTypes",
+        "summary": "List background-noise constructors",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/destroy_simulation": {
+      "post": {
+        "operationId": "destroySimulation",
+        "summary": "Destroy a simulation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/SimulationName" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/dev/manipulate_state": {
+      "post": {
+        "operationId": "manipulateSimulationState",
+        "summary": "Manipulate lifecycle state for integration tests",
+        "tags": ["Test support"],
+        "x-wqs-exposure": "test-only",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TestStateMutation" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "serveApiDocs",
+        "summary": "Render interactive API documentation",
+        "tags": ["Documentation"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": {
+            "description": "Swagger UI HTML",
+            "content": {
+              "text/html": {
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/export_script": {
+      "post": {
+        "operationId": "exportSimulationScript",
+        "summary": "Export a standalone Julia simulation script",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/get_state": {
+      "get": {
+        "operationId": "getSimulationState",
+        "summary": "Get simulation lifecycle state",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNameQuery" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/known_functions": {
+      "get": {
+        "operationId": "listKnownFunctions",
+        "summary": "List supported function names",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/logs/{name}": {
+      "get": {
+        "operationId": "getSimulationLogs",
+        "summary": "Read structured simulation logs",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" },
+          {
+            "name": "purge",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "serveOpenApi",
+        "summary": "Return the active OpenAPI contract",
+        "tags": ["Documentation"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": {
+            "description": "Active OpenAPI 3.1 document",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": true }
+              }
+            }
+          },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/parse_network_graph": {
+      "post": {
+        "operationId": "parseNetworkGraph",
+        "summary": "Parse and validate a network design",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NetworkGraphRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/pause_simulation": {
+      "post": {
+        "operationId": "pauseSimulation",
+        "summary": "Pause a running simulation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/SimulationName" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/platform_info": {
+      "get": {
+        "operationId": "getPlatformInfo",
+        "summary": "Get platform versions and capabilities",
+        "tags": ["Platform"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/prepare_simulation": {
+      "post": {
+        "operationId": "prepareSimulation",
+        "summary": "Prepare a parsed simulation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/SimulationName" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/protocol_types": {
+      "get": {
+        "operationId": "listProtocolTypes",
+        "summary": "List protocol constructors",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/protocols/{name}/{protocol_id}": {
+      "get": {
+        "operationId": "getProtocolState",
+        "summary": "Get a protocol representation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" },
+          { "$ref": "#/components/parameters/ProtocolIdPath" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/run_simulation": {
+      "post": {
+        "operationId": "runSimulation",
+        "summary": "Run or resume a simulation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RunSimulationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/simulation_log_groups": {
+      "get": {
+        "operationId": "listSimulationLogGroups",
+        "summary": "List simulator log groups",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/simulations": {
+      "get": {
+        "operationId": "listSimulations",
+        "summary": "List simulations",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/slot_types": {
+      "get": {
+        "operationId": "listSlotTypes",
+        "summary": "List slot types",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/slots/{name}/{slot_id}": {
+      "get": {
+        "operationId": "getSlotState",
+        "summary": "Get a slot representation",
+        "tags": ["Simulation"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" },
+          { "$ref": "#/components/parameters/SlotIdPath" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/states_zoo_preview": {
+      "post": {
+        "operationId": "previewStatesZoo",
+        "summary": "Preview a States Zoo constructor",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/states_zoo_types": {
+      "get": {
+        "operationId": "listStatesZooTypes",
+        "summary": "List States Zoo constructors",
+        "tags": ["Catalogs"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "operationId": "getStatus",
+        "summary": "Get service health",
+        "tags": ["Platform"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tag_preview": {
+      "post": {
+        "operationId": "previewTag",
+        "summary": "Preview a tag specification",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tag_queries/{name}": {
+      "post": {
+        "operationId": "queryTags",
+        "summary": "Query simulation tags",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tag_types": {
+      "get": {
+        "operationId": "listTagTypes",
+        "summary": "List tag constructors and query signatures",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tags/{name}": {
+      "get": {
+        "operationId": "listTags",
+        "summary": "List tags on a target",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" },
+          { "$ref": "#/components/parameters/TagTargetQuery" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "attachTag",
+        "summary": "Attach a tag to a target",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/tags/{name}/{tag_id}": {
+      "delete": {
+        "operationId": "deleteTag",
+        "summary": "Delete a tag from a target",
+        "tags": ["Tags"],
+        "x-wqs-exposure": "ordinary",
+        "parameters": [
+          { "$ref": "#/components/parameters/SimulationNamePath" },
+          { "$ref": "#/components/parameters/TagIdPath" },
+          { "$ref": "#/components/parameters/TagTargetQuery" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/test_code": {
+      "post": {
+        "operationId": "validateCode",
+        "summary": "Validate a custom Julia function",
+        "tags": ["Validation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/test_numeric_expression": {
+      "post": {
+        "operationId": "validateNumericExpression",
+        "summary": "Validate or evaluate a typed numeric expression",
+        "tags": ["Validation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NumericExpressionRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/test_symbolic_expression": {
+      "post": {
+        "operationId": "validateSymbolicExpression",
+        "summary": "Validate a symbolic expression",
+        "tags": ["Validation"],
+        "x-wqs-exposure": "ordinary",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/activity": {
+      "get": {
+        "operationId": "getMcpActivity",
+        "summary": "Read local MCP activity",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "parameters": [
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } },
+          { "name": "category", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/activity/clear": {
+      "post": {
+        "operationId": "clearMcpActivity",
+        "summary": "Clear local MCP activity",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/editor/bind": {
+      "post": {
+        "operationId": "bindMcpEditor",
+        "summary": "Bind the browser editor to local MCP",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/editor/commands": {
+      "get": {
+        "operationId": "pollMcpEditorCommands",
+        "summary": "Long-poll browser editor commands",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "parameters": [
+          { "name": "binding_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "generation", "in": "query", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/editor/commit": {
+      "post": {
+        "operationId": "commitMcpEditorCommand",
+        "summary": "Commit a browser editor command result",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/editor/heartbeat": {
+      "post": {
+        "operationId": "heartbeatMcpEditor",
+        "summary": "Renew the browser editor lease",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/editor/unbind": {
+      "post": {
+        "operationId": "unbindMcpEditor",
+        "summary": "Unbind the browser editor",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/internal/activity": {
+      "post": {
+        "operationId": "recordMcpActivity",
+        "summary": "Record sidecar activity",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/internal/ready": {
+      "post": {
+        "operationId": "reportMcpSidecarReady",
+        "summary": "Report that the local MCP sidecar is ready",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/internal/resource": {
+      "post": {
+        "operationId": "readMcpResource",
+        "summary": "Read a resource for the local MCP sidecar",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/internal/tool": {
+      "post": {
+        "operationId": "invokeMcpTool",
+        "summary": "Invoke a tool for the local MCP sidecar",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "202": { "$ref": "#/components/responses/Error" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/start": {
+      "post": {
+        "operationId": "startMcp",
+        "summary": "Start the local MCP sidecar",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/status": {
+      "get": {
+        "operationId": "getMcpStatus",
+        "summary": "Get local MCP status",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/_mcp/stop": {
+      "post": {
+        "operationId": "stopMcp",
+        "summary": "Stop the local MCP sidecar",
+        "tags": ["Local MCP"],
+        "x-wqs-exposure": "local-mcp",
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonSuccess" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ProtocolIdPath": {
+        "name": "protocol_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "SimulationNamePath": {
+        "name": "name",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "SimulationNameQuery": {
+        "name": "name",
+        "in": "query",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "SlotIdPath": {
+        "name": "slot_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "TagIdPath": {
+        "name": "tag_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "TagTargetQuery": {
+        "name": "target",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": ["register", "slot", "message_buffer"]
+        }
+      }
+    },
+    "requestBodies": {
+      "JsonObject": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/JsonObject" }
+          }
+        }
+      },
+      "SimulationName": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/SimulationNameRequest" }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Canonical structured error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "JsonSuccess": {
+        "description": "Successful JSON response",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/JsonObject" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "EdgeProtocol": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "parameters": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/JsonObject" }
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message", "details"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "message": { "type": "string" },
+          "details": { "$ref": "#/components/schemas/JsonObject" }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": { "$ref": "#/components/schemas/ErrorBody" }
+        }
+      },
+      "JsonObject": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "NetworkGraphRequest": {
+        "type": "object",
+        "required": ["name", "net"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "variables": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/JsonObject" }
+          },
+          "simulationConfig": { "$ref": "#/components/schemas/JsonObject" },
+          "net": {
+            "type": "object",
+            "required": ["nodes", "edges"],
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/JsonObject" }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "source", "target"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "source": { "type": "string" },
+                    "target": { "type": "string" },
+                    "data": { "$ref": "#/components/schemas/PhysicalEdgeData" }
+                  }
+                }
+              },
+              "protocols": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/EdgeProtocol" }
+              }
+            }
+          }
+        }
+      },
+      "NumericExpressionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expression", "target_type", "placement"],
+        "properties": {
+          "expression": { "type": "string" },
+          "target_type": {
+            "type": "string",
+            "enum": ["Float64", "Int64"]
+          },
+          "placement": {
+            "type": "string",
+            "enum": ["node", "edge", "floating", "variable"]
+          },
+          "context": {
+            "oneOf": [
+              {
+                "title": "Floating protocol context",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["node_names"],
+                "properties": {
+                  "node_names": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              {
+                "title": "Node protocol context",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["node_names", "self"],
+                "properties": {
+                  "node_names": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "self": { "type": "integer", "minimum": 1 }
+                }
+              },
+              {
+                "title": "Edge protocol context",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["node_names", "distance", "delay", "refractive_index", "loss", "transmissivity", "node_a", "node_b"],
+                "properties": {
+                  "node_names": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "distance": { "type": ["number", "null"], "minimum": 0 },
+                  "delay": { "type": ["number", "null"], "minimum": 0 },
+                  "refractive_index": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+                  "loss": { "type": ["number", "null"], "minimum": 0 },
+                  "transmissivity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+                  "node_a": { "type": "integer", "minimum": 1 },
+                  "node_b": { "type": "integer", "minimum": 1 }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "PhysicalEdgeData": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "type": { "type": "string" },
+          "distanceMeters": { "type": ["number", "null"], "minimum": 0 },
+          "propagationDelaySeconds": { "type": "number", "minimum": 0 },
+          "refractiveIndex": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+          "lossDbPerKm": { "type": ["number", "null"], "minimum": 0 },
+          "transmissivity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "protocols": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/EdgeProtocol" }
+          }
+        }
+      },
+      "RunSimulationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "time_units"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "time_units": {
+            "oneOf": [
+              { "type": "number" },
+              { "type": "string", "minLength": 1 }
+            ]
+          }
+        }
+      },
+      "SimulationNameRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      },
+      "TestStateMutation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "is_running": { "type": "boolean" },
+          "simulation_paused": { "type": "boolean" },
+          "has_run": { "type": "boolean" },
+          "simulation_progress": { "type": "number" },
+          "simulation_started_at": { "type": ["string", "null"] },
+          "simulation_last_active_time": { "type": "string" },
+          "block_reason": {
+            "type": "string",
+            "enum": ["timeout", "autopurge"]
+          }
+        }
+      }
+    }
+  }
+}

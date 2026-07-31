@@ -1,4 +1,8 @@
 import { requestJson } from '../../utils/httpClient.js'
+import {
+  httpOperation,
+  httpOperationPath,
+} from '../../utils/httpOperations.js'
 
 export class McpControlClient {
   constructor(baseUrl = '') {
@@ -9,13 +13,11 @@ export class McpControlClient {
     }
   }
 
-  url(path) {
-    return `${this.baseUrl}/_mcp${path}`
-  }
-
-  async request(path, { method = 'GET', body, signal } = {}) {
-    return requestJson(this.url(path), {
-      method,
+  async request(operationId, { query, body, signal } = {}) {
+    const operation = httpOperation(operationId)
+    const path = httpOperationPath(operationId, { query })
+    return requestJson(`${this.baseUrl}${path}`, {
+      method: operation.method,
       headers: this.headers,
       body,
       signal,
@@ -23,31 +25,29 @@ export class McpControlClient {
   }
 
   status(options) {
-    return this.request('/status', options)
+    return this.request('getMcpStatus', options)
   }
 
   start() {
-    return this.request('/start', { method: 'POST', body: {} })
+    return this.request('startMcp', { body: {} })
   }
 
   stop(bindingId = null) {
-    return this.request('/stop', {
-      method: 'POST',
+    return this.request('stopMcp', {
       body: bindingId ? { binding_id: bindingId } : {},
     })
   }
 
   bind(binding) {
-    return this.request('/editor/bind', { method: 'POST', body: binding })
+    return this.request('bindMcpEditor', { body: binding })
   }
 
   unbind(binding) {
-    return this.request('/editor/unbind', { method: 'POST', body: binding })
+    return this.request('unbindMcpEditor', { body: binding })
   }
 
   heartbeat(binding, options) {
-    return this.request('/editor/heartbeat', {
-      method: 'POST',
+    return this.request('heartbeatMcpEditor', {
       body: binding,
       ...options,
     })
@@ -58,12 +58,11 @@ export class McpControlClient {
       binding_id: binding.binding_id,
       generation: String(binding.generation),
     })
-    return this.request(`/editor/commands?${query}`, options)
+    return this.request('pollMcpEditorCommands', { query, ...options })
   }
 
   commit(payload, options) {
-    return this.request('/editor/commit', {
-      method: 'POST',
+    return this.request('commitMcpEditorCommand', {
       body: payload,
       ...options,
     })
@@ -76,10 +75,10 @@ export class McpControlClient {
     })
     if (category) query.set('category', category)
     if (status) query.set('status', status)
-    return this.request(`/activity?${query}`, { signal })
+    return this.request('getMcpActivity', { query, signal })
   }
 
   clearActivity() {
-    return this.request('/activity/clear', { method: 'POST', body: {} })
+    return this.request('clearMcpActivity', { body: {} })
   }
 }

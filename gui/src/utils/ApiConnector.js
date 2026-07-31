@@ -2,6 +2,7 @@
 import { ref, readonly } from 'vue'
 import { generateUUid } from './Utils.js'
 import { requestJson } from './httpClient.js'
+import { httpOperation, httpOperationPath } from './httpOperations.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -22,10 +23,6 @@ function getDefaultBaseUrl() {
 
 function scopedProjectName(uuid, projectName) {
   return `${uuid}_${String(projectName ?? '').trim()}`
-}
-
-function pathSegment(value) {
-  return encodeURIComponent(String(value))
 }
 
 function tagTargetPayload(target = {}, { includeDestination = false } = {}) {
@@ -74,15 +71,18 @@ export class ApiConnector {
 
   get config()  { return readonly(this._config) }
 
-  request(path, options = {}) {
+  requestOperation(operationId, { pathParams, query, ...options } = {}) {
+    const operation = httpOperation(operationId)
+    const path = httpOperationPath(operationId, { pathParams, query })
     return requestJson(`${this.baseUrl}${path}`, {
+      method: operation.method,
       headers: this.requestHeaders,
       ...options,
     })
   }
 
   async fetchKnownFunctions(){
-    const responseObject = await this.request('/known_functions')
+    const responseObject = await this.requestOperation('listKnownFunctions')
     this.known_functions.value = responseObject.known_functions
   }
 
@@ -90,7 +90,7 @@ export class ApiConnector {
     const cachedTypes = this._config.value.statesZooTypes
     if (!force && Array.isArray(cachedTypes)) return cachedTypes
 
-    const responseObject = await this.request('/states_zoo_types', { signal })
+    const responseObject = await this.requestOperation('listStatesZooTypes', { signal })
     const types = responseObject?.states_zoo_types
     if (!Array.isArray(types)) {
       throw new Error('States Zoo types response is invalid')
@@ -107,7 +107,7 @@ export class ApiConnector {
     const cachedGroups = this._config.value.simulationLogGroups
     if (!force && Array.isArray(cachedGroups)) return cachedGroups
 
-    const responseObject = await this.request('/simulation_log_groups', { signal })
+    const responseObject = await this.requestOperation('listSimulationLogGroups', { signal })
     const groups = responseObject?.simulation_log_groups
     if (
       !Array.isArray(groups)
@@ -124,8 +124,7 @@ export class ApiConnector {
   }
 
   async fetchStatesZooPreview(stateType, parameters, { signal } = {}) {
-    return this.request('/states_zoo_preview', {
-      method: 'POST',
+    return this.requestOperation('previewStatesZoo', {
       body: {
         state_type: stateType,
         parameters,
@@ -135,8 +134,7 @@ export class ApiConnector {
   }
 
   async exportScript(data, { signal } = {}) {
-    return this.request('/export_script', {
-      method: 'POST',
+    return this.requestOperation('exportSimulationScript', {
       body: data,
       signal,
     })
@@ -161,7 +159,7 @@ export class ApiConnector {
         promise: null,
       }
       request.promise = (async () => {
-        const catalog = await this.request('/tag_types', {
+        const catalog = await this.requestOperation('listTagTypes', {
           signal: controller.signal,
         })
         if (generation === this._tagTypesRequestGeneration) {
@@ -217,41 +215,45 @@ export class ApiConnector {
   }
 
   async previewTag(tag, { signal } = {}) {
-    return this.request('/tag_preview', {
-      method: 'POST',
+    return this.requestOperation('previewTag', {
       body: { tag },
       signal,
     })
   }
 
   async listTags(projectName, target, { signal } = {}) {
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
+    const namespace = this.getScopedSimulationName(projectName)
     const query = new URLSearchParams(tagTargetPayload(target))
-    return this.request(`/tags/${namespace}?${query}`, { signal })
+    return this.requestOperation('listTags', {
+      pathParams: { name: namespace },
+      query,
+      signal,
+    })
   }
 
   async attachTag(projectName, target, tag, { signal } = {}) {
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    return this.request(`/tags/${namespace}`, {
-      method: 'POST',
+    const namespace = this.getScopedSimulationName(projectName)
+    return this.requestOperation('attachTag', {
+      pathParams: { name: namespace },
       body: { ...tagTargetPayload(target, { includeDestination: true }), tag },
       signal,
     })
   }
 
   async deleteTag(projectName, target, tagId, { signal } = {}) {
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
+    const namespace = this.getScopedSimulationName(projectName)
     const query = new URLSearchParams(tagTargetPayload(target))
-    return this.request(`/tags/${namespace}/${pathSegment(tagId)}?${query}`, {
-      method: 'DELETE',
+    return this.requestOperation('deleteTag', {
+      pathParams: { name: namespace, tag_id: tagId },
+      query,
       signal,
     })
   }
 
   async queryTags(projectName, target, querySpec, { signal } = {}) {
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    return this.request(`/tag_queries/${namespace}`, {
-      method: 'POST',
+    const namespace = this.getScopedSimulationName(projectName)
+    return this.requestOperation('queryTags', {
+      pathParams: { name: namespace },
       body: { ...tagTargetPayload(target), query: querySpec },
       signal,
     })
@@ -293,9 +295,9 @@ export class ApiConnector {
     ] = await Promise.all([
       this.fetchKnownFunctions(),
       this.fetchStatesZooTypes(),
-      this.request('/background_types'),
-      this.request('/slot_types'),
-      this.request('/protocol_types'),
+      this.requestOperation('listBackgroundTypes'),
+      this.requestOperation('listSlotTypes'),
+      this.requestOperation('listProtocolTypes'),
     ])
 
     this._config.value.bgNoiseOptions = [
@@ -342,7 +344,7 @@ export class ApiConnector {
   }
 
   async fetchPlatformInfo(){
-    const result = await this.request('/platform_info')
+    const result = await this.requestOperation('getPlatformInfo')
     const versions = result?.versions && typeof result.versions === 'object'
       ? result.versions
       : {}
@@ -365,8 +367,7 @@ export class ApiConnector {
   }
 
   async destroySimulation(projectName){
-    return this.request('/destroy_simulation', {
-      method: 'POST',
+    return this.requestOperation('destroySimulation', {
       body: { name: this.getScopedSimulationName(projectName) },
     })
   }
@@ -376,15 +377,13 @@ export class ApiConnector {
       ...data,
       name: this.getScopedSimulationName(data.name),
     }
-    return this.request('/parse_network_graph', {
-      method: 'POST',
+    return this.requestOperation('parseNetworkGraph', {
       body: modifiedData,
     })
   }
 
   async prepareSimulation(data){
-    return this.request('/prepare_simulation', {
-      method: 'POST',
+    return this.requestOperation('prepareSimulation', {
       body: { name: this.getScopedSimulationName(data.name) },
     })
   }
@@ -394,19 +393,17 @@ export class ApiConnector {
       ? projectNameOrData
       : projectNameOrData?.name
     const query = new URLSearchParams({ name: this.getScopedSimulationName(projectName) })
-    return this.request(`/get_state?${query}`, { signal })
+    return this.requestOperation('getSimulationState', { query, signal })
   }
 
   async runSimulation( projectName, time_units){
-    return this.request('/run_simulation', {
-      method: 'POST',
+    return this.requestOperation('runSimulation', {
       body: { name: this.getScopedSimulationName(projectName), time_units },
     })
   }
 
   async pauseSimulation( projectName ){
-    return this.request('/pause_simulation', {
-      method: 'POST',
+    return this.requestOperation('pauseSimulation', {
       body: { name: this.getScopedSimulationName(projectName) },
     })
   }
@@ -414,17 +411,17 @@ export class ApiConnector {
 
   
   async getProtocolResults( projectName, protocolObject, { signal } = {} ){
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    const protocolId = pathSegment(protocolObject.id)
-    return this.request(`/protocols/${namespace}/${protocolId}`, {
+    const namespace = this.getScopedSimulationName(projectName)
+    return this.requestOperation('getProtocolState', {
+      pathParams: { name: namespace, protocol_id: protocolObject.id },
       signal,
     })
   }
   
   async getSlotResults( projectName, slotObject, { signal } = {} ){
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    const slotId = pathSegment(slotObject.id)
-    return this.request(`/slots/${namespace}/${slotId}`, {
+    const namespace = this.getScopedSimulationName(projectName)
+    return this.requestOperation('getSlotState', {
+      pathParams: { name: namespace, slot_id: slotObject.id },
       signal,
     })
   }
@@ -463,8 +460,7 @@ export class ApiConnector {
     }
     const body = { code: code || '' }
     if (placement) body.placement = placement
-    return this.request('/test_code', {
-      method: 'POST',
+    return this.requestOperation('validateCode', {
       body,
     })
   }
@@ -473,8 +469,7 @@ export class ApiConnector {
     if( expr == undefined || expr == null || expr == '' ){
       return { success: false, error: 'Expression is empty' }
     }
-    return this.request('/test_symbolic_expression', {
-      method: 'POST',
+    return this.requestOperation('validateSymbolicExpression', {
       body: { expr: expr || '' },
     })
   }
@@ -491,17 +486,20 @@ export class ApiConnector {
       placement,
     }
     if (context !== undefined) body.context = context
-    return this.request('/test_numeric_expression', {
-      method: 'POST',
+    return this.requestOperation('validateNumericExpression', {
       body,
       signal,
     })
   }
 
   async getBackendLogs( projectName, purge = true, { signal } = {} ){
-    const namespace = pathSegment(this.getScopedSimulationName(projectName))
+    const namespace = this.getScopedSimulationName(projectName)
     const query = new URLSearchParams({ purge: String(purge) })
-    return this.request(`/logs/${namespace}?${query}`, { signal })
+    return this.requestOperation('getSimulationLogs', {
+      pathParams: { name: namespace },
+      query,
+      signal,
+    })
   }
 }
 
