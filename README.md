@@ -255,6 +255,8 @@ When monitoring simulation state via `GET /get_state`, the response includes a `
 - `simulation_time` - Total time units for the simulation
 - `simulation_progress` - Current simulation time progress
 - `simulation_error` - Error message if simulation failed
+- `simulation_panic` - Exact panic record when execution terminates unexpectedly,
+  otherwise `null`
 
 ### Project documents
 
@@ -514,18 +516,25 @@ Notes:
 
 ### CI checks
 
-GitHub Actions and Buildkite run the same core repository scripts:
+The maintained local entry points are:
 
 ```bash
+./ci/agent-docs.sh
+./ci/http-contract.sh
 ./ci/backend-unit.sh
 ./ci/mcp-unit.sh
 ./ci/frontend-build.sh
 ./ci/backend-integration.sh
 ./ci/browser.sh
 ./ci/browser-production.sh
+./ci/public-container.sh
 ```
 
-GitHub Actions additionally runs `./ci/public-container.sh`.
+GitHub Actions runs all of these boundaries and adds advisory host/browser probes.
+Buildkite currently runs agent documentation, backend, MCP, frontend, integration,
+Chromium, production-browser, and public-profile startup checks; it does not run the
+standalone HTTP-contract or Podman-container boundaries. Release evidence for those two
+boundaries must therefore come from GitHub Actions or an explicit local run.
 
 Each script installs the locked project dependencies it needs, so it can run
 from a clean checkout once its language runtimes are available. The MCP,
@@ -561,7 +570,7 @@ Each Linux agent must still provide Git, Bash, curl, wget, tar, and Python 3.
 Browser agents must use a Playwright-supported Debian/Ubuntu base and let the
 job install apt packages as root or through passwordless `sudo`. Agents must be
 able to download Julia, mise, Node.js, npm packages, and Chromium, and ports
-8000 through 8004, 5173, and 18001 must be available. No queue name, secret,
+8000 through 8005, 5173, and 18001 must be available. No queue name, secret,
 or container image is assumed by `.buildkite/pipeline.yml`. Configure
 Buildkite's GitHub integration to create builds for pull requests and pushes
 to `main`.
