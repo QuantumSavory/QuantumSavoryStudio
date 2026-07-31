@@ -58,10 +58,35 @@ export function useProjectSession({
 }) {
   const transitionGeneration = ref(0)
   const transitionPhase = ref('idle')
+  let activeCommit = null
+  let disposed = false
 
   function cancelTransition(nextPhase = 'idle') {
-    transitionGeneration.value += 1
-    transitionPhase.value = nextPhase
+    const generation = ++transitionGeneration.value
+    const settledPhase = disposed ? 'disposed' : nextPhase
+    const pendingCommit = activeCommit?.finished || null
+    if (!pendingCommit) {
+      transitionPhase.value = settledPhase
+      return null
+    }
+    void pendingCommit.then(() => {
+      if (generation === transitionGeneration.value && !activeCommit) {
+        transitionPhase.value = settledPhase
+      }
+    })
+    return pendingCommit
+  }
+
+  function beginReplacement() {
+    if (disposed) return null
+    const generation = ++transitionGeneration.value
+    const precedingCommit = activeCommit?.finished || null
+    if (!precedingCommit) transitionPhase.value = 'preparing'
+    return { generation, precedingCommit }
+  }
+
+  function ownsPreparation(generation) {
+    return !disposed && generation === transitionGeneration.value
   }
 
   function projectReplacementBarrier() {
@@ -132,7 +157,7 @@ export function useProjectSession({
       )
       if (!accepted) return null
     }
-    return { ...decoded, platformInfo }
+    return { ...decoded, platformInfo: platformInfo || decoded.platformInfo }
   }
 
   async function preflightStoredProject(name) {
@@ -141,23 +166,62 @@ export function useProjectSession({
     return preflightProject(raw, name)
   }
 
-  async function commitCandidate({ name, decoded, demo, persist, generation }) {
-    if (generation !== transitionGeneration.value) return false
-
-    if (persist) {
-      const encoded = encodeStoredProject(decoded.project, {
-        name,
-        map: decoded.map,
-        uiGlobal: decoded.uiGlobal,
-        platformInfo: decoded.platformInfo || currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
-      })
-      store.openProject(name, encoded)
-      store.setRecentProjectName(name)
+  function preparePersistedCandidate({
+    name,
+    decoded,
+    persistenceMethod,
+    demo = false,
+    cleanupSimulation = false,
+    logCleanup = false,
+    successMessages = [],
+    refreshStatus = false
+  }) {
+    const document = encodeStoredProject(decoded.project, {
+      name,
+      map: decoded.map,
+      uiGlobal: decoded.uiGlobal,
+      platformInfo: decoded.platformInfo || currentPlatformInfo(),
+      defaultMapCenter,
+      defaultMapZoom
+    })
+    const verified = decodeStoredProject(document, codecContext(name))
+    return {
+      name,
+      decoded: verified,
+      demo,
+      cleanupSimulation,
+      logCleanup,
+      persistence: { method: persistenceMethod, document },
+      successMessages,
+      refreshStatus
     }
-    if (generation !== transitionGeneration.value) return false
+  }
 
+  async function teardownCollaboration() {
+    try {
+      const replacementBarrier = projectReplacementBarrier()
+      if (replacementBarrier) await replacementBarrier
+    } catch (error) {
+      console.warn('Failed to release project collaboration before replacement:', error)
+    }
+  }
+
+  async function commitCandidate(candidate) {
+    await teardownCollaboration()
+    if (candidate.cleanupSimulation) {
+      try {
+        const cleanupResult = await api.destroySimulation(candidate.name)
+        if (candidate.logCleanup && cleanupResult?.success === true) {
+          addLog?.('info', `Cleaned up existing simulation for: ${candidate.name}`, 'System')
+        }
+      } catch (error) {
+        console.warn('Failed to destroy simulation during project replacement:', error)
+      }
+    }
+    if (candidate.persistence) {
+      store[candidate.persistence.method](candidate.name, candidate.persistence.document)
+      store.setRecentProjectName(candidate.name)
+    }
     stopSessionActivity()
     clearLogs?.()
     selectedItem.value = null
@@ -170,129 +234,167 @@ export function useProjectSession({
       net: { nodes: [], edges: [], protocols: [] }
     }
     await nextTick()
-    if (generation !== transitionGeneration.value) return false
 
-    projectData.value = decoded.project
-    projectData.value.name = name
-    currentProjectName.value = name
-    isDemoProject.value = demo
-    mapCenter.value = [...decoded.map.position]
-    mapZoom.value = decoded.map.zoom
+    projectData.value = candidate.decoded.project
+    projectData.value.name = candidate.name
+    currentProjectName.value = candidate.name
+    isDemoProject.value = candidate.demo
+    mapCenter.value = [...candidate.decoded.map.position]
+    mapZoom.value = candidate.decoded.map.zoom
 
     syncLegacyProjectData()
     markAsSaved?.()
-    return true
-  }
-
-  async function open(name) {
-    name = canonicalName(name)
-    const generation = ++transitionGeneration.value
-    transitionPhase.value = 'preparing'
-    try {
-      const candidate = await preflightStoredProject(name)
-      if (!candidate || generation !== transitionGeneration.value) return false
-
-      transitionPhase.value = 'committing'
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      if (generation !== transitionGeneration.value) return false
+    for (const [level, message, source = 'System'] of candidate.successMessages) {
+      addLog?.(level, message, source)
+    }
+    if (candidate.refreshStatus) {
       try {
-        const cleanupResult = await api.destroySimulation(name)
-        if (cleanupResult?.success === true) {
-          addLog?.('info', `Cleaned up existing simulation for: ${name}`, 'System')
-        }
+        await getSimulationStatus?.(false)
       } catch (error) {
-        console.warn('Failed to destroy simulation on project load:', error)
+        console.warn('Failed to refresh simulation status after project replacement:', error)
       }
-      if (generation !== transitionGeneration.value) return false
-
-      if (!(await commitCandidate({ name, decoded: candidate, demo: false, persist: true, generation }))) return false
-      addLog?.('info', `Project opened: ${name}`, 'System')
-      await getSimulationStatus?.(false)
-      return true
-    } catch (error) {
-      if (generation === transitionGeneration.value) showError(error.message)
-      return false
-    } finally {
-      if (generation === transitionGeneration.value) transitionPhase.value = 'idle'
     }
   }
 
-  async function openDemo(demoData) {
-    const generation = ++transitionGeneration.value
-    transitionPhase.value = 'preparing'
+  function clearFailedBootstrapPointer(name, generation) {
+    if (!name || !ownsPreparation(generation)) return
     try {
-      const decoded = await preflightProject(demoData)
-      if (!decoded || generation !== transitionGeneration.value) return false
-      const name = canonicalName(decoded.project.name)
-
-      transitionPhase.value = 'committing'
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      if (generation !== transitionGeneration.value) return false
-      try {
-        await api.destroySimulation(name)
-      } catch (error) {
-        console.warn('Failed to destroy simulation on demo load:', error)
+      if (store.getRecentProjectName() === name) {
+        store.clearRecentProjectName()
       }
-      if (generation !== transitionGeneration.value) return false
-
-      if (!(await commitCandidate({ name, decoded, demo: true, persist: false, generation }))) return false
-      if (generation !== transitionGeneration.value) return false
-      addLog?.('info', `Demo project loaded: ${name}`, 'System')
-      addLog?.('warning', 'This is a demo project. Use "Save As" to create your own copy.', 'System')
-      await getSimulationStatus?.(false)
-      return true
     } catch (error) {
-      if (generation === transitionGeneration.value) showError(error.message)
-      return false
-    } finally {
-      if (generation === transitionGeneration.value) transitionPhase.value = 'idle'
+      console.warn('Failed to clear stale recent-project pointer:', error)
     }
   }
 
-  async function create(name) {
-    name = canonicalName(name)
-    const generation = ++transitionGeneration.value
-    transitionPhase.value = 'committing'
+  async function runReplacement({
+    prepare,
+    bootstrapRecentName = null,
+    onError = error => showError(error.message)
+  }) {
+    const transition = beginReplacement()
+    if (!transition) return false
+    const { generation, precedingCommit } = transition
+    let acquiredCommit = false
     try {
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      if (generation !== transitionGeneration.value) return false
-      const project = createEmptyProject(name)
-      const encoded = encodeStoredProject(project, {
+      // Give synchronous candidates the same cancellation/supersession window as
+      // candidates that fetch platform metadata or await user confirmation.
+      await Promise.resolve()
+      if (precedingCommit) await precedingCommit
+      if (!ownsPreparation(generation)) return false
+      transitionPhase.value = 'preparing'
+
+      const candidate = await prepare()
+      if (!ownsPreparation(generation)) return false
+      if (!candidate) {
+        clearFailedBootstrapPointer(bootstrapRecentName, generation)
+        return false
+      }
+
+      let finishCommit
+      const owner = {
+        generation,
+        finished: new Promise(resolve => { finishCommit = resolve })
+      }
+      activeCommit = owner
+      acquiredCommit = true
+      transitionPhase.value = 'committing'
+      try {
+        // Ownership is rechecked immediately before this point. Once commit
+        // starts it is intentionally irrevocable; newer transitions wait for
+        // this owner instead of observing or rolling back a half-torn session.
+        await commitCandidate(candidate)
+        return true
+      } finally {
+        if (activeCommit === owner) activeCommit = null
+        finishCommit()
+        if (ownsPreparation(generation)) transitionPhase.value = 'idle'
+      }
+    } catch (error) {
+      if (ownsPreparation(generation)) {
+        clearFailedBootstrapPointer(bootstrapRecentName, generation)
+      }
+      if (acquiredCommit || ownsPreparation(generation)) onError(error)
+      return false
+    } finally {
+      if (ownsPreparation(generation) && !activeCommit) transitionPhase.value = 'idle'
+    }
+  }
+
+  function prepareOpen(name) {
+    return async () => {
+      name = canonicalName(name)
+      const decoded = await preflightStoredProject(name)
+      if (!decoded) return null
+      return preparePersistedCandidate({
         name,
-        map: { position: [...defaultMapCenter], zoom: defaultMapZoom },
-        platformInfo: currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
+        decoded,
+        persistenceMethod: 'openProject',
+        cleanupSimulation: true,
+        logCleanup: true,
+        successMessages: [['info', `Project opened: ${name}`]],
+        refreshStatus: true
       })
-      store.saveProject(name, encoded)
-      store.setRecentProjectName(name)
-      if (generation !== transitionGeneration.value) return false
-
-      stopSessionActivity()
-      clearLogs?.()
-      selectedItem.value = null
-      selectedType.value = null
-      projectData.value = project
-      currentProjectName.value = name
-      isDemoProject.value = false
-      mapCenter.value = [...defaultMapCenter]
-      mapZoom.value = defaultMapZoom
-      syncLegacyProjectData()
-      markAsSaved?.()
-      addLog?.('info', `New project created: ${name}`, 'System')
-      return true
-    } catch (error) {
-      if (generation === transitionGeneration.value) showError(error.message)
-      return false
-    } finally {
-      if (generation === transitionGeneration.value) transitionPhase.value = 'idle'
     }
+  }
+
+  function open(name) {
+    return runReplacement({ prepare: prepareOpen(name) })
+  }
+
+  function restoreRecent(name) {
+    return runReplacement({
+      prepare: prepareOpen(name),
+      bootstrapRecentName: name
+    })
+  }
+
+  function openDemo(demoData) {
+    return runReplacement({
+      prepare: async () => {
+        const decoded = await preflightProject(demoData)
+        if (!decoded) return null
+        const name = canonicalName(decoded.project.name)
+        return {
+          name,
+          decoded,
+          demo: true,
+          cleanupSimulation: true,
+          logCleanup: false,
+          persistence: null,
+          successMessages: [
+            ['info', `Demo project loaded: ${name}`],
+            ['warning', 'This is a demo project. Use "Save As" to create your own copy.']
+          ],
+          refreshStatus: true
+        }
+      }
+    })
+  }
+
+  function create(name) {
+    return runReplacement({
+      prepare: async () => {
+        name = canonicalName(name)
+        return preparePersistedCandidate({
+          name,
+          decoded: {
+            project: createEmptyProject(name),
+            map: { position: [...defaultMapCenter], zoom: defaultMapZoom },
+            uiGlobal: {
+              map: { position: [...defaultMapCenter], zoom: defaultMapZoom }
+            },
+            platformInfo: currentPlatformInfo()
+          },
+          persistenceMethod: 'saveProject',
+          successMessages: [['info', `New project created: ${name}`]]
+        })
+      }
+    })
   }
 
   function save() {
+    if (activeCommit) return false
     const name = currentProjectName.value
     if (!name) return false
     projectData.value.name = name
@@ -301,40 +403,32 @@ export function useProjectSession({
     return true
   }
 
-  async function saveAs(name, { overwrite = false } = {}) {
-    try {
-      name = canonicalName(name)
-      const targetIsDifferentProject = name !== currentProjectName.value
-        && store.listProjects().includes(name)
-      if (targetIsDifferentProject && !overwrite) {
-        throw new Error(`A project named "${name}" already exists`)
+  function saveAs(name, { overwrite = false } = {}) {
+    return runReplacement({
+      prepare: async () => {
+        name = canonicalName(name)
+        const targetIsDifferentProject = name !== currentProjectName.value
+          && store.listProjects().includes(name)
+        if (targetIsDifferentProject && !overwrite) {
+          throw new Error(`A project named "${name}" already exists`)
+        }
+        return preparePersistedCandidate({
+          name,
+          decoded: {
+            project: projectData.value,
+            map: { position: [...mapCenter.value], zoom: mapZoom.value },
+            uiGlobal: { map: { position: [...mapCenter.value], zoom: mapZoom.value } },
+            platformInfo: currentPlatformInfo()
+          },
+          persistenceMethod: 'saveProject',
+          successMessages: [['info', `Project saved as: ${name}`]]
+        })
+      },
+      onError: error => {
+        addLog?.('error', `Failed to save project: ${error.message}`, 'System')
+        showError(`Failed to save project: ${error.message}`)
       }
-      cancelTransition()
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      const encoded = encodeStoredProject(projectData.value, {
-        name,
-        map: { position: [...mapCenter.value], zoom: mapZoom.value },
-        platformInfo: currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
-      })
-      store.saveProject(name, encoded)
-      store.setRecentProjectName(name)
-      stopSessionActivity()
-      clearLogs?.()
-      currentProjectName.value = name
-      projectData.value.name = name
-      isDemoProject.value = false
-      syncLegacyProjectData()
-      markAsSaved?.()
-      addLog?.('info', `Project saved as: ${name}`, 'System')
-      return true
-    } catch (error) {
-      addLog?.('error', `Failed to save project: ${error.message}`, 'System')
-      showError(`Failed to save project: ${error.message}`)
-      return false
-    }
+    })
   }
 
   async function remove(name, { confirmed = false } = {}) {
@@ -344,11 +438,11 @@ export function useProjectSession({
       if (!accepted) return false
     }
 
+    const pendingCommit = cancelTransition()
+    if (pendingCommit) await pendingCommit
     store.deleteProject(name)
     if (currentProjectName.value === name) {
-      cancelTransition()
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
+      await teardownCollaboration()
       stopSessionActivity()
       projectData.value = createEmptyProject()
       currentProjectName.value = ''
@@ -365,32 +459,20 @@ export function useProjectSession({
     return true
   }
 
-  async function importProject(data, finalName) {
-    const generation = ++transitionGeneration.value
-    transitionPhase.value = 'preparing'
-    try {
-      const candidate = await preflightProject(data, finalName)
-      if (!candidate || generation !== transitionGeneration.value) return false
-      const name = canonicalName(finalName || candidate.project.name)
-
-      transitionPhase.value = 'committing'
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      if (generation !== transitionGeneration.value) return false
-      try {
-        await api.destroySimulation(name)
-      } catch (error) {
-        console.warn('Failed to destroy simulation on project import:', error)
+  function importProject(data, finalName) {
+    return runReplacement({
+      prepare: async () => {
+        const decoded = await preflightProject(data, finalName)
+        if (!decoded) return null
+        const name = canonicalName(finalName || decoded.project.name)
+        return preparePersistedCandidate({
+          name,
+          decoded,
+          persistenceMethod: 'openProject',
+          cleanupSimulation: true
+        })
       }
-      if (generation !== transitionGeneration.value) return false
-
-      return await commitCandidate({ name, decoded: candidate, demo: false, persist: true, generation })
-    } catch (error) {
-      if (generation === transitionGeneration.value) showError(error.message)
-      return false
-    } finally {
-      if (generation === transitionGeneration.value) transitionPhase.value = 'idle'
-    }
+    })
   }
 
   function generateCopyName(baseName) {
@@ -405,13 +487,16 @@ export function useProjectSession({
   }
 
   function dispose() {
+    disposed = true
     cancelTransition('disposed')
   }
 
   return {
     transitionGeneration,
     transitionPhase,
+    cancel: cancelTransition,
     open,
+    restoreRecent,
     openDemo,
     create,
     save,

@@ -635,6 +635,7 @@ const {
   transitionGeneration: projectTransitionGeneration,
   transitionPhase: projectTransitionPhase,
   open: openProject,
+  restoreRecent: restoreRecentProject,
   openDemo: loadDemoProject,
   create: createNewProject,
   saveAs: createSaveAsProject,
@@ -1309,7 +1310,7 @@ onMounted( async () => {
     && !currentProjectName.value
     && projectTransitionGeneration.value === startupTransitionGeneration
   ) {
-    await openProject(startupRecentProjectName)
+    await restoreRecentProject(startupRecentProjectName)
   }
   
   startAlivePolling();
