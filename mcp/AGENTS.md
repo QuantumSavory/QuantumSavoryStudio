@@ -28,8 +28,9 @@ optional component of WebQuantumSavory, not an independently released product.
 - Do not import the root `WebQuantumSavory` package or add ModelContextProtocol there.
 - Communicate with the backend only through the capability-authenticated loopback
   bridge; keep the external listener on IPv4 loopback.
-- Load tool metadata and schemas from `../contracts/mcp/v1/tools.json`; do not create a
-  second registry.
+- Load tool metadata and schemas from the active co-shipped registry under
+  `../contracts/mcp/`; do not create a second registry. Follow
+  [the contract router](../contracts/AGENTS.md) for version changes.
 - Preserve the single-session transport and safe logger. Before changing the exact
   dependency pin, re-diff the upstream sources named in
   `src/single_session_http_transport.jl`.

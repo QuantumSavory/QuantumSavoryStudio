@@ -2,54 +2,42 @@
 
 ## Scope
 
-This repository ships one product with three components: the Julia HTTP/API backend,
-the browser frontend, and an optional local MCP sidecar. This file also governs the
-root backend entry points `bootstrap.jl` and `routes.jl`.
+This repository ships one GUI-first product: a Julia HTTP backend, a browser frontend,
+and an optional local MCP sidecar. This router also governs `bootstrap.jl`, `routes.jl`,
+root tests, and CI.
 
-## Start here
+## Route first
 
-- Read the closest component router before editing:
-  [backend internals](src/AGENTS.md), [frontend](gui/AGENTS.md), or
-  [MCP sidecar](mcp/AGENTS.md).
-- Use [the agent context index](.agents/index.md) only when the closest router does not
-  identify the context needed for the task. Do not read `.agents/` recursively.
-- Open [the V-model](.agents/v-model/index.md) when changing observable behavior,
-  interfaces, compatibility, acceptance criteria, or verification evidence.
+- Read the closest router:
+  [backend internals](src/AGENTS.md), [frontend package](gui/AGENTS.md),
+  [MCP sidecar](mcp/AGENTS.md), or [co-shipped contracts](contracts/AGENTS.md).
+- Frontend source has narrower routers under `gui/src/`; use the closest one.
+- Use [the context index](.agents/index.md) only when a router does not identify the
+  needed leaf. Never preload `.agents/`.
+- Open [the V-model](.agents/v-model/index.md) for observable behavior, interfaces,
+  compatibility, acceptance criteria, or evidence.
 
 ## Primary commands
 
-- Launch the integrated application: `./bin/server`
-- Backend unit checks: `./ci/backend-unit.sh`
-- Backend integration checks: `./ci/backend-integration.sh`
+- Integrated application: `./bin/server`
+- Backend unit/integration: `./ci/backend-unit.sh`,
+  `./ci/backend-integration.sh`
 - Public Podman profile: `./ci/public-container.sh`
-- All maintained check entry points and focused alternatives are in
-  [repository workflows](.agents/context/repository-workflows.md).
+- Other focused checks: [repository workflows](.agents/context/repository-workflows.md)
 
-## Engineering workflow
+## Repository rules
 
-- Above all, compare plausible designs and favor simplicity, maintainability, and clear
-  separation of concerns; factor shared behavior into one owner rather than duplicate
-  it here or reimplement another library's responsibility.
-- Run relevant tests locally before each commit and before opening or updating a PR; do
-  not rely on remote CI alone.
-- Keep commits small, coherent, and easy to review; rebase each fixup into the commit it
-  corrects.
-- On every PR you create, post a detailed comment describing the initiating user prompts
-  (verbatim when useful) and scope-defining follow-ups.
-
-## Root backend rules
-
-- Register HTTP handlers through the local `route(...)` wrapper in `routes.jl`.
-- Keep each changed supported route, its adjacent Swagger block, failure behavior, and
-  affected integration/frontend callers synchronized. Open the
-  [API reference](.agents/context/backend/api-routing-and-errors.md) first.
-- Do not edit generated Vite output under `public/index.html`, `public/vite.svg`, or
-  `public/assets/`.
-- Keep ModelContextProtocol out of the root Julia project; the dependency belongs only
-  to the isolated `mcp/` environment.
-- Do not commit Julia manifests, runtime databases/logs, Playwright output,
-  `node_modules/`, or generated frontend assets.
-- Preserve unrelated work and follow the containing workspace's worktree policy.
+- Follow the containing workspace's worktree policy and preserve unrelated work.
+- Prefer one clear owner for shared behavior; propose reusable simulator capabilities
+  upstream rather than maintaining local substitutes.
+- Register HTTP handlers through `route(...)` in `routes.jl`. Until generated private
+  API documentation lands, keep a changed route, adjacent Swagger, errors, tests, and
+  bundled callers synchronized.
+- Never edit or commit generated Vite output, Julia manifests, runtime databases/logs,
+  Playwright output, `node_modules/`, capabilities, or transport transcripts.
+- Keep ModelContextProtocol out of the root Julia environment.
+- Run relevant local checks before commits. Keep commits coherent and report prompts
+  and scope-defining follow-ups in any PR you create.
 
 ## Handoff
 
