@@ -247,6 +247,10 @@ function _physical_delay_map(data)
 end
 
 function _required_nonempty_string(object, field::String, context::String)
+  _is_object_like(object) || throw(validation_error(
+    "$context must be an object",
+    Dict{String,Any}("received_type" => string(typeof(object))),
+  ))
   haskey(object, field) || throw(validation_error("$context missing required field: '$field'"))
   raw_value = object[field]
   raw_value isa AbstractString || throw(validation_error(

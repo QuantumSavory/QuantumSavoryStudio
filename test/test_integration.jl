@@ -1078,6 +1078,30 @@
         @test haskey(invalid_code_data["details"], "received_type")
       end
 
+      for invalid_payload in (nothing, Any["x -> x"], "x -> x", 1)
+        invalid_payload_response = HTTP.post(
+          "$TEST_BASE_URL/test_code",
+          ["Content-Type" => "application/json"],
+          JSON.json(invalid_payload);
+          status_exception=false,
+        )
+        @test invalid_payload_response.status == 400
+        invalid_payload_data = parse_response(invalid_payload_response)
+        @test invalid_payload_data["success"] == false
+        @test invalid_payload_data["error_code"] == "VALIDATION_ERROR"
+        @test occursin("must be an object", invalid_payload_data["error"])
+      end
+
+      extra_field_response = make_request(
+        "POST",
+        "/test_code";
+        body=Dict("code" => "x -> x", "unexpected" => true),
+      )
+      @test extra_field_response.status == 400
+      extra_field_data = parse_response(extra_field_response)
+      @test extra_field_data["success"] == false
+      @test extra_field_data["error_code"] == "VALIDATION_ERROR"
+
       invalid_placement_response = make_request(
         "POST",
         "/test_code",
@@ -1321,6 +1345,30 @@
         @test invalid_expression_data["details"]["field"] == "expr"
         @test haskey(invalid_expression_data["details"], "received_type")
       end
+
+      for invalid_payload in (nothing, Any["Z₁"], "Z₁", 1)
+        invalid_payload_response = HTTP.post(
+          "$TEST_BASE_URL/test_symbolic_expression",
+          ["Content-Type" => "application/json"],
+          JSON.json(invalid_payload);
+          status_exception=false,
+        )
+        @test invalid_payload_response.status == 400
+        invalid_payload_data = parse_response(invalid_payload_response)
+        @test invalid_payload_data["success"] == false
+        @test invalid_payload_data["error_code"] == "VALIDATION_ERROR"
+        @test occursin("must be an object", invalid_payload_data["error"])
+      end
+
+      extra_field_response = make_request(
+        "POST",
+        "/test_symbolic_expression";
+        body=Dict("expr" => "Z₁", "unexpected" => true),
+      )
+      @test extra_field_response.status == 400
+      extra_field_data = parse_response(extra_field_response)
+      @test extra_field_data["success"] == false
+      @test extra_field_data["error_code"] == "VALIDATION_ERROR"
 
       if unsafe_evaluation_enabled
         # Execution error (bad expression)

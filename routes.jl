@@ -1862,6 +1862,7 @@ end
         application/json:
           schema:
             type: object
+            additionalProperties: false
             properties:
               code:
                 type: string
@@ -1940,6 +1941,12 @@ route("/test_code", method="POST") do
   payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
 
   code_string = _required_nonempty_string(payload, "code", "Code test request")
+  _require_exact_object_fields(
+    payload,
+    ("code",),
+    ("placement",);
+    context="Code test request",
+  )
   placement = get(payload, "placement", nothing)
   if placement !== nothing && !(
     placement isa AbstractString &&
@@ -2128,6 +2135,7 @@ end
         application/json:
           schema:
             type: object
+            additionalProperties: false
             properties:
               expr:
                 type: string
@@ -2196,6 +2204,11 @@ route("/test_symbolic_expression", method="POST") do
     payload,
     "expr",
     "Symbolic expression request",
+  )
+  _require_exact_object_fields(
+    payload,
+    ("expr",);
+    context="Symbolic expression request",
   )
   require_unsafe_code_evaluation()
 
