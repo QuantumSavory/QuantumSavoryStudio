@@ -38,7 +38,7 @@ end
 
 mutable struct CollaborationHub
   lock::ReentrantLock
-  command_queue::Channel{Dict{String,Any}}
+  command_queue::Vector{Dict{String,Any}}
   pending::Dict{String,PendingBrowserCommand}
   snapshot::Union{Nothing,Dict{String,Any}}
   snapshot_hash::Union{Nothing,String}
@@ -57,7 +57,7 @@ end
 function CollaborationHub(; clock=() -> Dates.now(Dates.UTC), id_source=nothing)
   hub = CollaborationHub(
     ReentrantLock(),
-    Channel{Dict{String,Any}}(MCP_COMMAND_QUEUE_SIZE),
+    Dict{String,Any}[],
     Dict{String,PendingBrowserCommand}(),
     nothing,
     nothing,
@@ -371,9 +371,7 @@ function _cancel_pending_locked!(
     isready(pending.response) || put!(pending.response, Dict("ok" => false, "error" => error))
   end
   empty!(hub.pending)
-  old_queue = hub.command_queue
-  hub.command_queue = Channel{Dict{String,Any}}(MCP_COMMAND_QUEUE_SIZE)
-  close(old_queue)
+  empty!(hub.command_queue)
 end
 
 function _desynchronize_binding_locked!(
@@ -656,7 +654,7 @@ function enqueue_browser_command!(
   normalized_payload = Dict{String,Any}(
     string(key) => value for (key, value) in payload
   )
-  enqueue_result = lock(hub.lock) do
+  pending = lock(hub.lock) do
     binding = _require_binding_locked!(hub)
     hub.accepting || throw(
       _mcp_error("SERVER_STOPPED", "The MCP listener is stopping.", retryable=true, status=409),
@@ -680,6 +678,9 @@ function enqueue_browser_command!(
     length(hub.pending) >= MCP_COMMAND_QUEUE_SIZE && throw(
       _mcp_error("EDITOR_BUSY", "The browser command queue is full.", retryable=true, status=429),
     )
+    length(hub.command_queue) >= MCP_COMMAND_QUEUE_SIZE && throw(
+      _mcp_error("EDITOR_BUSY", "The browser command queue is full.", retryable=true, status=429),
+    )
 
     command_id = hub.id_source()
     command = Dict{String,Any}(
@@ -697,40 +698,18 @@ function enqueue_browser_command!(
       hub.clock(),
     )
     hub.pending[command_id] = entry
-    (:enqueue, entry, hub.command_queue)
+    push!(hub.command_queue, command)
+    entry
   end
 
-  enqueue_result[1] == :result && return enqueue_result[2]
-  pending = enqueue_result[2]
-  if enqueue_result[1] == :enqueue
-    try
-      put!(enqueue_result[3], pending.command)
-    catch
-      lock(hub.lock) do
-        command_id = pending.command["command_id"]
-        get(hub.pending, command_id, nothing) === pending &&
-          delete!(hub.pending, command_id)
-      end
-      isready(pending.response) &&
-        return _browser_command_response(fetch(pending.response))
-      throw(
-        _mcp_error(
-          "OPERATION_CANCELLED",
-          "The browser binding changed while the command was queued.",
-          retryable=true,
-          status=409,
-        ),
-      )
-    end
-    record_mcp_activity!(
-      hub,
-      "browser_command",
-      "queued";
-      summary=string(get(payload, "type", "command")),
-      status="pending",
-      command_id=pending.command["command_id"],
-    )
-  end
+  record_mcp_activity!(
+    hub,
+    "browser_command",
+    "queued";
+    summary=string(get(payload, "type", "command")),
+    status="pending",
+    command_id=pending.command["command_id"],
+  )
 
   wait_result = timedwait(Float64(timeout_seconds); pollint=0.01) do
     isready(pending.response) && return true
@@ -748,6 +727,12 @@ function enqueue_browser_command!(
       elseif !pending.delivered &&
         get(hub.pending, pending.command["command_id"], nothing) === pending
         delete!(hub.pending, pending.command["command_id"])
+        queued_index = findfirst(
+          candidate -> candidate === pending.command,
+          hub.command_queue,
+        )
+        queued_index === nothing ||
+          deleteat!(hub.command_queue, queued_index)
         (:cancelled, nothing)
       else
         (:uncertain, _pending_write_readback_tool(pending))
@@ -799,40 +784,55 @@ function next_browser_command!(
   request::AbstractDict;
   timeout_seconds::Real=20,
 )
-  queue = lock(hub.lock) do
+  owner = lock(hub.lock) do
     binding = _require_binding_locked!(hub)
     _verify_binding_owner!(binding, request)
-    hub.command_queue
+    binding
   end
   deadline = time() + Float64(timeout_seconds)
-  command = nothing
-  while command === nothing
+  while true
     remaining = deadline - time()
     remaining <= 0 && return nothing
-    result = timedwait(() -> isready(queue), remaining; pollint=0.02)
+    result = timedwait(
+      () -> lock(hub.lock) do
+        hub.binding !== owner ||
+          owner.desynchronized ||
+          !hub.accepting ||
+          !isempty(hub.command_queue)
+      end,
+      remaining;
+      pollint=0.02,
+    )
     result == :timed_out && return nothing
-    candidate = try
-      take!(queue)
-    catch
-      return nothing
+
+    state, command = lock(hub.lock) do
+      if hub.binding !== owner ||
+        owner.desynchronized ||
+        !hub.accepting
+        return (:closed, nothing)
+      end
+      while !isempty(hub.command_queue)
+        candidate = popfirst!(hub.command_queue)
+        pending = get(hub.pending, candidate["command_id"], nothing)
+        pending === nothing && continue
+        pending.delivered = true
+        return (:ready, candidate)
+      end
+      return (:retry, nothing)
     end
-    active = lock(hub.lock) do
-      pending = get(hub.pending, candidate["command_id"], nothing)
-      pending === nothing && return false
-      pending.delivered = true
-      return true
-    end
-    active && (command = candidate)
+    state == :closed && return nothing
+    state == :retry && continue
+
+    record_mcp_activity!(
+      hub,
+      "browser_command",
+      "delivered";
+      summary=string(get(command["payload"], "type", "command")),
+      status="pending",
+      command_id=command["command_id"],
+    )
+    return deepcopy(command)
   end
-  record_mcp_activity!(
-    hub,
-    "browser_command",
-    "delivered";
-    summary=string(get(command["payload"], "type", "command")),
-    status="pending",
-    command_id=command["command_id"],
-  )
-  return deepcopy(command)
 end
 
 next_browser_command!(request::AbstractDict; kwargs...) =

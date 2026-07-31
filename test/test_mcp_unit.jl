@@ -323,7 +323,6 @@
     triggers = (:lease, :unbind, :stop, :replacement, :desynchronize)
     phases = (
       :queued,
-      :blocked_put,
       :delivered_design,
       :delivered_lifecycle,
       :delivered_read,
@@ -337,11 +336,6 @@
         "binding_id" => binding["binding_id"],
         "generation" => 1,
       )
-      if phase == :blocked_put
-        lock(hub.lock) do
-          hub.command_queue = Channel{Dict{String,Any}}(0)
-        end
-      end
       lifecycle = phase == :delivered_lifecycle
       pure_read = phase == :delivered_read
       payload = lifecycle ?
@@ -433,39 +427,113 @@
     for trigger in triggers, phase in phases
       cancellation_case(trigger, phase)
     end
+  end
 
-    closed_queue_hub = WebQuantumSavory.CollaborationHub()
-    WebQuantumSavory.bind_editor!(closed_queue_hub, binding_request())
-    closed_queue = Channel{Dict{String,Any}}(0)
-    lock(closed_queue_hub.lock) do
-      closed_queue_hub.command_queue = closed_queue
-    end
-    closed_queue_wait = @async try
+  @testset "browser queue admission is bounded and timeout-safe" begin
+    timeout_hub = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(timeout_hub, binding_request())
+    timeout_wait = @async try
       WebQuantumSavory.enqueue_browser_command!(
-        closed_queue_hub,
+        timeout_hub,
         Dict("type" => "design_command");
         expected_revision=0,
         mutates_design=true,
-        timeout_seconds=2,
+        timeout_seconds=0.03,
       )
     catch error
       error
     end
+    timeout_outcome = fetch(timeout_wait)
+    @test timeout_outcome isa WebQuantumSavory.APIError
+    @test timeout_outcome.error_code == "OPERATION_CANCELLED"
+    @test timeout_outcome.status_code == 409
+    @test timeout_outcome.details["retryable"] == true
+    @test lock(timeout_hub.lock) do
+      isempty(timeout_hub.pending) && isempty(timeout_hub.command_queue)
+    end
+
+    saturated_hub = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(saturated_hub, binding_request())
+    waiters = Task[]
+    for _ in 1:WebQuantumSavory.MCP_COMMAND_QUEUE_SIZE
+      push!(
+        waiters,
+        @async try
+          WebQuantumSavory.enqueue_browser_command!(
+            saturated_hub,
+            Dict("type" => "design_get");
+            timeout_seconds=2,
+          )
+        catch error
+          error
+        end,
+      )
+    end
     @test timedwait(
-      () -> lock(closed_queue_hub.lock) do
-        !isempty(closed_queue_hub.pending)
+      () -> lock(saturated_hub.lock) do
+        length(saturated_hub.pending) ==
+          WebQuantumSavory.MCP_COMMAND_QUEUE_SIZE &&
+          length(saturated_hub.command_queue) ==
+            WebQuantumSavory.MCP_COMMAND_QUEUE_SIZE
       end,
       1;
       pollint=0.01,
     ) == :ok
-    close(closed_queue)
-    closed_queue_outcome = fetch(closed_queue_wait)
-    @test closed_queue_outcome isa WebQuantumSavory.APIError
-    @test closed_queue_outcome.error_code == "OPERATION_CANCELLED"
-    @test closed_queue_outcome.status_code == 409
-    @test closed_queue_outcome.details["retryable"] == true
-    @test !haskey(closed_queue_outcome.details, "readback_required")
-    @test isempty(closed_queue_hub.pending)
+    overflow = try
+      WebQuantumSavory.enqueue_browser_command!(
+        saturated_hub,
+        Dict("type" => "design_get");
+        timeout_seconds=2,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test overflow isa WebQuantumSavory.APIError
+    @test overflow.error_code == "EDITOR_BUSY"
+    @test overflow.status_code == 429
+    @test overflow.details["retryable"] == true
+
+    WebQuantumSavory.stop_collaboration!(saturated_hub)
+    for waiter in waiters
+      outcome = fetch(waiter)
+      @test outcome isa WebQuantumSavory.APIError
+      @test outcome.error_code == "OPERATION_CANCELLED"
+      @test outcome.status_code == 409
+      @test outcome.details["retryable"] == true
+    end
+    @test isempty(saturated_hub.pending)
+    @test isempty(saturated_hub.command_queue)
+  end
+
+  @testset "browser long polls stop with their binding generation" begin
+    for teardown in (:stop, :unbind, :replacement)
+      hub = WebQuantumSavory.CollaborationHub()
+      binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+      owner = Dict(
+        "binding_id" => binding["binding_id"],
+        "generation" => 1,
+      )
+      long_poll = @async WebQuantumSavory.next_browser_command!(
+        hub,
+        owner;
+        timeout_seconds=2,
+      )
+      yield()
+
+      if teardown == :stop
+        WebQuantumSavory.stop_collaboration!(hub)
+      elseif teardown == :unbind
+        WebQuantumSavory.unbind_editor!(hub, owner)
+      else
+        WebQuantumSavory.bind_editor!(
+          hub,
+          binding_request(generation=2, hash="replacement"),
+        )
+      end
+      @test timedwait(() -> istaskdone(long_poll), 1; pollint=0.01) == :ok
+      @test fetch(long_poll) === nothing
+    end
   end
 
   @testset "a desynchronized owner can unbind and recover" begin

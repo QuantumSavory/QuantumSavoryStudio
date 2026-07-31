@@ -108,7 +108,7 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 
 - **Covers:** CMP-016
 - **Method:** test
-- **Procedure:** Race queued/blocked-put/delivered design, lifecycle, and read work against lease, unbind, stop, replacement, desynchronization, closed queue, timeout, acknowledgement, and restart.
+- **Procedure:** Race bounded queue admission, undelivered timeout, and delivered design, lifecycle, and read work against lease, unbind, stop, replacement, desynchronization, acknowledgement, and restart.
 - **Environment / configuration:** Collaboration hub/browser acknowledgement fixture with deterministic faults
 - **Pass criterion:** Provably pre-delivery cancellation and delivered reads are retryable; delivered writes require readback; accepted work advances once; no replay; lifecycle uncertainty blocks reads/duplicates until settlement.
 - **Status:** implemented

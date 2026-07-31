@@ -50,23 +50,24 @@ unclassified deep-watch synchronization fallback.
 Contract v2 and the hub use no public operation IDs, replay cache, or operation ledger:
 
 1. stale or provably pre-delivery-cancelled work does not mutate and is retryable,
-   including timeout, lease, unbind, stop, replacement/desynchronization, and a closed
-   queue;
-2. accepted design work advances the collaboration revision exactly once;
-3. delivered pure reads remain retryable, while delivered state-changing design or
+   including timeout, lease, unbind, stop, and replacement/desynchronization;
+2. queue admission is lock-owned and bounded, removes timed-out undelivered work, and
+   returns retryable busy without blocking when full;
+3. accepted design work advances the collaboration revision exactly once;
+4. delivered pure reads remain retryable, while delivered state-changing design or
    lifecycle work returns non-retryable `OUTCOME_UNKNOWN`;
-4. the transport never automatically replays an uncertain mutation;
-5. after design reply loss, the caller reads canonical revision/hash; after lifecycle
+5. the transport never automatically replays an uncertain mutation;
+6. after design reply loss, the caller reads canonical revision/hash; after lifecycle
    reply loss, it polls status until the pending barrier settles;
-6. rebind/restart begins from visible current state and accepts only fresh work.
+7. rebind/restart begins from visible current state and accepts only fresh work.
 
 Revision allocation is monotonic for the lifetime of a hub, including rebinds, so a
 fresh binding cannot accidentally accept a stale revision from an earlier binding. A
 fresh backend process binds the browser's visible document as its new baseline. Current
-component fixtures cover queued, blocked-put, and delivered cancellation classes, late
-acknowledgement, lifecycle uncertainty, rebind, fresh-process state, and no ledger
-fields. A deterministic full-stack bridge-reply-loss/sidecar-restart action remains an
-evidence gap.
+component fixtures cover queued timeout, bounded saturation, long-poll teardown,
+delivered cancellation classes, late acknowledgement, lifecycle uncertainty, rebind,
+fresh-process state, and no ledger fields. A deterministic full-stack
+bridge-reply-loss/sidecar-restart action remains an evidence gap.
 
 One hub-locked predicate identifies unresolved lifecycle commands. It rejects another
 lifecycle action and both status entry points with retryable `OPERATION_PENDING` and
