@@ -240,14 +240,38 @@ describe('ApiConnector project namespaces', () => {
   it('rejects tag-target aliases and non-string external IDs before transport', async () => {
     const connector = new ApiConnector('http://api.test')
 
-    await expect(connector.listTags('Project', {
-      target: 'register',
-      node_id: 'node-1'
-    })).rejects.toThrow('tag target.kind must be register, slot, or message_buffer')
-    await expect(connector.listTags('Project', {
+    const invalidTargets = [
+      [
+        { target: 'register', node_id: 'node-1' },
+        'tag target.kind must be register, slot, or message_buffer'
+      ],
+      [
+        { node_id: 'node-1' },
+        'tag target.kind must be register, slot, or message_buffer'
+      ],
+      [
+        { kind: 'register', node_id: '' },
+        'tag target.node_id must be a non-empty string'
+      ],
+      [
+        { kind: 'register', node_id: 1 },
+        'tag target.node_id must be a non-empty string'
+      ],
+      [
+        { kind: 'slot', slot_id: 1 },
+        'tag target.slot_id must be a non-empty string'
+      ]
+    ]
+    for (const [target, message] of invalidTargets) {
+      await expect(connector.listTags('Project', target)).rejects.toThrow(message)
+    }
+    await expect(connector.attachTag('Project', {
       kind: 'register',
-      node_id: 1
-    })).rejects.toThrow('tag target.node_id must be a non-empty string')
+      node_id: 'node-1',
+      destination_slot_id: 1
+    }, {})).rejects.toThrow(
+      'tag target.destination_slot_id must be a non-empty string',
+    )
 
     expect(fetch).not.toHaveBeenCalled()
   })

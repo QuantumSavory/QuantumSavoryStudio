@@ -74,7 +74,7 @@ const targetScope = computed(() => (
     : 'register'
 ))
 const selectedNode = computed(() => (
-  props.nodes.find(node => String(node.id) === String(target.value.node_id))
+  props.nodes.find(node => node.id === target.value.node_id)
   || props.nodes[0]
   || null
 ))
@@ -82,7 +82,7 @@ const selectedNodeId = computed(() => selectedNode.value?.id ?? '')
 const slots = computed(() => selectedNode.value?.data?.slots || [])
 const selectedSlot = computed(() => (
   target.value.kind === 'slot'
-    ? slots.value.find(slot => String(slot.id) === String(target.value.slot_id)) || null
+    ? slots.value.find(slot => slot.id === target.value.slot_id) || null
     : null
 ))
 const selectedSlotId = computed(() => selectedSlot.value?.id ?? '')
@@ -113,7 +113,7 @@ function changeKind(kind) {
 }
 
 function changeNode(nodeId) {
-  const node = props.nodes.find(candidate => String(candidate.id) === String(nodeId))
+  const node = props.nodes.find(candidate => candidate.id === nodeId)
   const normalizedNodeId = node?.id ?? ''
   emit('update:modelValue', targetScope.value === 'message_buffer'
     ? { kind: 'message_buffer', node_id: normalizedNodeId }
@@ -121,7 +121,7 @@ function changeNode(nodeId) {
 }
 
 function changeSlot(slotId) {
-  const slot = slots.value.find(candidate => String(candidate.id) === String(slotId))
+  const slot = slots.value.find(candidate => candidate.id === slotId)
   emit('update:modelValue', slot
     ? { kind: 'slot', node_id: selectedNodeId.value, slot_id: slot.id }
     : { kind: 'register', node_id: selectedNodeId.value })

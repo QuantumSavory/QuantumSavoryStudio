@@ -100,4 +100,30 @@ describe('TagTargetSelector', () => {
       .toEqual(['Register'])
     expect(wrapper.get('[aria-label="Target slot"]').findAll('option')[0].text()).toBe('All slots')
   })
+
+  it('does not coerce numeric target IDs into schema-v2 string identities', async () => {
+    const numericLookalikeNodes = [
+      nodes[0],
+      {
+        id: '1',
+        name: 'String One',
+        data: { slots: [{ id: '2', type: 'Qubit' }] }
+      }
+    ]
+    const wrapper = mount(TagTargetSelector, {
+      props: {
+        modelValue: { kind: 'slot', node_id: 1, slot_id: 2 },
+        nodes: numericLookalikeNodes,
+        allowMessages: true
+      }
+    })
+    await flushPromises()
+
+    expect(lastTarget(wrapper)).toEqual({
+      kind: 'register',
+      node_id: 'node-alice'
+    })
+    expect(wrapper.get('[aria-label="Target node"]').element.value).toBe('node-alice')
+    expect(wrapper.get('[aria-label="Target slot"]').element.value).toBe('')
+  })
 })
