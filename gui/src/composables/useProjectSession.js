@@ -122,13 +122,13 @@ export function useProjectSession({
     return currentPlatformInfo()
   }
 
-  async function preflightProject(raw, name) {
-    const decoded = decodeStoredProject(raw, codecContext(name))
+  async function preflightProject(raw, storageName) {
+    const decoded = decodeStoredProject(raw, codecContext(storageName))
     const platformInfo = await ensurePlatformInfo()
     const mismatch = compareProjectVersions(decoded.platformInfo?.versions, platformInfo?.versions)
     if (mismatch) {
       const accepted = await confirmVersionMismatch(
-        `This project (${name}) was saved with a different version of the software, which could affect simulation behavior.\n\n${mismatch.join('\n')}\n\nDo you want to proceed anyway?`
+        `This project (${decoded.project.name}) was saved with a different version of the software, which could affect simulation behavior.\n\n${mismatch.join('\n')}\n\nDo you want to proceed anyway?`
       )
       if (!accepted) return null
     }
@@ -222,9 +222,9 @@ export function useProjectSession({
     const generation = ++transitionGeneration.value
     transitionPhase.value = 'preparing'
     try {
-      const name = canonicalName(demoData?.name || 'Demo Project')
-      const decoded = await preflightProject(demoData, name)
+      const decoded = await preflightProject(demoData)
       if (!decoded || generation !== transitionGeneration.value) return false
+      const name = canonicalName(decoded.project.name)
 
       transitionPhase.value = 'committing'
       const replacementBarrier = projectReplacementBarrier()
@@ -366,12 +366,12 @@ export function useProjectSession({
   }
 
   async function importProject(data, finalName) {
-    const name = canonicalName(finalName || data?.name)
     const generation = ++transitionGeneration.value
     transitionPhase.value = 'preparing'
     try {
-      const candidate = await preflightProject(data, name)
+      const candidate = await preflightProject(data, finalName)
       if (!candidate || generation !== transitionGeneration.value) return false
+      const name = canonicalName(finalName || candidate.project.name)
 
       transitionPhase.value = 'committing'
       const replacementBarrier = projectReplacementBarrier()

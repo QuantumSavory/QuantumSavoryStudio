@@ -246,6 +246,29 @@ describe('project session', () => {
     )
   })
 
+  it.each([
+    ['import', (harness, document) => harness.session.importProject(document)],
+    ['demo', (harness, document) => harness.session.openDemo(document)],
+  ])('admits a raw %s name before normalization or platform lookup', async (
+    _operation,
+    run,
+  ) => {
+    const document = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    document.name = '   '
+    const harness = createHarness()
+    harness.api.getPlatformInfo = vi.fn(() => null)
+
+    expect(await run(harness, document)).toBe(false)
+
+    expect(harness.showError).toHaveBeenCalledWith(
+      expect.stringMatching(/schema validation.*\/name/i),
+    )
+    expect(harness.api.fetchPlatformInfo).not.toHaveBeenCalled()
+    expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+    expect(harness.store.saveProject).not.toHaveBeenCalled()
+    expect(harness.store.openProject).not.toHaveBeenCalled()
+  })
+
   it('allows only the newest overlapping open to commit', async () => {
     let resolveFirstConfirmation
     const firstConfirmation = new Promise(resolve => { resolveFirstConfirmation = resolve })
