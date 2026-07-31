@@ -96,7 +96,7 @@ evaluation_status=$(curl --silent --show-error \
   --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \
   --data '{"code":"open(\"/tmp/wqs-eval-canary\", \"w\")"}' \
-  "http://127.0.0.1:$host_port/validate_code")
+  "http://127.0.0.1:$host_port/test_code")
 [ "$evaluation_status" = 403 ]
 grep -Eq '"code"[[:space:]]*:[[:space:]]*"UNSAFE_EVALUATION_DISABLED"' \
   "$evaluation_body"
