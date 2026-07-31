@@ -48,45 +48,45 @@
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Fetch real metadata, feed responses into frontend descriptors, and submit representative advertised and unsupported values.
+- **Procedure:** Enumerate every GUI input path, feed it real catalogs/allowlists, and submit advertised boundaries/nulls, unadvertised IDs, and incompatible Variables.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** Wire types, placement, nullability, bounds, and safe resolution match across the boundary; unsupported values fail.
+- **Pass criterion:** Every path derives matching type, placement, nullability, bounds, and safe resolution; advertised values round-trip; unsupported values fail.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** One real-browser background scenario covers its catalog/descriptors; other catalogs, input kinds, and unsupported values remain separate or mocked.
+- **Nonconformance:** One real-browser catalog crosses the full boundary; others remain separate or mocked.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
 - **Covers:** SUB-006
 - **Method:** test
-- **Procedure:** Exercise valid/invalid lifecycle transitions, including competing same-name requests.
-- **Environment / configuration:** Real HTTP integration with controllable concurrency
-- **Pass criterion:** Per-name operations serialize, invalid candidates do not corrupt backend state, one task owns execution, and flags/progress/errors remain coherent.
+- **Procedure:** Exercise installation, every transition, same-name races, pause, timeout, successful cleanup, and injected cleanup failure.
+- **Environment / configuration:** Real HTTP with controlled concurrency, clock, and releases
+- **Pass criterion:** Operations serialize; invalid work preserves state; one task owns execution; task/progress/pause/error/phase agree; pause stops; timeout and success match documented states; failed cleanup attempts all releases, removes the record, and logs degradation.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Artifacts omit competing requests and some malformed bodies.
+- **Nonconformance:** Artifacts omit races, malformed bodies, timeout state, and cleanup-failure injection.
 
 ## INTV-007 — Verify observation, error, and cleanup handoff
 
 - **Covers:** SUB-007
 - **Method:** test
-- **Procedure:** Read observations through lifecycle states, trigger distinct backend errors, and inject an assigned-state release failure while observing GUI records.
+- **Procedure:** In every lifecycle state, read all named observations, inject field-distinct errors and release failures, and inspect GUI records.
 - **Environment / configuration:** Real backend/frontend with release injection and Tools Log
-- **Pass criterion:** Representations serialize; cleanup changes availability; errors reach the Log; failed cleanup attempts all releases, removes the record, and reports severe degradation.
+- **Pass criterion:** Observations serialize without Julia objects and honor unavailable/degraded states; cleanup blocks live operations; the Log preserves each error's classification/message/details; release failure attempts all, removes the record, and logs severe degradation.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Current artifacts cover selected observations; no release injection or complete cross-boundary error fixture exists.
+- **Nonconformance:** Artifacts cover selected observations without release injection or full error handoff.
 
 ## INTV-008 — Verify script-generation and help boundary
 
 - **Covers:** SUB-008
 - **Method:** test
-- **Procedure:** Generate repeatedly with source canaries, both link kinds, structured values, and selected unsupported behavior; inspect corresponding help.
+- **Procedure:** Using the complete mapping/omission inventory, generate repeatedly with canaries, both link kinds, and structured values; inspect all help.
 - **Environment / configuration:** Backend unit/HTTP tests plus browser export-help scenario
-- **Pass criterion:** Source/filename are deterministic and valid, registry names stay unchanged, canaries do not execute, supported mappings run, and selected omissions are disclosed.
+- **Pass criterion:** Source/filename are stable and valid; registry/canaries are unchanged; every supported mapping runs; every simplification or omission is disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
-- **Nonconformance:** The panel scenario mocks its endpoint; the background scenario reaches the real route for selected semantics. Help is general, with no exhaustive feature/omission inventory.
+- **Nonconformance:** The panel mocks its route; one real-route scenario covers selected semantics; no exhaustive feature/help inventory exists.
 
 ## INTV-009 — Verify private route/error/log handoff
 

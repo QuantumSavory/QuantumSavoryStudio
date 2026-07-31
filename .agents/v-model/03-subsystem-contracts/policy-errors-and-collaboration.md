@@ -7,7 +7,7 @@ active-project replacement.
 
 - **Normative statement:** Script generation shall validate canonical input and emit supported runtime mappings deterministically without mutating the server registry or executing user source, while export help identifies unsupported or simplified GUI behavior.
 - **Parents:** SYS-007
-- **Acceptance criterion:** Repeated component and HTTP requests return stable text/filename and executable supported semantics, preserve the state namespace, do not execute a source canary, and pair every selected omission with corresponding help.
+- **Acceptance criterion:** Repeated component and HTTP requests return stable text/filename and executable supported semantics, preserve the state namespace, do not execute a source canary, and pair every simplified or omitted GUI feature with corresponding help.
 - **Verification:** INTV-008 (test)
 - **Origin / risk:** Export generator, help widget, and maintainer-confirmed fidelity boundary; high code-generation risk
 - **Context:** [Script export](../../context/backend/script-export.md)

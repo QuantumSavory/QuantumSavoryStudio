@@ -17,9 +17,9 @@ No product suite was run for this documentation-only release-2.0 baseline.
 
 - **Covers:** SYS-002
 - **Method:** test
-- **Procedure:** Exercise browser edits, current-schema Save As/reopen in the same release, and selected projections with discriminating fixtures.
+- **Procedure:** Exercise documented browser edit classes on one discriminating current-schema design, Save As/reopen it in the same release, and derive collaboration, simulation, and script-export projections while retaining a source copy.
 - **Environment / configuration:** Node Vitest/jsdom plus Chromium/Vite workflows
-- **Pass criterion:** Edits occur once; reopen preserves asserted semantics in browser storage; projections are nonmutating and exclude asserted fields.
+- **Pass criterion:** Each edit changes the canonical model once; named save/reopen retains every documented durable field in browser storage; each projection includes exactly its declared subset, excludes every other documented field, and leaves the canonical model unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
 - **Nonconformance:** Existing artifacts target schema version 1; no one system fixture asserts every documented project field or explicitly proves absence of server project writes.
@@ -61,9 +61,9 @@ No product suite was run for this documentation-only release-2.0 baseline.
 
 - **Covers:** SYS-007
 - **Method:** test
-- **Procedure:** Export a real browser project through the backend, compare selected supported semantics, parse/run the source, verify state purity, and inspect omission help.
+- **Procedure:** From a maintained inventory of supported, simplified, and omitted GUI features, export discriminating real-browser projects through the backend, compare every supported mapping, parse/run the source, verify state purity, and inspect help for every simplification or omission.
 - **Environment / configuration:** Desktop browser plus real backend with native evaluation disabled
-- **Pass criterion:** Text/filename are stable, source parses/runs its supported path, registry and canary remain unchanged, and every selected simplification has corresponding help.
+- **Pass criterion:** Text/filename are stable; source parses/runs every supported mapped path; registry and canary remain unchanged; every simplified or omitted GUI feature has corresponding help.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** A background-noise scenario reaches the real route and inspects selected output, but no action combines that response with download, parse/run, disabled-backend canary/registry checks, and feature-specific help.
