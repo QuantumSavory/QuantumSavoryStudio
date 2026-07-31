@@ -70,7 +70,11 @@ Server-backed integration jobs declare the `local` profile and explicitly enable
 restricted source evaluation. The public-profile startup smoke sets the opt-in to `true`,
 then verifies that `/platform_info` reports evaluation disabled, `/test_code` returns
 the stable 403 policy error, local-only MCP/development routes are absent, and the
-diagnostic protocol stays hidden.
+diagnostic protocol stays hidden. The launcher owns its foreground lifetime through
+Genie's public `up` and `down!` APIs and waits on the returned HTTP server handle. The
+smoke gives that launcher a temporary `WQS_SERVER_SHUTDOWN_FILE` sentinel and creates it
+only after the probes, which exercises graceful shutdown without relying on
+platform-specific process signals.
 Real-server missing/false local opt-in checks remain a verification gap. The general
 browser wrapper uses Vite's development server; the production-browser job separately
 keeps evaluation and MCP disabled and serves the built frontend from the backend.

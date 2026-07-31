@@ -3421,6 +3421,24 @@
     @test WebQuantumSavory.validate_deployment_configuration(public_environment) ==
       WebQuantumSavory.PUBLIC_DEPLOYMENT_PROFILE
 
+    @test ServerLauncherFixture.supervised_shutdown_file(Dict{String,String}()) ===
+      nothing
+    @test_throws ArgumentError ServerLauncherFixture.supervised_shutdown_file(
+      Dict(ServerLauncherFixture.SUPERVISED_SHUTDOWN_FILE_ENV_VAR => " "),
+    )
+    mktempdir() do directory
+      shutdown_file = joinpath(directory, "shutdown")
+      environment = Dict(
+        ServerLauncherFixture.SUPERVISED_SHUTDOWN_FILE_ENV_VAR => shutdown_file,
+      )
+      @test ServerLauncherFixture.supervised_shutdown_file(environment) ==
+        shutdown_file
+      touch(shutdown_file)
+      @test_throws ArgumentError ServerLauncherFixture.supervised_shutdown_file(
+        environment,
+      )
+    end
+
     for (variable, value) in (
       WebQuantumSavory.GENIE_ENV_VAR => "test",
       WebQuantumSavory.MCP_ENABLE_ENV_VAR => "true",
@@ -3434,7 +3452,6 @@
 
       preparation_actions = Symbol[]
       @test_throws ArgumentError ServerLauncherFixture.prepare_server(
-        String[];
         environment=invalid_environment,
         instantiate_mcp_fn=_ -> push!(preparation_actions, :mcp),
         build_frontend_fn=() -> push!(preparation_actions, :frontend),
