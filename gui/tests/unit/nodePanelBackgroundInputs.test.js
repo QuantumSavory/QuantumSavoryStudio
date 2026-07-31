@@ -151,6 +151,18 @@ describe('NodePanel background constructor drafts', () => {
     expect(wrapper.emitted('design-operations')).toBeUndefined()
   })
 
+  it('fails closed when the slot catalog is malformed', async () => {
+    api.updateConfig({
+      slotTypes: { type: 'Qubit' },
+    })
+    const wrapper = mountPanel()
+
+    const addSlot = wrapper.get('.add-slot-btn')
+    expect(addSlot.attributes('disabled')).toBeDefined()
+    await addSlot.trigger('click')
+    expect(wrapper.emitted('design-operations')).toBeUndefined()
+  })
+
   it('uses concrete node context and clones validated add-many backgrounds', async () => {
     const wrapper = mountPanel()
     await wrapper.get('.menu-stub button:nth-child(2)').trigger('click')

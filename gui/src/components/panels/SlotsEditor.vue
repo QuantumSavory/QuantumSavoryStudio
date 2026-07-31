@@ -178,9 +178,10 @@ const resolvedNumericExpressionContext = computed(() => (
     )
 ))
 const slotTypes = computed(() => {
-  const configured = (api.config.value.slotTypes || [])
+  const catalog = api.config.value.slotTypes
+  const configured = (Array.isArray(catalog) ? catalog : [])
     .map(type => typeof type === 'string' ? type : type?.type)
-    .filter(Boolean)
+    .filter(type => typeof type === 'string' && type)
   return configured
 })
 
