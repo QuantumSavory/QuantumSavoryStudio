@@ -530,11 +530,12 @@ The maintained local entry points are:
 ./ci/public-container.sh
 ```
 
-GitHub Actions runs all of these boundaries and adds advisory host/browser probes.
-Buildkite currently runs agent documentation, backend, MCP, frontend, integration,
-Chromium, production-browser, and public-profile startup checks; it does not run the
-standalone HTTP-contract or Podman-container boundaries. Release evidence for those two
-boundaries must therefore come from GitHub Actions or an explicit local run.
+GitHub Actions runs all of these boundaries, the required public-profile startup smoke,
+and advisory host/browser probes. Buildkite currently runs agent documentation,
+backend, MCP, frontend, integration, Chromium, production-browser, and public-profile
+startup checks; it does not run the standalone HTTP-contract or Podman-container
+boundaries. Release evidence for those two boundaries must therefore come from GitHub
+Actions or an explicit local run.
 
 Each script installs the locked project dependencies it needs, so it can run
 from a clean checkout once its language runtimes are available. The MCP,
