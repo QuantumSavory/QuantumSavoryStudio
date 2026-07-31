@@ -97,5 +97,6 @@ incomplete.
 - The exact QuantumSavory source revision selected for the 2.0 candidate must become
   reachable from its declared upstream URL before clean release installation.
 - ModelContextProtocol 0.6.0 cannot preserve dependency-owned structured resource
-  failures in JSON-RPC `error.data`; release needs an upstream correction or an approved
-  scope/waiver decision.
+  failures in JSON-RPC `error.data`. This is an accepted 2.0 conformance gap, not a
+  release blocker; application-owned tool errors remain structured, and the transport
+  must not be patched locally to claim stronger resource-error behavior.

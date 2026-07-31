@@ -23,9 +23,12 @@ resource errors, and consolidated MCP matrices remain incomplete.
 
 Release metadata and notes target `2.0.0`; no verification status changed. Required
 supported-environment execution and maintainer acceptance remain pending. The exact
-QuantumSavory pin was not advertised upstream, and structured MCP resource errors remain
-dependency-owned; publish or re-pin the former and correct or approve the latter before
-release. Keep `1.10.1` as the reference until evidence, acceptance, tag, and publication.
+QuantumSavory pin cannot be fetched from its declared upstream and must be published or
+re-pinned before release. Dependency-owned MCP resource errors remain an accepted 2.0
+conformance gap rather than a release blocker: keep the affected actions incomplete, do
+not patch the transport locally, and revisit them when the provider supports JSON-RPC
+`error.data`. Keep `1.10.1` as the reference until evidence, acceptance, tag, and
+publication.
 
 ## Left-side specification
 
