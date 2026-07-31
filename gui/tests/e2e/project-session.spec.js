@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 
-async function mockBackend(page, parseRequests, { platformHandler } = {}) {
+async function mockBackend(page, parseRequests, { platformHandler, destroyRequests } = {}) {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
   await page.route('**/background_types', route => route.fulfill({ json: { background_types: [] } }))
   await page.route('**/slot_types', route => route.fulfill({
@@ -18,7 +18,10 @@ async function mockBackend(page, parseRequests, { platformHandler } = {}) {
       }
     })
   })
-  await page.route('**/destroy_simulation', route => route.fulfill({ json: { success: true } }))
+  await page.route('**/destroy_simulation', route => {
+    destroyRequests?.push(route.request().method())
+    return route.fulfill({ json: { success: true } })
+  })
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),
   ))
@@ -202,6 +205,49 @@ test('Save As refuses to overwrite a different existing project', async ({ page 
     recentName: 'Active Project',
     target: originalTarget,
   })
+})
+
+test('invalid browser imports preserve their source, active work, and storage', async ({ page }) => {
+  const destroyRequests = []
+  await mockBackend(page, [], { destroyRequests })
+  await page.goto('/')
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+
+  const result = await page.evaluate(async () => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    await setup.createNewProject('Active Project')
+    setup.projectData.description = 'unsaved active-session edit'
+
+    const imported = setup.serializeProjectData()
+    imported.name = 'Rejected Project'
+    imported.unexpected = { nested: true }
+    const sourceBefore = JSON.stringify(imported)
+    const admitted = await setup.validateAndProcessImport(imported)
+
+    return {
+      admitted,
+      sourceBefore,
+      sourceAfter: JSON.stringify(imported),
+      activeName: setup.projectData.name,
+      activeDescription: setup.projectData.description,
+      recentName: localStorage.getItem('recentProjectName'),
+      rejectedStored: localStorage.getItem('cqn_project_Rejected Project'),
+    }
+  })
+
+  const errorDialog = page.getByRole('dialog', { name: 'Import failed' })
+  await expect(errorDialog).toContainText(
+    'Project schema validation failed at /unexpected: expected declared field',
+  )
+  expect(result.sourceAfter).toBe(result.sourceBefore)
+  expect(result).toMatchObject({
+    admitted: false,
+    activeName: 'Active Project',
+    activeDescription: 'unsaved active-session edit',
+    recentName: 'Active Project',
+    rejectedStored: null,
+  })
+  expect(destroyRequests).toEqual([])
 })
 
 test('a late startup restore cannot replace a user-created session', async ({ page }) => {
