@@ -3,46 +3,57 @@ using Sockets
 const APP_ROOT = normpath(joinpath(@__DIR__, ".."))
 const STARTUP_TIMEOUT_SECONDS = 600
 
-function status_ready(port::Int)
+function http_response(port::Int, request::AbstractString)
     socket = try
         connect(ip"127.0.0.1", port)
     catch
-        return false
+        return nothing
     end
 
     try
-        write(
-            socket,
-            "GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-        )
-        response = read(socket, String)
-        return startswith(response, "HTTP/1.1 200") ||
-               startswith(response, "HTTP/1.0 200")
+        write(socket, request)
+        return read(socket, String)
     finally
         close(socket)
     end
 end
 
-function source_evaluation_disabled(port::Int)
-    socket = try
-        connect(ip"127.0.0.1", port)
-    catch
-        return false
-    end
+function successful_response(response)
+    response === nothing && return false
+    return startswith(response, "HTTP/1.1 200") ||
+           startswith(response, "HTTP/1.0 200")
+end
 
-    try
-        write(
-            socket,
-            "GET /platform_info HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-        )
-        response = read(socket, String)
-        successful = startswith(response, "HTTP/1.1 200") ||
-                     startswith(response, "HTTP/1.0 200")
-        return successful &&
-               occursin(r"\"unsafe_code_evaluation\"\s*:\s*false", response)
-    finally
-        close(socket)
-    end
+function status_ready(port::Int)
+    response = http_response(
+        port,
+        "GET /status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    )
+    return successful_response(response)
+end
+
+function source_evaluation_disabled(port::Int)
+    response = http_response(
+        port,
+        "GET /platform_info HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    )
+    return successful_response(response) &&
+           occursin(r"\"unsafe_code_evaluation\"\s*:\s*false", response)
+end
+
+function source_evaluation_request_denied(port::Int)
+    body = """{"code":"x -> x + 1","placement":"query"}"""
+    request = "POST /test_code HTTP/1.1\r\n" *
+              "Host: 127.0.0.1\r\n" *
+              "Content-Type: application/json\r\n" *
+              "Content-Length: $(ncodeunits(body))\r\n" *
+              "Connection: close\r\n\r\n" *
+              body
+    response = http_response(port, request)
+    response === nothing && return false
+    denied = startswith(response, "HTTP/1.1 403") ||
+             startswith(response, "HTTP/1.0 403")
+    return denied && occursin("\"UNSAFE_EVALUATION_DISABLED\"", response)
 end
 
 function startup_smoke()
@@ -73,6 +84,9 @@ function startup_smoke()
             if status_ready(port)
                 source_evaluation_disabled(port) || error(
                     "public profile exposed unsafe source evaluation",
+                )
+                source_evaluation_request_denied(port) || error(
+                    "public profile accepted a source-evaluation request",
                 )
                 return
             end
