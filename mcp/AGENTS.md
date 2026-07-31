@@ -12,9 +12,8 @@ Applies to the isolated optional Julia MCP application under `mcp/`.
   resources, schemas, dispatch, sessions, revisions, or stable errors.
 - [Browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
   binding, leases, snapshots, commands, or lifecycle relaying.
-- [Sidecar operations](../.agents/context/mcp/sidecar-operations.md) before
-  enabling, upgrading, testing, recovering, or coordinating a cross-component
-  tool/resource rollout.
+- [Sidecar operations](../.agents/context/mcp/sidecar-operations.md) before enabling,
+  upgrading, testing, recovering, or coordinating a cross-component rollout.
 
 ## Commands
 
@@ -30,6 +29,7 @@ Applies to the isolated optional Julia MCP application under `mcp/`.
 - Load tool metadata and schemas from the active co-shipped registry under
   `../contracts/mcp/`; do not create a second registry. Follow
   [the contract router](../contracts/AGENTS.md) for version changes.
+- Align sidecar package/server SemVer with root; MCP `contract_version` is independent.
 - Resolve capability-authenticated backend bridge paths from
   `../contracts/http/openapi.json` operation IDs. Accept only the exact canonical
   backend success/error shapes and retain structured diagnostics for MCP results and

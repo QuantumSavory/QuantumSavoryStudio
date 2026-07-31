@@ -27,6 +27,8 @@ prose in `.agents/context/`, not beside a second schema.
   Change schema, codec, fixtures, and admission tests together; add no pre-v2 migration.
 - `http/openapi.json` is the OpenAPI 3.1 route authority. Every operation has one stable
   ID, exposure, exact request/success schema, and canonical default error response.
+- Keep OpenAPI `info.version` aligned with the root product SemVer; project-schema,
+  MCP-contract, and OpenAPI format versions remain independent.
 - Derive backend paths, frontend operation maps, and sidecar bridge paths from OpenAPI;
   never hand-edit `../gui/src/generated/httpOperations.js`.
 - Make breaking changes explicitly and move all co-shipped consumers and evidence

@@ -1,13 +1,13 @@
 # Repository Workflows
 
 - **Context need:** Task playbook
-- **Open when:** Installing environments, selecting checks, running CI-equivalent
-  validation, or deciding whether an artifact is generated.
+- **Open when:** Installing environments, preparing release metadata, selecting checks,
+  running CI-equivalent validation, or deciding whether an artifact is generated.
 - **Do not open when:** Reasoning about intended product behavior or component
   architecture.
 - **Related specification IDs:** None — repository-only workflow
-- **Review when:** A manifest, runtime requirement, test runner, CI script, or generated
-  output boundary changes.
+- **Review when:** A release/version surface, manifest, runtime requirement, test runner,
+  CI script, or generated-output boundary changes.
 
 ## Prepare an environment
 
@@ -101,6 +101,23 @@ Edit `gui/public/` for static frontend source.
 `gui/src/generated/httpOperations.js` is the one tracked generated contract artifact:
 regenerate it with `npm --prefix gui run generate:http-operations`, review the diff, and
 commit it with its source change. Do not hand-edit it.
+
+## Keep release metadata aligned
+
+The root `Project.toml` owns the product SemVer. A release bump also updates:
+
+- OpenAPI `info.version`, whose parity is enforced by the HTTP contract check;
+- `gui/package.json` and the two root package versions in `gui/package-lock.json`, whose
+  parity is enforced by the frontend sync/build check;
+- `mcp/Project.toml` and the sidecar's advertised `mcp_server` version; and
+- the matching top-level `CHANGELOG.md` release notes.
+
+Project `schemaVersion`, MCP `contract_version`, OpenAPI format, lockfile format,
+JSON-RPC protocol, and dependency versions are independent values; never mass-replace
+them during an application bump. Before release, confirm every exact `[sources]`
+revision is reachable from its declared URL. Run every required Ubuntu/Chromium boundary
+and retain the V-model's previous released reference until the candidate is actually
+tagged and accepted.
 
 ## Finish
 

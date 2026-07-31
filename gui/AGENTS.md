@@ -33,7 +33,8 @@ static assets, and frontend tests. Source edits inherit the closest router under
   `src/generated/httpOperations.js`.
 - Preserve structured `ApiClientError` diagnostics; only `AbortError` is cancellation
   and only canonical `NOT_FOUND` is lifecycle absence.
-- Commit `package-lock.json` only with dependency changes.
+- Commit `package-lock.json` only with dependency or product-version changes; keep both
+  root package versions aligned with the root Julia project.
 - Keep build/test configuration explicit and use the repository CI entry points for
   tests that require the backend.
 - Never commit `node_modules/`, coverage, Playwright output, or Vite build output.

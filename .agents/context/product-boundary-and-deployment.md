@@ -28,6 +28,10 @@ The GUI user is the primary actor. The HTTP API supports the bundled frontend an
 an independently supported integration product. MCP augments a live local GUI session;
 the visible browser remains authoritative.
 
+The root Julia package, browser package, served OpenAPI information, and MCP sidecar
+share one product SemVer. Project-schema and MCP-contract version numbers describe their
+own wire formats and do not advance automatically with the product version.
+
 ## Deployment profiles
 
 | Profile | Intended use | Product boundary |
@@ -90,5 +94,8 @@ incomplete.
 
 - The public Podman profile and black-box check are implemented but have no passing
   remote CI record at this documentation update.
-- Public README examples can look like an external API promise even though the confirmed
-  product boundary treats that API as frontend support.
+- The exact QuantumSavory source revision selected for the 2.0 candidate must become
+  reachable from its declared upstream URL before clean release installation.
+- ModelContextProtocol 0.6.0 cannot preserve dependency-owned structured resource
+  failures in JSON-RPC `error.data`; release needs an upstream correction or an approved
+  scope/waiver decision.

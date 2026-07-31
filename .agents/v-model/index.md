@@ -4,6 +4,7 @@
 - **Conformance status:** incomplete
 - **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
+- **Candidate version:** `2.0.0` metadata prepared; not yet accepted, tagged, or released
 - **Profile target:** Approved release-2.0 behavior across the reviewed operational/HTTP,
   strict project-schema, candidate-first replacement, catalog-backed authoring, shared
   Play, MCP v2 readback/result-resource, exact simulation-request, and canonical
@@ -12,15 +13,19 @@
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
 
-This map claims no external framework compliance; approved maintainer decisions define
-intent. Canonical OpenAPI, errors, public source denial, support boundary, and strict
-project admission conform. Component evidence passes for shared Play and MCP
-metadata/resources, and is implemented for catalogs, readback, platform information,
-diagnostic events, and candidate-first browser behavior. Strict-project/candidate
-integration artifacts await a current frontend run after the platform correction.
-Exact projection passes; corrected backend admission/OpenAPI and diagnostic-event
-artifacts await execution. Cleanup, dependency-owned structured resource errors, and
-consolidated MCP matrices remain incomplete.
+This profile claims no external-framework compliance. OpenAPI/errors, public denial,
+support, and strict admission conform. Shared Play/MCP metadata evidence passes;
+catalog, readback, platform, diagnostic, and candidate artifacts are implemented pending
+their recorded runs. Exact projection passes. Cleanup, dependency-owned structured
+resource errors, and consolidated MCP matrices remain incomplete.
+
+## Release-candidate status
+
+Release metadata and notes target `2.0.0`; no verification status changed. Required
+supported-environment execution and maintainer acceptance remain pending. The exact
+QuantumSavory pin was not advertised upstream, and structured MCP resource errors remain
+dependency-owned; publish or re-pin the former and correct or approve the latter before
+release. Keep `1.10.1` as the reference until evidence, acceptance, tag, and publication.
 
 ## Left-side specification
 
