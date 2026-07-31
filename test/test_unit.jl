@@ -3786,6 +3786,12 @@
       WebQuantumSavory._convert_parameter_value("Vector{Float64}", [Inf]),
     ) === false
     @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Int64}", Any[1, true]),
+    ) === false
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Float64}", Any[0.5, false]),
+    ) === false
+    @test first(
       WebQuantumSavory._convert_parameter_value("Vector{Float64}", "[1.0]"),
     ) === false
 

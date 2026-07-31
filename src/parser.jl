@@ -28,6 +28,7 @@ function _convert_parameter_value(ptype::AbstractString, value)
     element_type = only(vector_match.captures)
     converted = element_type == "Int64" ? Int64[] : Float64[]
     for element in value
+      element isa Bool && return false => nothing
       ok, converted_element = _convert_parameter_value(element_type, element)
       ok || return false => nothing
       converted_element isa AbstractFloat && !isfinite(converted_element) &&
