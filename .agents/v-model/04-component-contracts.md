@@ -2,64 +2,64 @@
 
 ## CMP-002 — Candidate-based design reconciliation
 
-- **Normative statement:** A design command shall run serially on an isolated candidate, validate before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and preserve retained live object identities during atomic reconciliation.
+- **Normative statement:** A design command shall serialize on an isolated candidate, validate before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and atomically preserve retained live identities.
 - **Parents:** SUB-003
-- **Acceptance criterion:** Invalid single and mixed transactions leave source/selection/identities unchanged; valid create/update/delete transactions allocate distinct IDs, resolve aliases, and update every retained reference exactly once.
+- **Acceptance criterion:** Invalid single/mixed commands preserve source, selection, and identities; valid create/update/delete commands allocate distinct IDs, resolve aliases, and update each retained reference exactly once.
 - **Verification:** UNITV-002 (test)
-- **Origin / risk:** Design-command implementation and discriminating tests; high graph-integrity risk
+- **Origin / risk:** High graph-integrity risk
 - **Context:** [Authoring and inputs](../context/frontend/authoring-and-inputs.md)
 
 ## CMP-003 — Ordered topology mapping
 
-- **Normative statement:** Canonical node-array position shall map external node IDs and edge source/target roles to one-based register indices consistently across runtime construction and script generation, while physical graph pairs remain unique and unordered.
+- **Normative statement:** Canonical node-array order shall map external IDs and source/target roles to one-based register indices identically in runtime and export; physical pairs shall remain unique and unordered.
 - **Parents:** SUB-004
-- **Acceptance criterion:** Asymmetric reordered-node fixtures produce expected register indices and source/target bindings in runtime/export; duplicate physical pairs fail; virtual edges do not enter the graph.
+- **Acceptance criterion:** Reordered asymmetric fixtures produce expected register indices and endpoint roles in runtime/export; duplicate physical pairs fail; virtual edges do not enter the graph.
 - **Verification:** UNITV-003 (test), UNITV-010 (test)
-- **Origin / risk:** Parser/export mapping and tests; high scientific-correctness risk
+- **Origin / risk:** High scientific-correctness risk
 - **Context:** [Map geometry and layout](../context/frontend/map-geometry-and-layout.md)
 
 ## CMP-004 — Cooperative run-task invariants
 
-- **Normative statement:** A state shall own at most one cooperative run task, set running before exposure, yield between simulation steps, retain its cumulative target across pause, and update pause/task/error/time fields coherently on every exit, including approximate timeout.
+- **Normative statement:** A state shall own at most one cooperative task, expose running first, yield between steps, retain its cumulative target across pause, and coherently update pause/task/error/time fields on every exit, including approximate timeout.
 - **Parents:** SUB-006
-- **Acceptance criterion:** Duplicate run is rejected; progress precedes acknowledged pause; same-target resume retains the target; a later target extends it; timeout, task error, and destroy leave documented task/serialized fields.
+- **Acceptance criterion:** Duplicate run fails; progress precedes acknowledged pause; same-target resume retains and later-target resume extends; timeout, task error, and destroy leave documented task/serialized fields.
 - **Verification:** UNITV-004 (test), UNITV-011 (test)
-- **Origin / risk:** Runtime lifecycle evidence and confirmed approximate timing; high state/race risk
+- **Origin / risk:** High state/race risk
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## CMP-005 — Destructive cleanup and aggregated failure
 
-- **Normative statement:** Cleanup shall attempt every assigned-state release independently, aggregate failures, discard all heavy references and the registry record, retain nothing for retry, and return structured failure with a severe-degradation diagnostic when any release fails.
+- **Normative statement:** Cleanup shall independently attempt every assigned-state release, aggregate failures, discard all heavy references and the registry record without retry state, and return structured severe degradation on any failure.
 - **Parents:** SUB-006, SUB-007
-- **Acceptance criterion:** Success clears all heavy references and live access. With one or more injected failures, every release is attempted, no complete-success result is returned, the record is absent, later live access fails, and the GUI receives an error-severity degradation record.
+- **Acceptance criterion:** Success clears all heavy references/live access. Injected failures still attempt every release, return no complete success, remove the record, deny live access, and deliver GUI error-severity degradation.
 - **Verification:** UNITV-005 (test), UNITV-012 (test)
 - **Context:** [Simulation runtime](../context/backend/simulation-runtime.md)
 
 ## CMP-006 — Restricted-source admission and evaluation invariant
 
-- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the local-loopback gate.
+- **Normative statement:** Every native evaluation path shall apply the identifier allowlist and forbidden-head guard before lowering/evaluation, add only server-owned placement bindings, evaluate in a fresh module, and require local loopback.
 - **Parents:** SUB-010
-- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the local-loopback gate and guard; permitted forms and placement names work on loopback; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; non-loopback and public denial plus numeric type/range checks remain enforced.
+- **Acceptance criterion:** Inventory/adversarial tests make every path reach the gate/guard; permitted loopback placement forms work; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; non-loopback/public denial and numeric type/range checks hold.
 - **Verification:** UNITV-006 (test), UNITV-013 (inspection)
-- **Origin / risk:** Restricted allowlist/evaluator design and approved public-deny policy; critical host-integrity risk
+- **Origin / risk:** Critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
 
 ## CMP-007 — Deterministic script binding and imports
 
-- **Normative statement:** Generated source shall collect resolved exporter-owned bindings before rendering, sort/group explicit imports, assign collision aliases independently of discovery order, and instantiate context-dependent values separately at each concrete assignment.
+- **Normative statement:** Generated source shall collect resolved exporter bindings before rendering, sort/group explicit imports, assign discovery-order-independent collision aliases, and instantiate context-dependent values per assignment.
 - **Parents:** SUB-008
-- **Acceptance criterion:** Reordered discovery/collision and context-dependent fixtures produce identical valid imports, distinct aliases, correct per-assignment values, and executable representative supported bindings.
+- **Acceptance criterion:** Reordered discovery/collision/context fixtures produce identical valid imports, distinct aliases, correct per-assignment values, and executable representative supported bindings.
 - **Verification:** UNITV-007 (test)
-- **Origin / risk:** Import registry and export tests; medium reproducibility risk
+- **Origin / risk:** Medium reproducibility risk
 - **Context:** [Script export](../context/backend/script-export.md)
 
 ## CMP-009 — Single-session transport and safe operational logging
 
-- **Normative statement:** The sidecar transport shall accept one initialized MCP session until restart, reject a second session, release waiters on close, and prevent client log-level requests from exposing raw transport transcripts or replacing the safe process logger.
+- **Normative statement:** Sidecar transport shall allow one initialized MCP session until restart, reject a second, release close waiters, and prevent client log-level requests from exposing raw transcripts or replacing the safe process logger.
 - **Parents:** SUB-011, SUB-013
-- **Acceptance criterion:** Close-before-init, initialized session, second-session, restart/new-session, debug-level, and transcript-canary fixtures produce the documented lifecycle and no raw secret/canary output.
+- **Acceptance criterion:** Close-before-init, init, second-session, restart/new-session, debug-level, and transcript-canary fixtures preserve lifecycle without raw secret/canary output.
 - **Verification:** UNITV-009 (test)
-- **Origin / risk:** Pinned dependency adapter and sidecar tests; high local-secret risk
+- **Origin / risk:** High local-secret risk
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
 
 ## CMP-011 — Shared GUI/MCP Play readiness
