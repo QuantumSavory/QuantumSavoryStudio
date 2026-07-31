@@ -14,10 +14,12 @@
     Base.@kwdef struct ContextualIntegerBackground
       count::Int64 = 1
       label::String = "default"
+      values::Vector{Int64} = [7]
     end
     QuantumSavory.constructor_metadata(::Type{ContextualIntegerBackground}) = [
       (field=:count, type=Int64, doc="A contextual integer constructor field."),
       (field=:label, type=String, doc="A nonnumeric constructor field."),
+      (field=:values, type=Vector{Int64}, doc="An unsupported complex wire field."),
     ]
   end
   WebQuantumSavory._ensure_noise_types_cache!()
@@ -5506,6 +5508,28 @@
     ))
     @test unknown_background isa WebQuantumSavory.APIError
     @test occursin("Unknown background noise type", unknown_background.message)
+
+    unsupported_complex_error = capture_error(() ->
+      WebQuantumSavory._instantiate_noise(Dict(
+        "type" => "ContextualIntegerBackground",
+        "parameters" => [Dict(
+          "name" => "values",
+          "value" => Any[1, 2],
+        )],
+      )))
+    @test unsupported_complex_error isa WebQuantumSavory.APIError
+    if unsupported_complex_error isa WebQuantumSavory.APIError
+      @test unsupported_complex_error.status_code == 400
+      @test unsupported_complex_error.error_code == "VALIDATION_ERROR"
+      @test unsupported_complex_error.message ==
+        "Unsupported value for background noise parameter 'values'"
+      @test unsupported_complex_error.details == Dict{String,Any}(
+        "parameter_name" => "values",
+        "constructor_type" => string(ContextualIntegerBackground),
+        "parameter_type" => "Vector{Int64}",
+        "received_type" => "Vector{Any}",
+      )
+    end
 
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       kwargs = Dict{Symbol,Any}()

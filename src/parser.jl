@@ -1860,7 +1860,7 @@ function _constructor_parameter_kwargs(
       get(parameter, "type", nothing),
       value,
     )
-    _handle_typed_parameter!(
+    converted = _handle_typed_parameter!(
       kwargs,
       name,
       handling_type,
@@ -1870,6 +1870,15 @@ function _constructor_parameter_kwargs(
       constructor_metadata=metadata,
       parameter_context,
     )
+    converted || throw(validation_error(
+      "Unsupported value for $parameter_context '$original_name'",
+      Dict{String,Any}(
+        "parameter_name" => original_name,
+        "constructor_type" => string(constructor_type),
+        "parameter_type" => string(declared_type),
+        "received_type" => string(typeof(value)),
+      ),
+    ))
   end
 
   return kwargs, variable_assignments
