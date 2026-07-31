@@ -21,10 +21,12 @@ untracked; the npm lockfile is committed.
 | Frontend | `npm --prefix gui ci --include=dev` | Use `npm install` only for an intentional lockfile update |
 | MCP sidecar | `julia --startup-file=no --project=mcp -e 'using Pkg; Pkg.instantiate()'` | Needed only for MCP work |
 
-`./bin/server` installs the locked frontend dependencies, builds the GUI, and starts
-the integrated application. The release-support matrix is Ubuntu 24.04 x86_64, Julia
-1.12, Node 24, and the Playwright-locked Chromium build. Secondary host and browser
-checks are portability signals, not expanded support claims.
+`WQS_DEPLOYMENT_PROFILE=local ./bin/server` installs the locked frontend dependencies,
+builds the GUI, and starts the integrated application. The release-support matrix is
+Ubuntu 24.04 x86_64, Julia 1.12, Node 24, and the Playwright-locked Chromium build.
+GitHub Actions also runs macOS/Windows startup and Firefox/WebKit browser jobs as
+advisory nonblocking portability probes; those results do not expand the support
+declaration.
 
 ## Select the smallest check
 
@@ -109,7 +111,7 @@ current passing execution evidence without a durable run record.
 
 ## Support evidence gap
 
-The approved support matrix is Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, and the
-release-lock-selected Chromium build. Current jobs have not yet pinned the host or
-exercised the integrated production bundle as the system under test. Other hosts and
-browser engines are outside the approved release-2.0 support claim.
+Required jobs pin Ubuntu 24.04, Julia 1.12, Node 24, and the Chromium build selected by
+the lock, including an integrated production-bundle browser job. Advisory jobs probe
+macOS, Windows, Firefox, and WebKit without blocking a release; those environments are
+portability signals rather than supported release targets.

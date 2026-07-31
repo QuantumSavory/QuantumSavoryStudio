@@ -55,6 +55,12 @@ route loading omits the development state-manipulation endpoint.
 - Windows/macOS and Firefox/WebKit checks are secondary portability signals.
 - Mobile browsers are unsupported.
 
+Required release evidence currently exercises Ubuntu 24.04 and Chromium. Advisory
+nonblocking jobs probe macOS/Windows startup and Firefox/WebKit browser behavior. The
+advisory results do not expand the approved support boundary. Browser builds are
+selected by the committed Playwright lock; no independent minimum version policy is
+declared.
+
 ## Persistence and compatibility
 
 Named projects are stored only in browser `localStorage`; live simulations are
