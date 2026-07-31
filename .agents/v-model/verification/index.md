@@ -1,12 +1,15 @@
 # Verification and Acceptance
 
-The strict project-schema and candidate-first replacement slices have passing component
-and integration evidence plus implemented but incomplete browser-system evidence. MCP
-metadata/result resources have passing component evidence; MCP recovery and transport
-have implemented but incomplete integration/system artifacts. Exact simulation-request
-projection remains passing, while backend admission and contract-parity artifacts await
-execution after the exact-identifier correction. Other release-2.0 actions retain their
-recorded status; no acceptance demonstration is passing.
+The strict project-schema and candidate-first replacement slices have implemented
+component and integration evidence pending current frontend execution, plus incomplete
+browser-system evidence. The canonical platform-information boundary has implemented
+backend, OpenAPI, frontend admission, display, and durable-project artifacts pending
+execution. MCP metadata/result resources have passing component evidence; MCP recovery
+and transport have implemented but incomplete integration/system artifacts. Exact
+simulation-request projection remains passing, while backend admission and
+contract-parity artifacts await execution after the exact-identifier correction. Other
+release-2.0 actions retain their recorded status; no acceptance demonstration is
+passing.
 
 ## Action routes
 
@@ -18,7 +21,8 @@ recorded status; no acceptance demonstration is passing.
   [release-2.0 follow-ups](integration-followups.md)
 - Component evidence: [current partial suites](component.md);
   [release-2.0 follow-ups](component-followups.md);
-  [exact simulation payload](component-exact-payload.md)
+  [exact simulation payload](component-exact-payload.md);
+  [platform information](component-platform-information.md)
 
 ## Status policy
 

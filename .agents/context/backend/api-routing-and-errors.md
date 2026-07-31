@@ -6,7 +6,7 @@
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
 - **Related specification IDs:** SYS-006, SYS-008, SUB-004, SUB-007, SUB-009,
-  CMP-013, CMP-017
+  CMP-013, CMP-017, CMP-018
 - **Review when:** A public/internal route, error code, status code, or OpenAPI schema
   changes.
 
@@ -88,6 +88,13 @@ success schema. Representative shapes are:
 | Run / pause | Object containing `state` |
 | Get state | `{ "success": true, "state": ... }` |
 | Destroy | `{ "success": true, "message": ... }` |
+
+`/platform_info` returns one closed snake_case DTO. Its `versions` object requires
+`julia`, `genie`, `quantumsavory`, and `app`; its `quantumsavory` object requires the
+version, tracked revision/source, tree hash, and commit fields; and `capabilities`
+requires `unsafe_code_evaluation` plus the closed local MCP capability object. Package
+and source strings may be `null` when introspection is unavailable. No camel-cased
+response field is supported.
 
 The top-level serialized `status` is a coarse created/prepared/complete value, not the
 complete execution phase. Running, pause acknowledgement, progress, and errors are in

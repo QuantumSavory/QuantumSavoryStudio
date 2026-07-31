@@ -5,7 +5,7 @@
   polling, logs, panic handling, or simulation cleanup.
 - **Do not open when:** Changing backend simulation algorithms or project persistence.
 - **Related specification IDs:** SYS-005, SYS-006, SYS-008, SYS-012, SUB-006,
-  SUB-007, SUB-013, CMP-011, CMP-013
+  SUB-007, SUB-013, CMP-011, CMP-013, CMP-018
 - **Review when:** A backend state field, frontend phase, action capability, polling
   cadence, or lifecycle API call changes.
 
@@ -39,6 +39,11 @@ identifiers are URL encoded. Literal API paths are not a second caller contract.
 Simulation-status callers pass the project name as a string. Tag callers pass an exact
 `kind` discriminant and nonempty string IDs; the client does not infer a default kind,
 read a wire-name alias, or coerce identifier types.
+
+`ApiConnector` caches the exact snake_case `/platform_info` DTO without adding display
+or durable-project aliases and returns `null` before a successful load. Capability
+checks read `capabilities.unsafe_code_evaluation` directly. Display normalization and
+durable project conversion are separate consumers of that raw boundary.
 
 The Runner's “Run for” value is an additional duration. The controller adds it to
 current simulated time and submits the backend's absolute cumulative target. Resume
@@ -127,6 +132,7 @@ through the backend into the visible Tools Log.
 - **Readiness validation:** [`gui/src/utils/projectHelpers.js`](../../../gui/src/utils/projectHelpers.js).
 - **Browser revision relay:** [`gui/src/features/mcp/McpEditorBridge.js`](../../../gui/src/features/mcp/McpEditorBridge.js).
 - **API client:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
+- **Platform-information admission:** [`gui/src/utils/platformInfo.js`](../../../gui/src/utils/platformInfo.js).
 - **HTTP reader:** [`gui/src/utils/httpClient.js`](../../../gui/src/utils/httpClient.js).
 - **Generated operations:** [`gui/src/generated/httpOperations.js`](../../../gui/src/generated/httpOperations.js).
 - **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js),

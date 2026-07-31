@@ -6,26 +6,21 @@
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Approved release-2.0 behavior across the reviewed operational/HTTP,
   strict project-schema, candidate-first replacement, catalog-backed authoring, shared
-  Play, MCP v2 readback/result-resource, and exact simulation-request slices
+  Play, MCP v2 readback/result-resource, exact simulation-request, and canonical
+  platform-information slices
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
 
-This repository-specific map claims no external framework compliance. Approved
-maintainer decisions define intent; code, tests, public prose, and history supply
-context without overriding it. Canonical OpenAPI, exact non-2xx errors, public-profile
-source denial, the release support boundary, and strict project admission now conform.
-Strict project admission and candidate-first replacement have passing component and
-integration evidence. Candidate-first browser-system evidence is implemented but does
-not cover the full named matrix. Shared Play readiness has passing component evidence
-not cover the full named matrix. Catalog-backed constructor admission has implemented
-component evidence; shared Play readiness has passing component evidence and implemented
-browser-system evidence. MCP metadata/result resources have passing component evidence;
-readback recovery has implemented component/integration artifacts. Exact frontend
-projection remains passing; backend admission and OpenAPI parity have durable artifacts
-pending execution after the exact-identifier correction. The dependency-owned structured
-resource-error boundary and consolidated MCP integration/system fault/resource matrices
-remain incomplete, as does cleanup.
+This map claims no external framework compliance; approved maintainer decisions define
+intent. Canonical OpenAPI, errors, public source denial, support boundary, and strict
+project admission conform. Component evidence passes for shared Play and MCP
+metadata/resources, and is implemented for catalogs, readback, platform information,
+and candidate-first browser behavior. Strict-project/candidate integration artifacts
+await a current frontend run after the platform correction. Exact projection passes;
+corrected backend admission/OpenAPI artifacts await execution. Cleanup,
+dependency-owned structured resource errors, and consolidated MCP matrices remain
+incomplete.
 
 ## Left-side specification
 
@@ -47,31 +42,26 @@ remain incomplete, as does cleanup.
   - Component verification:
     [current partial suites](verification/component.md);
     [release-2.0 follow-ups](verification/component-followups.md);
-    [exact simulation payload](verification/component-exact-payload.md)
+    [exact simulation payload](verification/component-exact-payload.md);
+    [platform information](verification/component-platform-information.md)
 
-The strict-schema mini-V executed the frontend unit/build path and focused serial
-Chromium flows. UNITV-019 and INTV-015 are `passing`; SYSV-018 is `implemented` with an
-exhaustive browser-matrix gap. The candidate-first mini-V executed the full frontend
-unit suite plus focused Chromium flows; UNITV-020 and INTV-016 are `passing`, while
-SYSV-019 is `implemented` with the same class-matrix gap. Acceptance remains `planned`.
-Actions outside these slices retain their recorded status.
+Strict-schema and candidate-first actions UNITV-019/020 and INTV-015/016 are
+`implemented` pending a current frontend run; SYSV-018/019 retain exhaustive browser
+gaps. Acceptance remains `planned`; other actions retain their recorded status.
 
-The MCP mini-V executed frontend contract/bridge checks, focused hub/resource checks,
-and isolated sidecar checks. UNITV-016 and UNITV-017 are `passing`; UNITV-021,
-INTV-012, INTV-013, INTV-017, SYSV-012, and SYSV-013 have durable but incomplete
-artifacts. SYSV-020 and acceptance remain `planned`.
+The MCP mini-V has `passing` UNITV-016/017 evidence. UNITV-021, INTV-012/013/017,
+and SYSV-012/013 have incomplete artifacts; SYSV-020 and acceptance remain `planned`.
 
-The exact simulation-request mini-V previously executed frontend codec/unit/build checks
-and backend unit, OpenAPI-contract, and live HTTP integration checks against the pinned
-QuantumSavory revision. INTV-002 remains `passing`; UNITV-022 and INTV-004 are
-`implemented` until the backend suites execute the exact-identifier correction and its
-regression fixture. Broader script-help and visible browser-error matrices remain
-tracked by INTV-008 and INTV-009.
+The exact-request mini-V retains `passing` INTV-002 evidence. UNITV-022 and INTV-004 are
+`implemented` until backend suites execute the identifier correction; INTV-008/009
+track broader script-help and visible-error matrices.
 
-The catalog-admission mini-V extends UNITV-002 with slot, background, and generated-
-protocol component fixtures. Real-catalog missing/malformed/unknown, placement, and
-descriptor-contradiction integration/system matrices remain planned under INTV-005 and
-SYSV-004.
+The platform-information mini-V separates the closed backend/OpenAPI DTO, raw cache,
+display view, and durable conversion. UNITV-023 and related project actions are
+`implemented` pending Julia/frontend/browser execution.
+
+The catalog mini-V extends UNITV-002; real-catalog failure and placement matrices remain
+planned under INTV-005 and SYSV-004.
 
 ## Source basis
 

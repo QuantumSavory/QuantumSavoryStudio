@@ -42,9 +42,9 @@
   reaches normalization/hydration; every application-owned object rejects undeclared
   fields unless the schema explicitly names an extension point; every rejection is
   structured, and no source or browser-storage mutation occurs during admission.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this integration boundary.
+- **Nonconformance:** No current frontend execution record exists after the canonical platform-information boundary correction.
 
 ## INTV-016 — Verify candidate-first active-project transitions
 
@@ -62,9 +62,9 @@
   navigation pointer; acquired work is not rolled back and releases waiters; target
   namespace ownership is exact; and the latest error-free candidate commits teardown,
   persistence, and installation once.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this integration boundary.
+- **Nonconformance:** No current frontend or browser execution record exists after the canonical platform-information boundary correction.
 
 ## INTV-017 — Verify MCP readback recovery boundary
 

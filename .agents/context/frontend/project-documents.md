@@ -6,7 +6,7 @@
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
 - **Related specification IDs:** STK-010, STK-011, SYS-002, SYS-017, SYS-018, SUB-002,
-  SUB-004, SUB-008, SUB-015, SUB-016, CMP-014, CMP-015, CMP-017
+  SUB-004, SUB-008, SUB-015, SUB-016, CMP-014, CMP-015, CMP-017, CMP-018
 - **Review when:** A durable field, schema version, admission rule, normalization,
   projection, storage key, or project-transition phase changes.
 
@@ -16,9 +16,10 @@ Normative release-2.0 behavior is defined by
 [CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
 and
 [CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
-The strict-schema and candidate-first transaction chains through CMP-015 have passing
-component/integration evidence; the exhaustive candidate-first browser-system matrix
-remains incomplete.
+The strict-schema and candidate-first transaction chains through CMP-015 are
+implemented, but need a current frontend execution record after the platform-information
+boundary correction; the exhaustive candidate-first browser-system matrix remains
+incomplete.
 
 ## Canonical shapes
 
@@ -50,6 +51,14 @@ timing values from the export panel.
 co-shipped JSON Schema closes every application-owned object boundary with
 `additionalProperties: false`; no nested map is extensible unless the schema explicitly
 names that extension point.
+
+Platform information has two deliberately different wire shapes. The private backend
+DTO is closed and snake-cased, including `versions.quantumsavory`, detailed top-level
+`quantumsavory` metadata, and capabilities. Durable schema-v2 documents retain only the
+closed version record and intentionally spell `versions.quantumSavory` in camel case.
+`projectPlatformInfoFromBackend` is the sole conversion owner. The project encoder
+accepts the exact durable record only; it does not fill missing keys, consume the raw
+backend object, or recognize spelling aliases.
 
 ## Current strict-schema behavior
 
@@ -90,6 +99,8 @@ candidate before collaboration teardown, simulator cleanup, project-document wri
 recent-pointer changes, polling/result teardown, graph release, or installation.
 Persisted candidates are encoded and decoded again during preparation so the exact
 document and live graph are both validated before ownership is rechecked.
+Current backend platform metadata is converted to the durable project shape before
+software-version comparison or project save.
 
 After the final ownership check, one commit performs its applicable teardown,
 persistence, recent-pointer update, MapLibre graph-release tick, and installation.

@@ -1,6 +1,6 @@
 # Component Verification Follow-ups
 
-These actions cover discriminating gaps and approved release-2.0 behavior.
+These actions cover release-2.0 verification gaps.
 
 ## UNITV-010 — Verify reordered-node runtime/export mapping
 
@@ -89,9 +89,9 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** Validate and encode/decode schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field fixtures at every application-owned object boundary, plus hydration, cloning, and source-nonmutation fixtures.
 - **Environment / configuration:** Node Vitest/jsdom with the co-shipped `contracts/project/v2.schema.json`
 - **Pass criterion:** Encoding emits schema-valid version 2; every application-owned object is closed with no implicit extension point; only schema-valid input reaches normalization/hydration, every other class returns stable expected/actual/path diagnostics before side effects, and admitted output is independent.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this component boundary.
+- **Nonconformance:** Current frontend execution is pending after the platform-information correction.
 
 ## UNITV-020 — Verify candidate-first project-session transaction
 
@@ -100,9 +100,9 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** From a populated session, run every replacement class through preparation and commit; delay version confirmation, collaboration release, and target cleanup; inject schema, platform, name, and conflict rejection, cancellation, supersession, disposal, and a post-install exception; and observe stored documents, the recent-project navigation pointer, exact cleanup target, queue, and active owners.
 - **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
 - **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale/disposed preparation persists no candidate; schema admission precedes platform I/O; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer; disposal blocks later mutations while an acquired owner completes; acquired cancellation/exception causes no rollback and releases queued work; and one latest error-free candidate performs applicable target cleanup, teardown, persistence, and installation exactly once.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this component boundary.
+- **Nonconformance:** Current frontend execution is pending after the platform-information correction.
 
 ## UNITV-021 — Verify revision-guarded readback recovery
 
