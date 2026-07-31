@@ -1191,6 +1191,29 @@ describe('backend payload codecs', () => {
     expect(payload.net.edges[0].data.transmissivity).toBeGreaterThanOrEqual(0)
     expect(payload.net.edges[0].data.transmissivity).toBeLessThanOrEqual(1)
 
+    const sourceProjectionCanaries = structuredClone({
+      variables: project.variables,
+      nodePosition: project.net.nodes[0].position,
+      backgroundNoise: slot.backgroundNoise,
+      nodeProtocolParameters: project.net.nodes[0].data.protocols[0].parameters,
+      edgeProtocolParameters: project.net.edges[0].data.protocols[0].parameters,
+      floatingProtocols: project.net.protocols,
+    })
+    payload.variables[0].value.parameters.fidelity = 0.1
+    payload.net.nodes[0].position[0] = 999
+    payload.net.nodes[0].data.slots[0].backgroundNoise.parameters[0].value = 999
+    payload.net.nodes[0].data.protocols[0].parameters[0].value = 999
+    payload.net.edges[0].data.protocols[0].parameters[0].value.id = 'mutated'
+    payload.net.protocols.push({ id: 'result-only' })
+    expect({
+      variables: project.variables,
+      nodePosition: project.net.nodes[0].position,
+      backgroundNoise: slot.backgroundNoise,
+      nodeProtocolParameters: project.net.nodes[0].data.protocols[0].parameters,
+      edgeProtocolParameters: project.net.edges[0].data.protocols[0].parameters,
+      floatingProtocols: project.net.protocols,
+    }).toEqual(sourceProjectionCanaries)
+
     project.net.edges[0].data.physicalOverrides = {
       distanceMeters: 1250,
       delaySeconds: 0.25,

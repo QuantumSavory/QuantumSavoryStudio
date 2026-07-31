@@ -6,13 +6,13 @@ browser-system evidence. The canonical platform-information boundary has impleme
 backend, OpenAPI, frontend admission, display, and durable-project artifacts pending
 execution. The canonical diagnostic-event boundary has implemented backend, OpenAPI,
 frontend admission/conversion, and HTTP/GUI handoff artifacts pending execution. MCP
-metadata/result resources have passing component evidence; MCP recovery and transport
-have implemented but incomplete integration/system artifacts. Exact simulation-request
-projection remains passing, while backend admission and contract-parity artifacts await
-execution after the exact-identifier correction. Supported-environment verification and
-acceptance are blocked by an exact QuantumSavory revision that cannot be fetched from
-its declared upstream. Other release-2.0 actions retain their recorded status; no
-acceptance demonstration is passing.
+metadata/result resources and exact project projection have implemented component and
+integration artifacts pending current durable runs; MCP recovery and transport have
+implemented but incomplete integration/system artifacts. Backend exact-request
+admission and contract-parity artifacts await execution after the identifier correction.
+Supported-environment verification and acceptance are blocked by an exact QuantumSavory
+revision that cannot be fetched from its declared upstream. Other release-2.0 actions
+retain their recorded status; no acceptance demonstration is passing.
 
 ## Action routes
 

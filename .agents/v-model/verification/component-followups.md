@@ -55,9 +55,9 @@ These actions cover release-2.0 verification gaps.
 - **Procedure:** Call GUI Play and MCP Run through one adapter using incomplete, busy/disabled, valid unprepared, and prepared designs.
 - **Environment / configuration:** Vitest/jsdom simulation controller, capability model, and MCP bridge
 - **Pass criterion:** Both entries return equal actionable issues; busy/disabled prevents dispatch; valid input prepares/starts once; explicit/implicit prepare record the same browser revision.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectHelpers.test.js`](../../../gui/tests/unit/projectHelpers.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this component boundary.
+- **Nonconformance:** Current durable frontend execution is absent.
 
 ## UNITV-017 — Verify MCP annotations and representations
 
@@ -66,10 +66,10 @@ These actions cover release-2.0 verification gaps.
 - **Procedure:** Validate registry annotations/descriptors; reject invalid metadata and noncanonical links; render and round-trip slot/protocol HTML/PNG with opaque IDs; exercise both trust boundaries.
 - **Environment / configuration:** Contract loader plus backend resource adapter and sidecar resource provider
 - **Pass criterion:** Intrinsic idempotence only; exact nonempty correct-MIME links; IDs round-trip; failures remain structured validation/not-found.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`contracts/mcp/v2/contract.json`](../../../contracts/mcp/v2/contract.json), [`src/mcp_contract_registry.jl`](../../../src/mcp_contract_registry.jl), [`gui/tests/unit/mcpContract.test.js`](../../../gui/tests/unit/mcpContract.test.js), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl), [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh)
-- **Nonconformance:** None at this component boundary. The dependency-owned JSON-RPC
-  resource-provider error envelope remains tracked at INTV-013.
+- **Nonconformance:** Current durable cross-layer execution is absent; the
+  dependency-owned JSON-RPC resource-provider error envelope remains at INTV-013.
 
 ## UNITV-018 — Verify frontend error-envelope preservation
 

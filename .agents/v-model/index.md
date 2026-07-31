@@ -13,11 +13,12 @@
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
 
-This profile claims no external-framework compliance. OpenAPI/errors, public denial,
-support, and strict admission conform. Shared Play/MCP metadata evidence passes;
-catalog, readback, platform, diagnostic, and candidate artifacts are implemented pending
-their recorded runs. Exact projection passes. Cleanup, dependency-owned structured
-resource errors, and consolidated MCP matrices remain incomplete.
+This profile claims no external-framework compliance. OpenAPI/error and public-denial
+evidence is current; support and strict-admission verification remain incomplete. Shared
+Play/MCP metadata, exact projection, catalog, readback, platform, diagnostic, and
+candidate artifacts are implemented pending their recorded runs. Cleanup,
+dependency-owned structured resource errors, and consolidated MCP matrices remain
+incomplete.
 
 ## Release-candidate status
 
@@ -58,12 +59,14 @@ Strict-schema and candidate-first actions UNITV-019/020 and INTV-015/016 are
 gaps. Their acceptance actions remain `planned`; other actions retain their recorded
 status.
 
-The MCP mini-V has `passing` UNITV-016/017 evidence. UNITV-021, INTV-012/013/017,
-and SYSV-012/013 have incomplete artifacts; SYSV-020 and acceptance remain `planned`.
+The MCP mini-V has `implemented` UNITV-016/017 artifacts pending current durable runs.
+UNITV-021, INTV-012/013/017, and SYSV-012/013 have incomplete artifacts; SYSV-020 and
+acceptance remain `planned`.
 
-The exact-request mini-V retains `passing` INTV-002 evidence. UNITV-022 and INTV-004 are
-`implemented` until backend suites execute the identifier correction; INTV-008/009
-track broader script-help and visible-error matrices.
+The project-projection boundary INTV-002 is `implemented` pending a current frontend
+run. The exact-request actions UNITV-022 and INTV-004 are `implemented` until backend
+suites execute the identifier correction; INTV-008/009 track broader script-help and
+visible-error matrices.
 
 The platform-information mini-V separates the closed backend/OpenAPI DTO, raw cache,
 display view, and durable conversion. UNITV-023 and related project actions are

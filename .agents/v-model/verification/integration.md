@@ -18,9 +18,10 @@
 - **Procedure:** Round-trip an asymmetric project, derive the exact parse and export projections with additive field canaries, and mutate the outputs without source mutation.
 - **Environment / configuration:** Vitest/jsdom with real codec and projection helpers
 - **Pass criterion:** Fields round-trip, hydration is independent, parse carries explicit representations but no timing, export carries only positive timing plus the parse semantics, undeclared fields do not cross, and inputs remain unchanged under output mutation.
-- **Status:** passing
+- **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** None at this integration boundary.
+- **Nonconformance:** The durable artifact now discriminates mutation of both endpoint
+  projections, but no current frontend execution record demonstrates the full criterion.
 
 ## INTV-003 — Verify shared atomic authoring
 
