@@ -1288,7 +1288,10 @@ function executePendingAction(action) {
   }
 }
 
+let appIsMounted = false
+
 onMounted( async () => {
+  appIsMounted = true
   // Capture the startup restore target before any await. A user can create or
   // open a project while platform metadata is loading; that newer session must
   // not be replaced by a late read of `recentProjectName`.
@@ -1302,6 +1305,7 @@ onMounted( async () => {
     api.fetchPlatformInfo(),
     api.fetchSimulationLogGroups()
   ])
+  if (!appIsMounted) return
   applicationMetadataPending.value = false
   
   // Restore only if no user-initiated project transition won the startup race.
@@ -1312,6 +1316,7 @@ onMounted( async () => {
   ) {
     await restoreRecentProject(startupRecentProjectName)
   }
+  if (!appIsMounted) return
   
   startAlivePolling();
   
@@ -1337,6 +1342,7 @@ function handlePageExit() {
 
 // Clean up beforeunload handler on unmount
 onUnmounted(() => {
+  appIsMounted = false
   resolveConfirmation(false)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('pagehide', handlePageExit)

@@ -10,6 +10,7 @@ import { useProjectSession } from '../../src/composables/useProjectSession'
 function createHarness({
   projects = {},
   confirmVersionMismatch = vi.fn(() => true),
+  confirmDelete = vi.fn(() => true),
   destroySimulation = vi.fn(async () => ({ success: true })),
   beforeProjectReplacement = vi.fn(async () => {}),
   getPlatformInfo = vi.fn(() => ({
@@ -79,6 +80,7 @@ function createHarness({
     syncLegacyProjectData: calls.syncLegacy,
     beforeProjectReplacement,
     confirmVersionMismatch,
+    confirmDelete,
     showError,
     store,
     api
@@ -94,6 +96,7 @@ function createHarness({
     mapCenter,
     mapZoom,
     calls,
+    confirmDelete,
     store,
     api,
     addLog,
@@ -654,6 +657,88 @@ describe('project session', () => {
 
     harness.session.dispose()
     expect(harness.session.transitionPhase.value).toBe('disposed')
+  })
+
+  it('makes disposal terminal for pending and later mutating entries', async () => {
+    const confirmation = deferred()
+    const confirmVersionMismatch = vi.fn(() => confirmation.promise)
+    const candidate = encodeStoredProject(createEmptyProject('B'), {
+      name: 'B',
+      platformInfo: {
+        versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' }
+      }
+    })
+    const active = encodeStoredProject(createEmptyProject('A'), { name: 'A' })
+    const harness = createHarness({
+      projects: { A: active, B: candidate },
+      confirmVersionMismatch
+    })
+    const before = snapshotProtectedState(harness)
+
+    const pending = harness.session.open('B')
+    await vi.waitFor(() => expect(confirmVersionMismatch).toHaveBeenCalledOnce())
+    harness.session.dispose()
+    confirmation.resolve(true)
+
+    expect(await pending).toBe(false)
+    expect(harness.session.transitionPhase.value).toBe('disposed')
+    expectProtectedState(harness, before)
+
+    const replacementResults = await Promise.all([
+      harness.session.open('B'),
+      harness.session.restoreRecent('B'),
+      harness.session.openDemo(candidate),
+      harness.session.create('C'),
+      harness.session.saveAs('C'),
+      harness.session.importProject(candidate, 'C')
+    ])
+    expect(replacementResults).toEqual([false, false, false, false, false, false])
+    expect(harness.session.save()).toBe(false)
+    expect(await harness.session.delete('A')).toBe(false)
+    expect(harness.confirmDelete).not.toHaveBeenCalled()
+    expectProtectedState(harness, before)
+  })
+
+  it('does not delete after disposal wins a pending confirmation', async () => {
+    const confirmation = deferred()
+    const confirmDelete = vi.fn(() => confirmation.promise)
+    const active = encodeStoredProject(createEmptyProject('A'), { name: 'A' })
+    const harness = createHarness({ projects: { A: active }, confirmDelete })
+    const before = snapshotProtectedState(harness)
+
+    const pending = harness.session.delete('A')
+    await vi.waitFor(() => expect(confirmDelete).toHaveBeenCalledOnce())
+    harness.session.dispose()
+    confirmation.resolve(true)
+
+    expect(await pending).toBe(false)
+    expect(harness.session.transitionPhase.value).toBe('disposed')
+    expectProtectedState(harness, before)
+  })
+
+  it('lets an acquired replacement finish once before disposal becomes terminal', async () => {
+    const cleanup = deferred()
+    const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const harness = createHarness({
+      projects: { B: stored },
+      destroySimulation: vi.fn(() => cleanup.promise)
+    })
+
+    const pending = harness.session.open('B')
+    await vi.waitFor(() => {
+      expect(harness.session.transitionPhase.value).toBe('committing')
+    })
+    const finishingCommit = harness.session.dispose()
+    expect(harness.session.transitionPhase.value).toBe('committing')
+
+    cleanup.resolve({ success: true })
+    expect(await pending).toBe(true)
+    await finishingCommit
+    expect(harness.session.transitionPhase.value).toBe('disposed')
+    expect(harness.currentProjectName.value).toBe('B')
+    expect(harness.store.openProject).toHaveBeenCalledOnce()
+    expect(harness.calls.reset).toHaveBeenCalledOnce()
+    expect(await harness.session.create('C')).toBe(false)
   })
 
   it('queues Save As behind an acquired open commit', async () => {

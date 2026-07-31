@@ -481,3 +481,52 @@ test('a late startup restore cannot replace a user-created session', async ({ pa
     return setup.projectData.description
   })).toBe('unsaved edit made during startup')
 })
+
+test('unmount during metadata bootstrap cannot restart application lifecycle owners', async ({ page }) => {
+  let releasePlatform
+  let markPlatformRequested
+  const platformReleased = new Promise(resolve => { releasePlatform = resolve })
+  const platformRequested = new Promise(resolve => { markPlatformRequested = resolve })
+
+  await page.addInitScript(() => {
+    const trackedTypes = new Set(['beforeunload', 'pagehide'])
+    const activeListeners = new Set()
+    const addEventListener = window.addEventListener
+    const removeEventListener = window.removeEventListener
+    window.addEventListener = function (type, listener, options) {
+      if (trackedTypes.has(type)) activeListeners.add(`${type}:${String(listener)}`)
+      return addEventListener.call(this, type, listener, options)
+    }
+    window.removeEventListener = function (type, listener, options) {
+      if (trackedTypes.has(type)) activeListeners.delete(`${type}:${String(listener)}`)
+      return removeEventListener.call(this, type, listener, options)
+    }
+    globalThis.__activeProjectLifecycleListeners = activeListeners
+  })
+  await mockBackend(page, [], {
+    platformHandler: async route => {
+      markPlatformRequested()
+      await platformReleased
+      await route.fulfill({
+        json: {
+          versions: { julia: '1.12', quantumsavory: '0.7', app: '1.6' },
+          capabilities: { unsafe_code_evaluation: false }
+        }
+      })
+    }
+  })
+
+  await page.goto('/')
+  await platformRequested
+  await page.evaluate(() => {
+    globalThis.__activeProjectLifecycleListeners.clear()
+    document.querySelector('#app')?.__vue_app__?.unmount()
+  })
+
+  const platformResponse = page.waitForResponse(response => response.url().endsWith('/platform_info'))
+  releasePlatform()
+  await platformResponse
+  await expect.poll(() => page.evaluate(
+    () => globalThis.__activeProjectLifecycleListeners.size
+  )).toBe(0)
+})

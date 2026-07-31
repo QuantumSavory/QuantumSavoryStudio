@@ -397,7 +397,7 @@ export function useProjectSession({
   }
 
   function save() {
-    if (activeCommit) return false
+    if (disposed || activeCommit) return false
     const name = currentProjectName.value
     if (!name) return false
     projectData.value.name = name
@@ -435,14 +435,17 @@ export function useProjectSession({
   }
 
   async function remove(name, { confirmed = false } = {}) {
+    if (disposed) return false
     name = canonicalName(name)
     if (!confirmed) {
       const accepted = await confirmDelete(`Are you sure you want to delete the project "${name}"? This action cannot be undone.`)
       if (!accepted) return false
     }
+    if (disposed) return false
 
     const pendingCommit = cancelTransition()
     if (pendingCommit) await pendingCommit
+    if (disposed) return false
     store.deleteProject(name)
     if (currentProjectName.value === name) {
       await teardownCollaboration()
@@ -490,8 +493,9 @@ export function useProjectSession({
   }
 
   function dispose() {
+    if (disposed) return activeCommit?.finished || null
     disposed = true
-    cancelTransition('disposed')
+    return cancelTransition('disposed')
   }
 
   return {
