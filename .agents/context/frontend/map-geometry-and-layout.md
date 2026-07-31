@@ -60,9 +60,9 @@ Generators build candidate nodes/edges transactionally, validate all positions, 
 fresh nested IDs, normalize final edges, and mutate only after the candidate is valid.
 Cloned physical links clear route/distance/delay/transmissivity overrides while retaining
 material overrides. Protocol replacement is opt-in and removes only the targeted type.
-Every generated slot background must resolve through the live constructor catalog after
-its destination node position stabilizes; unavailable or unknown metadata aborts the
-whole design transaction.
+Every generated slot type and background must resolve through its live simulator
+catalog after the destination node position stabilizes; unavailable or unknown metadata
+aborts the whole design transaction.
 
 Preserve documented deterministic ordering/naming for repeater, star, grid, and all-to-all
 layouts. These are current user-visible behaviors, but exact geometry/names remain draft

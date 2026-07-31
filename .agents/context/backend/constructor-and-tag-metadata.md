@@ -29,7 +29,9 @@ QuantumSavory ConstructorFieldSchema
 
 Frontend descriptor IDs are UI choices, not Julia types on the wire. Default constructor
 selection omits the keyword so Julia applies its own default; metadata `defaultValue` is
-documentation rather than fresh draft state.
+documentation rather than fresh draft state. An explicit descriptor must agree with an
+intrinsic value or linked Variable branch. Only an omitted descriptor may be inferred;
+a Variable branch change synchronizes every linked descriptor atomically or fails.
 
 Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
 values with `kind` are closed variable-reference, numeric-expression, or States Zoo
@@ -38,12 +40,12 @@ constructors, but no nested object may introduce `kind`; unknown discriminators 
 validation errors rather than forward-compatible fallbacks. States Zoo recipe parameter
 names and numeric ranges come from the selected simulator catalog entry.
 
-The browser admits background-noise assignments only while a nonempty live catalog is
-available and only for exact catalog type IDs. Its Web `default` no-noise entry joins
-the catalog after the backend catalog request succeeds; it is not an empty-catalog
-fallback. Ordinary slot edits, template cloning, and layout generation share the same
-catalog-backed parameter validator, so missing or unknown metadata cannot commit a
-candidate.
+The browser admits slot types and background-noise assignments only while their
+nonempty live catalogs are available and only for exact catalog type IDs. Its Web
+`default` no-noise entry joins the background catalog after the backend request
+succeeds; neither catalog has an empty-catalog fallback. Ordinary slot edits, template
+cloning, and layout generation share the same command admission boundary, so missing or
+unknown metadata cannot commit a candidate.
 
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.

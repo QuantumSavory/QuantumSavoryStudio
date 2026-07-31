@@ -4,9 +4,9 @@
 
 - **Covers:** CMP-002
 - **Method:** test
-- **Procedure:** Run valid/invalid create-update-delete, mixed transactions, IDs, aliases, async validation, retained references, known/missing/unknown backgrounds through GUI/MCP direct, template, and generated paths, and matching/contradictory/omitted intrinsic branches.
+- **Procedure:** Run valid and invalid create/update/delete commands, mixed transactions, ID collisions, transaction-local aliases, asynchronous validation, and retained-reference cases; exercise direct GUI/MCP, template-copy, and generated slot/background admissions plus matching, contradictory, omitted, and linked-Variable descriptor branches.
 - **Environment / configuration:** Node Vitest/jsdom
-- **Pass criterion:** Invalid catalog, descriptor, and mixed candidates leave source and commit hooks unchanged; valid candidates and omitted-branch inference allocate fresh IDs, resolve aliases, persist matching descriptors, and preserve asserted identities/references.
+- **Pass criterion:** Every invalid candidate leaves source, selection, retained identities, and commit hooks unchanged; every valid candidate allocates fresh IDs, resolves aliases, persists matching or inferred descriptors, preserves each asserted live identity, and updates every retained reference exactly once.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js)
 - **Nonconformance:** No current supported-environment execution record exists, and no fixture starts with an existing generated ID that collides with the allocator's next candidate.
