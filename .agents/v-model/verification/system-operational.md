@@ -126,7 +126,7 @@ their status.
   [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** As of 2026-07-31, declared QuantumSavory SHA
-  `9339c8336e2194df0de459aa1c4e0a5daaa6bac3` is a local coordinator commit absent
-  from the declared upstream refs, blocking clean installation. After replacing or
-  publishing it, the action still omits save/reopen and lacks durable run evidence.
+- **Nonconformance:** As of 2026-07-31, pinned QuantumSavory commit
+  `9339c8336e2194df0de459aa1c4e0a5daaa6bac3` is absent from declared upstream
+  refs, blocking clean installation. Publish it or pin a reachable equivalent; the
+  action still omits save/reopen and lacks durable run evidence.
