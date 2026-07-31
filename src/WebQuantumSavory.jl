@@ -160,6 +160,38 @@ end
 
 
 
+function _render_result_representation(value, mime, label::AbstractString)
+  value === nothing && return nothing
+  try
+    buffer = IOBuffer()
+    show(buffer, mime, value)
+    bytes = take!(buffer)
+    content = mime isa MIME"text/html" ? String(bytes) : bytes
+    return base64encode(content)
+  catch error
+    @warn "Failed to render simulation result" label mime=string(mime) exception=(
+      error,
+      catch_backtrace(),
+    )
+    return nothing
+  end
+end
+
+function _render_result_representations(value, label::AbstractString)
+  return (
+    html_base64=_render_result_representation(
+      value,
+      MIME"text/html"(),
+      label,
+    ),
+    png_base64=_render_result_representation(
+      value,
+      MIME"image/png"(),
+      label,
+    ),
+  )
+end
+
 function get_protocol_state(protocol_id::String, state::State)
   # Check if protocol exists in mapping
   if state.protocol_mapping === nothing || !haskey(state.protocol_mapping, protocol_id)
@@ -167,36 +199,16 @@ function get_protocol_state(protocol_id::String, state::State)
   end
 
   protocol = state.protocol_mapping[protocol_id]
-
-  # Get HTML and PNG representations as base64
-  html_base64 = nothing
-  png_base64 = nothing
-
-  # Generate HTML representation
-  try
-    html_buffer = IOBuffer()
-    show(html_buffer, MIME"text/html"(), protocol)
-    html_content = String(take!(html_buffer))
-    html_base64 = base64encode(html_content)
-  catch e
-    @warn "Failed to render HTML for protocol $protocol_id: $e"
-  end
-
-  # Generate PNG representation
-  try
-    png_buffer = IOBuffer()
-    show(png_buffer, MIME"image/png"(), protocol)
-    png_content = take!(png_buffer)
-    png_base64 = base64encode(png_content)
-  catch e
-    @warn "Failed to render PNG for protocol $protocol_id: $e"
-  end
+  representations = _render_result_representations(
+    protocol,
+    "protocol $protocol_id",
+  )
 
   Dict(
     "protocol_id" => protocol_id,
     "protocol_type" => string(typeof(protocol)),
-    "html_base64" => html_base64,
-    "png_base64" => png_base64
+    "html_base64" => representations.html_base64,
+    "png_base64" => representations.png_base64,
   )
 end
 
@@ -238,31 +250,10 @@ function get_slot_state(slot_id::String, state::State)
     end
   end
 
-  # Get HTML and PNG representations as base64
-  html_base64 = nothing
-  png_base64 = nothing
-
-  if !isnothing(slot_state)
-    # Generate HTML representation
-    try
-      html_buffer = IOBuffer()
-      show(html_buffer, MIME"text/html"(), slot_state)
-      html_content = String(take!(html_buffer))
-      html_base64 = base64encode(html_content)
-    catch e
-      @warn "Failed to render HTML state for slot $slot_id: $e"
-    end
-
-    # Generate PNG representation
-    try
-      png_buffer = IOBuffer()
-      show(png_buffer, MIME"image/png"(), slot_state)
-      png_content = take!(png_buffer)
-      png_base64 = base64encode(png_content)
-    catch e
-      @warn "Failed to render PNG state for slot $slot_id: $e"
-    end
-  end
+  representations = _render_result_representations(
+    slot_state,
+    "state in slot $slot_id",
+  )
 
   access_time = state.network === nothing ?
     nothing : QuantumSavory.access_time(slot)
@@ -275,8 +266,8 @@ function get_slot_state(slot_id::String, state::State)
     "access_time" => access_time,
     "entangled_slots" => entangled_slots,
     "entangled_slot_details" => entangled_slot_details,
-    "html_base64" => html_base64,
-    "png_base64" => png_base64
+    "html_base64" => representations.html_base64,
+    "png_base64" => representations.png_base64,
   )
 end
 
