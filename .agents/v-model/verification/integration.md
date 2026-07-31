@@ -103,13 +103,14 @@
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Trace source entries; test local missing/false/true gates and public canaries.
+- **Procedure:** Trace source entries; test local-loopback missing/false/true gates plus non-loopback and public canaries.
 - **Environment / configuration:** Source inventory, unit/HTTP fixtures, and local/public processes
-- **Pass criterion:** Source reaches the gate and guard; forbidden canaries fail; export works disabled; local missing/false and public deny; local true admits the restricted subset.
+- **Pass criterion:** Source reaches the gate and guard; forbidden canaries fail; export works disabled; local missing/false, non-loopback, and public deny; local-loopback true admits the restricted subset.
 - **Status:** planned
 - **Evidence:** [Executing-source inventory](../../context/backend/source-evaluation.md#executing-source-inventory), [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
-- **Nonconformance:** Public-process denial is covered; real-server missing/false local
-  checks and the independent semantic site trace remain absent.
+- **Nonconformance:** Component non-loopback and public-process denial are covered;
+  real-server missing/false local checks and the independent semantic site trace remain
+  absent.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 

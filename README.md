@@ -380,11 +380,12 @@ Both variables are parsed strictly. `WQS_DEPLOYMENT_PROFILE` accepts only
 `local` and `public`; `WQS_ENABLE_SOURCE_EVALUATION` accepts only `true` and
 `false`. A missing or malformed deployment profile prevents server startup.
 Keep the opt-in unset or set it to `false` unless every local API caller and
-simulation payload is trusted. The `public` profile always denies source
-evaluation, even if the opt-in is `true`. It also requires `GENIE_ENV=prod` and
-rejects MCP or diagnostic test features before launcher preparation. When
-disabled, evaluation requests return HTTP 403 with the stable code
-`UNSAFE_EVALUATION_DISABLED`.
+simulation payload is trusted. Evaluation is enabled only when the effective
+Genie listener is also loopback; a non-loopback local listener denies it. The
+`public` profile always denies source evaluation, even if the opt-in is `true`.
+It also requires `GENIE_ENV=prod` and rejects MCP or diagnostic test features
+before launcher preparation. When disabled, evaluation requests return HTTP
+403 with the stable code `UNSAFE_EVALUATION_DISABLED`.
 
 When enabled, use `POST /test_symbolic_expression` to evaluate a symbolic
 expression in a fresh module with QuantumSavory preloaded and get its LaTeX

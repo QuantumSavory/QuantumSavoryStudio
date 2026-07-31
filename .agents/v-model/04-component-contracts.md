@@ -37,9 +37,9 @@
 
 ## CMP-006 — Restricted-source admission and evaluation invariant
 
-- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the local environment gate.
+- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the local-loopback gate.
 - **Parents:** SUB-010
-- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the local gate and guard; permitted forms and placement names work locally; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; public mode and numeric type/range checks remain enforced.
+- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the local-loopback gate and guard; permitted forms and placement names work on loopback; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; non-loopback and public denial plus numeric type/range checks remain enforced.
 - **Verification:** UNITV-006 (test), UNITV-013 (inspection)
 - **Origin / risk:** Restricted allowlist/evaluator design and approved public-deny policy; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)

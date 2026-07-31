@@ -7,7 +7,7 @@ candidate-first replacement, and the release-declared support environment.
 
 - **Normative statement:** Every user-source execution surface shall remain disabled unless the operator enables the single opt-in for local loopback operation, shall admit only the restricted language when enabled, and shall remain disabled in public operation.
 - **Parents:** STK-005, STK-008
-- **Acceptance criterion:** Missing or false opt-in denies all executing paths while safe structured paths and pure export work; true local opt-in admits only the documented subset; public mode denies execution regardless of the local opt-in.
+- **Acceptance criterion:** Missing or false opt-in denies all executing paths while safe structured paths and pure export work; true local-loopback opt-in admits only the documented subset; a non-loopback local listener and public mode deny execution regardless of the opt-in.
 - **Verification:** SYSV-009 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 risk model; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../../context/backend/source-evaluation.md)

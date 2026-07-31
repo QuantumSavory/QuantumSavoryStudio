@@ -26,9 +26,10 @@ npm run build
 npm run preview
 ```
 
-The production build is emitted into the backend's `../public/` directory. Those generated
-files are ignored by Git; the root `./bin/server` launcher installs dependencies and rebuilds
-the GUI automatically before starting the API server.
+The production build is emitted into the backend's `../public/` directory. Those
+generated files are ignored by Git; the root
+`WQS_DEPLOYMENT_PROFILE=local ./bin/server` launcher installs dependencies, rebuilds
+the GUI, and starts the API server.
 
 ## Testing
 

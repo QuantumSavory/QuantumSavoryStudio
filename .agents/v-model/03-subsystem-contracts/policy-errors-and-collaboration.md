@@ -23,9 +23,9 @@ active-project replacement.
 
 ## SUB-010 — Restricted-source admission boundary
 
-- **Normative statement:** Every executing user-source surface shall parse source, apply the identifier allowlist and explicit forbidden-head guard before native evaluation, use only server-owned context, require the local environment opt-in, and remain unavailable in public mode.
+- **Normative statement:** Every executing user-source surface shall parse source, apply the identifier allowlist and explicit forbidden-head guard before native evaluation, use only server-owned context, require the local-loopback opt-in, and remain unavailable on a non-loopback listener or in public mode.
 - **Parents:** SYS-009
-- **Acceptance criterion:** Every executing path rejects forbidden syntax, capability names, and undeclared identifiers before evaluation; non-executing export works disabled; missing/false opt-in and public mode deny execution; true local opt-in enforces declared context/type/range.
+- **Acceptance criterion:** Every executing path rejects forbidden syntax, capability names, and undeclared identifiers before evaluation; non-executing export works disabled; missing/false opt-in, non-loopback local listeners, and public mode deny execution; true local-loopback opt-in enforces declared context/type/range.
 - **Verification:** INTV-010 (test)
 - **Origin / risk:** Central validator/evaluator plus maintainer-approved release-2.0 public-deny policy; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../../context/backend/source-evaluation.md)

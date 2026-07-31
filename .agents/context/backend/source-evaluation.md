@@ -21,18 +21,18 @@ This reference records the current evaluator and its gaps.
 values `local` and `public`. Missing or malformed values fail startup. In the `local`
 profile, `WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in; the exact
 strings `true` and `false` are accepted, a missing value disables evaluation, and a
-malformed value fails startup. The `public` profile denies evaluation regardless of the
-opt-in.
+malformed value fails startup. The gate also requires the effective Genie listener to
+be loopback-only. The `public` profile denies evaluation regardless of the opt-in.
 
 The restricted language reduces risk but is not a security sandbox: accepted Julia
 executes natively in the server process without memory, operation, or safely
 interruptible in-process time metering.
 
-Only trusted local loopback operation may honor the opt-in. The profile is an operator
-declaration; source policy does not independently inspect the server bind address.
-Public launch artifacts must therefore declare `WQS_DEPLOYMENT_PROFILE=public`, which
-denies native evaluation rather than treating the allowlist or deployment container as
-a sufficient sandbox.
+Only trusted local loopback operation may honor the opt-in. Source policy checks both
+the declared profile and effective Genie listener, so a non-loopback local listener
+still denies evaluation. Public launch artifacts declare
+`WQS_DEPLOYMENT_PROFILE=public`, which denies native evaluation rather than treating the
+allowlist or deployment container as a sufficient sandbox.
 
 Safe non-source paths include ordinary numeric/intrinsic conversion, known predefined
 functions, structured States Zoo recipes, pure script-source validation/emission, and
@@ -113,12 +113,12 @@ structured 400 `VALIDATION_ERROR`.
 
 ## Verification
 
-Backend unit tests exercise missing, false, true, and malformed local values, malformed
-or missing profiles, public denial despite a true opt-in, every source family, safe
-non-source values, and the lexical native-evaluator inventory. Maintained server-backed
-suites declare the local profile and opt in explicitly. The startup smoke runs a real
-production server with the public profile and a true opt-in, then verifies that the
-capability remains disabled and `/test_code` returns the stable 403 policy error.
+Backend unit tests exercise missing, false, true, malformed, non-loopback, and public
+gate states, every source family, safe non-source values, and the lexical
+native-evaluator inventory. Maintained server-backed suites declare the local profile
+and opt in explicitly. The startup smoke runs a real production server with the public
+profile and a true opt-in, then verifies that the capability remains disabled and
+`/test_code` returns the stable 403 policy error.
 
 ## Anchors
 

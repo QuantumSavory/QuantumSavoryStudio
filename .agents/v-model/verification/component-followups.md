@@ -40,9 +40,9 @@ encoded by the current component suites.
 
 - **Covers:** CMP-006
 - **Method:** inspection
-- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value through the local environment gate, parser, allowlist guard, server-owned context, and public-mode denial.
+- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value through the local-loopback gate, parser, allowlist guard, server-owned context, non-loopback denial, and public-mode denial.
 - **Environment / configuration:** Pinned source with a durable evaluator inventory
-- **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context; public mode cannot enable evaluation.
+- **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context; non-loopback and public modes cannot enable evaluation.
 - **Status:** planned
 - **Evidence:** [Executing-source inventory](../../context/backend/source-evaluation.md#executing-source-inventory), [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** The inventory and lexical direct-call scan do not yet constitute

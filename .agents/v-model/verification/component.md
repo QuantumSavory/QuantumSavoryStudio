@@ -48,14 +48,14 @@
 
 - **Covers:** CMP-006
 - **Method:** test
-- **Procedure:** Run permitted and rejected identifiers/heads, property/module access, macros, imports, commands, local/context bindings, symbolic names, target-type/range, filesystem canaries, local gate states, and public denial.
-- **Environment / configuration:** Julia backend unit environment with missing/false/true local opt-in and public mode
-- **Pass criterion:** Permitted local forms and placement bindings work only when enabled; every forbidden/capability fixture is denied before evaluation; public mode always denies; target-type/range checks match each fixture.
+- **Procedure:** Run permitted and rejected identifiers/heads, property/module access, macros, imports, commands, local/context bindings, symbolic names, target-type/range, filesystem canaries, local-loopback gate states, non-loopback denial, and public denial.
+- **Environment / configuration:** Julia backend unit environment with missing/false/true local-loopback opt-in, a non-loopback listener, and public mode
+- **Pass criterion:** Permitted local forms and placement bindings work only when enabled on loopback; every forbidden/capability fixture is denied before evaluation; non-loopback and public modes always deny; target-type/range checks match each fixture.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** Adversarial fixtures cover direct import/using, command and macro
-  heads, public denial, and rejection of untagged complex parameters. Complete semantic
-  site coverage remains the planned UNITV-013 inspection.
+  heads, non-loopback/public denial, and rejection of untagged complex parameters.
+  Complete semantic site coverage remains the planned UNITV-013 inspection.
 
 ## UNITV-007 — Verify deterministic export bindings
 

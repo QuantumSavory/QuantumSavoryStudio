@@ -44,7 +44,7 @@ replacement, operation-ledger, and broad-platform outcomes rather than reusing t
 
 - **Normative statement:** An operator shall be able to keep native Julia evaluation disabled by default, explicitly enable only the restricted subset for local loopback use, and keep it disabled in public operation.
 - **Parents:** None
-- **Acceptance criterion:** Missing or false opt-in denies every native-source execution path while structured safe values remain usable; true local opt-in admits only the restricted language; public mode denies execution regardless of the local opt-in.
+- **Acceptance criterion:** Missing or false opt-in denies every native-source execution path while structured safe values remain usable; true local-loopback opt-in admits only the restricted language; a non-loopback local listener and public mode deny execution regardless of the opt-in.
 - **Verification:** ACC-005 (demonstration)
 - **Origin / risk:** Maintainer-approved release-2.0 safety policy; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)

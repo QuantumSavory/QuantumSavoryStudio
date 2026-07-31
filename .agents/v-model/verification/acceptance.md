@@ -51,15 +51,15 @@ planned until a durable release-2.0 acceptance record exists.
 
 - **Covers:** STK-005
 - **Method:** demonstration
-- **Procedure:** Run local mode with the opt-in missing, false, and true, exercise source and safe structured paths, then attempt the same source canaries in public mode.
-- **Environment / configuration:** Local loopback and public deployment profiles
-- **Pass criterion:** Missing/false local mode executes no source canary and retains safe paths; true local mode admits only the restricted subset; public mode executes no source canary regardless of the local opt-in.
+- **Procedure:** Run loopback local mode with the opt-in missing, false, and true, exercise source and safe structured paths, then repeat canaries on a non-loopback local listener and in public mode.
+- **Environment / configuration:** Local loopback, non-loopback, and public profiles
+- **Pass criterion:** Missing/false local mode executes no source canary and retains safe paths; true local-loopback mode admits only the restricted subset; non-loopback local and public modes execute no source canary regardless of the opt-in.
 - **Status:** planned
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
 - **Nonconformance:** Component evidence covers all gate values and the public-process
   smoke demonstrates denial with a true opt-in. A single maintained operator
-  demonstration spanning missing/false/true local source and safe paths plus public
-  canaries remains absent.
+  demonstration spanning local-loopback, non-loopback, safe-path, and public scenarios
+  remains absent.
 
 ## ACC-007 — Validate bounded and failure-aware service operation
 

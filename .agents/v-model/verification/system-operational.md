@@ -7,14 +7,15 @@ and supported environments. No product suite was run for this documentation base
 
 - **Covers:** SYS-009
 - **Method:** test
-- **Procedure:** Exercise source-bearing and safe structured paths with the opt-in missing/false/true locally, then repeat source canaries in public mode.
-- **Environment / configuration:** Real local backend plus public-profile process
-- **Pass criterion:** Missing/false local mode executes no canary; true local mode admits only restricted source; safe/pure paths work in both local gate states; public mode executes no source canary.
+- **Procedure:** Exercise source-bearing and safe structured paths with the opt-in missing/false/true on local loopback, then repeat canaries on a non-loopback local listener and in public mode.
+- **Environment / configuration:** Real local backend plus non-loopback and public profiles
+- **Pass criterion:** Missing/false local mode executes no canary; true local-loopback admits only restricted source; safe/pure paths work in both local gate states; non-loopback local and public modes execute no source canary.
 - **Status:** planned
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
-- **Nonconformance:** The production public-profile smoke verifies a disabled
-  capability and rejected source request with the opt-in true. Maintained real-server
-  missing/false local and representative safe-path actions remain absent.
+- **Nonconformance:** Component tests cover non-loopback denial, and the public smoke
+  verifies a disabled capability and rejected source request with the opt-in true.
+  Maintained real-server missing/false local and representative safe-path actions remain
+  absent.
 
 ## SYSV-010 — Verify execution, retention, and failed cleanup
 
