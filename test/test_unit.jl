@@ -2191,14 +2191,30 @@
           project_file=project_file,
         )
 
-        @test all(haskey(info["versions"], key) for key in ("julia", "quantumsavory", "app"))
+        @test Set(keys(info)) == Set(["versions", "quantumsavory", "capabilities"])
+        @test Set(keys(info["versions"])) ==
+          Set(["julia", "genie", "quantumsavory", "app"])
         @test info["versions"]["julia"] == string(VERSION)
         @test info["versions"]["genie"] == "5.35.15"
         @test info["versions"]["quantumsavory"] == "0.7.0"
         @test info["versions"]["app"] == "9.8.7"
-        @test info["capabilities"]["unsafe_code_evaluation"] isa Bool
+        capabilities = info["capabilities"]
+        @test Set(keys(capabilities)) == Set(["unsafe_code_evaluation", "mcp"])
+        @test capabilities["unsafe_code_evaluation"] isa Bool
+        @test Set(keys(capabilities["mcp"])) ==
+          Set(["available", "local_only", "start_mode"])
+        @test capabilities["mcp"]["available"] isa Bool
+        @test capabilities["mcp"]["local_only"] === true
+        @test capabilities["mcp"]["start_mode"] == "manual"
 
         details = info["quantumsavory"]
+        @test Set(keys(details)) == Set([
+          "version",
+          "tracked_revision",
+          "tracked_source",
+          "tree_hash",
+          "commit",
+        ])
         @test details["version"] == info["versions"]["quantumsavory"]
         @test details["tracked_revision"] == "master"
         @test details["tracked_source"] == tracked_source
@@ -2228,6 +2244,13 @@
       @test unavailable["versions"]["genie"] === nothing
       @test unavailable["versions"]["quantumsavory"] === nothing
       @test unavailable["versions"]["app"] === nothing
+      @test Set(keys(unavailable["quantumsavory"])) == Set([
+        "version",
+        "tracked_revision",
+        "tracked_source",
+        "tree_hash",
+        "commit",
+      ])
       @test all(value === nothing for value in values(unavailable["quantumsavory"]))
   end
 

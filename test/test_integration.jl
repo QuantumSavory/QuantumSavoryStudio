@@ -115,11 +115,9 @@
 
   @testset "Platform Info" begin
       @test platform_info_response.status == 200
-      @test haskey(platform_info, "versions")
-      @test haskey(platform_info, "quantumsavory")
-      @test haskey(platform_info, "capabilities")
+      @test Set(keys(platform_info)) == Set(["versions", "quantumsavory", "capabilities"])
       versions = platform_info["versions"]
-      @test all(haskey(versions, key) for key in ("julia", "genie", "quantumsavory", "app"))
+      @test Set(keys(versions)) == Set(["julia", "genie", "quantumsavory", "app"])
       @test all(versions[key] isa String && !isempty(versions[key]) for key in (
         "julia",
         "genie",
@@ -128,6 +126,13 @@
       ))
 
       quantumsavory = platform_info["quantumsavory"]
+      @test Set(keys(quantumsavory)) == Set([
+        "version",
+        "tracked_revision",
+        "tracked_source",
+        "tree_hash",
+        "commit",
+      ])
       @test quantumsavory["version"] == versions["quantumsavory"]
       @test quantumsavory["tracked_revision"] isa String
       @test !isempty(quantumsavory["tracked_revision"])
@@ -142,6 +147,10 @@
         @test quantumsavory["commit"] === nothing
       end
       @test unsafe_evaluation_enabled isa Bool
+      @test Set(keys(platform_info["capabilities"])) == Set([
+        "unsafe_code_evaluation",
+        "mcp",
+      ])
       @test platform_info["capabilities"]["mcp"] == Dict(
         "available" => false,
         "local_only" => true,
@@ -1186,6 +1195,51 @@
       @test contract["components"]["schemas"]["SimulationVariable"]["properties"][
         "value"
       ]["\$ref"] == "#/components/schemas/VariableDefinitionValue"
+
+      platform_schema = operation_schemas["getPlatformInfoResponse"]
+      @test platform_schema["additionalProperties"] == false
+      @test Set(platform_schema["required"]) == Set([
+        "versions",
+        "quantumsavory",
+        "capabilities",
+      ])
+      platform_versions = platform_schema["properties"]["versions"]
+      @test platform_versions["additionalProperties"] == false
+      @test Set(platform_versions["required"]) == Set([
+        "julia",
+        "genie",
+        "quantumsavory",
+        "app",
+      ])
+      @test Set(keys(platform_versions["properties"])) ==
+        Set(platform_versions["required"])
+      quantumsavory_schema = platform_schema["properties"]["quantumsavory"]
+      @test quantumsavory_schema["additionalProperties"] == false
+      @test Set(quantumsavory_schema["required"]) == Set([
+        "version",
+        "tracked_revision",
+        "tracked_source",
+        "tree_hash",
+        "commit",
+      ])
+      @test Set(keys(quantumsavory_schema["properties"])) ==
+        Set(quantumsavory_schema["required"])
+      capability_schema = platform_schema["properties"]["capabilities"]
+      @test capability_schema["additionalProperties"] == false
+      @test Set(capability_schema["required"]) == Set([
+        "unsafe_code_evaluation",
+        "mcp",
+      ])
+      @test Set(keys(capability_schema["properties"])) ==
+        Set(capability_schema["required"])
+      mcp_schema = capability_schema["properties"]["mcp"]
+      @test mcp_schema["additionalProperties"] == false
+      @test Set(mcp_schema["required"]) == Set([
+        "available",
+        "local_only",
+        "start_mode",
+      ])
+      @test Set(keys(mcp_schema["properties"])) == Set(mcp_schema["required"])
 
       numeric_schema =
         contract["components"]["schemas"]["NumericExpressionRequest"]

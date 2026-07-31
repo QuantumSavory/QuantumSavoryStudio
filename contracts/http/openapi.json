@@ -3397,13 +3397,119 @@
             ],
             "properties": {
               "versions": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "julia",
+                  "genie",
+                  "quantumsavory",
+                  "app"
+                ],
+                "properties": {
+                  "julia": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "genie": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "quantumsavory": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "app": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
               },
               "quantumsavory": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "tracked_revision",
+                  "tracked_source",
+                  "tree_hash",
+                  "commit"
+                ],
+                "properties": {
+                  "version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "tracked_revision": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "tracked_source": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "tree_hash": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "commit": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+                  }
+                }
               },
               "capabilities": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "unsafe_code_evaluation",
+                  "mcp"
+                ],
+                "properties": {
+                  "unsafe_code_evaluation": {
+                    "type": "boolean"
+                  },
+                  "mcp": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "available",
+                      "local_only",
+                      "start_mode"
+                    ],
+                    "properties": {
+                      "available": {
+                        "type": "boolean"
+                      },
+                      "local_only": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "start_mode": {
+                        "type": "string",
+                        "const": "manual"
+                      }
+                    }
+                  }
+                }
               }
             }
           },
