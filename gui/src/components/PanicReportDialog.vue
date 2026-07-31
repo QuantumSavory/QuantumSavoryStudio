@@ -126,7 +126,7 @@ const props = defineProps({
   },
   platformInfo: {
     type: Object,
-    default: () => ({}),
+    default: null,
   },
   browserActions: {
     type: Object,

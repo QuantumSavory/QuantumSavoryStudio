@@ -13,6 +13,7 @@ import {
   writeReportToClipboard,
 } from '../../src/utils/panicReport'
 import { createEmptyProject, encodeStoredProject } from '../../src/utils/projectCodec'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const panic = {
   id: 'panic-123',
@@ -38,19 +39,11 @@ describe('panic report data', () => {
   })
 
   it('builds complete Markdown with panic, version, and reproduction details', () => {
-    const report = buildPanicReport(panic, {
-      versions: {
-        app: '1.6.0',
-        quantumSavory: '0.7.2',
-        julia: '1.12.1',
-        genie: '5.33.8',
-      },
-      quantumsavory: {
-        tracked_source: 'https://github.com/QuantumSavory/QuantumSavory.jl.git',
-        tracked_revision: 'master',
-        tree_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      },
-    })
+    const report = buildPanicReport(panic, backendPlatformInfo({
+      app: '1.6.0',
+      quantumsavory: '0.7.2',
+      trackedRevision: 'master',
+    }))
 
     expect(report).toContain('# WebQuantumSavory simulator panic report')
     expect(report).toContain('- Panic ID: panic-123')
@@ -73,23 +66,15 @@ describe('panic report data', () => {
     expect(report).toContain('not uploaded automatically')
   })
 
-  it('accepts backend-style platform version keys', () => {
-    const report = buildPanicReport(panic, {
-      versions: { app: '2.0', quantumsavory: '1.0', julia: '1.13' },
-    })
-
-    expect(report).toContain('- WebQuantumSavory: 2.0')
-    expect(report).toContain('- QuantumSavory: 1.0')
+  it('rejects partial or durable platform metadata at the raw backend boundary', () => {
+    expect(() => buildPanicReport(panic, {
+      versions: { app: '2.0', quantumSavory: '1.0', julia: '1.13' },
+    })).toThrow(/platformInfo must contain exactly/)
   })
 
   it('includes a commit only when the backend provides a full commit SHA', () => {
     const commit = '0123456789abcdef0123456789abcdef01234567'
-    const report = buildPanicReport(panic, {
-      quantumsavory: {
-        tree_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        commit,
-      },
-    })
+    const report = buildPanicReport(panic, backendPlatformInfo({ commit }))
 
     expect(report).toContain(`- QuantumSavory commit: ${commit}`)
     expect(report).not.toContain('- QuantumSavory commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')

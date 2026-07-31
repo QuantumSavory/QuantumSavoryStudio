@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const PANEL_SIZE_STORAGE_KEY = 'bottomPanel_size'
 const BOTTOM_PANEL_COLLAPSED_STORAGE_KEY = 'panelCollapsed_logs_panel'
@@ -13,10 +14,7 @@ async function mockBackend(page) {
       '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
-      '/platform_info': {
-        versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-        capabilities: { unsafe_code_evaluation: false },
-      },
+      '/platform_info': backendPlatformInfo(),
       '/export_script': {
         success: true,
         script: 'using QuantumSavory\nrun(Simulation(), 1.0)\n',

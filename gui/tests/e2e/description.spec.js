@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const EMBEDDED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlWlY4AAAAASUVORK5CYII='
 const MARKDOWN_DESCRIPTION = `# Bell network
@@ -46,10 +47,7 @@ async function mockBackend(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/destroy_simulation', route => route.fulfill({
     status: 200,

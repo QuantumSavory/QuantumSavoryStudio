@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackend(page, parseRequests, {
   platformHandler,
@@ -15,10 +16,11 @@ async function mockBackend(page, parseRequests, {
   await page.route('**/platform_info', route => {
     if (platformHandler) return platformHandler(route)
     return route.fulfill({
-      json: {
-        versions: { julia: '1.12', quantumsavory: '0.7', app: '1.6' },
-        capabilities: { unsafe_code_evaluation: false }
-      }
+      json: backendPlatformInfo({
+        julia: '1.12',
+        quantumsavory: '0.7',
+        app: '1.6',
+      }),
     })
   })
   await page.route('**/destroy_simulation', async route => {
@@ -451,10 +453,11 @@ test('a late startup restore cannot replace a user-created session', async ({ pa
       markPlatformRequested()
       await platformReleased
       await route.fulfill({
-        json: {
-          versions: { julia: '1.12', quantumsavory: '0.7', app: '1.6' },
-          capabilities: { unsafe_code_evaluation: false }
-        }
+        json: backendPlatformInfo({
+          julia: '1.12',
+          quantumsavory: '0.7',
+          app: '1.6',
+        }),
       })
     }
   })
@@ -508,10 +511,11 @@ test('unmount during metadata bootstrap cannot restart application lifecycle own
       markPlatformRequested()
       await platformReleased
       await route.fulfill({
-        json: {
-          versions: { julia: '1.12', quantumsavory: '0.7', app: '1.6' },
-          capabilities: { unsafe_code_evaluation: false }
-        }
+        json: backendPlatformInfo({
+          julia: '1.12',
+          quantumsavory: '0.7',
+          app: '1.6',
+        }),
       })
     }
   })

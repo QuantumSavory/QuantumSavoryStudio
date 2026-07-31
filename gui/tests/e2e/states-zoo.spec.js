@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 import {
   canonicalErrorResponse,
   simulationNotFoundResponse,
@@ -143,10 +144,7 @@ async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),

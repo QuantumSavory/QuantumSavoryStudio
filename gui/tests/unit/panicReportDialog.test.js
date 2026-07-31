@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import PanicReportDialog from '../../src/components/PanicReportDialog.vue'
 import { createEmptyProject, encodeStoredProject } from '../../src/utils/projectCodec'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const AppDialogStub = {
   props: ['show', 'title'],
@@ -52,18 +53,11 @@ function mountDialog(browserActions) {
       show: true,
       panic,
       projectName: project.name,
-      platformInfo: {
-        versions: {
-          app: '1.6.0',
-          quantumSavory: '0.7.2',
-          julia: '1.12.1',
-          genie: '5.33.8',
-        },
-        quantumsavory: {
-          tracked_revision: 'master',
-          tree_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        },
-      },
+      platformInfo: backendPlatformInfo({
+        app: '1.6.0',
+        quantumsavory: '0.7.2',
+        trackedRevision: 'master',
+      }),
       serializeProject: vi.fn(() => project),
       browserActions,
     },

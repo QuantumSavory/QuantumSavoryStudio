@@ -3,6 +3,7 @@ import { ref, readonly } from 'vue'
 import { generateUUid } from './Utils.js'
 import { requestJson } from './httpClient.js'
 import { httpOperation, httpOperationPath } from './httpOperations.js'
+import { assertBackendPlatformInfo } from './platformInfo.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -342,36 +343,18 @@ export class ApiConnector {
   }
 
   getPlatformInfo(){
-    if( !this._platformInfo.value ){
-      return "Not set";
-    }
     return this._platformInfo.value
   }
 
   isUnsafeCodeEvaluationEnabled(){
-    return this._platformInfo.value?.capabilities?.unsafeCodeEvaluation === true
+    return this._platformInfo.value?.capabilities?.unsafe_code_evaluation === true
   }
 
   async fetchPlatformInfo(){
-    const result = await this.requestOperation('getPlatformInfo')
-    const versions = result?.versions && typeof result.versions === 'object'
-      ? result.versions
-      : {}
-    const capabilities = result?.capabilities && typeof result.capabilities === 'object'
-      ? result.capabilities
-      : {}
-    this._platformInfo.value = {
-      ...result,
-      versions: {
-        ...versions,
-        quantumSavory: versions.quantumSavory ?? versions.quantumsavory,
-      },
-      capabilities: {
-        ...capabilities,
-        unsafeCodeEvaluation: capabilities.unsafeCodeEvaluation === true
-          || capabilities.unsafe_code_evaluation === true,
-      },
-    }
+    const result = assertBackendPlatformInfo(
+      await this.requestOperation('getPlatformInfo'),
+    )
+    this._platformInfo.value = result
     return result
   }
 

@@ -227,10 +227,7 @@ function addLog(level, message, source = 'App', extendedInfo = null, options = {
 }
 
 const activePanic = ref(null)
-const platformInfo = computed(() => {
-  const cachedPlatformInfo = api.getPlatformInfo()
-  return cachedPlatformInfo && typeof cachedPlatformInfo === 'object' ? cachedPlatformInfo : {}
-})
+const platformInfo = computed(() => api.getPlatformInfo())
 const showRepeaterChainDialog = ref(false)
 const showStarNetworkDialog = ref(false)
 const showGraphNetworkDialog = ref(false)

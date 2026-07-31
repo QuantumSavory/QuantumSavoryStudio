@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -42,10 +43,7 @@ async function mockBackendMetadata(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/export_script', route => route.fulfill({
     status: 200,

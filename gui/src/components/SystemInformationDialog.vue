@@ -115,7 +115,10 @@ import AppButton from './ui/AppButton.vue'
 import AppDialog from './ui/AppDialog.vue'
 import MarkdownContent from './ui/MarkdownContent.vue'
 import { changelogMarkdown as embeddedChangelogMarkdown } from '../utils/changelogContent.js'
-import { normalizeSystemInformation } from '../utils/systemInformation.js'
+import {
+  normalizeSystemInformation,
+  unavailableSystemInformation,
+} from '../utils/systemInformation.js'
 
 const props = defineProps({
   show: {
@@ -124,7 +127,7 @@ const props = defineProps({
   },
   platformInfo: {
     type: Object,
-    default: () => ({}),
+    default: null,
   },
   changelogMarkdown: {
     type: String,
@@ -133,7 +136,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
-const information = computed(() => normalizeSystemInformation(props.platformInfo))
+const information = computed(() => (
+  props.platformInfo == null
+    ? unavailableSystemInformation()
+    : normalizeSystemInformation(props.platformInfo)
+))
 </script>
 
 <style scoped>

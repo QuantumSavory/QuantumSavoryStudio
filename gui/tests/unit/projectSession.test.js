@@ -6,6 +6,10 @@ import {
   encodeStoredProject,
 } from '../../src/utils/projectCodec'
 import { useProjectSession } from '../../src/composables/useProjectSession'
+import {
+  backendPlatformInfo,
+  durablePlatformInfo,
+} from '../platformInfoFixtures.js'
 
 function createHarness({
   projects = {},
@@ -13,8 +17,10 @@ function createHarness({
   confirmDelete = vi.fn(() => true),
   destroySimulation = vi.fn(async () => ({ success: true })),
   beforeProjectReplacement = vi.fn(async () => {}),
-  getPlatformInfo = vi.fn(() => ({
-    versions: { julia: '1.12', quantumSavory: '0.7', app: '1.6' }
+  getPlatformInfo = vi.fn(() => backendPlatformInfo({
+    julia: '1.12',
+    quantumsavory: '0.7',
+    app: '1.6',
   })),
   fetchPlatformInfo = vi.fn(),
   getSimulationStatus = vi.fn()
@@ -332,6 +338,31 @@ describe('project session', () => {
     expect(window.localStorage.getItem('recentProjectName')).toBe('B')
   })
 
+  it('converts raw backend platform metadata before saving a durable project', () => {
+    const rawPlatformInfo = backendPlatformInfo({
+      julia: '1.13',
+      genie: '5.40',
+      quantumsavory: '0.9',
+      app: '2.1',
+      unsafeCodeEvaluation: true,
+      mcpAvailable: true,
+    })
+    const harness = createHarness({
+      getPlatformInfo: vi.fn(() => rawPlatformInfo),
+    })
+
+    expect(harness.session.save()).toBe(true)
+    expect(harness.records.get('A').platformInfo).toEqual(durablePlatformInfo({
+      julia: '1.13',
+      genie: '5.40',
+      quantumSavory: '0.9',
+      app: '2.1',
+    }))
+    expect(rawPlatformInfo).toHaveProperty('quantumsavory')
+    expect(rawPlatformInfo).toHaveProperty('capabilities')
+    expect(rawPlatformInfo).not.toHaveProperty('quantumSavory')
+  })
+
   it('awaits collaboration teardown before replacing the active project', async () => {
     let releaseTeardown
     const beforeProjectReplacement = vi.fn(() => new Promise(resolve => {
@@ -395,7 +426,11 @@ describe('project session', () => {
     const stored = encodeStoredProject(createEmptyProject('B'), {
       name: 'B',
       map: { position: [5, 6], zoom: 7 },
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const harness = createHarness({ projects: { B: stored }, confirmVersionMismatch: vi.fn(() => false) })
     expect(await harness.session.open('B')).toBe(false)
@@ -442,9 +477,11 @@ describe('project session', () => {
     const confirmVersionMismatch = vi.fn(() => mismatch.promise)
     const candidateDocument = encodeStoredProject(createEmptyProject('B'), {
       name: 'B',
-      platformInfo: {
-        versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' }
-      }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const projects = {
       A: encodeStoredProject(createEmptyProject('A'), { name: 'A' })
@@ -588,9 +625,11 @@ describe('project session', () => {
     const confirmVersionMismatch = vi.fn(() => confirmation.promise)
     const stored = encodeStoredProject(createEmptyProject('Old Recent'), {
       name: 'Old Recent',
-      platformInfo: {
-        versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' }
-      }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const harness = createHarness({
       projects: { 'Old Recent': stored },
@@ -619,7 +658,11 @@ describe('project session', () => {
     const projectA = encodeStoredProject(createEmptyProject('Old'), {
       name: 'Old',
       map: { position: [1, 1], zoom: 2 },
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const projectB = encodeStoredProject(createEmptyProject('Newest'), {
       name: 'Newest',
@@ -665,9 +708,11 @@ describe('project session', () => {
     const confirmVersionMismatch = vi.fn(() => confirmation.promise)
     const candidate = encodeStoredProject(createEmptyProject('B'), {
       name: 'B',
-      platformInfo: {
-        versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' }
-      }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const active = encodeStoredProject(createEmptyProject('A'), { name: 'A' })
     const harness = createHarness({
@@ -889,11 +934,19 @@ describe('project session', () => {
   it('does not overwrite an existing project when an imported version is declined', async () => {
     const original = encodeStoredProject(createEmptyProject('B'), {
       name: 'B',
-      platformInfo: { versions: { julia: '1.12', quantumSavory: '0.7', app: '1.6' } }
+      platformInfo: durablePlatformInfo({
+        julia: '1.12',
+        quantumSavory: '0.7',
+        app: '1.6',
+      })
     })
     const imported = encodeStoredProject(createEmptyProject('Imported B'), {
       name: 'Imported B',
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
+      platformInfo: durablePlatformInfo({
+        julia: '2.0',
+        quantumSavory: '0.7',
+        app: '1.6',
+      }),
     })
     const harness = createHarness({
       projects: { B: original },

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function openEntanglerEditor(page, projectName) {
   const protocolTypesLoaded = page.waitForResponse(
@@ -109,10 +110,7 @@ async function setEvaluationCapability(page, enabled) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: enabled },
-    },
+    json: backendPlatformInfo({ unsafeCodeEvaluation: enabled }),
   }))
   await page.route('**/logs/**', route => route.fulfill({
     status: 200,

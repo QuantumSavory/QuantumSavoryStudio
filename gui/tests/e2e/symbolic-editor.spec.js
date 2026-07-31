@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { saveAndReadProject } from './projectBoundary.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 import {
   addOneSlotToEachNode,
   mockParseAndDestroy,
@@ -76,10 +77,7 @@ async function mockConfiguration(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: true },
-    },
+    json: backendPlatformInfo({ unsafeCodeEvaluation: true }),
   }))
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),

@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiConnector } from '../../src/utils/ApiConnector'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const values = new Map()
 const storage = {
@@ -150,45 +151,43 @@ describe('ApiConnector project namespaces', () => {
     })
   })
 
-  it('preserves expanded platform metadata while adding legacy client aliases', async () => {
-    const response = {
-      versions: {
-        julia: '1.12.1',
-        genie: '5.33.8',
-        quantumsavory: '0.7.0',
-        app: '1.8.0',
-      },
-      quantumsavory: {
-        version: '0.7.0',
-        tracked_revision: 'master',
-        tracked_source: 'https://github.com/QuantumSavory/QuantumSavory.jl.git',
-        tree_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        commit: null,
-      },
-      capabilities: {
-        unsafe_code_evaluation: true,
-        another_capability: 'retained',
-      },
-    }
+  it('stores and returns only the exact raw backend platform DTO', async () => {
+    const response = backendPlatformInfo({
+      app: '1.8.0',
+      quantumsavory: '0.7.0',
+      trackedRevision: 'master',
+      unsafeCodeEvaluation: true,
+      mcpAvailable: true,
+    })
     globalThis.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => response,
     }))
     const connector = new ApiConnector('http://api.test')
 
+    expect(connector.getPlatformInfo()).toBeNull()
+    expect(connector.isUnsafeCodeEvaluationEnabled()).toBe(false)
     await expect(connector.fetchPlatformInfo()).resolves.toEqual(response)
-    expect(connector.getPlatformInfo()).toEqual({
-      ...response,
-      versions: {
-        ...response.versions,
-        quantumSavory: '0.7.0',
-      },
-      capabilities: {
-        ...response.capabilities,
-        unsafeCodeEvaluation: true,
-      },
-    })
+    expect(connector.getPlatformInfo()).toEqual(response)
+    expect(connector.getPlatformInfo().versions).not.toHaveProperty('quantumSavory')
+    expect(connector.getPlatformInfo().capabilities)
+      .not.toHaveProperty('unsafeCodeEvaluation')
     expect(connector.isUnsafeCodeEvaluationEnabled()).toBe(true)
+  })
+
+  it('rejects legacy platform aliases without populating the cache', async () => {
+    const response = backendPlatformInfo()
+    response.capabilities.unsafeCodeEvaluation = false
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => response,
+    }))
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.fetchPlatformInfo()).rejects.toThrow(
+      /platformInfo\.capabilities must contain exactly/,
+    )
+    expect(connector.getPlatformInfo()).toBeNull()
   })
 
   it('keeps tag explorer simulation names and external IDs at the HTTP boundary', async () => {

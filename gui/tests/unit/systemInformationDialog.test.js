@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 
 import SystemInformationDialog from '../../src/components/SystemInformationDialog.vue'
 import { frontendBuildInfo } from '../../src/utils/frontendBuildInfo.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const AppDialogStub = {
   props: ['show', 'title'],
@@ -20,7 +21,7 @@ const AppButtonStub = {
   template: '<button @click="$emit(\'click\', $event)"><slot /></button>',
 }
 
-function mountDialog(platformInfo = {}, extraProps = {}) {
+function mountDialog(platformInfo = null, extraProps = {}) {
   return mount(SystemInformationDialog, {
     props: { show: true, platformInfo, ...extraProps },
     global: {
@@ -34,19 +35,11 @@ function mountDialog(platformInfo = {}, extraProps = {}) {
 
 describe('SystemInformationDialog', () => {
   it('shows runtime, tracked source, tree hash, and exact frontend dependency data', () => {
-    const wrapper = mountDialog({
-      versions: {
-        app: '1.8.0',
-        julia: '1.12.1',
-        genie: '5.33.8',
-        quantumsavory: '0.7.0',
-      },
-      quantumsavory: {
-        tracked_source: 'https://github.com/QuantumSavory/QuantumSavory.jl.git',
-        tracked_revision: 'master',
-        tree_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      },
-    })
+    const wrapper = mountDialog(backendPlatformInfo({
+      app: '1.8.0',
+      quantumsavory: '0.7.0',
+      trackedRevision: 'master',
+    }))
 
     expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('System Information')
     expect(wrapper.get('[data-testid="system-webquantumsavory-version"]').text()).toBe('1.8.0')
@@ -81,7 +74,7 @@ describe('SystemInformationDialog', () => {
   })
 
   it('renders changelog content through the shared safe Markdown pipeline', () => {
-    const wrapper = mountDialog({}, {
+    const wrapper = mountDialog(null, {
       changelogMarkdown: '# Changelog\n\n<script>alert(1)</script>',
     })
     const changelog = wrapper.get('[data-testid="system-changelog"]')

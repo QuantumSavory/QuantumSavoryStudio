@@ -1,4 +1,7 @@
-import { normalizeSystemInformation } from './systemInformation.js'
+import {
+  normalizeSystemInformation,
+  unavailableSystemInformation,
+} from './systemInformation.js'
 
 export const PANIC_ISSUE_URL = 'https://github.com/QuantumSavory/WebQuantumSavory/issues/new'
 
@@ -64,9 +67,11 @@ function dependencyReportSection(title, dependencies) {
   ]
 }
 
-export function buildPanicReport(panic, platformInfo = {}) {
+export function buildPanicReport(panic, platformInfo = null) {
   const details = normalizePanic(panic)
-  const system = normalizeSystemInformation(platformInfo)
+  const system = platformInfo == null
+    ? unavailableSystemInformation()
+    : normalizeSystemInformation(platformInfo)
   const quantumSavoryDetails = [
     system.quantumSavory.trackedSource
       ? `- QuantumSavory tracked source: ${markdownText(system.quantumSavory.trackedSource)}`

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 function sourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -19,10 +20,7 @@ async function mockBackend(page) {
       '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
-      '/platform_info': {
-        versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-        capabilities: { unsafe_code_evaluation: false },
-      },
+      '/platform_info': backendPlatformInfo(),
     }
 
     return route.fulfill({

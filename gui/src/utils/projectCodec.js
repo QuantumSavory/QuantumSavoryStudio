@@ -31,6 +31,7 @@ import {
   normalizeRepresentationConfig,
   requireRepresentationConfig,
 } from './representations'
+import { assertBackendPlatformInfo } from './platformInfo.js'
 
 const projectDocumentValidator = new Ajv2020({
   allErrors: true,
@@ -709,21 +710,15 @@ function plainVariable(variable) {
   }
 }
 
-function plainPlatformInfo(value) {
-  if (!isRecord(value)) return null
-  const versions = isRecord(value.versions) ? value.versions : {}
-  const version = (...keys) => {
-    const resolved = keys.map(key => versions[key]).find(candidate => (
-      typeof candidate === 'string' && candidate
-    ))
-    return resolved ?? null
-  }
+/** Convert the exact backend DTO to the intentionally camel-cased durable v2 shape. */
+export function projectPlatformInfoFromBackend(platformInfo) {
+  const source = assertBackendPlatformInfo(platformInfo)
   return {
     versions: {
-      julia: version('julia'),
-      genie: version('genie'),
-      quantumSavory: version('quantumSavory', 'quantumsavory'),
-      app: version('app', 'webQuantumSavory', 'webquantumsavory'),
+      julia: source.versions.julia,
+      genie: source.versions.genie,
+      quantumSavory: source.versions.quantumsavory,
+      app: source.versions.app,
     },
   }
 }
@@ -839,7 +834,7 @@ export function encodeStoredProject(project, context = {}) {
       timeStep: finiteNumber(sourceSimulationConfig.timeStep, DEFAULT_SIMULATION_TIME_STEP),
       ...representationConfig,
     },
-    ...(isRecord(platformInfo) ? { platformInfo: plainPlatformInfo(platformInfo) } : {}),
+    ...(platformInfo == null ? {} : { platformInfo: cloneValue(platformInfo) }),
     net: {
       nodes: Array.isArray(sourceNet.nodes)
         ? sourceNet.nodes.map(plainNode)

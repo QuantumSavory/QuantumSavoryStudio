@@ -5,7 +5,8 @@ import {
   createEmptyProject,
   decodeStoredProject,
   encodeStoredProject,
-  normalizeProjectName
+  normalizeProjectName,
+  projectPlatformInfoFromBackend,
 } from '../utils/projectCodec'
 
 function majorVersion(version) {
@@ -109,9 +110,9 @@ export function useProjectSession({
     }
   }
 
-  function currentPlatformInfo() {
+  function currentProjectPlatformInfo() {
     const platformInfo = api.getPlatformInfo()
-    return platformInfo && typeof platformInfo === 'object' ? platformInfo : null
+    return platformInfo == null ? null : projectPlatformInfoFromBackend(platformInfo)
   }
 
   function serializeProjectData(name = currentProjectName.value) {
@@ -121,7 +122,7 @@ export function useProjectSession({
         position: [...mapCenter.value],
         zoom: mapZoom.value
       },
-      platformInfo: currentPlatformInfo(),
+      platformInfo: currentProjectPlatformInfo(),
       defaultMapCenter,
       defaultMapZoom
     })
@@ -139,16 +140,16 @@ export function useProjectSession({
     hideSlotState?.()
   }
 
-  async function ensurePlatformInfo() {
-    if (!currentPlatformInfo()) {
+  async function ensureProjectPlatformInfo() {
+    if (api.getPlatformInfo() == null) {
       await api.fetchPlatformInfo()
     }
-    return currentPlatformInfo()
+    return currentProjectPlatformInfo()
   }
 
   async function preflightProject(raw, storageName) {
     const decoded = decodeStoredProject(raw, codecContext(storageName))
-    const platformInfo = await ensurePlatformInfo()
+    const platformInfo = await ensureProjectPlatformInfo()
     const mismatch = compareProjectVersions(decoded.platformInfo?.versions, platformInfo?.versions)
     if (mismatch) {
       const accepted = await confirmVersionMismatch(
@@ -179,7 +180,7 @@ export function useProjectSession({
       name,
       map: decoded.map,
       uiGlobal: decoded.uiGlobal,
-      platformInfo: decoded.platformInfo || currentPlatformInfo(),
+      platformInfo: decoded.platformInfo || currentProjectPlatformInfo(),
       defaultMapCenter,
       defaultMapZoom
     })
@@ -385,7 +386,7 @@ export function useProjectSession({
             uiGlobal: {
               map: { position: [...defaultMapCenter], zoom: defaultMapZoom }
             },
-            platformInfo: currentPlatformInfo()
+            platformInfo: currentProjectPlatformInfo()
           },
           persistenceMethod: 'saveProject',
           successMessages: [['info', `New project created: ${name}`]]
@@ -418,7 +419,7 @@ export function useProjectSession({
             project: projectData.value,
             map: { position: [...mapCenter.value], zoom: mapZoom.value },
             uiGlobal: { map: { position: [...mapCenter.value], zoom: mapZoom.value } },
-            platformInfo: currentPlatformInfo()
+            platformInfo: currentProjectPlatformInfo()
           },
           persistenceMethod: 'saveProject',
           cleanupSimulation: targetExists,

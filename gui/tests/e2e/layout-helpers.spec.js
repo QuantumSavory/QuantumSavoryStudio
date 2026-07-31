@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -30,10 +31,7 @@ async function mockBackendMetadata(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/destroy_simulation', route => route.fulfill({
     status: 200,

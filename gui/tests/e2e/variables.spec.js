@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 import {
   replaceStoredProjectAndReload,
   saveAndReadProject,
@@ -53,10 +54,7 @@ async function mockConfiguration(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),

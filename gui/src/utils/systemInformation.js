@@ -1,4 +1,8 @@
 import { frontendBuildInfo } from './frontendBuildInfo.js'
+import {
+  assertBackendPlatformInfo,
+  isFullGitCommitSha,
+} from './platformInfo.js'
 
 export const UNKNOWN_SYSTEM_VALUE = 'Unknown'
 
@@ -19,54 +23,42 @@ function dependencyRows(dependencies) {
 
 function actualCommit(value) {
   const candidate = firstString(value)
-  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(candidate) ? candidate : ''
+  return isFullGitCommitSha(candidate) ? candidate : ''
 }
 
-/**
- * Normalize backend platform metadata and compile-time frontend dependency
- * versions for both visible diagnostics and copied panic reports.
- */
-export function normalizeSystemInformation(platformInfo = {}, buildInfo = frontendBuildInfo) {
-  const source = record(platformInfo)
-  const suppliedVersions = record(source.versions)
-  const versions = Object.keys(suppliedVersions).length ? suppliedVersions : source
-  const backendQuantumSavory = record(source.quantumsavory)
-  const normalizedQuantumSavory = record(source.quantumSavory)
-  const quantumSavory = Object.keys(backendQuantumSavory).length
-    ? backendQuantumSavory
-    : normalizedQuantumSavory
+function systemInformationView(platformInfo, buildInfo) {
+  const versions = platformInfo?.versions ?? {}
+  const quantumsavory = platformInfo?.quantumsavory ?? {}
   const build = record(buildInfo)
   const dependencies = record(build.dependencies)
 
   return {
-    webQuantumSavory: firstString(
-      versions.app,
-      versions.webQuantumSavory,
-      versions.webquantumsavory,
-      build.appVersion,
-    ) || UNKNOWN_SYSTEM_VALUE,
-    julia: firstString(versions.julia, source.julia) || UNKNOWN_SYSTEM_VALUE,
-    genie: firstString(versions.genie, source.genie) || UNKNOWN_SYSTEM_VALUE,
+    webQuantumSavory: firstString(versions.app, build.appVersion) || UNKNOWN_SYSTEM_VALUE,
+    julia: firstString(versions.julia) || UNKNOWN_SYSTEM_VALUE,
+    genie: firstString(versions.genie) || UNKNOWN_SYSTEM_VALUE,
     quantumSavory: {
-      version: firstString(
-        quantumSavory.version,
-        versions.quantumSavory,
-        versions.quantumsavory,
-      ) || UNKNOWN_SYSTEM_VALUE,
-      trackedSource: firstString(
-        quantumSavory.tracked_source,
-        quantumSavory.trackedSource,
-      ),
-      trackedRevision: firstString(
-        quantumSavory.tracked_revision,
-        quantumSavory.trackedRevision,
-      ),
-      treeHash: firstString(quantumSavory.tree_hash, quantumSavory.treeHash),
-      commit: actualCommit(quantumSavory.commit),
+      version: firstString(quantumsavory.version) || UNKNOWN_SYSTEM_VALUE,
+      trackedSource: firstString(quantumsavory.tracked_source),
+      trackedRevision: firstString(quantumsavory.tracked_revision),
+      treeHash: firstString(quantumsavory.tree_hash),
+      commit: actualCommit(quantumsavory.commit),
     },
     frontend: {
       runtime: dependencyRows(dependencies.runtime),
       development: dependencyRows(dependencies.development),
     },
   }
+}
+
+/**
+ * Normalize backend platform metadata and compile-time frontend dependency
+ * versions for both visible diagnostics and copied panic reports.
+ */
+export function normalizeSystemInformation(platformInfo, buildInfo = frontendBuildInfo) {
+  return systemInformationView(assertBackendPlatformInfo(platformInfo), buildInfo)
+}
+
+/** Build the same display view when platform metadata could not be loaded. */
+export function unavailableSystemInformation(buildInfo = frontendBuildInfo) {
+  return systemInformationView(null, buildInfo)
 }

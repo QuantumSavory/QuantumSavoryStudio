@@ -23,15 +23,20 @@ import {
   encodeDesignDocument,
   encodeStoredProject,
   normalizeProjectName,
+  projectPlatformInfoFromBackend,
   summarizeProject,
   toScriptExportPayloadFromSimulationPayload,
   toSimulationPayload,
 } from '../../src/utils/projectCodec'
+import {
+  backendPlatformInfo,
+  durablePlatformInfo,
+} from '../platformInfoFixtures.js'
 
 describe('collaborative design codec', () => {
   it('projects stored projects without UI, platform, or runtime slot state', () => {
     const project = createEmptyProject('Canonical')
-    project.platformInfo = { versions: { app: '1.0.0' } }
+    project.platformInfo = durablePlatformInfo({ app: '1.0.0' })
     project.uiGlobal = { selection: 'node_a' }
     const node = new Node({
       id: 'node_a',
@@ -800,7 +805,12 @@ describe('encodeStoredProject', () => {
 
     const encoded = encodeStoredProject(decoded.project, {
       name: 'Saved As',
-      platformInfo: { versions: { app: '2.0.0' } },
+      platformInfo: durablePlatformInfo({
+        julia: null,
+        genie: null,
+        quantumSavory: null,
+        app: '2.0.0',
+      }),
       uiGlobal: decoded.uiGlobal,
       map: { position: [10, 20], zoom: 6 },
     })
@@ -847,6 +857,45 @@ describe('encodeStoredProject', () => {
 
     expect(liveSlot.isLocked).toBe(true)
     expect(liveSlot.assignment).toEqual({ node: 1 })
+  })
+
+  it('owns the single backend-to-durable platform conversion', () => {
+    const backend = backendPlatformInfo({
+      julia: '1.13.0',
+      genie: null,
+      quantumsavory: '0.9.0',
+      app: '2.1.0',
+    })
+    const converted = projectPlatformInfoFromBackend(backend)
+
+    expect(converted).toEqual(durablePlatformInfo({
+      julia: '1.13.0',
+      genie: null,
+      quantumSavory: '0.9.0',
+      app: '2.1.0',
+    }))
+    expect(converted).not.toBe(backend)
+    expect(converted.versions).not.toBe(backend.versions)
+    expect(() => projectPlatformInfoFromBackend(durablePlatformInfo()))
+      .toThrow(/platformInfo must contain exactly/)
+  })
+
+  it('accepts only the exact durable platform shape during encoding', () => {
+    const project = createEmptyProject('Exact platform metadata')
+    const exact = durablePlatformInfo()
+    const encoded = encodeStoredProject(project, { platformInfo: exact })
+    expect(encoded.platformInfo).toEqual(exact)
+    expect(encoded.platformInfo).not.toBe(exact)
+
+    for (const platformInfo of [
+      { versions: { app: '2.0.0' } },
+      { versions: { ...exact.versions, quantumsavory: '0.8.0' } },
+      { ...exact, capabilities: {} },
+      backendPlatformInfo(),
+    ]) {
+      expect(() => encodeStoredProject(project, { platformInfo }))
+        .toThrow(ProjectSchemaError)
+    }
   })
 
   it('round-trips identities, references, description, tagged data, and map state', () => {
@@ -1059,7 +1108,7 @@ describe('backend payload codecs', () => {
     })
     project.schemaVersion = 99
     project.uiGlobal = { map: { position: [0, 0], zoom: 1 } }
-    project.platformInfo = { versions: {} }
+    project.platformInfo = durablePlatformInfo()
     const slot = project.net.nodes[0].data.slots[0]
     slot.ui_expanded = true
     slot.isLocked = true

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackend(page, { parseRequests = [], scriptRequests = [] } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -19,10 +20,7 @@ async function mockBackend(page, { parseRequests = [], scriptRequests = [] } = {
     json: { states_zoo_types: [] },
   }))
   await page.route('**/platform_info', route => route.fulfill({
-    json: {
-      versions: { julia: 'test', quantumSavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
   await page.route('**/destroy_simulation', route => route.fulfill({
     json: { success: true },

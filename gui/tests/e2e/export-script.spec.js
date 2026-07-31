@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { canonicalErrorResponse } from './httpResponses.js'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -31,10 +32,7 @@ async function mockBackendMetadata(page) {
   await page.route('**/platform_info', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
 }
 

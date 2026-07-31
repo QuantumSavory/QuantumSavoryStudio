@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 async function mockBackend(page) {
   await page.route('http://localhost:8000/**', route => {
@@ -9,10 +10,7 @@ async function mockBackend(page) {
       '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
-      '/platform_info': {
-        versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-        capabilities: { unsafe_code_evaluation: false },
-      },
+      '/platform_info': backendPlatformInfo(),
     }
 
     return route.fulfill({

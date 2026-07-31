@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const PROJECT_NAME = 'Physical Edge Layout'
 
@@ -19,10 +20,7 @@ async function mockBackendMetadata(page) {
     json: { states_zoo_types: [] },
   }))
   await page.route('**/platform_info', route => route.fulfill({
-    json: {
-      versions: { julia: 'test', quantumsavory: 'test', app: 'test' },
-      capabilities: { unsafe_code_evaluation: false },
-    },
+    json: backendPlatformInfo(),
   }))
 }
 
