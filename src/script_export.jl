@@ -1013,22 +1013,9 @@ function _script_noise_expression(
   node_index=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
-  noise_definition === nothing && return "nothing"
-  if noise_definition isa AbstractString
-    String(noise_definition) == "default" && return "nothing"
-    type_name = String(noise_definition)
-    parameters = Any[]
-  elseif _is_object_like(noise_definition)
-    type_name = _required_nonempty_string(noise_definition, "type", context)
-    type_name == "default" && return "nothing"
-    parameters = get(noise_definition, "parameters", Any[])
-    parameters isa AbstractVector || throw(validation_error("$context parameters must be an array"))
-  else
-    throw(validation_error(
-      "$context must be a background-noise object, string, or null",
-      Dict{String,Any}("received_type" => string(typeof(noise_definition))),
-    ))
-  end
+  type_name = noise_definition["type"]
+  type_name == "default" && return "nothing"
+  parameters = noise_definition["parameters"]
 
   noise_type = _resolve_type_from_string(type_name, :noise)
   noise_type === nothing && throw(validation_error("$context has unknown type '$type_name'"))
@@ -1546,7 +1533,7 @@ function generate_julia_script(payload)
         script_representation(default_representations, slot_type, render_reference),
       )
       push!(background_expressions, _script_noise_expression(
-        get(slot, "backgroundNoise", nothing),
+        slot["backgroundNoise"],
         "Node $node_index slot $slot_index background noise";
         variable_bindings,
         node_index,

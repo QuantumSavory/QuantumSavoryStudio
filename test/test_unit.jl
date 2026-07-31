@@ -2638,9 +2638,11 @@
       )
         @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
       end
-      wrong_background = rejected_payload_shape(payload ->
-        payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = nothing)
-      @test occursin("must be an object", wrong_background.message)
+      for background in (nothing, "AmplitudeDamping")
+        wrong_background = rejected_payload_shape(payload ->
+          payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = background)
+        @test occursin("must be an object", wrong_background.message)
+      end
 
       background_parameter(payload) =
         payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"]["parameters"][1]

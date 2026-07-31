@@ -543,16 +543,6 @@ function _validate_variable_references(payload, variables)
     definition = constructor.definition
     location = constructor.location
     kind = constructor.kind
-    if definition isa AbstractString
-      String(definition) == "default" && continue
-      resolved = kind === :protocol ?
-        _resolve_protocol_type_from_string(String(definition)) :
-        _resolve_noise_type_from_string(String(definition))
-      resolved === nothing && throw(validation_error(
-        "Unknown $(kind === :protocol ? "protocol" : "background noise") type: '$(definition)'",
-      ))
-      continue
-    end
     _is_object_like(definition) || throw(validation_error(
       "$location must be a catalog-backed object",
     ))
@@ -570,10 +560,7 @@ function _validate_variable_references(payload, variables)
     ))
 
     declared_parameter_types = _constructor_parameter_types(constructor_type)
-    parameters = get(definition, "parameters", Any[])
-    parameters isa AbstractVector || throw(validation_error(
-      "$location parameters must be an array",
-    ))
+    parameters = definition["parameters"]
     supplied_names = Set{String}()
 
     for (parameter_index, parameter) in enumerate(parameters)
@@ -598,7 +585,6 @@ function _validate_variable_references(payload, variables)
           "location" => location,
         ),
       ))
-      haskey(parameter, "value") || continue
       value = parameter["value"]
       if value === nothing ||
           (value isa AbstractString && isempty(strip(String(value))))
@@ -1527,7 +1513,7 @@ function create_registers_from_nodes(data)
 
   for (node_index, node) in enumerate(nodes)
     node_data = node["data"]
-    slots = get(node_data, "slots", [])
+    slots = node_data["slots"]
 
     # isempty(slots) && continue # TODO: what to do with empty slots?
 
@@ -1547,14 +1533,13 @@ function create_registers_from_nodes(data)
       push!(traits, slot_type())
       push!(representations, construct_representation(default_representations, slot_type))
 
-      # Instantiate background noise (supports string or object with parameters)
-      noise_def = get(slot_data, "backgroundNoise", nothing)
+      # Instantiate the exact validated background-noise object.
+      noise_def = slot_data["backgroundNoise"]
       background_context = Dict{Symbol,Any}(
         :node => node_index,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
-      background = noise_def === nothing ? nothing :
-        _instantiate_noise(noise_def, background_context; variables)
+      background = _instantiate_noise(noise_def, background_context; variables)
       push!(background_noise, background)
     end
 
@@ -1601,67 +1586,46 @@ function _resolve_protocol_type_from_string(type_str::AbstractString)
   return T
 end
 
-# Instantiate a background noise from either a String name or an object.
+# Instantiate one exact validated background-noise object.
 function _instantiate_noise(
   noise_def,
   ctx::Dict{Symbol,Any}=Dict{Symbol,Any}();
   variables=Dict{String,Variable}(),
 )
-  # String form: "Depolarization" or any available background type name
-  if isa(noise_def, AbstractString)
-    if String(noise_def) == "default"
-      return nothing # this now means no noise
-    end
+  type_name = noise_def["type"]
+  type_name == "default" && return nothing
 
-    T = _resolve_type_from_string(String(noise_def), :noise)
-    T === nothing && error("Unknown background noise type: $(noise_def)")
-    return T()
-  end
+  noise_type = _resolve_type_from_string(type_name, :noise)
+  noise_type === nothing && error("Unknown background noise type: $(type_name)")
 
-  # Object form: { type: String, parameters: [ { name, value } ] }
-  if isa(noise_def, AbstractDict) || startswith(string(typeof(noise_def)), "JSON3.Object")
-    tstr = get(noise_def, "type", nothing)
-    tstr === nothing && error("Noise object missing 'type'")
-    
-    # Handle "default" type as no noise
-    if String(tstr) == "default"
-      return nothing
-    end
-    
-    T = _resolve_type_from_string(String(tstr), :noise)
-    T === nothing && error("Unknown background noise type: $(tstr)")
+  raw_params = Vector{Any}(noise_def["parameters"])
+  kwargs, variable_assignments = _constructor_parameter_kwargs(
+    raw_params,
+    noise_type,
+    ctx;
+    variables,
+    parameter_context="background noise parameter",
+  )
 
-    raw_params = Vector{Any}(get(noise_def, "parameters", Any[]))
-    kwargs, variable_assignments = _constructor_parameter_kwargs(
-      raw_params,
-      T,
-      ctx;
-      variables,
-      parameter_context="background noise parameter",
+  isempty(variable_assignments) &&
+    return noise_type(; (k => v for (k, v) in kwargs)...)
+  try
+    return noise_type(; (k => v for (k, v) in kwargs)...)
+  catch error
+    error isa APIError && rethrow(error)
+    parameter_names = join(
+      (assignment["parameter_name"] for assignment in variable_assignments),
+      ", ",
     )
-
-    isempty(variable_assignments) &&
-      return T(; (k => v for (k, v) in kwargs)...)
-    try
-      return T(; (k => v for (k, v) in kwargs)...)
-    catch error
-      error isa APIError && rethrow(error)
-      parameter_names = join(
-        (assignment["parameter_name"] for assignment in variable_assignments),
-        ", ",
-      )
-      throw(validation_error(
-        "Failed to instantiate background noise with variable-backed parameter(s): $parameter_names",
-        Dict{String,Any}(
-          "background_type" => string(T),
-          "variable_assignments" => variable_assignments,
-          "constructor_error" => sprint(showerror, error),
-        ),
-      ))
-    end
+    throw(validation_error(
+      "Failed to instantiate background noise with variable-backed parameter(s): $parameter_names",
+      Dict{String,Any}(
+        "background_type" => string(noise_type),
+        "variable_assignments" => variable_assignments,
+        "constructor_error" => sprint(showerror, error),
+      ),
+    ))
   end
-
-  error("Unsupported backgroundNoise definition (expected object or nothing): $(typeof(noise_def))")
 end
 
 function _resolve_noise_type_from_string(type_str::AbstractString)
