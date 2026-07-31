@@ -2622,6 +2622,92 @@
               }
             }
           },
+          "simulationLogEvent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "timestamp",
+              "source",
+              "severity",
+              "message",
+              "details"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "debug",
+                  "info",
+                  "success",
+                  "warning",
+                  "error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
+              }
+            }
+          },
+          "simulationPanicEvent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "timestamp",
+              "source",
+              "severity",
+              "summary",
+              "exception_type",
+              "message",
+              "stacktrace"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "const": "panic"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "exception_type": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "stacktrace": {
+                "type": "string"
+              }
+            }
+          },
           "simulationState": {
             "type": "object",
             "additionalProperties": false,
@@ -2714,7 +2800,7 @@
                   "simulation_panic": {
                     "oneOf": [
                       {
-                        "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
+                        "$ref": "#/components/schemas/HttpOperationSchemas/$defs/simulationPanicEvent"
                       },
                       {
                         "type": "null"
@@ -3331,7 +3417,17 @@
                 "const": true
               },
               "logs": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/objectArray"
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/HttpOperationSchemas/$defs/simulationLogEvent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HttpOperationSchemas/$defs/simulationPanicEvent"
+                    }
+                  ]
+                }
               },
               "count": {
                 "type": "integer",

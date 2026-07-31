@@ -1075,20 +1075,23 @@
       logs_data = parse_response(logs_response)
       structured_record = findfirst(logs_data["logs"]) do record
         get(record, "source", nothing) == "Simulator" &&
-          get(record, "group", nothing) == "protocol" &&
-          haskey(record, "event") &&
-          haskey(record, "sim_time") &&
-          haskey(record, "sim_process_id") &&
-          haskey(record, "protocol") &&
-          haskey(record, "nodes")
+          get(get(record, "details", Dict()), "group", nothing) == "protocol" &&
+          haskey(get(record, "details", Dict()), "event") &&
+          haskey(get(record, "details", Dict()), "sim_time") &&
+          haskey(get(record, "details", Dict()), "sim_process_id") &&
+          haskey(get(record, "details", Dict()), "protocol") &&
+          haskey(get(record, "details", Dict()), "nodes")
       end
       @test structured_record !== nothing
       if structured_record !== nothing
         record = logs_data["logs"][structured_record]
-        @test record["event"] isa String
-        @test record["sim_time"] isa Number
-        @test record["protocol"] isa String
-        @test record["nodes"] isa Vector
+        @test Set(keys(record)) == Set([
+          "id", "timestamp", "source", "severity", "message", "details",
+        ])
+        @test record["details"]["event"] isa String
+        @test record["details"]["sim_time"] isa Number
+        @test record["details"]["protocol"] isa String
+        @test record["details"]["nodes"] isa Vector
       end
 
       # 6. Clean up
@@ -1262,6 +1265,42 @@
         "type" => "string",
         "const" => "manual",
       )
+
+      ordinary_log_schema = operation_schemas["simulationLogEvent"]
+      @test ordinary_log_schema["additionalProperties"] == false
+      @test Set(ordinary_log_schema["required"]) == Set([
+        "id", "timestamp", "source", "severity", "message", "details",
+      ])
+      @test Set(keys(ordinary_log_schema["properties"])) ==
+        Set(ordinary_log_schema["required"])
+      @test ordinary_log_schema["properties"]["severity"]["enum"] ==
+        ["debug", "info", "success", "warning", "error"]
+      @test ordinary_log_schema["properties"]["details"]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/jsonObject"
+
+      panic_schema = operation_schemas["simulationPanicEvent"]
+      @test panic_schema["additionalProperties"] == false
+      @test Set(panic_schema["required"]) == Set([
+        "id", "timestamp", "source", "severity", "summary",
+        "exception_type", "message", "stacktrace",
+      ])
+      @test Set(keys(panic_schema["properties"])) ==
+        Set(panic_schema["required"])
+      @test panic_schema["properties"]["severity"] == Dict(
+        "type" => "string",
+        "const" => "panic",
+      )
+      @test operation_schemas["simulationState"]["properties"]["simulation"][
+        "properties"
+      ]["simulation_panic"]["oneOf"][1]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/simulationPanicEvent"
+      log_items = operation_schemas["getSimulationLogsResponse"]["properties"][
+        "logs"
+      ]["items"]["oneOf"]
+      @test [schema["\$ref"] for schema in log_items] == [
+        "#/components/schemas/HttpOperationSchemas/\$defs/simulationLogEvent",
+        "#/components/schemas/HttpOperationSchemas/\$defs/simulationPanicEvent",
+      ]
 
       numeric_schema =
         contract["components"]["schemas"]["NumericExpressionRequest"]
@@ -1693,6 +1732,23 @@
       create_response = make_request("POST", "/parse_network_graph", body=payload)
       @test create_response.status == 200
 
+      state = WebQuantumSavory.STATE[logs_test_name]
+      WebQuantumSavory.Logger.log_event(
+        state,
+        Logging.Info,
+        "canonical ordinary event";
+        group="protocol",
+        event="fixture_event",
+      )
+      panic_error, panic_backtrace = try
+        error("canonical panic event")
+      catch error
+        (error, catch_backtrace())
+      end
+      panic = WebQuantumSavory._panic_record(panic_error, panic_backtrace)
+      state.simulation_panic = copy(panic)
+      push!(state.log_events, panic)
+
       # Test getting logs with default purge=true
       logs_response = make_request("GET", "/logs/$logs_test_name")
       @test logs_response.status == 200
@@ -1703,6 +1759,25 @@
       @test isa(logs_data["logs"], Vector)
       @test isa(logs_data["count"], Int)
       @test logs_data["count"] == length(logs_data["logs"])
+      ordinary = only(filter(
+        event -> get(event, "severity", nothing) == "info",
+        logs_data["logs"],
+      ))
+      @test Set(keys(ordinary)) == Set([
+        "id", "timestamp", "source", "severity", "message", "details",
+      ])
+      @test ordinary["details"] == Dict(
+        "group" => "protocol",
+        "event" => "fixture_event",
+      )
+      panic_event = only(filter(
+        event -> get(event, "severity", nothing) == "panic",
+        logs_data["logs"],
+      ))
+      @test Set(keys(panic_event)) == Set([
+        "id", "timestamp", "source", "severity", "summary",
+        "exception_type", "message", "stacktrace",
+      ])
 
       # Test getting logs with purge=false
       logs_response_no_purge = make_request("GET", "/logs/$logs_test_name", query=Dict("purge" => "false"))

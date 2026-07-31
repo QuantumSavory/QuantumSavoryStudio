@@ -456,9 +456,11 @@ function _cleanup_degradation_report(
       "source" => "Simulator",
       "severity" => "error",
       "message" => "Simulation resource cleanup degraded",
-      "error_code" => "SIMULATION_CLEANUP_FAILED",
-      "cleanup_failure_count" => length(failures),
-      "cleanup_failures" => failure_details,
+      "details" => Dict{String,Any}(
+        "error_code" => "SIMULATION_CLEANUP_FAILED",
+        "cleanup_failure_count" => length(failures),
+        "cleanup_failures" => failure_details,
+      ),
     )
   end
   return CleanupReport(failures, degradation_event)

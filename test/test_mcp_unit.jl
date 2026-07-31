@@ -1480,13 +1480,16 @@
   end
 
   @testset "simulation log reads can remain non-purging" begin
-    state = WebQuantumSavory.State(
-      name="logs",
-      log_events=Any[Dict("message" => "one"), Dict("message" => "two")],
-    )
+    state = WebQuantumSavory.State(name="logs")
+    WebQuantumSavory.Logger.log_event(state, Logging.Info, "one")
+    WebQuantumSavory.Logger.log_event(state, Logging.Info, "two")
     service = WebQuantumSavory.SimulationService(Dict("logs" => state))
     latest = WebQuantumSavory.simulation_logs(service, "logs"; purge=false, limit=1)
-    @test latest == Any[Dict("message" => "two")]
+    @test length(latest) == 1
+    @test only(latest)["message"] == "two"
+    @test Set(keys(only(latest))) == Set([
+      "id", "timestamp", "source", "severity", "message", "details",
+    ])
     @test length(state.log_events) == 2
     @test WebQuantumSavory.simulation_status(service, "logs")["name"] == "logs"
     @test_throws WebQuantumSavory.APIError WebQuantumSavory.simulation_status(

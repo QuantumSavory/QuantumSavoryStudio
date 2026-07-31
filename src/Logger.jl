@@ -188,23 +188,26 @@ function json_safe(value, depth::Int=0)
 end
 
 function _base_event(level, message; source::AbstractString=DEFAULT_SOURCE, prefix::AbstractString="log")
+  severity = severity_name(level)
+  severity == "panic" && throw(ArgumentError(
+    "Panic events must use the dedicated panic record constructor",
+  ))
+  isempty(source) && throw(ArgumentError("Log event source must not be empty"))
   Dict{String,Any}(
     "id" => next_event_id(prefix),
     "timestamp" => event_timestamp(),
     "source" => String(source),
-    "severity" => severity_name(level),
+    "severity" => severity,
     "message" => string(message),
+    "details" => Dict{String,Any}(),
   )
 end
 
 function _add_extra_fields!(event::Dict{String,Any}, fields)
+  details = event["details"]
   for (raw_key, value) in fields
     key = string(raw_key)
-    # Public record identity fields cannot be replaced by logger metadata.
-    if haskey(event, key)
-      key = "logging_$(key)"
-    end
-    event[key] = json_safe(value)
+    details[key] = json_safe(value)
   end
   return event
 end
@@ -242,8 +245,8 @@ end
 Logging.min_enabled_level(logger::CapturingLogger) = MIN_LEVEL
 
 function Logging.shouldlog(logger::CapturingLogger, level, _module, group, id)
-  # QuantumSavory's module remains a fallback for legacy records that predate
-  # stable groups. External protocol modules opt in by using an exported group.
+  # QuantumSavory-owned records may lack an exported group. External protocol
+  # modules opt in by using one of the stable simulator groups.
   trusted_origin = ultimateparent(_module) === QuantumSavory || group in STABLE_LOG_GROUPS
   return MIN_LEVEL <= level <= MAX_LEVEL && trusted_origin
 end
@@ -254,11 +257,12 @@ function Logging.handle_message(logger::CapturingLogger, level, message, _module
   try
     fields, group_override = _canonical_captured_fields(kwargs)
     event = _base_event(level, message)
-    event["module"] = string(_module)
-    event["group"] = json_safe(something(group_override, _canonical_log_group(group, kwargs)))
-    event["logging_id"] = json_safe(id)
-    event["file"] = string(filepath)
-    event["line"] = line
+    details = event["details"]
+    details["module"] = string(_module)
+    details["group"] = json_safe(something(group_override, _canonical_log_group(group, kwargs)))
+    details["logging_id"] = json_safe(id)
+    details["file"] = string(filepath)
+    details["line"] = line
     _add_extra_fields!(event, fields)
     push!(logger.state.log_events, event)
   catch error
@@ -293,7 +297,7 @@ end
 function log_event(state, level, message; module_name=nothing, source=DEFAULT_SOURCE, kwargs...)
   try
     event = _base_event(level, message; source=string(source))
-    module_name === nothing || (event["module"] = string(module_name))
+    module_name === nothing || (event["details"]["module"] = string(module_name))
     _add_extra_fields!(event, kwargs)
     push!(state.log_events, event)
   catch error

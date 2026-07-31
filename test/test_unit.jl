@@ -3492,9 +3492,12 @@
       )
       degradation_event = cleanup_error.details["degradation_event"]
       @test degradation_event["severity"] == "error"
-      @test degradation_event["error_code"] ==
+      @test Set(keys(degradation_event)) == Set([
+        "id", "timestamp", "source", "severity", "message", "details",
+      ])
+      @test degradation_event["details"]["error_code"] ==
         "SIMULATION_CLEANUP_FAILED"
-      @test degradation_event["cleanup_failure_count"] == 2
+      @test degradation_event["details"]["cleanup_failure_count"] == 2
     end
     @test length(attempted_slots) == 2
     @test all(
@@ -4064,7 +4067,7 @@
       )
       ConcurrentSim.run(actual_resumable_sim)
     end
-    @test only(actual_resumable_state.log_events)["group"] ==
+    @test only(actual_resumable_state.log_events)["details"]["group"] ==
       string(QuantumSavory.LOG_GROUPS.protocol)
 
     structured_state = WebQuantumSavory.State(name="structured_logs")
@@ -4101,27 +4104,33 @@
     )
 
     captured = structured_state.log_events[1]
+    @test Set(keys(captured)) == Set([
+      "id", "timestamp", "source", "severity", "message", "details",
+    ])
     @test captured["source"] == "Simulator"
     @test captured["severity"] == "error"
     @test captured["message"] == "ordinary simulator error"
-    @test captured["group"] == "protocol"
-    @test captured["event"] == "pair_entangled"
-    @test captured["sim_time"] == 1.25
-    @test captured["sim_process_id"] == "9007199254740992"
-    @test captured["protocol"] == "ExampleProtocol"
-    @test captured["nodes"] == Any[1, 2]
-    @test captured["pair_id"] == "9007199254740993"
-    @test captured["attempt"] == 2
-    @test captured["context"] == Dict("slot" => 3, "active" => true)
-    @test captured["exception"]["exception_type"] == "ErrorException"
-    @test occursin("structured logger failure", captured["exception"]["message"])
-    @test occursin("Stacktrace", captured["exception"]["stacktrace"])
+    details = captured["details"]
+    @test details["group"] == "protocol"
+    @test details["event"] == "pair_entangled"
+    @test details["sim_time"] == 1.25
+    @test details["sim_process_id"] == "9007199254740992"
+    @test details["protocol"] == "ExampleProtocol"
+    @test details["nodes"] == Any[1, 2]
+    @test details["pair_id"] == "9007199254740993"
+    @test details["attempt"] == 2
+    @test details["context"] == Dict("slot" => 3, "active" => true)
+    @test details["exception"]["exception_type"] == "ErrorException"
+    @test occursin("structured logger failure", details["exception"]["message"])
+    @test occursin("Stacktrace", details["exception"]["stacktrace"])
     @test structured_state.log_events[2]["severity"] == "success"
+    @test structured_state.log_events[2]["details"]["result"] == Any["ok", 4]
     @test all(log["source"] == "Simulator" for log in structured_state.log_events)
     @test length(unique(log["id"] for log in structured_state.log_events)) == 2
     round_tripped_logs = JSON.parse(JSON.json(structured_state.log_events))
     @test round_tripped_logs isa Vector
-    @test round_tripped_logs[1]["group"] == string(QuantumSavory.LOG_GROUPS.protocol)
+    @test round_tripped_logs[1]["details"]["group"] ==
+      string(QuantumSavory.LOG_GROUPS.protocol)
     @test WebQuantumSavory.Logger.json_safe(Int128(9_007_199_254_740_991)) ==
       Int128(9_007_199_254_740_991)
     @test WebQuantumSavory.Logger.json_safe(Int128(-9_007_199_254_740_991)) ==
@@ -4155,12 +4164,13 @@
       resumable_fields...,
     )
     resumable_record = only(resumable_state.log_events)
-    @test resumable_record["group"] == "protocol"
-    @test resumable_record["event"] == "pair_entangled"
-    @test resumable_record["round"] == 2
-    @test resumable_record["slots"] == Any[1, 2]
-    @test resumable_record["pair_id"] == "9007199254740993"
-    @test !any(occursin(r"_\d+$", key) for key in keys(resumable_record))
+    resumable_details = resumable_record["details"]
+    @test resumable_details["group"] == "protocol"
+    @test resumable_details["event"] == "pair_entangled"
+    @test resumable_details["round"] == 2
+    @test resumable_details["slots"] == Any[1, 2]
+    @test resumable_details["pair_id"] == "9007199254740993"
+    @test !any(occursin(r"_\d+$", key) for key in keys(resumable_details))
 
     custom_state = WebQuantumSavory.State(name="custom_module_structured_logs")
     custom_logger = WebQuantumSavory.Logger.make_logger(
@@ -4188,9 +4198,10 @@
     )
     @test length(custom_state.log_events) == 1
     @test only(custom_state.log_events)["message"] == "custom protocol event"
-    @test only(custom_state.log_events)["module"] == "Main.CustomStructuredLogModule"
-    @test only(custom_state.log_events)["group"] == "protocol"
-    @test only(custom_state.log_events)["event"] == "custom_event"
+    @test only(custom_state.log_events)["details"]["module"] ==
+      "Main.CustomStructuredLogModule"
+    @test only(custom_state.log_events)["details"]["group"] == "protocol"
+    @test only(custom_state.log_events)["details"]["event"] == "custom_event"
     @test !Logging.shouldlog(
       custom_logger,
       Logging.Debug,
@@ -4217,10 +4228,18 @@
     @test only(silent_state.log_events)["message"] == "captured without console output"
 
     # Create a test state with log events
+    test_event(id, timestamp, severity, message) = Dict{String,Any}(
+      "id" => id,
+      "timestamp" => timestamp,
+      "source" => "Simulator",
+      "severity" => severity,
+      "message" => message,
+      "details" => Dict{String,Any}(),
+    )
     test_logs = [
-      Dict("timestamp" => "2023-01-01T00:00:00", "level" => "info", "message" => "Test log 1"),
-      Dict("timestamp" => "2023-01-01T00:00:01", "level" => "warn", "message" => "Test log 2"),
-      Dict("timestamp" => "2023-01-01T00:00:02", "level" => "error", "message" => "Test log 3")
+      test_event("log-1", "2023-01-01T00:00:00Z", "info", "Test log 1"),
+      test_event("log-2", "2023-01-01T00:00:01Z", "warning", "Test log 2"),
+      test_event("log-3", "2023-01-01T00:00:02Z", "error", "Test log 3"),
     ]
     
     state = WebQuantumSavory.State(name="test_logs", log_events=test_logs)
@@ -4241,8 +4260,12 @@
       @test length(state.log_events) == 0
       
       # Add more logs
-      push!(state.log_events, Dict("timestamp" => "2023-01-01T00:00:03", "level" => "info", "message" => "Test log 4"))
-      push!(state.log_events, Dict("timestamp" => "2023-01-01T00:00:04", "level" => "debug", "message" => "Test log 5"))
+      push!(state.log_events, test_event(
+        "log-4", "2023-01-01T00:00:03Z", "info", "Test log 4",
+      ))
+      push!(state.log_events, test_event(
+        "log-5", "2023-01-01T00:00:04Z", "debug", "Test log 5",
+      ))
       
       # Test get_logs with purge=false
       logs_no_purge = WebQuantumSavory.get_logs("test_logs", false)
