@@ -60,22 +60,25 @@ The current 10/30/300-minute constants are not configurable. Their baselined
 fixed-but-approximate semantics are specified by
 [SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources).
 
-## Cleanup target and current delta
+## Cleanup outcome
 
 The destructive failed-cleanup outcome is specified by
 [SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources)
 and [SUB-007](../../v-model/03-subsystem-contracts/core-application.md#sub-007--observation-diagnostics-and-cleanup-boundary).
 
-Cleanup attempts to trace out assigned state and clear network, mapping, graph, and
-payload references. Individual trace-out failures are logged and do not stop remaining
-attempts, but they are not aggregated into the cleanup return value. If no outer cleanup
-exception occurs, the current implementation logs success and returns `true` even when
-an individual trace-out failed. Explicit destroy then removes the registry entry, so
-that failure does not reach the caller as a cleanup warning.
+Cleanup snapshots every assigned slot before releasing any one of them, attempts each
+release independently, and aggregates JSON-safe stage/type/message/location records.
+It clears network, simulation, graph, payload, protocol, and slot-mapping references in
+all outcomes and returns one `CleanupReport`.
 
-Cleanup also clears the references needed to retry an individual failed release. That
-matches the no-retry decision, but returning `true`, retaining a blocked record, and
-failing to surface severe degradation do not match SYS-010/SUB-007.
+The simulation service removes the matching registry record even if the cleanup
+boundary itself fails. Any aggregated failure becomes a
+`SIMULATION_CLEANUP_FAILED` API error whose details contain every failure and an
+error-severity degradation event; nothing is retained for retry. Blocking and the
+wall-clock timeout path apply the same report rule and discard the record on release
+failure. Focused component injection covers multiple independent failures, record and
+lifecycle-lock removal, heavy-reference clearing, and later live-access rejection.
+Real HTTP/GUI failure injection remains an integration-level verification gap.
 
 ## Logs, panic, and live metadata
 
@@ -85,7 +88,7 @@ queries, slots, and protocol rendering require a retained register/network and b
 unavailable after blocking or destruction. Panic state and structured logs may contain
 full exception messages and stack traces. The required disclosure and GUI handoff are
 specified by [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable);
-current production evaluation redaction is a separate gap.
+source-evaluation disclosure remains a separate policy boundary.
 
 ## Anchors
 

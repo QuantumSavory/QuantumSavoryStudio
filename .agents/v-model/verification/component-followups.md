@@ -32,9 +32,9 @@ encoded by the current component suites.
 - **Procedure:** Inject failures in early and late assigned-state releases, record every attempt, and inspect outcome, registry, references, later access, and structured degradation event.
 - **Environment / configuration:** Julia backend unit environment with injectable release failures
 - **Pass criterion:** All releases are attempted; failures aggregate; no success is returned; heavy state and registry record are absent; nothing is retained for retry; error-severity degradation details are structured.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Injection does not exist; current code logs per-slot warnings, clears retry state, and can return success.
+- **Status:** implemented
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
+- **Nonconformance:** No current execution record exists; HTTP/GUI handoff remains part of INTV-007.
 
 ## UNITV-013 — Inspect evaluation-site completeness
 

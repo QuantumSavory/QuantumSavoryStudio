@@ -42,7 +42,7 @@
 - **Pass criterion:** Successful releases clear heavy references, block reasons/record presence match the retention stage, active runs are excluded, and blocked live access fails.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
-- **Nonconformance:** Failure behavior requires UNITV-012; no current execution record exists.
+- **Nonconformance:** No current execution record exists; failure behavior is covered separately by UNITV-012.
 
 ## UNITV-006 — Verify restricted-source guard and evaluation
 
