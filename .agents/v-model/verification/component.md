@@ -8,10 +8,10 @@
 - **Environment / configuration:** Node Vitest/jsdom
 - **Pass criterion:** Every invalid candidate leaves source, selection, retained identities, and commit hooks unchanged; every valid candidate allocates fresh IDs, resolves aliases, distinguishes required values from optional omission, normalizes constructors from live metadata, preserves each asserted live identity, and updates every retained reference exactly once.
 - **Status:** implemented
-- **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js) and [`gui/tests/unit/nodePanelBackgroundInputs.test.js`](../../../gui/tests/unit/nodePanelBackgroundInputs.test.js)
-- **Nonconformance:** No current supported-environment execution record exists;
-  required-field metadata/fixtures are absent, and no fixture starts with an existing
-  generated ID that collides with the allocator's next candidate.
+- **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/nodePanelBackgroundInputs.test.js`](../../../gui/tests/unit/nodePanelBackgroundInputs.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), [`gui/tests/unit/projectHelpers.test.js`](../../../gui/tests/unit/projectHelpers.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
+- **Nonconformance:** No current supported-environment execution record exists, and no
+  fixture starts with an existing generated ID that collides with the allocator's next
+  candidate.
 
 ## UNITV-003 — Verify asymmetric topology and edge-role mapping
 

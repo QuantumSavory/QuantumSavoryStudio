@@ -38,9 +38,10 @@ gaps recorded below.
 - **Environment / configuration:** Real browser/backend with no intercepted catalog routes
 - **Pass criterion:** Choices and requiredness derive from current metadata or explicit allowlists; required values and optional omission round-trip, while malformed/missing metadata, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Upstream requiredness and the SimpleSwitch keyword-construction
-  invariant are absent. Existing real-browser coverage is limited to one background
+- **Evidence:** Automated precursors in [`test/test_unit.jl`](../../../test/test_unit.jl), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
+- **Nonconformance:** No current supported real-browser/backend action exercises the
+  complete SimpleSwitch and catalog-failure matrix, and the exact upstream pin is not
+  remotely reachable. Existing real-browser coverage is limited to one background
   catalog; other input and failure kinds remain separate or mocked.
 
 ## SYSV-005 — Verify GUI simulation lifecycle

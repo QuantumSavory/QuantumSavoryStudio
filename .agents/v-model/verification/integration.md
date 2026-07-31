@@ -44,21 +44,20 @@
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
 - **Nonconformance:** The exact-string and global-identity regressions and corrected backend suites
-  have not executed; required-field metadata and complete SimpleSwitch construction are
-  absent, and reordered-node discrimination remains planned under UNITV-010.
+  have not executed, and reordered-node discrimination remains planned under UNITV-010.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs; cover required/optional fields, a generated existing-owner protocol, boundaries/nulls, omission, unknown IDs, placement, descriptor conflicts, Variables, and keyword construction.
+- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs, covering required/optional fields, an existing-owner protocol, boundaries, omission, unknown IDs, placement, descriptor conflicts, Variables, and keyword construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
 - **Pass criterion:** All paths derive matching type, placement, requiredness, nullability, bounds, and resolution; false differs from omission; valid values use catalog keyword construction; invalid metadata, values, placement, or descriptors preserve the design.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Upstream lacks requiredness and keyword-complete SimpleSwitch
-  construction; Web offers omission for its two required fields. Other real-catalog,
-  generated-protocol, and malformed/unknown metadata cases remain incomplete.
+- **Evidence:** [`Project.toml`](../../../Project.toml), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
+- **Nonconformance:** Artifacts encode requiredness and keyword-complete SimpleSwitch
+  construction. The upstream pin is unreachable; no real-stack run covers the full
+  catalog/failure matrix.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
@@ -91,8 +90,8 @@
 - **Pass criterion:** Exact configuration is required; required fields emit explicit keywords, optional omissions remain omitted, output is stable and valid, mappings run, and omissions are disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
-- **Nonconformance:** Required-field metadata and a complete SimpleSwitch export fixture
-  are absent; the panel mocks its route and no exhaustive feature/help inventory exists.
+- **Nonconformance:** The corrected backend/frontend cases have not executed; the panel
+  mocks its route and no exhaustive feature/help inventory exists.
 
 ## INTV-009 — Verify private route/error/log handoff
 

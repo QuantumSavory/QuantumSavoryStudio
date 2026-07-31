@@ -32,11 +32,11 @@ all historical GUI mutations already use the service.
 
 Editable protocol parameters, background-noise parameters, and Variables use explicit
 descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector currently begins with Default for every field; Default clears the draft value
-and omits the keyword from minimized payloads. This is the known required-field gap
-routed from the [backend constructor-metadata reference](../backend/constructor-and-tag-metadata.md).
-After upstream supplies `required`, only omittable fields may expose Default; required
-booleans must distinguish an explicit `false` from omission.
+selector offers Default only for optional fields; it clears the value and omits the
+keyword. Required fields have no Default branch, and required Booleans remain unresolved
+until `true` or `false` is chosen. Numeric vectors use one JSON-array parser: members are
+finite, integer members are integral, and Booleans are rejected. Empty arrays remain
+valid without an advertised nonempty constraint.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
@@ -45,6 +45,7 @@ value and transient validation state.
 Constructor member metadata from the backend is authoritative for:
 
 - protocol placement and virtual-edge eligibility;
+- required versus optional keyword construction;
 - nullable unions and named-tag semantics;
 - field-compatible Variable assignment;
 - bounds and target types.
@@ -53,17 +54,22 @@ Never infer named-tag behavior from saved type strings or create a frontend-only
 catalog.
 
 `ConstructorForm` is the shared descriptor/validation/Variable-assignment core for
-protocols and background noise. Its thin wrappers differ in parameter identity
-(`name` versus `field`), metadata lookup, and injected protocol fields; do not fork
-background input rules. Every background assignment, including the Web `default`
-sentinel, and every slot type must resolve an exact entry in its nonempty live simulator
-catalog before commit. Missing catalogs and unknown types fail without committing the
-candidate; GUI controls, template-to-node copies, and layout-generated copies have no
-literal fallback. Background parameters then use shared constructor validation. An
-installed background expression receives concrete node context. A layout template
-receives representative/deferred validation, and `DesignCommandService` revalidates
-every cloned slot type and background against its destination node after candidate
-positions stabilize, aborting the whole generation if one fails.
+protocols and background noise; its thin wrappers differ only in identity, lookup, and
+injected fields. `validateConstructorDraft` is shared by authoring and readiness. A
+required linked Variable must exist, be compatible and complete, and not use Default;
+resolution stays live while the editor is open.
+
+`ProtocolsManager` keeps a required-field addition as a local pending draft. The command
+service creates it once, only after completion; cancellation or incompleteness leaves the
+design unchanged. Optional-only protocols retain immediate creation. Runtime metadata
+is not copied into project documents.
+
+Every background assignment, including Web `default`, and every slot type resolves an
+exact entry in its nonempty live catalog. Slot IDs use the shared object-catalog
+projection; string and literal fallbacks are removed. Missing or unknown metadata aborts
+the candidate. Background parameters use shared constructor validation. Installed
+expressions receive node context; generator templates defer it, then
+`DesignCommandService` revalidates every clone at its final node atomically.
 
 Network-generator options are not an authority for protocol definitions. After topology
 stabilizes, the command service scans the whole candidate network and resolves every new
@@ -75,10 +81,14 @@ protocols are deliberately not reprocessed.
 Schema-v2 durable parameters carry `selectedType`. An explicit current branch is
 authoritative and must agree with intrinsic `nothing` or `Wildcard` wire values and with
 the referenced Variable's branch. Transport authoring may omit `selectedType`; only
-that omission permits value- or reference-based inference, and the committed parameter
-records the inferred descriptor ID. A Variable branch change updates all linked
-descriptors in the same candidate or rejects the whole update when any assignment is
-incompatible.
+that omission permits inference. Updates record current catalog types/descriptors and
+drop unknown seeded fields. No older-schema migration exists. Variable branch changes
+update all linked descriptors atomically or reject the candidate.
+
+Before transport, `App` injects one protocol/background catalog bundle into the GUI/MCP
+validator. Missing or malformed catalogs produce `CONSTRUCTOR_CATALOG_UNAVAILABLE`;
+invalid constructors produce catalog-backed issues, with no dispatch. Omission is
+reserved for topology-only utility use.
 
 ## Draft and validation state
 
@@ -123,14 +133,16 @@ on an ID/name collision. Backend registry and rendering rules live in
 ## Anchors
 
 - **Command service:** [`gui/src/domain/design/DesignCommandService.js`](../../../gui/src/domain/design/DesignCommandService.js).
-- **Constructor helpers:** [`gui/src/utils/protocolConstructors.js`](../../../gui/src/utils/protocolConstructors.js)
-  and [`gui/src/utils/parameterTypes.js`](../../../gui/src/utils/parameterTypes.js).
-- **Shared constructor/editor:** [`gui/src/components/panels/ConstructorForm.vue`](../../../gui/src/components/panels/ConstructorForm.vue)
+- **Constructor/readiness helpers:** [`gui/src/utils/constructorParameters.js`](../../../gui/src/utils/constructorParameters.js)
+  and [`gui/src/utils/projectHelpers.js`](../../../gui/src/utils/projectHelpers.js).
+- **Shared constructor/editor:** [`gui/src/components/panels/ConstructorForm.vue`](../../../gui/src/components/panels/ConstructorForm.vue),
+  [`gui/src/components/panels/ProtocolsManager.vue`](../../../gui/src/components/panels/ProtocolsManager.vue),
   and [`gui/src/components/panels/CodeEditorWithSymbols.vue`](../../../gui/src/components/panels/CodeEditorWithSymbols.vue).
 - **Source-context help:** [`gui/src/utils/sourceContext.js`](../../../gui/src/utils/sourceContext.js)
   and [`gui/src/components/panels/SourceContextHelp.vue`](../../../gui/src/components/panels/SourceContextHelp.vue).
 - **Atomicity evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js).
-- **Input evidence:** [`gui/tests/unit/protocolConstructorForm.test.js`](../../../gui/tests/unit/protocolConstructorForm.test.js)
+- **Input evidence:** [`gui/tests/unit/protocolConstructorForm.test.js`](../../../gui/tests/unit/protocolConstructorForm.test.js),
+  [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js),
   and [`gui/tests/unit/backgroundNoiseConstructorForm.test.js`](../../../gui/tests/unit/backgroundNoiseConstructorForm.test.js).
 - **Background integration:** [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js).
 

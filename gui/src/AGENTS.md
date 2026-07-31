@@ -28,8 +28,8 @@ Applies under `gui/src/`. Components inherit `components/AGENTS.md`.
 - Keep encoders as declared-field projections; simulator and collaboration projections
   remain separate.
 - Route authoring through the shared design-command service; reject missing, unknown, or
-  contradictory constructor metadata before reconciliation, and gate lifecycle work on
-  the capability model.
+  contradictory constructor metadata before reconciliation. Gate lifecycle work on the
+  capability model and the injected live constructor catalogs.
 - Preserve durable IDs and retained object identity across graph reconciliation.
 - Keep browser globals private to their resource owner. Share presentation actions through
   injected UI services, and observe public UI, storage, or network boundaries in browser tests.

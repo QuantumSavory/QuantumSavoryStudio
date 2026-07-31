@@ -126,6 +126,7 @@ their status.
   [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** As of 2026-07-31, the declared QuantumSavory SHA returns
-  `upload-pack: not our ref`, blocking clean installation. After replacing or publishing
-  it, the action still omits save/reopen and lacks durable run evidence.
+- **Nonconformance:** As of 2026-07-31, declared QuantumSavory SHA
+  `b00a894e4584f3821df88b34fb096289bc7dd2a4` returns `upload-pack: not our ref`,
+  blocking clean installation. After replacing or publishing it, the action still omits
+  save/reopen and lacks durable run evidence.

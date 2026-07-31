@@ -22,8 +22,8 @@ incomplete.
 
 ## Release-candidate status
 
-`2.0.0` metadata is prepared without changing evidence. SYSV-021 and ACC-012 are
-blocked: the exact QuantumSavory pin cannot be fetched from its declared upstream and
+`2.0.0` metadata is prepared without changing evidence. SYSV-021 and ACC-012 are blocked:
+QuantumSavory pin `b00a894e4584f3821df88b34fb096289bc7dd2a4` is unavailable upstream and
 must be published or replaced before supported-environment execution and acceptance.
 Dependency-owned MCP resource `error.data` loss is an accepted conformance gap, not a
 release blocker; its actions stay incomplete and the transport stays unpatched. Keep
@@ -76,8 +76,9 @@ The diagnostic-event mini-V separates closed ordinary/panic transport DTOs from 
 application log view. UNITV-024 and INTV-019 are `implemented` pending
 Julia/frontend/browser execution.
 
-The catalog mini-V extends UNITV-002; real-catalog failure and placement matrices remain
-planned under INTV-005 and SYSV-004.
+Catalog artifacts extend UNITV-002 with required authoring, staged creation, closed
+admission, and shared readiness. Real-catalog failure/placement runs remain planned
+under INTV-005 and SYSV-004.
 
 ## Source basis
 

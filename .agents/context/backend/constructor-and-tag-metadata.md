@@ -32,25 +32,32 @@ descriptor must agree with an intrinsic value or linked Variable branch. Only an
 omitted descriptor may be inferred; a Variable branch change synchronizes every linked
 descriptor atomically or fails.
 
-## Required-field construction follow-up
+## Constructor requiredness and keyword construction
 
-Current constructor metadata does not distinguish required fields from omittable Julia
-keywords, so the browser offers `Default` for every field. That is incorrect for
-`SimpleSwitchDiscreteProt.clientnodes` and `success_probs`, the two required fields in
-the current catalog, and lets an incomplete draft fail only during construction. Do not
-solve this by serializing concrete default values: simulator defaults include values
-that are not a stable JSON contract.
+Every QuantumSavory `ConstructorFieldSchema` declares a mandatory `required::Bool`.
+Web projects constructor parameters as the exact object
+`{field,type,doc,required,min,max}`; named-tag fields add their declared `kind` and
+`nullable` members. The current simulator catalog marks only
+`SimpleSwitchDiscreteProt.clientnodes` and `success_probs` as required. Required fields
+must be present and complete, while omission of an optional field deliberately delegates
+to the simulator keyword default. Do not serialize concrete defaults as a substitute:
+simulator defaults are not a stable JSON contract.
 
-Implement the correction as two ordered changes. First, QuantumSavory adds an explicit
-mandatory `required::Bool` to every `ConstructorFieldSchema` declaration and makes
-keyword constructibility from injected plus advertised fields an invariant of every
-catalog entry. `SimpleSwitchDiscreteProt` must therefore synthesize a fresh correctly
-sized `_backlog` when keyword construction omits that hidden field. Then Web projects
-`required`, removes `Default` from required fields, and requires an explicit
-choice—including `true` or `false` for required booleans—before authoring commit. Update
-closed OpenAPI metadata, readiness/runtime/export validation, catalog/constructor tests,
-and the listed V-model actions together. Keep these as ordered upstream and consumer
-PRs; do not add a parallel construction abstraction.
+QuantumSavory owns keyword construction and hidden runtime state. In particular,
+`SimpleSwitchDiscreteProt` creates a fresh private `_backlog` from its required public
+arguments; Web neither advertises nor persists that field. Backend parsing, runtime
+construction, and script export share the required-field contract. Explicit numeric
+vectors accept finite numbers, require integral members for integer vectors, and reject
+Booleans as numbers.
+
+The browser validates the complete protocol/background catalog response before
+publishing either half. Authoring removes `Default` from required fields, treats a
+required Boolean as unresolved until the user chooses `true` or `false`, and rejects a
+missing, stale, incompatible, or Default-valued linked Variable. GUI and MCP simulation
+readiness use the same live-catalog validator and fail closed while either constructor
+catalog is unavailable. The closed OpenAPI catalog schemas include `required`; `/docs`
+continues to render generated Swagger UI from the active OpenAPI document, and generated
+operation paths remain derived rather than hand-edited.
 
 Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
 values with `kind` are closed variable-reference, numeric-expression, or States Zoo
@@ -107,14 +114,20 @@ availability depends on a retained register/network.
 ## Compatibility boundary
 
 The root and test projects declare QuantumSavory `0.8` compatibility and source exact
-revision `b419b1268a5e5e3a91de64d88ecaa758610540db`; no Julia manifest is committed.
+revision `b00a894e4584f3821df88b34fb096289bc7dd2a4`; no Julia manifest is committed.
 Changing that revision is therefore the explicit point at which maintainers must review
-catalog projections, fixtures, generated imports, and this reference together.
+catalog projections, fixtures, generated imports, and this reference together. As of
+2026-07-31 that revision is not exposed by the declared upstream remote, so a release or
+fresh supported-environment run is blocked until the upstream commit is published or
+the pin is replaced by a reachable equivalent.
 
 ## Anchors
 
 - **Catalog/parser:** [`src/parser.jl`](../../../src/parser.jl).
 - **Tag codec:** [`src/tag_metadata.jl`](../../../src/tag_metadata.jl).
+- **Frontend catalog admission:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
+- **Generated API documentation:** [`routes.jl`](../../../routes.jl) and
+  [`contracts/http/openapi.json`](../../../contracts/http/openapi.json).
 - **Dependency declaration:** [`Project.toml`](../../../Project.toml).
 - **Contract evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl) and
   [`test/test_integration.jl`](../../../test/test_integration.jl).

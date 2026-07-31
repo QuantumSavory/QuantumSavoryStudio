@@ -130,6 +130,7 @@ acceptance, except ACC-012 is blocked as recorded below.
   [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** As of 2026-07-31, the declared QuantumSavory SHA returns
-  `upload-pack: not our ref`, blocking preparation. After replacing or publishing it,
-  save/reopen coverage and a maintainer acceptance record remain required.
+- **Nonconformance:** As of 2026-07-31, declared QuantumSavory SHA
+  `b00a894e4584f3821df88b34fb096289bc7dd2a4` returns `upload-pack: not our ref`,
+  blocking preparation. After replacing or publishing it, save/reopen coverage and a
+  maintainer acceptance record remain required.
