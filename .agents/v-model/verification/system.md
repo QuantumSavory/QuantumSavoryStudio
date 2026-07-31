@@ -34,12 +34,14 @@ gaps recorded below.
 
 - **Covers:** SYS-004
 - **Method:** test
-- **Procedure:** Fetch real catalogs, render every input kind, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit advertised, malformed/missing-metadata, unsupported, invalid-placement, and contradictory explicit values.
+- **Procedure:** Fetch real catalogs, render every input kind, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, malformed/missing-metadata, unsupported, invalid-placement, and contradictory explicit values.
 - **Environment / configuration:** Real browser/backend with no intercepted catalog routes
-- **Pass criterion:** Choices derive from current returned metadata or explicit allowlists; advertised values round-trip, while malformed/missing metadata, unsupported values, invalid placement, and explicit descriptor contradictions fail without changing the visible design.
+- **Pass criterion:** Choices and requiredness derive from current metadata or explicit allowlists; required values and optional omission round-trip, while malformed/missing metadata, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** A real-browser background-noise scenario crosses its catalog through descriptors, persistence, simulation, and export; generated-protocol placement, malformed/missing catalogs, other input kinds, and explicit unsupported values remain separate or mocked.
+- **Nonconformance:** Upstream requiredness and the SimpleSwitch keyword-construction
+  invariant are absent. Existing real-browser coverage is limited to one background
+  catalog; other input and failure kinds remain separate or mocked.
 
 ## SYSV-005 — Verify GUI simulation lifecycle
 

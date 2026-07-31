@@ -42,15 +42,15 @@ solve this by serializing concrete default values: simulator defaults include va
 that are not a stable JSON contract.
 
 Implement the correction as two ordered changes. First, QuantumSavory adds an explicit
-mandatory `required::Bool` to every `ConstructorFieldSchema` declaration and a public
-`construct_from_schema(::Type{T}; kwargs...)` seam. Its default method performs keyword
-construction; the SimpleSwitch specialization routes through the public outer
-constructor that initializes hidden `_backlog` state. Then Web projects `required` in
-constructor metadata, removes `Default` from required fields, requires an explicit
-choice—including `true` or `false` for required booleans—before authoring commit, and
-uses the simulator construction seam in both runtime parsing and script export. Update
-OpenAPI, catalog/constructor tests, and SUB-005/INTV-005 evidence together. Keep the two
-repository changes as ordered upstream and consumer PRs.
+mandatory `required::Bool` to every `ConstructorFieldSchema` declaration and makes
+keyword constructibility from injected plus advertised fields an invariant of every
+catalog entry. `SimpleSwitchDiscreteProt` must therefore synthesize a fresh correctly
+sized `_backlog` when keyword construction omits that hidden field. Then Web projects
+`required`, removes `Default` from required fields, and requires an explicit
+choice—including `true` or `false` for required booleans—before authoring commit. Update
+closed OpenAPI metadata, readiness/runtime/export validation, catalog/constructor tests,
+and the listed V-model actions together. Keep these as ordered upstream and consumer
+PRs; do not add a parallel construction abstraction.
 
 Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
 values with `kind` are closed variable-reference, numeric-expression, or States Zoo

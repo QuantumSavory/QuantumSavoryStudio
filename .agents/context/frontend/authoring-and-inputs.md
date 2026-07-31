@@ -32,8 +32,11 @@ all historical GUI mutations already use the service.
 
 Editable protocol parameters, background-noise parameters, and Variables use explicit
 descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector begins with Default. Default clears the draft value and omits the keyword from
-minimized payloads.
+selector currently begins with Default for every field; Default clears the draft value
+and omits the keyword from minimized payloads. This is the known required-field gap
+routed from the [backend constructor-metadata reference](../backend/constructor-and-tag-metadata.md).
+After upstream supplies `required`, only omittable fields may expose Default; required
+booleans must distinguish an explicit `false` from omission.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old

@@ -38,28 +38,27 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed physical duplicates, repeated node, edge, slot, and protocol IDs, field mutations at every owned level, tagged/opaque constructor values, resolved physical values, and placement-gated protocols through HTTP.
+- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed physical duplicates, repeated IDs, missing required and complete catalog constructors, field mutations, tagged/opaque values, resolved physical values, and placement-gated protocols through HTTP.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five required resolved fields; permitted virtual protocols remain without physical fields; graph and result-addressing identity is unambiguous across the full payload; exact tags and untagged simulator values follow their declared branches; every owned malformed fixture fails before construction.
+- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five resolved fields; permitted virtual protocols lack physical fields; identities remain unambiguous; required constructor omission fails before construction while a complete catalog constructor builds; exact tags, opaque values, and every owned malformed fixture follow their declared branches.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
 - **Nonconformance:** The exact-string and global-identity regressions and corrected backend suites
-  have not executed; reordered-node discrimination remains the separate planned
-  UNITV-010 action.
+  have not executed; required-field metadata and complete SimpleSwitch construction are
+  absent, and reordered-node discrimination remains planned under UNITV-010.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs; cover required/omittable fields, a generated existing-owner protocol, boundaries/nulls, omission, unknown IDs, placement, descriptor conflicts, Variables, and simulator-owned construction.
+- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs; cover required/optional fields, a generated existing-owner protocol, boundaries/nulls, omission, unknown IDs, placement, descriptor conflicts, Variables, and keyword construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** All paths derive matching type, placement, requiredness, nullability, bounds, and resolution; false differs from omission; valid values construct through the simulator seam; invalid metadata, values, placement, or descriptors preserve the design.
+- **Pass criterion:** All paths derive matching type, placement, requiredness, nullability, bounds, and resolution; false differs from omission; valid values use catalog keyword construction; invalid metadata, values, placement, or descriptors preserve the design.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Upstream metadata lacks requiredness and a schema-backed
-  construction seam; Web consequently offers omission for the two required
-  SimpleSwitch fields and bypasses its public outer constructor. Other real-catalog,
-  generated-protocol, and malformed/unknown metadata cases also remain incomplete.
+- **Nonconformance:** Upstream lacks requiredness and keyword-complete SimpleSwitch
+  construction; Web offers omission for its two required fields. Other real-catalog,
+  generated-protocol, and malformed/unknown metadata cases remain incomplete.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
@@ -87,12 +86,13 @@
 
 - **Covers:** SUB-008
 - **Method:** test
-- **Procedure:** Reject malformed or default-dependent export request trees, generate the complete mapping/omission inventory repeatedly with canaries, and inspect help.
+- **Procedure:** Reject malformed, omitted-required, or default-dependent export trees; generate complete mapping/omission and keyword-constructor canaries repeatedly; inspect help.
 - **Environment / configuration:** Backend unit/HTTP tests plus browser export-help scenario
-- **Pass criterion:** Exact explicit configuration is required; output is stable and valid, state/canaries stay unchanged, mappings run, and omissions are disclosed.
+- **Pass criterion:** Exact configuration is required; required fields emit explicit keywords, optional omissions remain omitted, output is stable and valid, mappings run, and omissions are disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
-- **Nonconformance:** The panel mocks its route; one real-route scenario covers selected semantics; no exhaustive feature/help inventory exists.
+- **Nonconformance:** Required-field metadata and a complete SimpleSwitch export fixture
+  are absent; the panel mocks its route and no exhaustive feature/help inventory exists.
 
 ## INTV-009 — Verify private route/error/log handoff
 
