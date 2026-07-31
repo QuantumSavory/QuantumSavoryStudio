@@ -6,7 +6,7 @@
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
 - **Related specification IDs:** SYS-006, SYS-008, SUB-004, SUB-007, SUB-009,
-  CMP-013, CMP-017, CMP-018
+  CMP-013, CMP-017, CMP-018, CMP-019
 - **Review when:** A public/internal route, error code, status code, or OpenAPI schema
   changes.
 
@@ -96,6 +96,14 @@ requires `unsafe_code_evaluation` plus the closed local MCP capability object. P
 and source strings may be `null` when introspection is unavailable. The detailed
 QuantumSavory version equals `versions.quantumsavory`. No camel-cased response field is
 supported. `/docs` derives this nested schema from the same OpenAPI source.
+
+`/logs` returns the closed `{success, logs, count}` envelope, with each item selected
+from two distinct closed schemas. An ordinary event contains exactly `id`, `timestamp`,
+`source`, `severity`, `message`, and object `details`; a panic contains exactly `id`,
+`timestamp`, `source`, `severity`, `summary`, `exception_type`, `message`, and
+`stacktrace`. Serialized state reuses that same panic schema for `simulation_panic`.
+The served OpenAPI document and generated `/docs` retain these exact definitions rather
+than documenting a permissive common record.
 
 The top-level serialized `status` is a coarse created/prepared/complete value, not the
 complete execution phase. Running, pause acknowledgement, progress, and errors are in

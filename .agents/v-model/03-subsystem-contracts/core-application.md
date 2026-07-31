@@ -59,10 +59,10 @@ requirements.
 
 ## SUB-007 — Observation, diagnostics, and cleanup boundary
 
-- **Normative statement:** Logs, panic diagnostics, results, tags, queries, and cleanup failures shall cross backend/GUI boundaries as structured serializable records, with complete diagnostic disclosure and explicit unavailable/degraded states.
+- **Normative statement:** Ordinary logs and panic diagnostics shall cross backend/GUI boundaries as distinct closed records, while results, tags, queries, and cleanup failures remain structured and serializable with complete disclosure and explicit unavailable/degraded states.
 - **Parents:** SYS-006, SYS-008, SYS-010
-- **Acceptance criterion:** Results contain no live Julia objects; live-only operations fail after cleanup; every failure delivered to or polled by the GUI preserves classification/message/details in the Tools Log; any release failure attempts all releases, removes the record, and logs severe degradation.
-- **Verification:** INTV-007 (test)
+- **Acceptance criterion:** Ordinary log metadata is confined to named details and panic fields are exact; both paths reject aliases and preserve complete diagnostics. Results contain no live Julia objects; live-only operations fail after cleanup; every GUI failure preserves classification/message/details; release failure attempts all releases, removes the record, and logs severe degradation.
+- **Verification:** INTV-007 (test), INTV-019 (test)
 - **Origin / risk:** Maintainer-confirmed error and cleanup behavior; high observability/resource risk
 - **Context:** [Simulation runtime](../../context/backend/simulation-runtime.md)
 

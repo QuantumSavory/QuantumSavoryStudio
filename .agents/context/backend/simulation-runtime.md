@@ -5,7 +5,8 @@
   cleanup, logs, tags, panic reporting, or resource limits.
 - **Do not open when:** Changing source evaluation, generated scripts, or frontend-only
   project editing.
-- **Related specification IDs:** SYS-005, SYS-006, SYS-010, SUB-006, SUB-007, CMP-004, CMP-005
+- **Related specification IDs:** SYS-005, SYS-006, SYS-010, SUB-006, SUB-007,
+  SUB-009, CMP-004, CMP-005, CMP-019
 - **Review when:** State fields, lifecycle transitions, time limits, cleanup policy, or
   live-result availability changes.
 
@@ -85,9 +86,22 @@ Real HTTP/GUI failure injection remains an integration-level verification gap.
 Starting a new target clears captured logs; resuming a paused target preserves them.
 HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Live tags,
 queries, slots, and protocol rendering require a retained register/network and become
-unavailable after blocking or destruction. Panic state and structured logs may contain
-full exception messages and stack traces. The required disclosure and GUI handoff are
-specified by [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable);
+unavailable after blocking or destruction.
+
+Ordinary captured events are closed records containing exactly `id`, `timestamp`,
+`source`, `severity`, `message`, and object `details`. Logger metadata and arbitrary
+simulator fields live only under `details`. Panic events are a distinct closed record
+containing exactly `id`, `timestamp`, `source`, `severity`, `summary`,
+`exception_type`, `message`, and `stacktrace`; they contain no ordinary-event
+`details`. The resumable-logging adapter repairs generated `_group_N` group values and
+captured-field suffixes before nesting them under `details`. This is current
+ResumableFunctions integration, not a retired-schema compatibility path. Cleanup
+degradation uses the same ordinary-event shape.
+
+Panic state and structured logs may contain full exception messages and stack traces.
+The required shapes and GUI handoff are specified by
+[CMP-019](../../v-model/04-component-contracts/mcp-http.md#cmp-019--canonical-diagnostic-event-boundaries)
+and [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable);
 source-evaluation disclosure remains a separate policy boundary.
 
 ## Anchors

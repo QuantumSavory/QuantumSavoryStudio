@@ -5,7 +5,7 @@
   polling, logs, panic handling, or simulation cleanup.
 - **Do not open when:** Changing backend simulation algorithms or project persistence.
 - **Related specification IDs:** SYS-005, SYS-006, SYS-008, SYS-012, SUB-006,
-  SUB-007, SUB-013, CMP-011, CMP-013, CMP-018
+  SUB-007, SUB-013, CMP-011, CMP-013, CMP-018, CMP-019
 - **Review when:** A backend state field, frontend phase, action capability, polling
   cadence, or lifecycle API call changes.
 
@@ -61,9 +61,13 @@ Current cadences are implementation choices:
 - client-side state polling timeout: 15 minutes.
 
 Generation and project-name guards prevent stale responses from changing a new session.
-Terminal state handling drains final logs before stopping polls. Panic events are
-deduplicated across state and log polling while structured severity/source/group data is
-retained.
+Terminal state handling drains final logs before stopping polls. `ApiConnector` admits
+only the exact `/logs` envelope and exact snake_case ordinary/panic event schemas. State
+panic ingestion uses the same event validator. One backend-event converter creates the
+application log view, while application-authored messages use a distinct internal
+constructor and cannot enter transport parsing. There are no transport aliases,
+stringified-`details` parsing, or source guessing. Panic events are deduplicated across
+state and log polling by their stable exact ID.
 
 Project-session transitions stop state/log polling and liveness checks. The lower-level
 `resetSimulation()` helper stops state/log polling but currently leaves the liveness

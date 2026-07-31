@@ -41,3 +41,12 @@
 - **Verification:** UNITV-021 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 simplified recovery invariant; high duplicate-mutation risk
 - **Context:** [Browser collaboration](../../context/mcp/browser-collaboration.md)
+
+## CMP-019 — Canonical diagnostic-event boundaries
+
+- **Normative statement:** Ordinary simulator logs and panic events shall use distinct closed DTOs; ordinary metadata shall exist only under `details`; browser admission shall accept only exact snake_case transport fields and convert them once into a separate application-log view.
+- **Parents:** SUB-007, SUB-009
+- **Acceptance criterion:** Backend/OpenAPI ordinary events have exactly `id`, `timestamp`, `source`, `severity`, `message`, and object `details`; panic events have exactly `id`, `timestamp`, `source`, panic `severity`, `summary`, `exception_type`, `message`, and `stacktrace`. Status and log polling reject omissions, extras, aliases, invalid values, and stringified details; app-authored logs never enter transport admission; resumable-group repair retains canonical metadata under `details`.
+- **Verification:** UNITV-024 (test)
+- **Origin / risk:** Maintainer-approved current-only diagnostic boundary; high observability risk
+- **Context:** [Simulation client](../../context/frontend/simulation-client.md)
