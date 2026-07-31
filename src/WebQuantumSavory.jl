@@ -893,7 +893,6 @@ get_logs(simulation_name::String, purge::Bool=true) =
     limit=nothing,
   )
 
-include("mocks.jl")
 include("simulation_service.jl")
 include("collaboration_hub.jl")
 include("sidecar_supervisor.jl")
