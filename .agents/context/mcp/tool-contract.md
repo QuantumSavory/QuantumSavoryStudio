@@ -45,8 +45,10 @@ The current recovery rules are:
   remain literal, every other byte uses an uppercase percent triplet, and decoding
   occurs exactly once, so reserved characters, `%`, `+`, and Unicode round-trip
   without collisions or URI aliases;
-- backend and sidecar trust boundaries independently validate MIME type, base64,
-  nonempty UTF-8 HTML, and the PNG signature.
+- the sidecar requires exact `{mime_type, value}` structured-resource or
+  `{mime_type, base64}` rendered-resource payloads; backend and sidecar trust
+  boundaries independently validate registry MIME type, base64, nonempty UTF-8 HTML,
+  and the PNG signature.
 
 Exactly four result templates are advertised: slot HTML/PNG and protocol HTML/PNG. Each
 declares `result_kind`, `identifier_variable`, and `format`; contract loading rejects

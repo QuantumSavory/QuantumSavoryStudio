@@ -427,10 +427,74 @@ end
     ]
 end
 
-@testset "MCP rendered resources validate both trust boundaries" begin
+@testset "MCP resources validate the exact sidecar boundary" begin
     png_bytes = vcat(RESOURCE_PNG_SIGNATURE, UInt8[0x01])
+    design_uri = "wqs://design/current"
     html_uri = "wqs://simulation/slots/slot/html"
     png_uri = "wqs://simulation/slots/slot/png"
+    design_value = Dict{String,Any}("name" => "Project")
+    design = structured_resource_contents(
+        design_uri,
+        Dict(
+            "mime_type" => "application/json",
+            "value" => design_value,
+        ),
+        "application/json",
+    )
+    @test design isa TextResourceContents
+    @test string(design.uri) == design_uri
+    @test design.mime_type == "application/json"
+    @test JSON3.read(design.text, Dict{String,Any}) == design_value
+    string_value = structured_resource_contents(
+        design_uri,
+        Dict(
+            "mime_type" => "application/json",
+            "value" => "Project",
+        ),
+        "application/json",
+    )
+    @test string_value.text == "\"Project\""
+
+    structured_invalid_cases = (
+        (
+            Dict("mime_type" => "application/json"),
+            "MALFORMED_SUCCESS_RESPONSE",
+        ),
+        (
+            Dict(
+                "mime_type" => "application/json",
+                "value" => design_value,
+                "legacy" => true,
+            ),
+            "MALFORMED_SUCCESS_RESPONSE",
+        ),
+        (
+            Dict(
+                "mime_type" => "application/json",
+                "base64" => base64encode("{}"),
+            ),
+            "MALFORMED_SUCCESS_RESPONSE",
+        ),
+        (
+            Dict("mime_type" => "text/plain", "value" => design_value),
+            "VALIDATION_FAILED",
+        ),
+    )
+    for (payload, expected_code) in structured_invalid_cases
+        error = try
+            structured_resource_contents(
+                design_uri,
+                payload,
+                "application/json",
+            )
+            nothing
+        catch caught
+            caught
+        end
+        @test error isa BackendRequestError
+        @test error.payload["code"] == expected_code
+    end
+
     html = rendered_resource_contents(
         html_uri,
         Dict(
@@ -466,7 +530,21 @@ end
         (
             Dict("mime_type" => "text/html"),
             "text/html",
-            "RESULT_NOT_FOUND",
+            "MALFORMED_SUCCESS_RESPONSE",
+        ),
+        (
+            Dict(
+                "mime_type" => "text/html",
+                "base64" => base64encode("<p>x</p>"),
+                "value" => "<p>x</p>",
+            ),
+            "text/html",
+            "MALFORMED_SUCCESS_RESPONSE",
+        ),
+        (
+            Dict("mime_type" => "text/html", "value" => "<p>x</p>"),
+            "text/html",
+            "MALFORMED_SUCCESS_RESPONSE",
         ),
         (
             Dict("mime_type" => "text/html", "base64" => ""),

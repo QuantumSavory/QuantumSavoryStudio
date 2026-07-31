@@ -57,7 +57,9 @@ Each must remain a `local-mcp` operation under `/_mcp/internal/`. Do not reintro
 literal endpoint suffixes in sidecar callers.
 
 The sidecar accepts only exact backend success objects or the canonical non-2xx
-`error.code/message/details` envelope. Network failure, invalid JSON, malformed success,
+`error.code/message/details` envelope. Resource results additionally require exactly
+`mime_type` plus `value` or `base64`, according to the registry resource kind, and the
+MIME type must match the registry. Network failure, invalid JSON, malformed success,
 and malformed error responses retain distinct classifications and diagnostics.
 Resource failures retain structured payloads through the backend bridge and
 `BackendRequestError`. The pinned ModelContextProtocol resource-provider handler then

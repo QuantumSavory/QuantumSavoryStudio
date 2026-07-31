@@ -496,19 +496,26 @@ function resource_value(configuration, uri)
   return plain_dictionary(result)
 end
 
-function text_resource(configuration, uri)
-  result = resource_value(configuration, uri)
-  value = get(result, "value", result)
-  return TextResourceContents(
-    uri=uri,
-    mime_type=string(get(result, "mime_type", "application/json")),
-    text=value isa AbstractString ? String(value) : JSON3.write(value),
+function require_exact_resource_payload(
+  result,
+  uri,
+  expected_fields,
+)
+  exact_string_keys(result, expected_fields) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "MALFORMED_SUCCESS_RESPONSE",
+      "The backend returned a malformed resource payload.";
+      details=Dict(
+        "uri" => uri,
+        "expected_fields" => collect(expected_fields),
+      ),
+    )),
   )
+  return nothing
 end
 
-function rendered_resource_contents(uri, result, expected_mime_type)
-  mime_type = string(get(result, "mime_type", "application/octet-stream"))
-  encoded = get(result, "base64", nothing)
+function require_resource_mime_type(result, uri, expected_mime_type)
+  mime_type = string(result["mime_type"])
   mime_type == expected_mime_type || throw(
     BackendRequestError(sidecar_error_payload(
       "VALIDATION_FAILED",
@@ -520,6 +527,44 @@ function rendered_resource_contents(uri, result, expected_mime_type)
       ),
     )),
   )
+  return mime_type
+end
+
+function structured_resource_contents(uri, result, expected_mime_type)
+  require_exact_resource_payload(
+    result,
+    uri,
+    ("mime_type", "value"),
+  )
+  mime_type = require_resource_mime_type(
+    result,
+    uri,
+    expected_mime_type,
+  )
+  return TextResourceContents(
+    uri=uri,
+    mime_type=mime_type,
+    text=JSON3.write(result["value"]),
+  )
+end
+
+function text_resource(configuration, uri, expected_mime_type)
+  result = resource_value(configuration, uri)
+  return structured_resource_contents(uri, result, expected_mime_type)
+end
+
+function rendered_resource_contents(uri, result, expected_mime_type)
+  require_exact_resource_payload(
+    result,
+    uri,
+    ("mime_type", "base64"),
+  )
+  mime_type = require_resource_mime_type(
+    result,
+    uri,
+    expected_mime_type,
+  )
+  encoded = result["base64"]
   encoded isa AbstractString && !isempty(encoded) || throw(
     BackendRequestError(sidecar_error_payload(
       "RESULT_NOT_FOUND",
@@ -601,12 +646,14 @@ function resources(
       name=resource.name,
       description=resource.description,
       mime_type=resource.mime_type,
-      data_provider=() -> text_resource(configuration, resource.uri),
+      data_provider=() ->
+        text_resource(configuration, resource.uri, resource.mime_type),
     )
   end
   templates = map(registry.resource_templates) do template
     provider = if template.result_kind === nothing
-      (uri, _variables) -> text_resource(configuration, uri)
+      (uri, _variables) ->
+        text_resource(configuration, uri, template.mime_type)
     else
       (uri, _variables) ->
         template_resource(configuration, uri, template.mime_type)
