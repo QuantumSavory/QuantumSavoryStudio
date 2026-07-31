@@ -47,8 +47,8 @@ artifacts are therefore at most `implemented`; no action is marked `passing`.
 - Current behavior: root/`src/`, `gui/`, `mcp/`, and the co-shipped MCP contract.
 - Verification design: `test/`, `gui/tests/`, `mcp/test/`, `ci/`, GitHub Actions, and
   Buildkite.
-- Historical-only evidence: implemented plans under `plans/followups/`; these do not
-  define current behavior.
+- Historical decisions remain available in Git history; they do not define current
+  behavior.
 
 ## Confirmed product boundaries
 
