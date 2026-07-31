@@ -63,7 +63,3 @@ export const SOURCE_CONTEXT_KEYWORDS = Object.freeze(
 export const SOURCE_CONTEXT_BY_ID = Object.freeze(
   Object.fromEntries(SOURCE_CONTEXT_KEYWORDS.map(keyword => [keyword.id, keyword]))
 )
-
-// Compatibility aliases for the original custom-function consumers.
-export const CUSTOM_FUNCTION_CONTEXT_KEYWORDS = SOURCE_CONTEXT_KEYWORDS
-export const CUSTOM_FUNCTION_CONTEXT_BY_ID = SOURCE_CONTEXT_BY_ID

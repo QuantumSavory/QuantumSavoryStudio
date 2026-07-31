@@ -53,7 +53,7 @@
 import { ref, useId } from 'vue'
 import { CircleHelp, X } from '@lucide/vue'
 import Popover from 'primevue/popover'
-import { SOURCE_CONTEXT_KEYWORDS } from '../../utils/customFunctionContext'
+import { SOURCE_CONTEXT_KEYWORDS } from '../../utils/sourceContext'
 
 const props = defineProps({
   label: {

@@ -3,16 +3,16 @@ import { nextTick } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import PrimeVue from 'primevue/config'
 import CodeEditorWithSymbols from '../../src/components/panels/CodeEditorWithSymbols.vue'
-import CustomFunctionContextHelp from '../../src/components/panels/CustomFunctionContextHelp.vue'
+import SourceContextHelp from '../../src/components/panels/SourceContextHelp.vue'
 import NodeListPanel from '../../src/components/panels/NodeListPanel.vue'
 import {
-  CUSTOM_FUNCTION_CONTEXT_BY_ID,
-  CUSTOM_FUNCTION_CONTEXT_KEYWORDS
-} from '../../src/utils/customFunctionContext'
+  SOURCE_CONTEXT_BY_ID,
+  SOURCE_CONTEXT_KEYWORDS
+} from '../../src/utils/sourceContext'
 
-describe('custom-function contextual help', () => {
+describe('source contextual help', () => {
   it('opens every contextual keyword from the shared catalog in a helper popup', async () => {
-    const wrapper = mount(CustomFunctionContextHelp, {
+    const wrapper = mount(SourceContextHelp, {
       attachTo: document.body,
       global: { plugins: [PrimeVue] },
     })
@@ -43,11 +43,11 @@ describe('custom-function contextual help', () => {
       'node_a',
       'node_b',
     ])
-    expect(popup.textContent).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.description)
-    expect(popup.textContent).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.recommendation)
-    expect(popup.textContent).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.self.availability)
-    expect(popup.textContent).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.distance.availability)
-    expect(CUSTOM_FUNCTION_CONTEXT_KEYWORDS).toHaveLength(9)
+    expect(popup.textContent).toContain(SOURCE_CONTEXT_BY_ID.nodeid.description)
+    expect(popup.textContent).toContain(SOURCE_CONTEXT_BY_ID.nodeid.recommendation)
+    expect(popup.textContent).toContain(SOURCE_CONTEXT_BY_ID.self.availability)
+    expect(popup.textContent).toContain(SOURCE_CONTEXT_BY_ID.distance.availability)
+    expect(SOURCE_CONTEXT_KEYWORDS).toHaveLength(9)
 
     closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
@@ -68,13 +68,13 @@ describe('custom-function contextual help', () => {
       }
     })
 
-    expect(wrapper.findComponent(CustomFunctionContextHelp).exists()).toBe(true)
+    expect(wrapper.findComponent(SourceContextHelp).exists()).toBe(true)
 
     await wrapper.setProps({ showLatex: true })
-    expect(wrapper.findComponent(CustomFunctionContextHelp).exists()).toBe(false)
+    expect(wrapper.findComponent(SourceContextHelp).exists()).toBe(false)
 
     await wrapper.setProps({ showLatex: false, collapsible: true, collapsed: true })
-    expect(wrapper.findComponent(CustomFunctionContextHelp).exists()).toBe(false)
+    expect(wrapper.findComponent(SourceContextHelp).exists()).toBe(false)
   })
 
   it('keeps editor actions from submitting an enclosing constructor form', () => {
@@ -166,8 +166,8 @@ describe('custom-function contextual help', () => {
 
     const help = wrapper.get('[data-testid="node-context-help"]')
     expect(help.text()).toContain('one-based simulator IDs')
-    expect(help.text()).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.syntax)
-    expect(help.text()).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.recommendation)
+    expect(help.text()).toContain(SOURCE_CONTEXT_BY_ID.nodeid.syntax)
+    expect(help.text()).toContain(SOURCE_CONTEXT_BY_ID.nodeid.recommendation)
     expect(wrapper.get('.node-index').text()).toBe('#1')
   })
 

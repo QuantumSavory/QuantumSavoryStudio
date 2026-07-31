@@ -79,7 +79,7 @@
     </component>
 
     <template v-else>
-      <CustomFunctionContextHelp
+      <SourceContextHelp
         v-if="shouldShowContextHelp"
         :label="contextHelpLabel"
         :subject="contextHelpSubject"
@@ -206,7 +206,7 @@ import { HighCode } from 'vue-highlight-code'
 import 'vue-highlight-code/dist/style.css'
 import { TriangleAlert } from '@lucide/vue'
 import { SAFE_KATEX_OPTIONS } from '../../utils/katexOptions'
-import CustomFunctionContextHelp from './CustomFunctionContextHelp.vue'
+import SourceContextHelp from './SourceContextHelp.vue'
 
 const props = defineProps({
   modelValue: {

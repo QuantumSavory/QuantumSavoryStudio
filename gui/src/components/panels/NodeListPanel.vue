@@ -65,7 +65,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ArrowDown, ArrowUp, Plus } from '@lucide/vue'
-import { CUSTOM_FUNCTION_CONTEXT_BY_ID } from '../../utils/customFunctionContext'
+import { SOURCE_CONTEXT_BY_ID } from '../../utils/sourceContext'
 import BasePanel from './BasePanel.vue'
 import NodeIndex from './NodeIndex.vue'
 
@@ -90,7 +90,7 @@ const props = defineProps({
 const emit = defineEmits(['select', 'addNewNode', 'move-node', 'update:collapsed'])
 
 const isReorderingLocked = computed(() => props.editingLocked)
-const nodeIdKeyword = CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid
+const nodeIdKeyword = SOURCE_CONTEXT_BY_ID.nodeid
 
 function handleSelect(node) {
   emit('select', node)

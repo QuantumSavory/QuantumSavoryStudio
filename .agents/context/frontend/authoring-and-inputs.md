@@ -104,6 +104,8 @@ on an ID/name collision. Backend registry and rendering rules live in
   and [`gui/src/utils/parameterTypes.js`](../../../gui/src/utils/parameterTypes.js).
 - **Shared constructor/editor:** [`gui/src/components/panels/ConstructorForm.vue`](../../../gui/src/components/panels/ConstructorForm.vue)
   and [`gui/src/components/panels/CodeEditorWithSymbols.vue`](../../../gui/src/components/panels/CodeEditorWithSymbols.vue).
+- **Source-context help:** [`gui/src/utils/sourceContext.js`](../../../gui/src/utils/sourceContext.js)
+  and [`gui/src/components/panels/SourceContextHelp.vue`](../../../gui/src/components/panels/SourceContextHelp.vue).
 - **Atomicity evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js).
 - **Input evidence:** [`gui/tests/unit/protocolConstructorForm.test.js`](../../../gui/tests/unit/protocolConstructorForm.test.js)
   and [`gui/tests/unit/backgroundNoiseConstructorForm.test.js`](../../../gui/tests/unit/backgroundNoiseConstructorForm.test.js).
