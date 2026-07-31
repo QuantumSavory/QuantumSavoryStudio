@@ -24,18 +24,16 @@
 - **Procedure:** Delay candidate retrieval/preflight/decode for every replacement
   class, inject rejection/failure, and overlap transitions while observing all active
   and persistence owners.
-- **Environment / configuration:** Browser project-session integration with
-  controllable promises and storage
+- **Environment / configuration:** Vitest/jsdom project-session integration with
+  controllable promises/storage plus the release Chromium browser
 - **Pass criterion:** Active state and stored project documents persist through
   candidate work; rejected/stale candidates have no active or project-document storage
   effect; failed bootstrap automatic-open may clear only a stale recent-project
   navigation pointer, and the latest successful candidate commits teardown,
   persistence, and installation once.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests assert preservation after selected rejection, but
-  candidate preparation and persistence are not one side-effect-free transaction
-  across all entry points.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this integration boundary.
 
 ## INTV-017 — Verify MCP readback recovery boundary
 

@@ -99,9 +99,9 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** From a populated session, delay and fail every candidate phase for each replacement class, inject cancellation and supersession, and observe stored documents, the recent-project navigation pointer, and active owners.
 - **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
 - **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale candidates persist no candidate; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer, and one latest successful candidate performs teardown, persistence, and installation exactly once.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests preserve active state after selected preflight failure but candidate preparation, storage, and commit are not one transaction.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this component boundary.
 
 ## UNITV-021 — Verify revision-guarded readback recovery
 

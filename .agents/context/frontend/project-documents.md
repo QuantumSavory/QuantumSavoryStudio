@@ -16,8 +16,8 @@ Normative release-2.0 behavior is defined by
 [CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
 and
 [CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
-The strict-schema chain through CMP-014 is implemented. The candidate-first transaction
-in CMP-015 remains an approved target and a current conformance gap.
+The strict-schema and candidate-first transaction chains through CMP-015 are
+implemented.
 
 ## Canonical shapes
 
@@ -75,18 +75,26 @@ failure during bootstrap may clear only the stale recent-project navigation poin
 needed to avoid repeated boot failure; no other replacement failure may mutate that
 pointer, and none may delete or rewrite a stored project document.
 
-## Current transitions versus approved transaction
+## Candidate-first session transaction
 
-Saved/import/demo flows decode before active-session teardown, reject noncurrent
-documents before session or storage effects, and generation-guard overlapping opens.
-Candidate creation, persistence, teardown, and installation are not yet one
-side-effect-free prepare/atomic-commit transaction across every replacement entry point.
+Saved open, import, demo, create/new, and Save As use one project-session transaction
+owner. Each request receives a generation and prepares a fully decoded isolated
+candidate before collaboration teardown, simulator cleanup, project-document writes,
+recent-pointer changes, polling/result teardown, graph release, or installation.
+Persisted candidates are encoded and decoded again during preparation so the exact
+document and live graph are both validated before ownership is rechecked.
 
-The approved target prepares an isolated candidate under a transition generation,
-rechecks ownership, and only then commits teardown, persistence, and installation.
-Failed, cancelled, incompatible, invalid, or stale candidates preserve active work and
-stored project documents and persist no candidate. The bootstrap pointer exception above
-is navigation recovery, not permission to mutate a project document.
+After the final ownership check, one commit performs its applicable teardown,
+persistence, recent-pointer update, MapLibre graph-release tick, and installation.
+A request that arrives after commit ownership is acquired waits for that commit and
+prepares from the resulting stable session; it never cancels or rolls back a partially
+torn session. Failed, cancelled, incompatible, invalid, or stale preparation preserves
+active work and every stored project document and persists no candidate.
+
+Startup calls the distinct automatic-restore entry point. Only failure of that owning
+bootstrap request may clear its still-matching recent-project pointer; ordinary open and
+stale bootstrap work cannot. This navigation recovery never rewrites or deletes the
+stored document.
 
 ## Frontend-only fields
 

@@ -109,8 +109,8 @@ planned until a durable release-2.0 acceptance record exists.
 - **Environment / configuration:** Supported desktop browser with visible project/session state
 - **Pass criterion:** Every unsuccessful or superseded candidate preserves active work and stored project documents and persists no candidate; failed bootstrap automatic-open may clear only its stale recent-project navigation pointer, and the successful latest candidate replaces the active project once.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current source preflights many candidates before teardown, but no one acceptance artifact proves all replacement owners and persistence effects.
+- **Evidence:** Automated precursor: [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
+- **Nonconformance:** Automated browser evidence covers the transaction boundary, but repository maintainers have not recorded the complete release-2.0 acceptance demonstration.
 
 ## ACC-012 — Validate the supported release environment
 
