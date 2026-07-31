@@ -5,7 +5,7 @@
 - **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Approved release-2.0 behavior against source at
-  `2ae8857d3df62c9a9e0f5014a10460536f88d916`
+  `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31

@@ -25,8 +25,11 @@ and supported environments. No product suite was run for this documentation base
 - **Environment / configuration:** Real backend with injected clock, active task, release probes, and GUI Log observer
 - **Pass criterion:** Fixed transitions occur no earlier than 10/30/300-minute thresholds and at a convenient later check; active work is excluded; every release is attempted; any failure removes the record and returns/logs structured severe degradation.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Timestamp tests cover successful paths only; current release failures can return success and retain a blocked record.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
+- **Nonconformance:** Component evidence covers successful timestamp paths and
+  destructive release failure, including all attempts, record removal, and structured
+  degradation. No real-backend action combines injected time, active work, every
+  retention threshold, destructive failure, and GUI Log observation.
 
 ## SYSV-011 — Verify optional local sidecar control
 
@@ -71,9 +74,12 @@ and supported environments. No product suite was run for this documentation base
 - **Procedure:** Start local and public profiles, save projects in two browser profiles, create live simulations, restart servers, and inspect running services/storage.
 - **Environment / configuration:** Local host and Internet-reachable test deployment
 - **Pass criterion:** No account or server project store appears; each browser retains only local projects; backend restart removes live simulations; public mode has no MCP listener.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** No maintained public deployment definition or black-box profile test exists.
+- **Status:** implemented
+- **Evidence:** [`Containerfile`](../../../Containerfile), [`ci/public-container.sh`](../../../ci/public-container.sh), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** The public black-box action proves absent server project storage,
+  disabled MCP, and volatile simulations across restart. It does not combine the local
+  profile and two independent browser stores in one system action, and no durable run
+  record accompanies the profile.
 
 ## SYSV-019 — Verify candidate-first project replacement
 
@@ -104,6 +110,8 @@ and supported environments. No product suite was run for this documentation base
 - **Procedure:** Install dependencies, build, launch the integrated production application, and complete the primary model/save/Play workflow.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** The exact supported matrix entry installs, starts the production bundle, and completes the workflow without an environment-specific failure.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current jobs use `ubuntu-latest`; browser CI builds the production bundle but exercises the Vite development server rather than that integrated output.
+- **Status:** implemented
+- **Evidence:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml), [`ci/browser-production.sh`](../../../ci/browser-production.sh), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
+- **Nonconformance:** The maintained action pins Ubuntu 24.04, Julia 1.12, and Node 24
+  and drives Chromium against the integrated production launcher. The workflow omits
+  save/reopen, and no durable execution record accompanies this profile.

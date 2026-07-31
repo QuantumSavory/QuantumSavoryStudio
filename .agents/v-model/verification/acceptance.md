@@ -69,8 +69,10 @@ planned until a durable release-2.0 acceptance record exists.
 - **Environment / configuration:** Long-lived local service with time/resource instrumentation and GUI Log observer
 - **Pass criterion:** Active work is not idle; fixed limits act at convenient checks after 10/30/300 minutes; successful stages follow retention policy; failure still attempts all releases, removes the record, returns failure, and logs severe degradation.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests cover successful timestamp paths; release failure currently logs a warning and can still report success.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
+- **Nonconformance:** Component evidence covers aggregated release failure, removal, and
+  structured degradation. No maintained long-lived operator demonstration combines the
+  time thresholds, active-work exclusion, retention stages, and GUI Log observation.
 
 ## ACC-008 — Validate account-free local and public deployment
 
@@ -80,8 +82,11 @@ planned until a durable release-2.0 acceptance record exists.
 - **Environment / configuration:** Local host and Internet-reachable test deployment
 - **Pass criterion:** Both profiles require no account; each browser owns only its local saved projects; backend restart removes live simulations; no server project database appears; public mode starts neither MCP nor native-source evaluation.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Browser local-storage and process-memory behavior have source evidence, but no maintained public deployment artifact or demonstration exists.
+- **Evidence:** [`Containerfile`](../../../Containerfile), [`ci/public-container.sh`](../../../ci/public-container.sh), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** Maintained public-process actions cover disabled MCP/source,
+  absent server project storage, and volatile simulations. No operator demonstration
+  combines local and Internet-reachable profiles with two independent browser stores
+  and the primary educational flow.
 
 ## ACC-010 — Validate strict current-schema project admission
 
@@ -113,5 +118,7 @@ planned until a durable release-2.0 acceptance record exists.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** Installation, startup, modeling, save/reopen, and Play complete without an environment-specific blocker.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current CI uses `ubuntu-latest`, exercises Chromium through Vite's development server, and has no maintainer release-acceptance record.
+- **Evidence:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml), [`ci/browser-production.sh`](../../../ci/browser-production.sh), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
+- **Nonconformance:** CI defines the pinned Ubuntu/Julia/Node environment and exercises
+  the integrated production bundle through Chromium, but the action does not cover
+  save/reopen and no maintainer release-acceptance record exists.

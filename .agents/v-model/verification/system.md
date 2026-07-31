@@ -9,9 +9,11 @@ No durable full-system run record accompanies this profile.
 - **Procedure:** From a prepared checkout, run the documented launcher and request the root GUI and health surface from a desktop browser.
 - **Environment / configuration:** Supported release environment with instantiated Julia and locked frontend dependencies
 - **Pass criterion:** The launcher builds the locked frontend, starts a loopback backend, and serves a usable GUI and health response.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Component CI scripts do not execute `bin/server` as one black-box production-bundle user action.
+- **Status:** implemented
+- **Evidence:** [`ci/browser-production.sh`](../../../ci/browser-production.sh), [`ci/run-with-server.sh`](../../../ci/run-with-server.sh), [`gui/tests/e2e/smoke.spec.js`](../../../gui/tests/e2e/smoke.spec.js), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
+- **Nonconformance:** The production-browser action launches `bin/server`, polls the
+  health surface, and drives the GUI. No durable full-system execution record
+  accompanies this profile.
 
 ## SYSV-002 — Verify canonical browser authoring
 
