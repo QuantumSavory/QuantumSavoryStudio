@@ -3313,7 +3313,34 @@
     @test WebQuantumSavory.unsafe_code_evaluation_enabled(
       profile="local",
       override="true",
+      backend_host="127.0.0.1",
     )
+    @test WebQuantumSavory.unsafe_code_evaluation_enabled(
+      profile="local",
+      override="true",
+      backend_host="::1",
+    )
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      profile="local",
+      override="true",
+      backend_host="0.0.0.0",
+    )
+    nonloopback_error = try
+      WebQuantumSavory.require_unsafe_code_evaluation(
+        profile="local",
+        override="true",
+        backend_host="192.0.2.10",
+      )
+      nothing
+    catch error
+      error
+    end
+    @test nonloopback_error isa WebQuantumSavory.APIError
+    if nonloopback_error isa WebQuantumSavory.APIError
+      @test nonloopback_error.status_code == 403
+      @test nonloopback_error.error_code ==
+        WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
+    end
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
       profile="local",
       override="false",

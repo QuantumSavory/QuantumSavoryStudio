@@ -92,7 +92,7 @@ if [ "$server_profile" = production ]; then
     WQS_DEPLOYMENT_PROFILE=local \
     WQS_ENABLE_SOURCE_EVALUATION=false \
     WEBQUANTUMSAVORY_ENABLE_MCP=false \
-    "$app_root/bin/server" "-p$server_port" >"$server_log" 2>&1 &
+    "$app_root/bin/server" -l127.0.0.1 "-p$server_port" >"$server_log" 2>&1 &
 else
   GENIE_ENV=test \
     WQS_DEPLOYMENT_PROFILE=local \

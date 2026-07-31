@@ -5,10 +5,13 @@ const EVALUATION_FAILED_CODE = "EVALUATION_FAILED"
 function unsafe_code_evaluation_enabled(;
   profile::Union{Nothing,AbstractString}=deployment_profile(),
   override::Union{Nothing,AbstractString}=get(ENV, UNSAFE_EVALUATION_ENV_VAR, nothing),
+  backend_host::AbstractString=string(Genie.config.server_host),
 )
   parsed_profile = _parse_deployment_profile(profile)
   opted_in = _strict_environment_boolean(override, UNSAFE_EVALUATION_ENV_VAR)
-  return parsed_profile == LOCAL_DEPLOYMENT_PROFILE && opted_in
+  return parsed_profile == LOCAL_DEPLOYMENT_PROFILE &&
+    opted_in &&
+    is_loopback_host(backend_host)
 end
 
 function unsafe_evaluation_disabled_error()
@@ -24,8 +27,9 @@ function unsafe_evaluation_disabled_error()
 end
 
 """Reject an operation that would evaluate user-controlled Julia code."""
-function require_unsafe_code_evaluation()
-  unsafe_code_evaluation_enabled() || throw(unsafe_evaluation_disabled_error())
+function require_unsafe_code_evaluation(; kwargs...)
+  unsafe_code_evaluation_enabled(; kwargs...) ||
+    throw(unsafe_evaluation_disabled_error())
   nothing
 end
 

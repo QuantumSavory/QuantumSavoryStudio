@@ -28,6 +28,17 @@ function _strict_environment_boolean(value, variable_name::AbstractString)
   throw(ArgumentError("$variable_name must be exactly \"true\" or \"false\""))
 end
 
+"""Return whether a listener host is confined to an IPv4 or IPv6 loopback address."""
+function is_loopback_host(host::AbstractString)
+  normalized = lowercase(strip(host))
+  normalized in ("localhost", "ip6-localhost", "::1", "0:0:0:0:0:0:0:1") && return true
+  startswith(normalized, "127.") && return all(
+    part -> something(tryparse(UInt8, part), 256) <= 255,
+    split(normalized, '.'),
+  )
+  return false
+end
+
 """
 Validate every startup feature controlled by the product deployment profile.
 

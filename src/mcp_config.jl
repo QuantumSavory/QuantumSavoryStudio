@@ -67,16 +67,6 @@ function _configured_port(value, variable_name::AbstractString, fallback::Int)
   return port
 end
 
-function is_loopback_host(host::AbstractString)
-  normalized = lowercase(strip(host))
-  normalized in ("localhost", "ip6-localhost", "::1", "0:0:0:0:0:0:0:1") && return true
-  startswith(normalized, "127.") && return all(
-    part -> something(tryparse(UInt8, part), 256) <= 255,
-    split(normalized, '.'),
-  )
-  return false
-end
-
 """Strictly parse the MCP feature flag and listener port without starting Genie."""
 function _read_mcp_environment_settings(environment=ENV)
   enabled = _strict_environment_boolean(
