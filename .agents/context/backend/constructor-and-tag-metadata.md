@@ -47,6 +47,13 @@ succeeds; neither catalog has an empty-catalog fallback. Ordinary slot edits, te
 cloning, and layout generation share the same command admission boundary, so missing or
 unknown metadata cannot commit a candidate.
 
+Protocol admission is placement-scoped. Direct edits and every new or changed protocol
+left by a layout generator resolve an exact type in the current node, edge, or floating
+catalog; virtual-edge eligibility and constructor parameters come from that live entry.
+Generator-supplied definitions may seed drafts but cannot authorize a type, placement,
+or parameter schema. Validation covers the whole candidate network because generators
+may attach tracker protocols to existing endpoint owners.
+
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.
 The frontend does not interpret package-qualified symbolic type spellings.

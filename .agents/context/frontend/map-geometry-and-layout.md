@@ -62,7 +62,10 @@ Cloned physical links clear route/distance/delay/transmissivity overrides while 
 material overrides. Protocol replacement is opt-in and removes only the targeted type.
 Every generated slot type and background must resolve through its live simulator
 catalog after the destination node position stabilizes; unavailable or unknown metadata
-aborts the whole design transaction.
+aborts the whole design transaction. Every new or changed protocol, including one added
+to an existing endpoint, must likewise resolve by exact type in its live placement
+catalog and be normalized from that definition; generator options are never catalog
+authority.
 
 Preserve documented deterministic ordering/naming for repeater, star, grid, and all-to-all
 layouts. These are current user-visible behaviors, but exact geometry/names remain draft

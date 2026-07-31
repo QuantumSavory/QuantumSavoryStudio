@@ -68,9 +68,10 @@ QuantumSavory revision. INTV-002 remains `passing`; UNITV-022 and INTV-004 are
 regression fixture. Broader script-help and visible browser-error matrices remain
 tracked by INTV-008 and INTV-009.
 
-The catalog-admission mini-V extends UNITV-002 with component fixtures. Real-catalog
-missing/unknown and descriptor-contradiction integration/system matrices remain planned
-under INTV-005 and SYSV-004.
+The catalog-admission mini-V extends UNITV-002 with slot, background, and generated-
+protocol component fixtures. Real-catalog missing/malformed/unknown, placement, and
+descriptor-contradiction integration/system matrices remain planned under INTV-005 and
+SYSV-004.
 
 ## Source basis
 

@@ -62,6 +62,13 @@ receives representative/deferred validation, and `DesignCommandService` revalida
 every cloned slot type and background against its destination node after candidate
 positions stabilize, aborting the whole generation if one fails.
 
+Network-generator options are not an authority for protocol definitions. After topology
+stabilizes, the command service scans the whole candidate network and resolves every new
+or changed protocol—including tracker protocols added to pre-existing endpoints—by its
+exact type and placement in the live protocol catalog. It applies virtual-edge policy
+and rebuilds parameters from that live definition before commit. Unchanged existing
+protocols are deliberately not reprocessed.
+
 Schema-v2 durable parameters carry `selectedType`. An explicit current branch is
 authoritative and must agree with intrinsic `nothing` or `Wildcard` wire values and with
 the referenced Variable's branch. Transport authoring may omit `selectedType`; only

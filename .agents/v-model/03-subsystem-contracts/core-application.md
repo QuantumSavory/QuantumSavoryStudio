@@ -43,7 +43,7 @@ requirements.
 
 - **Normative statement:** Explicit simulator-owned constructor, protocol, tag, representation, and state-family catalogs, together with intentional Web-only representation choices, shall supply authoritative wire semantics, placement, nullability, bounds, and safe type resolution to every GUI input path.
 - **Parents:** SYS-004
-- **Acceptance criterion:** Backend and browser derive the same descriptor semantics from returned metadata; catalogs do not expand through subtype discovery or loaded-package reflection; named-tag and explicit Web-only values resolve without source evaluation; missing catalogs, unadvertised IDs, contradictory explicit descriptor/value pairs, coercible non-number state values, and incompatible Variables fail before authoring commit.
+- **Acceptance criterion:** Backend and browser derive the same descriptor semantics from returned metadata; catalogs do not expand through subtype discovery or loaded-package reflection; named-tag and explicit Web-only values resolve without source evaluation; direct, template-copied, and layout-generated assignments—including protocols added to existing owners—resolve exact current IDs in their placement catalog; missing or malformed catalogs, unadvertised IDs, invalid placement, contradictory explicit descriptor/value pairs, coercible non-number state values, and incompatible Variables fail before authoring commit.
 - **Verification:** INTV-005 (test)
 - **Origin / risk:** Metadata pipeline and frontend descriptors; medium dependency risk
 - **Context:** [Constructor and tag metadata](../../context/backend/constructor-and-tag-metadata.md)

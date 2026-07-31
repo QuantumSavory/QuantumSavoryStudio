@@ -26,7 +26,7 @@ actions.
 
 - **Normative statement:** The backend shall expose the current constructor, placement, tag, representation, and structured-state metadata needed by the GUI without requiring it to duplicate simulator catalogs.
 - **Parents:** STK-001, STK-002
-- **Acceptance criterion:** The GUI can render and submit each advertised input kind from returned metadata; missing metadata, unsupported or non-advertised types, and explicit descriptor/value contradictions are rejected without changing the design; explicit allowlists do not silently expand with dependency internals.
+- **Acceptance criterion:** The GUI can render and submit each advertised input kind from returned metadata; direct, copied, and generated catalog-backed assignments resolve through current metadata; missing or malformed metadata, unsupported or non-advertised types, invalid placement, and explicit descriptor/value contradictions are rejected without changing the design; explicit allowlists do not silently expand with dependency internals.
 - **Verification:** SYSV-004 (test)
 - **Origin / risk:** Released metadata-driven inputs; medium dependency-compatibility risk
 - **Context:** [Constructor and tag metadata](../../context/backend/constructor-and-tag-metadata.md)

@@ -4,7 +4,7 @@
 
 - **Normative statement:** A design command shall run serially on an isolated candidate, validate exact live-catalog inputs before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and preserve retained live object identities during atomic reconciliation.
 - **Parents:** SUB-003, SUB-005
-- **Acceptance criterion:** Invalid single and mixed transactions—including missing or unknown slot/background metadata and explicit descriptor/value/reference contradictions—leave the source design, selection, retained identities, and commit hooks unchanged across direct GUI/MCP, template-copy, and generated paths; valid create/update/delete transactions and omitted-branch inference allocate distinct IDs, resolve transaction-local aliases, and update every retained reference exactly once.
+- **Acceptance criterion:** Unavailable or malformed catalogs, unknown slot/background/protocol types, invalid protocol placement, and descriptor/value/reference conflicts leave direct, copied, or generated source design, selection, identities, and hooks unchanged. Valid create/update/delete candidates normalize constructors from live metadata, allocate distinct IDs, resolve aliases and omitted branches, and update every retained reference once.
 - **Verification:** UNITV-002 (test)
 - **Origin / risk:** Design-command implementation and discriminating tests; high graph-integrity risk
 - **Context:** [Authoring and inputs](../context/frontend/authoring-and-inputs.md)
