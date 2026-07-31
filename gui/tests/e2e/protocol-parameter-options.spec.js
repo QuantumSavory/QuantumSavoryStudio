@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 import { canonicalErrorResponse } from './httpResponses.js'
+import {
+  mockParseAndDestroy,
+  parseNetworkThroughRunner,
+} from './simulationLifecycle.js'
 
 const KNOWN_FUNCTIONS = [
   'minimum',
@@ -148,6 +152,7 @@ async function mockConfiguration(page) {
       capabilities: { unsafe_code_evaluation: false },
     },
   }))
+  await mockParseAndDestroy(page)
 }
 
 async function createProjectWithEdge(page) {
@@ -228,6 +233,7 @@ async function createProjectWithEdge(page) {
         value: null,
       }],
     })
+    projectData.net.nodes.forEach(node => node.createNewSlot())
   }, { savedTag: TAG_BETA })
 }
 
@@ -447,11 +453,7 @@ test.describe('Protocol parameter options', () => {
 
     expect(page.tagCatalogState.requests).toBe(1)
 
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const state = setupState?.simulationState?.value ?? setupState?.simulationState
-      state.phase = 'parsed'
-    })
+    await parseNetworkThroughRunner(page)
     await expect(consumerInput).toBeDisabled()
     await expect(consumerRow.getByRole('button', { name: 'Set tag from a variable' })).toBeDisabled()
   })

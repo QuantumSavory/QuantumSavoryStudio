@@ -209,18 +209,3 @@ export function simulationCapabilities(
     canExploreTags
   }
 }
-
-export function legacySimulationStatus(state) {
-  const ready = [SimulationPhase.PARSED, SimulationPhase.PREPARED, SimulationPhase.COMPLETED].includes(state.phase)
-  return {
-    status: state.phase === SimulationPhase.ERROR || state.phase === SimulationPhase.BLOCKED
-      ? 'error'
-      : state.phase === SimulationPhase.EMPTY
-        ? 'stopped'
-        : ready
-          ? 'ready'
-          : 'processing',
-    message: state.message,
-    state: state.backendState
-  }
-}

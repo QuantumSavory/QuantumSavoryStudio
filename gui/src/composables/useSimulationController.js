@@ -5,7 +5,6 @@ import {
   SimulationPhase,
   createSimulationState,
   isNotFoundError,
-  legacySimulationStatus,
   reduceSimulationState,
   simulationCapabilities
 } from './simulationLifecycle'
@@ -87,10 +86,6 @@ export function useSimulationController({
   let disposed = false
   const seenPanicIds = new Set()
 
-  // Compatibility views for legacy callers and browser test helpers. First-party
-  // panels consume the explicit lifecycle contracts below.
-  const simulationState = state
-  const simulationStatus = computed(() => legacySimulationStatus(state.value))
   const backendSimulation = computed(() => state.value.backendState?.simulation || {})
   const phase = computed(() => state.value.phase)
   const foregroundRequest = computed(() => state.value.foregroundRequest)
@@ -123,11 +118,6 @@ export function useSimulationController({
       }
     : baseCapabilities.value
   )
-  const isSimulationRunning = computed(() => state.value.phase === SimulationPhase.RUNNING)
-  const isSimulationPaused = computed(() => state.value.phase === SimulationPhase.PAUSED)
-  const isSimulationComplete = computed(() => state.value.phase === SimulationPhase.COMPLETED)
-  const isSimulationIdle = computed(() => state.value.phase === SimulationPhase.EMPTY)
-  const currentSimulationTime = computed(() => Number(backendSimulation.value.simulation_progress || 0))
   const targetSimulationTime = computed(() => Number(
     state.value.cumulativeTargetTime
     || backendSimulation.value.simulation_time
@@ -135,7 +125,6 @@ export function useSimulationController({
     || 1
   ))
   const pollingActive = computed(() => state.value.pollingActive)
-  const hasSimulationRun = computed(() => state.value.cumulativeTargetTime > 0)
 
   function dispatch(event) {
     state.value = reduceSimulationState(state.value, event)
@@ -190,15 +179,6 @@ export function useSimulationController({
         slot.assignment = false
       }
     }
-  }
-
-  function calculateSimulationProgress(simulation = backendSimulation.value) {
-    const progress = Number(simulation?.simulation_progress || 0)
-    const target = Math.max(
-      Number(simulation?.simulation_time || 0),
-      Number(state.value.cumulativeTargetTime || projectData.value?.simulationConfig?.time || 1)
-    )
-    return target > 0 ? Math.min(Math.round((progress / target) * 100), 100) : 0
   }
 
   function reportValidationError(message) {
@@ -854,21 +834,9 @@ export function useSimulationController({
     phase,
     foregroundRequest,
     capabilities,
-    simulationState,
-    simulationStatus,
     backendSimulation,
-    isSimulationRunning,
-    isSimulationPaused,
-    isSimulationComplete,
-    isSimulationIdle,
-    currentSimulationTime,
     targetSimulationTime,
     pollingActive,
-    hasSimulationRun,
-    getSlotById,
-    calculateSimulationProgress,
-    updateSimulationStatus: updateSlotStates,
-    resetSlotStates,
     resetSimulation,
     prepareNetworkGraph,
     prepareSimulation,

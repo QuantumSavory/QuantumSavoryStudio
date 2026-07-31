@@ -520,7 +520,7 @@ describe('simulation controller polling ownership', () => {
     })
     await Promise.resolve()
     expect(controller.phase.value).toBe('empty')
-    expect(controller.simulationStatus.value.state).toBeNull()
+    expect(controller.state.value.backendState).toBeNull()
     stop()
     expect(vi.getTimerCount()).toBe(0)
   })

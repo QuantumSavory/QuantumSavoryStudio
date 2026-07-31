@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import {
+  mockParseAndDestroy,
+  parseNetworkThroughRunner,
+} from './simulationLifecycle.js'
 
 const TAG_ALPHA = 'Example.Alpha.ReadyTag'
 const TAG_BETA = 'Example.Beta.ReadyTag'
@@ -108,11 +112,7 @@ async function mockBackendMetadata(page, {
       capabilities: { unsafe_code_evaluation: false },
     },
   }))
-  await page.route('**/destroy_simulation', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    json: { success: true },
-  }))
+  await mockParseAndDestroy(page)
   await page.route('**/get_state**', route => route.fulfill(
     simulationNotFoundResponse(),
   ))
@@ -209,9 +209,10 @@ test.describe('Layout Tools repeater chain generator', () => {
     await page.getByRole('button', { name: 'Cancel' }).click()
 
     await page.evaluate(() => {
-      const app = document.querySelector('#app')?.__vue_app__
-      app._instance.setupState.simulationState.phase = 'parsed'
+      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+      setupState.projectData.net.nodes.forEach(node => node.createNewSlot())
     })
+    await parseNetworkThroughRunner(page)
     await expect(helper).toBeDisabled()
     await expect(page.getByText(
       'Network editing is unavailable after a simulation has started. Annotations remain available.',

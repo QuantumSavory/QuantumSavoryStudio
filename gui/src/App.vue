@@ -372,11 +372,10 @@ async function flushBrowserEditors() {
 }
 
 const {
+  state: simulationLifecycle,
   phase: simulationPhase,
   foregroundRequest,
   capabilities: simulationCapabilities,
-  simulationState,
-  simulationStatus,
   backendSimulation,
   targetSimulationTime,
   pollingActive,
@@ -873,7 +872,7 @@ const {
 })
 
 function showEntangledSlots(slotId) {
-  const allEntanglements = simulationStatus.value?.state?.slots?.entanglements;
+  const allEntanglements = simulationLifecycle.value.backendState?.slots?.entanglements;
   if( !allEntanglements ){
     return
   }

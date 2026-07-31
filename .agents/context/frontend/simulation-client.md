@@ -22,8 +22,10 @@ The pure lifecycle reducer derives:
 `empty`, `parsed`, `prepared`, `running`, `paused`, `completed`, `blocked`, or `error`.
 
 It combines graph presence with nested backend simulation fields. Consumers use the
-derived capabilities for editing, Run/Pause/Resume/Stop, live tags, and foreground-work
-locks rather than reconstructing phase from top-level status or simulated time.
+canonical reducer state and its derived phase/capabilities for editing,
+Run/Pause/Resume/Stop, live tags, and foreground-work locks rather than reconstructing
+phase from top-level status or simulated time. The controller does not expose a second
+legacy status object or mutable state alias.
 
 Network/protocol editing locks after a successful parse and remains locked through every
 later nonempty simulation phase. Frontend-only annotations remain editable.
@@ -125,6 +127,7 @@ through the backend into the visible Tools Log.
 - **HTTP reader:** [`gui/src/utils/httpClient.js`](../../../gui/src/utils/httpClient.js).
 - **Generated operations:** [`gui/src/generated/httpOperations.js`](../../../gui/src/generated/httpOperations.js).
 - **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js),
+  [`gui/tests/e2e/variables.spec.js`](../../../gui/tests/e2e/variables.spec.js),
   [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js),
   and [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js).
 

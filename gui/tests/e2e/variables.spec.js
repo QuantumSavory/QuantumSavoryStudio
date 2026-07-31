@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import {
+  mockParseAndDestroy,
+  parseNetworkThroughRunner,
+  stopSimulationThroughRunner,
+} from './simulationLifecycle.js'
 
 const EDGE_PROTOCOL_TYPE = {
   type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
@@ -51,6 +56,7 @@ async function mockConfiguration(page) {
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),
   ))
+  await mockParseAndDestroy(page)
 }
 
 async function loadApp(page) {
@@ -99,6 +105,7 @@ async function createProjectWithEdgeProtocol(page) {
         value: null,
       }],
     })
+    projectData.net.nodes.forEach(node => node.createNewSlot())
   })
 }
 
@@ -115,15 +122,6 @@ async function expectIconCentered(button) {
     .toBeLessThanOrEqual(1)
   expect(Math.abs(iconBox.y + iconBox.height / 2 - (buttonBox.y + buttonBox.height / 2)))
     .toBeLessThanOrEqual(1)
-}
-
-async function setSimulationPhase(page, phase) {
-  await page.evaluate(nextPhase => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const simulationState = setupState?.simulationState?.value ?? setupState?.simulationState
-    if (!simulationState) throw new Error('Simulation state is unavailable')
-    simulationState.phase = nextPhase
-  }, phase)
 }
 
 test.describe('Protocol variable type compatibility', () => {
@@ -257,7 +255,7 @@ test.describe('Global protocol variables', () => {
     expect(serialized.fullParameter).toEqual(expectedFullParameter)
     expect(serialized.minimizedParameter).toEqual(expectedMinimizedParameter)
 
-    await setSimulationPhase(page, 'parsed')
+    await parseNetworkThroughRunner(page)
     await expect(addVariableButton).toBeDisabled()
     await expect(nameInput).toBeDisabled()
     await expect(typeSelect).toBeDisabled()
@@ -265,7 +263,7 @@ test.describe('Global protocol variables', () => {
     await expect(variableSelector).toBeDisabled()
     await expect(roundsRow.getByRole('button', { name: 'Use a direct value for rounds' })).toBeDisabled()
 
-    await setSimulationPhase(page, 'empty')
+    await stopSimulationThroughRunner(page)
     await expect(addVariableButton).toBeEnabled()
     await expect(nameInput).toBeEnabled()
     await expect(typeSelect).toBeEnabled()
