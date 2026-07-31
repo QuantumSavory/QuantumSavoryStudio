@@ -174,6 +174,10 @@
       @test all(haskey(parameter, "field") for parameter in parameters)
       @test all(haskey(parameter, "type") for parameter in parameters)
       @test all(
+        get(parameter, "required", nothing) isa Bool
+        for parameter in parameters
+      )
+      @test all(
         parameter["type"] isa String || (
           parameter["type"] isa Vector &&
           all(member -> member isa String, parameter["type"])
@@ -446,6 +450,21 @@
       @test all(pt["group"] in ["node", "edge", "floating"] for pt in data["protocol_types"])
 
       protocol_types_by_name = Dict(pt["type"] => pt for pt in data["protocol_types"])
+      required_parameters = Set(
+        (protocol["type"], parameter["field"])
+        for protocol in data["protocol_types"]
+        for parameter in protocol["parameters"]
+        if parameter["required"]
+      )
+      @test all(
+        get(parameter, "required", nothing) isa Bool
+        for protocol in data["protocol_types"]
+        for parameter in protocol["parameters"]
+      )
+      @test required_parameters == Set([
+        ("SimpleSwitchDiscreteProt", "clientnodes"),
+        ("SimpleSwitchDiscreteProt", "success_probs"),
+      ])
       virtual_protocol = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglementConsumer)]
       physical_protocols = [
         protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)],

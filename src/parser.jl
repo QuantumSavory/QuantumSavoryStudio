@@ -7,9 +7,9 @@ using .Logger: @log_event
 """Convert a raw parameter value to a target primitive, Wildcard, or simple Union type.
 
 Supported target strings: "Int", "Int64", "Float64", "Float32", "String", "Nothing", "Bool",
-"Wildcard", "QuantumSavory.Wildcard", and Union types that include Nothing and
-one of the above primitives or String. Wildcard targets produce a fresh
-`QuantumSavory.Wildcard()` and do not use the supplied value.
+numeric vectors, "Wildcard", "QuantumSavory.Wildcard", and Union types that
+include Nothing and one of the supported scalar types. Wildcard targets produce
+a fresh `QuantumSavory.Wildcard()` and do not use the supplied value.
 
 Returns a Pair{Bool,Any} where first indicates success. On failure, returns
 (false, nothing) and callers should skip setting the parameter.
@@ -20,6 +20,21 @@ function _convert_parameter_value(ptype::AbstractString, value)
 
   if ts in ("Wildcard", "QuantumSavory.Wildcard")
     return true => QuantumSavory.Wildcard()
+  end
+
+  vector_match = match(r"^Vector\{(Int64|Float64)\}$", ts)
+  if vector_match !== nothing
+    value isa AbstractVector || return false => nothing
+    element_type = only(vector_match.captures)
+    converted = element_type == "Int64" ? Int64[] : Float64[]
+    for element in value
+      ok, converted_element = _convert_parameter_value(element_type, element)
+      ok || return false => nothing
+      converted_element isa AbstractFloat && !isfinite(converted_element) &&
+        return false => nothing
+      push!(converted, converted_element)
+    end
+    return true => converted
   end
 
   # Direct primitives
@@ -515,12 +530,10 @@ function _collect_background_definitions(payload)
 end
 
 """
-Validate all catalog-backed constructor parameter tags before construction.
-
-Despite its historical name, this covers protocols and slot backgrounds,
+Validate catalog-backed protocol and slot-background inputs before construction,
 including direct numeric expressions and every semantic Variable type.
 """
-function _validate_variable_references(payload, variables)
+function _validate_constructor_parameters(payload, variables)
   constructors = Any[
     (
       definition=definition,
@@ -559,7 +572,13 @@ function _validate_variable_references(payload, variables)
       Dict{String,Any}("location" => location, "constructor_type" => raw_type),
     ))
 
-    declared_parameter_types = _constructor_parameter_types(constructor_type)
+    constructor_fields_by_name = _constructor_fields_by_name(constructor_type)
+    declared_parameter_types = Dict(
+      name => field_schema.declared_type
+      for (name, field_schema) in pairs(constructor_fields_by_name)
+    )
+    required_names =
+      _required_constructor_parameter_names(constructor_fields_by_name)
     parameters = definition["parameters"]
     supplied_names = Set{String}()
 
@@ -586,8 +605,13 @@ function _validate_variable_references(payload, variables)
         ),
       ))
       value = parameter["value"]
-      if value === nothing ||
-          (value isa AbstractString && isempty(strip(String(value))))
+      if _constructor_parameter_is_omitted(value)
+        _reject_required_constructor_omission(
+          required_names,
+          parameter_name,
+          "$location parameter",
+          constructor_type,
+        )
         continue
       end
       context = "$location parameter '$parameter_name'"
@@ -625,7 +649,15 @@ function _validate_variable_references(payload, variables)
           "Named tag type parameters cannot use variables",
           Dict{String,Any}("parameter_name" => parameter_name),
         ))
-      _variable_uses_constructor_default(variable) && continue
+      if _variable_uses_constructor_default(variable)
+        _reject_required_constructor_omission(
+          required_names,
+          parameter_name,
+          "$location parameter",
+          constructor_type,
+        )
+        continue
+      end
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $context",
@@ -652,6 +684,12 @@ function _validate_variable_references(payload, variables)
         ))
       end
     end
+    _require_all_constructor_parameters(
+      required_names,
+      supplied_names,
+      location,
+      constructor_type,
+    )
   end
 
   return true
@@ -732,9 +770,54 @@ end
 _constructor_fields_by_name(constructor_type) =
   _constructor_fields_by_name(QuantumSavory.constructor_schema(constructor_type))
 
+"""Read the mandatory simulator-owned omission contract for one field."""
+_constructor_field_required(field_schema) = field_schema.required::Bool
+
+function _required_constructor_parameter_names(fields_by_name)
+  return Set(
+    name for (name, field_schema) in pairs(fields_by_name)
+    if _constructor_field_required(field_schema)
+  )
+end
+
+_constructor_parameter_is_omitted(value) =
+  value === nothing || (value isa AbstractString && isempty(strip(String(value))))
+
+function _reject_required_constructor_omission(
+  required_names,
+  name::String,
+  context::String,
+  constructor_type,
+)
+  name in required_names || return nothing
+  throw(validation_error(
+    "$context '$name' is required and cannot use constructor omission",
+    Dict{String,Any}(
+      "parameter_name" => name,
+      "constructor_type" => string(constructor_type),
+    ),
+  ))
+end
+
+function _require_all_constructor_parameters(
+  required_names,
+  supplied_names,
+  context::String,
+  constructor_type,
+)
+  missing = sort!(collect(setdiff(required_names, supplied_names)))
+  isempty(missing) || throw(validation_error(
+    "$context is missing required parameter(s): $(join(missing, ", "))",
+    Dict{String,Any}(
+      "missing_parameters" => missing,
+      "constructor_type" => string(constructor_type),
+    ),
+  ))
+  return nothing
+end
+
 function _constructor_numeric_bound(field_schema, field::Symbol)
   field_schema === nothing && return nothing
-  field in propertynames(field_schema) || return nothing
   value = getproperty(field_schema, field)
   value === nothing && return nothing
   value isa Real && !(value isa Bool) || throw(server_error(
@@ -860,6 +943,7 @@ function parse_pt_type(parameters)
       field=field.name,
       type=t,
       doc=field.doc,
+      required=_constructor_field_required(field),
       min=field.minimum,
       max=field.maximum,
     )
@@ -1452,7 +1536,7 @@ function validate_payload(payload; script_export::Bool=false)
     # Validate definitions and tagged protocol-parameter references before
     # creating backend state.
     variables = _parse_variables(payload)
-    _validate_variable_references(payload, variables)
+    _validate_constructor_parameters(payload, variables)
 
     # Prepare success response with graph info
     response = Dict(
@@ -1974,6 +2058,8 @@ function _constructor_parameter_kwargs(
   kwargs = Dict{Symbol,Any}()
   variable_assignments = Dict{String,Any}[]
   supplied_names = Set{String}()
+  required_names =
+    _required_constructor_parameter_names(constructor_fields_by_name)
 
   for (parameter_index, parameter) in enumerate(params)
     _is_object_like(parameter) || throw(validation_error(
@@ -1997,7 +2083,13 @@ function _constructor_parameter_kwargs(
     ))
 
     value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(value)))
+    if _constructor_parameter_is_omitted(value)
+      _reject_required_constructor_omission(
+        required_names,
+        original_name,
+        parameter_context,
+        constructor_type,
+      )
       continue
     end
 
@@ -2035,7 +2127,15 @@ function _constructor_parameter_kwargs(
           "parameter_name" => original_name,
         ),
       ))
-      _variable_uses_constructor_default(variable) && continue
+      if _variable_uses_constructor_default(variable)
+        _reject_required_constructor_omission(
+          required_names,
+          original_name,
+          parameter_context,
+          constructor_type,
+        )
+        continue
+      end
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $parameter_context '$original_name'",
@@ -2124,6 +2224,13 @@ function _constructor_parameter_kwargs(
       ),
     ))
   end
+
+  _require_all_constructor_parameters(
+    required_names,
+    Set(string(name) for name in keys(kwargs)),
+    parameter_context,
+    constructor_type,
+  )
 
   return kwargs, variable_assignments
 end

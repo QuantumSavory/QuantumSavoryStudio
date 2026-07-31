@@ -2573,6 +2573,160 @@
               "$ref": "#/components/schemas/HttpOperationSchemas/$defs/jsonObject"
             }
           },
+          "constructorParameterMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "type",
+              "doc",
+              "required",
+              "min",
+              "max"
+            ],
+            "dependentRequired": {
+              "kind": [
+                "nullable"
+              ],
+              "nullable": [
+                "kind"
+              ]
+            },
+            "properties": {
+              "field": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "type": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              },
+              "doc": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "min": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "max": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "kind": {
+                "type": "string",
+                "const": "named_tag_type"
+              },
+              "nullable": {
+                "type": "boolean"
+              }
+            }
+          },
+          "backgroundTypeMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "doc",
+              "parameters"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "doc": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/constructorParameterMetadata"
+                }
+              }
+            }
+          },
+          "protocolTypeMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "doc",
+              "group",
+              "parameters",
+              "virtual"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "doc": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string",
+                "enum": [
+                  "node",
+                  "edge",
+                  "floating"
+                ]
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/constructorParameterMetadata"
+                }
+              },
+              "virtual": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "slotTypeMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "doc"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "doc": {
+                "type": "string"
+              }
+            }
+          },
           "stringArray": {
             "type": "array",
             "items": {
@@ -3300,7 +3454,10 @@
             ],
             "properties": {
               "background_types": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/objectArray"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/backgroundTypeMetadata"
+                }
               }
             }
           },
@@ -3615,7 +3772,10 @@
             ],
             "properties": {
               "protocol_types": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/objectArray"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/protocolTypeMetadata"
+                }
               }
             }
           },
@@ -3715,7 +3875,10 @@
             ],
             "properties": {
               "slot_types": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/objectArray"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/slotTypeMetadata"
+                }
               }
             }
           },

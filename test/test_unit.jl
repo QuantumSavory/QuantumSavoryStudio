@@ -31,16 +31,19 @@
             :count,
             Int64,
             "A contextual integer constructor field.",
+            false,
           ),
           QuantumSavory.ConstructorFieldSchema(
             :label,
             String,
             "A nonnumeric constructor field.",
+            false,
           ),
           QuantumSavory.ConstructorFieldSchema(
             :values,
             Vector{Int64},
-            "An unsupported complex wire field.",
+            "A numeric vector constructor field.",
+            false,
           ),
         ),
       )
@@ -1185,6 +1188,11 @@
       @test all(haskey(bt, "type") for bt in background_types)
       @test all(haskey(bt, "doc") for bt in background_types)
       @test all(haskey(bt, "parameters") for bt in background_types)
+      @test all(
+        parameter.required isa Bool
+        for background in background_types
+        for parameter in background["parameters"]
+      )
   end
 
   @testset "Slot Types" begin
@@ -1731,6 +1739,22 @@
       @test all(haskey(pt, "parameters") for pt in protocol_types)
       @test all(haskey(pt, "virtual") for pt in protocol_types)
       @test all(pt["group"] in ["node", "edge", "floating"] for pt in protocol_types)
+
+      required_parameters = Set(
+        (protocol["type"], string(parameter.field))
+        for protocol in protocol_types
+        for parameter in protocol["parameters"]
+        if parameter.required
+      )
+      @test all(
+        parameter.required isa Bool
+        for protocol in protocol_types
+        for parameter in protocol["parameters"]
+      )
+      @test required_parameters == Set([
+        ("SimpleSwitchDiscreteProt", "clientnodes"),
+        ("SimpleSwitchDiscreteProt", "success_probs"),
+      ])
 
       protocol_types_by_name = Dict(pt["type"] => pt for pt in protocol_types)
       virtual_protocol = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglementConsumer)]
@@ -3047,6 +3071,82 @@
       @test kwargs[:filter].(1:3) == [true, false, false]
   end
 
+  @testset "Required Constructor Parameters" begin
+      simulation_name = "required_constructor_parameters"
+      payload = deepcopy(test_payload)
+      payload["name"] = simulation_name
+      switch_definition = Dict(
+        "id" => "required-switch",
+        "type" => "SimpleSwitchDiscreteProt",
+        "parameters" => Any[
+          Dict(
+            "name" => "clientnodes",
+            "type" => "Vector{Int64}",
+            "value" => Any[2],
+          ),
+          Dict(
+            "name" => "success_probs",
+            "type" => "Vector{Float64}",
+            "value" => Any[0.75],
+          ),
+        ],
+      )
+      push!(payload["net"]["nodes"][1]["data"]["protocols"], switch_definition)
+
+      try
+        validated = WebQuantumSavory.validate_payload(payload)
+        state = WebQuantumSavory.parse_network_graph(validated)
+        WebQuantumSavory.prepare_simulation(state, simulation_name)
+        switch = state.protocol_mapping["required-switch"]
+        @test switch.clientnodes == [2]
+        @test switch.success_probs == [0.75]
+      finally
+        haskey(WebQuantumSavory.STATE, simulation_name) &&
+          WebQuantumSavory.destroy_simulation(simulation_name)
+      end
+
+      missing = deepcopy(payload)
+      pop!(missing["net"]["nodes"][1]["data"]["protocols"])
+      missing_switch = deepcopy(switch_definition)
+      pop!(missing_switch["parameters"])
+      push!(missing["net"]["nodes"][1]["data"]["protocols"], missing_switch)
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(missing)
+
+      omitted = deepcopy(payload)
+      omitted_switch = omitted["net"]["nodes"][1]["data"]["protocols"][end]
+      omitted_switch["parameters"][1]["value"] = nothing
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(omitted)
+
+      defaulted = deepcopy(payload)
+      defaulted["variables"] = Any[Dict(
+        "id" => "constructor-default",
+        "name" => "constructor default",
+        "type" => "default",
+        "value" => nothing,
+      )]
+      defaulted_switch =
+        defaulted["net"]["nodes"][1]["data"]["protocols"][end]
+      defaulted_switch["parameters"][1]["value"] =
+        Dict("kind" => "variable", "id" => "constructor-default")
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(defaulted)
+
+      export_payload = deepcopy(payload)
+      merge!(
+        export_payload["simulationConfig"],
+        Dict("time" => 0.1, "timeStep" => 0.01),
+      )
+      script = WebQuantumSavory.generate_julia_script(export_payload)
+      @test occursin("clientnodes = [2]", script)
+      @test occursin("success_probs = [0.75]", script)
+      missing_export = deepcopy(export_payload)
+      pop!(
+        missing_export["net"]["nodes"][1]["data"]["protocols"][end]["parameters"],
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+        missing_export,
+      )
+  end
+
   @testset "Graph Building" begin
       validation_result = WebQuantumSavory.validate_payload(test_payload)
       g = WebQuantumSavory.build_graph(validation_result)
@@ -3667,6 +3767,81 @@
     @test ok && v ≈ 3.14
     ok, v = WebQuantumSavory._convert_parameter_value("Float32", 2)
     @test ok && v == 2.0
+
+    # Numeric vectors are converted element-wise from JSON-compatible arrays.
+    ok, v = WebQuantumSavory._convert_parameter_value(
+      "Vector{Int64}",
+      Any[1, 2.0, "3"],
+    )
+    @test ok && v == Int64[1, 2, 3]
+    ok, v = WebQuantumSavory._convert_parameter_value(
+      "Vector{Float64}",
+      Any[0.25, 1, "2.5"],
+    )
+    @test ok && v == [0.25, 1.0, 2.5]
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Int64}", [1.5]),
+    ) === false
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Float64}", [Inf]),
+    ) === false
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Float64}", "[1.0]"),
+    ) === false
+
+    switch_type = QuantumSavory.ProtocolZoo.SimpleSwitchDiscreteProt
+    switch_parameters = Any[
+      Dict(
+        "name" => "clientnodes",
+        "type" => "Vector{Int64}",
+        "value" => Any[2, 3.0],
+      ),
+      Dict(
+        "name" => "success_probs",
+        "type" => "Vector{Float64}",
+        "value" => Any[0.25, 0.75],
+      ),
+    ]
+    switch_kwargs, _ = WebQuantumSavory._constructor_parameter_kwargs(
+      switch_parameters,
+      switch_type,
+      Dict{Symbol,Any}();
+      parameter_context="switch parameter",
+    )
+    @test switch_kwargs == Dict(
+      :clientnodes => Int64[2, 3],
+      :success_probs => [0.25, 0.75],
+    )
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
+      switch_parameters[1:1],
+      switch_type,
+      Dict{Symbol,Any}();
+      parameter_context="switch parameter",
+    )
+    null_required = deepcopy(switch_parameters)
+    null_required[1]["value"] = nothing
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
+      null_required,
+      switch_type,
+      Dict{Symbol,Any}();
+      parameter_context="switch parameter",
+    )
+    default_required = deepcopy(switch_parameters)
+    default_required[1]["value"] = Dict("kind" => "variable", "id" => "default")
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
+      default_required,
+      switch_type,
+      Dict{Symbol,Any}();
+      variables=Dict(
+        "default" => WebQuantumSavory.Variable(
+          "default",
+          "constructor default",
+          "Default",
+          nothing,
+        ),
+      ),
+      parameter_context="switch parameter",
+    )
 
     # Strings and explicit Nothing values do not require Julia evaluation.
     ok, v = WebQuantumSavory._convert_parameter_value("String", 123)
@@ -5868,7 +6043,8 @@
     bounded_schema = QuantumSavory.ConstructorFieldSchema(
       :bounded,
       Float64,
-      "A bounded test value.";
+      "A bounded test value.",
+      false;
       minimum=0.0,
       maximum=1.0,
     )

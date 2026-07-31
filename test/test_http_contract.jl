@@ -63,6 +63,53 @@
 
   operation_schemas =
     document["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+
+  constructor_parameter_metadata =
+    operation_schemas["constructorParameterMetadata"]
+  @test constructor_parameter_metadata["additionalProperties"] == false
+  @test Set(constructor_parameter_metadata["required"]) == Set([
+    "field",
+    "type",
+    "doc",
+    "required",
+    "min",
+    "max",
+  ])
+  @test constructor_parameter_metadata["properties"]["required"] ==
+    Dict("type" => "boolean")
+  @test constructor_parameter_metadata["dependentRequired"] == Dict(
+    "kind" => ["nullable"],
+    "nullable" => ["kind"],
+  )
+
+  catalog_schemas = Dict(
+    "listBackgroundTypesResponse" => (
+      response_field="background_types",
+      item_schema="backgroundTypeMetadata",
+    ),
+    "listProtocolTypesResponse" => (
+      response_field="protocol_types",
+      item_schema="protocolTypeMetadata",
+    ),
+    "listSlotTypesResponse" => (
+      response_field="slot_types",
+      item_schema="slotTypeMetadata",
+    ),
+  )
+  for (response_schema, catalog) in pairs(catalog_schemas)
+    response = operation_schemas[response_schema]
+    @test response["additionalProperties"] == false
+    @test response["required"] == [catalog.response_field]
+    @test response["properties"][catalog.response_field]["items"]["\$ref"] ==
+      "#/components/schemas/HttpOperationSchemas/\$defs/$(catalog.item_schema)"
+    @test operation_schemas[catalog.item_schema]["additionalProperties"] == false
+  end
+  for metadata_schema in ("backgroundTypeMetadata", "protocolTypeMetadata")
+    parameters = operation_schemas[metadata_schema]["properties"]["parameters"]
+    @test parameters["items"]["\$ref"] ==
+      "#/components/schemas/HttpOperationSchemas/\$defs/constructorParameterMetadata"
+  end
+
   for path_item in values(document["paths"])
     for (method, operation) in pairs(path_item)
       lowercase(string(method)) in WQS.HTTP_METHODS || continue
