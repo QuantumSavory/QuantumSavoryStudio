@@ -269,7 +269,7 @@ function _lease_live(hub::CollaborationHub, binding::EditorBinding)
   return hub.clock() - binding.heartbeat_at <= Dates.Second(MCP_EDITOR_LEASE_SECONDS)
 end
 
-function _pending_readback_tool(pending::PendingBrowserCommand)
+function _pending_write_readback_tool(pending::PendingBrowserCommand)
   pending.mutates_design && return "design_get"
   payload = get(pending.command, "payload", Dict{String,Any}())
   get(payload, "type", "") == "simulation_action" && return "simulation_status"
@@ -299,7 +299,7 @@ function _require_simulation_quiescent_locked!(hub::CollaborationHub)
   )
 end
 
-function _cancelled_pending_error(
+function _delivery_classified_cancellation_error(
   pending::PendingBrowserCommand,
   code::String,
   message::String,
@@ -309,15 +309,19 @@ function _cancelled_pending_error(
     return Dict{String,Any}(
       "code" => code,
       "message" => message,
-      "retryable" => false,
+      "status" => 409,
+      "retryable" => true,
       "details" => Dict{String,Any}(),
     )
   end
-  readback_tool = _pending_readback_tool(pending)
+  # A delivered pure read is safe to retry. Only delivered state-changing
+  # design/lifecycle work needs non-retryable readback recovery.
+  readback_tool = _pending_write_readback_tool(pending)
   if readback_tool === nothing
     return Dict{String,Any}(
       "code" => code,
       "message" => message,
+      "status" => 409,
       "retryable" => true,
       "details" => Dict{String,Any}(),
     )
@@ -325,10 +329,27 @@ function _cancelled_pending_error(
   return Dict{String,Any}(
     "code" => "OUTCOME_UNKNOWN",
     "message" => unknown_message,
+    "status" => 409,
     "retryable" => false,
     "details" => Dict{String,Any}(
       "readback_required" => true,
       "readback_tool" => readback_tool,
+    ),
+  )
+end
+
+function _browser_command_response(response)
+  if get(response, "ok", false)
+    return response["result"]
+  end
+  error = response["error"]
+  throw(
+    _mcp_error(
+      string(error["code"]),
+      string(error["message"]);
+      retryable=get(error, "retryable", false),
+      status=get(error, "status", 400),
+      details=get(error, "details", Dict{String,Any}()),
     ),
   )
 end
@@ -341,7 +362,7 @@ function _cancel_pending_locked!(
     "The editor disappeared after command delivery; the outcome is unknown.",
 )
   for pending in values(hub.pending)
-    error = _cancelled_pending_error(
+    error = _delivery_classified_cancellation_error(
       pending,
       code,
       message,
@@ -690,10 +711,13 @@ function enqueue_browser_command!(
         get(hub.pending, command_id, nothing) === pending &&
           delete!(hub.pending, command_id)
       end
+      isready(pending.response) &&
+        return _browser_command_response(fetch(pending.response))
       throw(
         _mcp_error(
           "OPERATION_CANCELLED",
           "The browser binding changed while the command was queued.",
+          retryable=true,
           status=409,
         ),
       )
@@ -726,7 +750,7 @@ function enqueue_browser_command!(
         delete!(hub.pending, pending.command["command_id"])
         (:cancelled, nothing)
       else
-        (:uncertain, _pending_readback_tool(pending))
+        (:uncertain, _pending_write_readback_tool(pending))
       end
     end
     if outcome == :cancelled
@@ -764,20 +788,7 @@ function enqueue_browser_command!(
   end
   # The response can become ready between the timed wait and timeout
   # classification. Preserve that completed response without replay state.
-  response = fetch(pending.response)
-  if get(response, "ok", false)
-    return response["result"]
-  end
-  error = response["error"]
-  throw(
-    _mcp_error(
-      string(error["code"]),
-      string(error["message"]);
-      retryable=get(error, "retryable", false),
-      status=get(error, "status", 400),
-      details=get(error, "details", Dict{String,Any}()),
-    ),
-  )
+  return _browser_command_response(fetch(pending.response))
 end
 
 enqueue_browser_command!(payload::AbstractDict; kwargs...) =

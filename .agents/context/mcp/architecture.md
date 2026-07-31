@@ -50,12 +50,12 @@ internal calls. This excludes ordinary remote access, not every local process; i
 user authentication or a general sandbox.
 
 Current contract v2 has no public operation ID, mutation ledger, or successful-result
-cache. Design mutations serialize against `expected_revision`. A write known to have
-failed before browser delivery is retryable; once delivery may have occurred, the
-response is non-retryable and names authoritative `design_get` or `simulation_status`
-readback. Unresolved lifecycle delivery makes status and fresh lifecycle calls
-retryable-pending until acknowledgement or teardown. Neither process replays uncertain
-work.
+cache. Design mutations serialize against `expected_revision`. Every cancellation
+proven to precede browser delivery is retryable, as is a delivered pure read. Delivered
+state-changing design/lifecycle work is non-retryable `OUTCOME_UNKNOWN` and names
+authoritative `design_get`/`simulation_status` readback. Unresolved lifecycle delivery
+makes status and fresh lifecycle calls retryable-pending until acknowledgement or
+teardown. Neither process replays uncertain work.
 
 Operational diagnostics redact recognized capabilities, credentials, session IDs,
 binary bodies, and raw transcript fields. This is distinct from ordinary

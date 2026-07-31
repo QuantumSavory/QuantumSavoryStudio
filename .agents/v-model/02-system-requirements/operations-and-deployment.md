@@ -34,7 +34,7 @@ candidate-first replacement, and the release-declared support environment.
 
 - **Normative statement:** The current shipped MCP contract shall expose collaborative design, catalog, lifecycle, result, and resource capabilities while preserving the visible browser as authority and requiring state readback rather than automatic mutation replay after an uncertain reply.
 - **Parents:** STK-004
-- **Acceptance criterion:** One session binds one browser; valid edits are visible and unsaved; stale revisions do not mutate; accepted design mutations advance revision once; Run follows GUI Play; HTML and PNG results are readable; uncertain design replies require authoritative readback, while an uncertain lifecycle reply blocks status and fresh lifecycle work as pending until acknowledgement or teardown, after which authoritative status succeeds.
+- **Acceptance criterion:** One session binds one browser; valid edits are visible and unsaved; stale revisions do not mutate; every provably pre-delivery cancellation and delivered pure read is retryable; accepted design mutations advance once; delivered state-changing uncertainty requires authoritative readback, with lifecycle status/work blocked pending settlement; Run follows GUI Play; HTML/PNG results are readable.
 - **Verification:** SYSV-012 (test), SYSV-013 (test), SYSV-020 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 simplified recovery policy; high concurrency/data-loss risk
 - **Context:** [MCP tool contract](../../context/mcp/tool-contract.md)

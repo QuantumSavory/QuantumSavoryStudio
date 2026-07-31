@@ -43,7 +43,7 @@ active-project replacement.
 
 - **Normative statement:** Collaboration shall coordinate one renewable browser binding, canonical revision/hash, serialized mutation delivery, lifecycle quiescence, and authoritative readback recovery without automatically replaying uncertain mutations.
 - **Parents:** SYS-011, SYS-012
-- **Acceptance criterion:** Binding ownership/expiry and stale revision prevent mutation; accepted design mutation advances revision once; pre-delivery failure does not mutate; delivered lifecycle uncertainty rejects status and duplicate lifecycle work as retryable pending until late acknowledgement, rejection, or teardown; rebind/restart begins from visible current state with fresh work.
+- **Acceptance criterion:** Binding ownership/expiry and stale revision prevent mutation; provably pre-delivery cancellation and delivered pure reads are retryable; accepted design mutation advances once; delivered state-changing work requires readback, and lifecycle uncertainty rejects status/duplicates as retryable pending until acknowledgement, rejection, or teardown; rebind/restart accepts fresh visible state.
 - **Verification:** INTV-012 (test), INTV-017 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 simplified recovery contract; high duplicate-mutation risk
 - **Context:** [Browser collaboration](../../context/mcp/browser-collaboration.md)

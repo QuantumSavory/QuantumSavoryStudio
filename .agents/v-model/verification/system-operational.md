@@ -105,9 +105,9 @@ their status.
 
 - **Covers:** SYS-012
 - **Method:** test
-- **Procedure:** Inject stale revision, pre-delivery failure, post-commit reply loss, lifecycle reply loss with status/duplicate probes, browser rebind, and sidecar restart under the release-2.0 contract.
+- **Procedure:** Inject stale revision, pre/post-delivery cancellation, post-commit reply loss, lifecycle reply loss with status/duplicate probes, browser rebind, and sidecar restart.
 - **Environment / configuration:** Real local MCP stack with controllable delivery/acknowledgement loss
-- **Pass criterion:** Stale/pre-delivery work does not mutate; committed design work advances once; no uncertain work replays; unresolved lifecycle delivery reports pending and blocks duplicates until settlement; readback/rebind/restart start from visible state.
+- **Pass criterion:** Pre-delivery cancellation and delivered reads are retryable; delivered writes require readback; committed work advances once without replay; lifecycle uncertainty blocks reads/duplicates until settlement; rebind/restart uses visible state.
 - **Status:** planned
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
 - **Nonconformance:** Component fixtures implement no-cache readback/lifecycle

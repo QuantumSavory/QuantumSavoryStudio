@@ -247,6 +247,9 @@
     expired = fetch(waiting)
     @test expired isa WebQuantumSavory.APIError
     @test expired.error_code == "EDITOR_LEASE_EXPIRED"
+    @test expired.status_code == 409
+    @test expired.details["retryable"] == true
+    @test !haskey(expired.details, "readback_required")
     @test hub.binding === nothing
     @test isempty(hub.pending)
 
@@ -314,6 +317,155 @@
     @test lifecycle_unknown.details["retryable"] == false
     @test lifecycle_unknown.details["readback_required"] == true
     @test lifecycle_unknown.details["readback_tool"] == "simulation_status"
+  end
+
+  @testset "cancellation classification follows the delivery boundary" begin
+    triggers = (:lease, :unbind, :stop, :replacement, :desynchronize)
+    phases = (
+      :queued,
+      :blocked_put,
+      :delivered_design,
+      :delivered_lifecycle,
+      :delivered_read,
+    )
+
+    function cancellation_case(trigger, phase)
+      now = Ref(DateTime(2026, 7, 18))
+      hub = WebQuantumSavory.CollaborationHub(clock=() -> now[])
+      binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+      owner = Dict(
+        "binding_id" => binding["binding_id"],
+        "generation" => 1,
+      )
+      if phase == :blocked_put
+        lock(hub.lock) do
+          hub.command_queue = Channel{Dict{String,Any}}(0)
+        end
+      end
+      lifecycle = phase == :delivered_lifecycle
+      pure_read = phase == :delivered_read
+      payload = lifecycle ?
+        Dict("type" => "simulation_action", "action" => "run") :
+        Dict("type" => pure_read ? "design_get" : "design_command")
+      mutates_design = !lifecycle && !pure_read
+      waiting = @async try
+        WebQuantumSavory.enqueue_browser_command!(
+          hub,
+          payload;
+          expected_revision=mutates_design ? 0 : nothing,
+          mutates_design,
+          timeout_seconds=2,
+        )
+      catch error
+        error
+      end
+      @test timedwait(
+        () -> lock(hub.lock) do
+          !isempty(hub.pending)
+        end,
+        1;
+        pollint=0.01,
+      ) == :ok
+
+      delivered = startswith(string(phase), "delivered_")
+      if delivered
+        @test WebQuantumSavory.next_browser_command!(
+          hub,
+          owner;
+          timeout_seconds=1,
+        ) !== nothing
+      end
+
+      if trigger == :lease
+        now[] += Second(WebQuantumSavory.MCP_EDITOR_LEASE_SECONDS + 1)
+        WebQuantumSavory.expire_editor_lease!(hub)
+      elseif trigger == :unbind
+        WebQuantumSavory.unbind_editor!(hub, owner)
+      elseif trigger == :stop
+        WebQuantumSavory.stop_collaboration!(hub)
+      elseif trigger == :replacement
+        WebQuantumSavory.bind_editor!(
+          hub,
+          binding_request(generation=2, hash="replacement"),
+        )
+      else
+        mismatch = try
+          WebQuantumSavory.commit_browser_command!(
+            hub,
+            Dict(
+              owner...,
+              "command_id" => "unknown-command",
+              "base_revision" => 0,
+              "success" => false,
+            ),
+          )
+          nothing
+        catch error
+          error
+        end
+        @test mismatch isa WebQuantumSavory.APIError
+        @test mismatch.error_code == "PROJECT_CHANGED"
+      end
+
+      outcome = fetch(waiting)
+      @test outcome isa WebQuantumSavory.APIError
+      @test outcome.status_code == 409
+      state_changing_delivery =
+        phase in (:delivered_design, :delivered_lifecycle)
+      if state_changing_delivery
+        @test outcome.error_code == "OUTCOME_UNKNOWN"
+        @test outcome.details["retryable"] == false
+        @test outcome.details["readback_required"] == true
+        @test outcome.details["readback_tool"] == (
+          lifecycle ? "simulation_status" : "design_get"
+        )
+      else
+        expected_code = trigger == :lease ?
+          "EDITOR_LEASE_EXPIRED" :
+          trigger == :replacement ? "PROJECT_CHANGED" : "OPERATION_CANCELLED"
+        @test outcome.error_code == expected_code
+        @test outcome.details["retryable"] == true
+        @test !haskey(outcome.details, "readback_required")
+      end
+      @test isempty(hub.pending)
+    end
+
+    for trigger in triggers, phase in phases
+      cancellation_case(trigger, phase)
+    end
+
+    closed_queue_hub = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(closed_queue_hub, binding_request())
+    closed_queue = Channel{Dict{String,Any}}(0)
+    lock(closed_queue_hub.lock) do
+      closed_queue_hub.command_queue = closed_queue
+    end
+    closed_queue_wait = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        closed_queue_hub,
+        Dict("type" => "design_command");
+        expected_revision=0,
+        mutates_design=true,
+        timeout_seconds=2,
+      )
+    catch error
+      error
+    end
+    @test timedwait(
+      () -> lock(closed_queue_hub.lock) do
+        !isempty(closed_queue_hub.pending)
+      end,
+      1;
+      pollint=0.01,
+    ) == :ok
+    close(closed_queue)
+    closed_queue_outcome = fetch(closed_queue_wait)
+    @test closed_queue_outcome isa WebQuantumSavory.APIError
+    @test closed_queue_outcome.error_code == "OPERATION_CANCELLED"
+    @test closed_queue_outcome.status_code == 409
+    @test closed_queue_outcome.details["retryable"] == true
+    @test !haskey(closed_queue_outcome.details, "readback_required")
+    @test isempty(closed_queue_hub.pending)
   end
 
   @testset "a desynchronized owner can unbind and recover" begin
@@ -1179,6 +1331,8 @@
     undelivered_outcome = fetch(undelivered.waiting)
     @test undelivered_outcome isa WebQuantumSavory.APIError
     @test undelivered_outcome.error_code == "OPERATION_CANCELLED"
+    @test undelivered_outcome.details["retryable"] == true
+    @test !haskey(undelivered_outcome.details, "readback_required")
     @test isempty(undelivered.hub.pending)
     @test WebQuantumSavory.collaboration_status(
       undelivered.hub,
@@ -1204,6 +1358,9 @@
     delivered_outcome = fetch(delivered.waiting)
     @test delivered_outcome isa WebQuantumSavory.APIError
     @test delivered_outcome.error_code == "OUTCOME_UNKNOWN"
+    @test delivered_outcome.details["retryable"] == false
+    @test delivered_outcome.details["readback_required"] == true
+    @test delivered_outcome.details["readback_tool"] == "design_get"
     @test isempty(delivered.hub.pending)
     @test WebQuantumSavory.collaboration_status(
       delivered.hub,

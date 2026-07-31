@@ -70,14 +70,14 @@
 
 - **Covers:** SUB-012
 - **Method:** test
-- **Procedure:** Inject pre-delivery failure, post-commit reply loss, lifecycle reply
-  loss with pending status/duplicate probes, browser rebind, and transport restart,
-  then read authoritative state before fresh work.
+- **Procedure:** Inject cancellation before/after delivery, post-commit reply loss,
+  lifecycle reply loss with pending status/duplicate probes, browser rebind, and
+  transport restart, then read authoritative state before fresh work.
 - **Environment / configuration:** Real hub/browser bridge with deterministic delivery
   and acknowledgement faults
-- **Pass criterion:** Pre-delivery work does not mutate; committed design work advances
-  once; uncertain work is not replayed; unresolved lifecycle delivery blocks status and
-  duplicates until acknowledgement or teardown; rebind/restart accepts fresh requests.
+- **Pass criterion:** Pre-delivery cancellation and delivered reads are retryable;
+  delivered writes require readback; committed design work advances once without
+  replay; unresolved lifecycle delivery blocks status/duplicates until settlement.
 - **Status:** implemented
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
 - **Nonconformance:** V2/hub component faults cover no-ledger readback and lifecycle
