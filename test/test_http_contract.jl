@@ -102,7 +102,7 @@
   @test validate_code_request["additionalProperties"] == false
   @test validate_code_request["required"] == ["code"]
   @test validate_code_request["properties"]["code"] ==
-    Dict("type" => "string", "minLength" => 1)
+    Dict("type" => "string", "minLength" => 1, "pattern" => "\\S")
   @test Set(validate_code_request["properties"]["placement"]["enum"]) ==
     Set(["node", "edge", "floating", "variable", "query"])
 
@@ -111,7 +111,13 @@
   @test validate_symbolic_request["additionalProperties"] == false
   @test validate_symbolic_request["required"] == ["expr"]
   @test validate_symbolic_request["properties"]["expr"] ==
-    Dict("type" => "string", "minLength" => 1)
+    Dict("type" => "string", "minLength" => 1, "pattern" => "\\S")
+
+  evaluation_failure = operation_schemas["evaluationFailure"]
+  @test Set(evaluation_failure["required"]) ==
+    Set(["success", "error_code", "error", "error_type"])
+  @test Set(keys(operation_schemas["destroySimulationResponse"]["properties"])) ==
+    Set(["success", "message"])
 
   test_document = WQS.active_http_contract_document(mcp=false, test_support=true)
   test_operations = operations(test_document)

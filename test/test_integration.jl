@@ -1085,6 +1085,16 @@
         extra_field_data["error"]["message"],
       )
 
+      blank_code_response = make_request(
+        "POST",
+        "/test_code";
+        body=Dict("code" => " \t "),
+      )
+      @test blank_code_response.status == 400
+      blank_code_data = parse_response(blank_code_response)
+      @test blank_code_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("must not be blank", blank_code_data["error"]["message"])
+
       invalid_placement_response = make_request(
         "POST",
         "/test_code",
@@ -1353,6 +1363,19 @@
       @test occursin(
         "fields do not match the request schema",
         extra_field_data["error"]["message"],
+      )
+
+      blank_expression_response = make_request(
+        "POST",
+        "/test_symbolic_expression";
+        body=Dict("expr" => " \t "),
+      )
+      @test blank_expression_response.status == 400
+      blank_expression_data = parse_response(blank_expression_response)
+      @test blank_expression_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin(
+        "must not be blank",
+        blank_expression_data["error"]["message"],
       )
 
       if unsafe_evaluation_enabled

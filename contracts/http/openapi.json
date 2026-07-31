@@ -2232,7 +2232,8 @@
             "required": [
               "success",
               "error_code",
-              "error"
+              "error",
+              "error_type"
             ],
             "properties": {
               "success": {
@@ -2451,7 +2452,8 @@
             "properties": {
               "code": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               },
               "placement": {
                 "type": "string",
@@ -2477,7 +2479,8 @@
             "properties": {
               "expr": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               }
             }
           },
@@ -2721,9 +2724,6 @@
                 "const": true
               },
               "message": {
-                "type": "string"
-              },
-              "warning": {
                 "type": "string"
               }
             }
