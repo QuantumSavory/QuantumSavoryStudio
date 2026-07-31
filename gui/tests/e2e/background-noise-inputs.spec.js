@@ -184,13 +184,13 @@ test.describe('Background-noise constructor inputs', () => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       return setup.projectData.net.nodes.slice(1).map(node => node.data.slots[0].backgroundNoise)
     })
+    // Catalog documentation remains editor metadata. Generated project values use
+    // only the closed strict-v2 background-noise fields.
     expect(clonedBackgrounds).toEqual(Array(2).fill({
       type: 'T1Decay',
-      doc: expect.any(String),
       parameters: [{
         field: 't1',
         type: 'Float64',
-        doc: expect.any(String),
         selectedType: 'expression:Float64',
         value: {
           kind: 'numeric_expression',
