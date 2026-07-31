@@ -41,6 +41,9 @@ Prefer the checked-in wrappers for full component boundaries:
 | Production browser | `./ci/browser-production.sh` | Canonical launcher, integrated production bundle, and primary Chromium flow |
 | Public deployment | `./ci/public-container.sh` | Hardened Podman build, public-policy denial, restart volatility, and no database scaffold |
 
+The agent-documentation wrapper first runs the linter's focused regression fixtures, then
+checks the repository in strict mode.
+
 Useful focused commands:
 
 ```sh

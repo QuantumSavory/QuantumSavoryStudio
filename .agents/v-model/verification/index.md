@@ -18,10 +18,10 @@ did not execute product suites or create a stable run record.
 
 - `planned`: the full action is designed but its durable test, analysis, inspection, or
   demonstration is not yet implemented.
-- `implemented`: a durable action artifact exists, but current full-criterion execution
-  evidence is absent or incomplete.
+- `implemented`: a durable action artifact exists at a cited repository-local file, but
+  current full-criterion execution evidence is absent or incomplete.
 - `passing`: current durable evidence demonstrates every pass-criterion clause in the
-  named environment.
+  named environment and cites an executable repository test or CI path.
 - `failing`, `blocked`, and `waived`: use only with the concrete evidence, blocker, or
   maintainer approval required by the documentation skill.
 
@@ -29,3 +29,7 @@ Source inspection and test-file presence do not establish a pass. Each action na
 known nonconformance or missing coverage rather than allowing adjacent tests to imply
 coverage. Acceptance demonstrations remain planned until maintainers record durable
 release acceptance.
+
+The strict linter enforces the local-file floor for `implemented` and the executable
+test/CI-path floor for `passing`; those mechanical checks do not replace clause-by-clause
+review of the current run record.

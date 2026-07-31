@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import html
 import json
 import os
 import re
 import sys
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
@@ -30,6 +32,17 @@ HEADING_CANDIDATE_RE = re.compile(
 FIELD_RE = re.compile(r"^\s*[-*]\s+\*\*([^*]+):\*\*\s*(.*)$")
 LINK_RE = re.compile(r"!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\n]+)\s*\)")
 REFERENCE_LINK_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)")
+ATX_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}(?:[ \t]+|$)(.*)$")
+INLINE_LINK_RE = re.compile(r"!?\[([^\]\n]*)\]\([^)\n]+\)")
+HTML_TAG_RE = re.compile(r"<[^>\n]+>")
+HTML_ANCHOR_RE = re.compile(
+    r"<(?:a|span)\b[^>]*\b(?:id|name)\s*=\s*[\"']([^\"']+)[\"'][^>]*>",
+    re.IGNORECASE,
+)
+CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
+BARE_PATH_RE = re.compile(
+    r"(?<![\w./-])((?:\.{1,2}/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)"
+)
 WORD_RE = re.compile(r"\b[\w'-]+\b", re.UNICODE)
 PLACEHOLDER_RE = re.compile(
     r"\{\{[^{}\n]+\}\}|<[A-Z][A-Z0-9_ -]{2,}>|\b(?:TODO|TBD|FIXME|CHANGEME)\b"
@@ -162,6 +175,8 @@ ARTIFACT_SUFFIXES = {
     ".yml",
     ".zip",
 }
+EXECUTABLE_EVIDENCE_SUFFIXES = CODE_SUFFIXES - {".h", ".hpp"}
+EXECUTABLE_EVIDENCE_DIRECTORIES = {"ci", "test", "tests"}
 NONE_VALUES = {"", "-", "—", "none", "n/a", "na", "not applicable"}
 CONTEXT_NEEDS = {
     "guided learning": "Guided learning",
@@ -265,6 +280,25 @@ def _visible_lines(text: str) -> list[str]:
     return result
 
 
+def _github_heading_anchor(value: str) -> str:
+    """Return the GitHub-style fragment generated for one Markdown heading."""
+    text = re.sub(r"[ \t]+#+[ \t]*$", "", value).strip()
+    text = INLINE_LINK_RE.sub(lambda match: match.group(1), text)
+    text = HTML_TAG_RE.sub("", text)
+    text = html.unescape(text)
+    text = re.sub(r"\\(.)", r"\1", text)
+    text = text.replace("`", "")
+    characters = []
+    for character in text.casefold():
+        if character.isspace():
+            characters.append("-")
+        elif character in {"-", "_"}:
+            characters.append(character)
+        elif not unicodedata.category(character).startswith(("P", "S")):
+            characters.append(character)
+    return "".join(characters)
+
+
 def _normalized_paragraph(block: Sequence[tuple[int, str]]) -> str | None:
     if any(line.lstrip().startswith(("#", "|", "<!--")) for _, line in block):
         return None
@@ -283,6 +317,7 @@ class RepositoryDocsLinter:
         self.warnings: list[Finding] = []
         self._finding_keys: set[tuple[str, str, str, int | None, str]] = set()
         self._text_cache: dict[Path, str] = {}
+        self._anchor_cache: dict[Path, set[str]] = {}
         self.records: list[Record] = []
         self.records_by_id: dict[str, Record] = {}
         self.record_counts: dict[Path, int] = defaultdict(int)
@@ -430,7 +465,7 @@ class RepositoryDocsLinter:
                         destination = raw[1:-1].strip()
                     else:
                         destination = raw.split(maxsplit=1)[0]
-                    if not destination or destination.startswith("#"):
+                    if not destination:
                         continue
                     if destination.startswith("//"):
                         continue
@@ -449,9 +484,11 @@ class RepositoryDocsLinter:
                     if parsed.scheme and len(parsed.scheme) > 1:
                         continue
                     local_path = unquote(parsed.path)
-                    if not local_path:
+                    if not local_path and not parsed.fragment:
                         continue
-                    if local_path.startswith("/"):
+                    if not local_path:
+                        candidate = path
+                    elif local_path.startswith("/"):
                         candidate = self.repository / local_path.lstrip("/")
                     else:
                         candidate = path.parent / local_path
@@ -470,6 +507,40 @@ class RepositoryDocsLinter:
                             f"local link target does not exist: {destination}",
                             line_number,
                         )
+                    elif (
+                        parsed.fragment
+                        and candidate.is_file()
+                        and candidate.suffix.lower() in {".md", ".markdown"}
+                    ):
+                        fragment = unquote(parsed.fragment)
+                        if fragment not in self._markdown_anchors(candidate):
+                            self.error(
+                                "broken_link_fragment",
+                                path,
+                                f"local Markdown fragment does not exist: {destination}",
+                                line_number,
+                            )
+
+    def _markdown_anchors(self, path: Path) -> set[str]:
+        resolved = path.resolve()
+        if resolved in self._anchor_cache:
+            return self._anchor_cache[resolved]
+        anchors: set[str] = set()
+        counts: dict[str, int] = defaultdict(int)
+        for line in _visible_lines(self._read(path)):
+            for match in HTML_ANCHOR_RE.finditer(line):
+                anchors.add(html.unescape(match.group(1)))
+            heading_match = ATX_HEADING_RE.match(line)
+            if heading_match is None:
+                continue
+            base = _github_heading_anchor(heading_match.group(1))
+            if not base:
+                continue
+            occurrence = counts[base]
+            counts[base] += 1
+            anchors.add(base if occurrence == 0 else f"{base}-{occurrence}")
+        self._anchor_cache[resolved] = anchors
+        return anchors
 
     def _discover_profiles(self) -> None:
         vmodel_root = self.repository / ".agents" / "v-model"
@@ -980,27 +1051,93 @@ class RepositoryDocsLinter:
                 f"{record.identifier} Status must be one of {statuses}",
                 record.field_lines.get("status", record.line),
             )
-        if status == "passing" and not self._durable_evidence(
-            record.fields.get("evidence", "")
-        ):
-            self.error(
-                "passing_without_evidence",
-                record.path,
-                f"{record.identifier} is passing without a durable evidence reference",
-                record.field_lines.get("evidence", record.line),
-            )
+        self._validate_action_evidence(record, status)
         return covered_ids
 
-    @staticmethod
-    def _durable_evidence(value: str) -> bool:
+    def _validate_action_evidence(self, record: Record, status: str) -> None:
+        evidence_files = self._repository_evidence_files(record)
+        if status == "implemented" and not evidence_files:
+            self.error(
+                "implemented_without_repository_evidence",
+                record.path,
+                f"{record.identifier} is implemented without an existing "
+                "repository-local evidence file",
+                record.field_lines.get("evidence", record.line),
+            )
+        elif status == "passing" and not any(
+            self._is_executable_evidence(path) for path in evidence_files
+        ):
+            self.error(
+                "passing_without_executable_evidence",
+                record.path,
+                f"{record.identifier} is passing without an existing executable "
+                "repository evidence file",
+                record.field_lines.get("evidence", record.line),
+            )
+
+    def _repository_evidence_files(self, record: Record) -> set[Path]:
+        value = record.fields.get("evidence", "")
         if _is_none(value) or PLACEHOLDER_RE.search(value):
-            return False
-        return bool(
-            re.search(r"\[[^\]]+\]\([^)]+\)", value)
-            or re.search(r"`[^`]+`", value)
-            or re.search(r"https?://\S+", value)
-            or re.search(
-                r"(?:^|\s)(?:artifacts?|docs?|reports?|test|tests|ci)/\S+", value
+            return set()
+        references: list[tuple[str, bool]] = []
+        references.extend((match.group(1), True) for match in LINK_RE.finditer(value))
+        references.extend((match.group(1), False) for match in CODE_SPAN_RE.finditer(value))
+        references.extend((match.group(1), False) for match in BARE_PATH_RE.finditer(value))
+        evidence_files: set[Path] = set()
+        for raw_reference, document_relative in references:
+            raw = raw_reference.strip()
+            if raw.startswith("<") and raw.endswith(">"):
+                destination = raw[1:-1].strip()
+            else:
+                destination = raw.split(maxsplit=1)[0]
+            if not destination or destination.startswith(("#", "//")):
+                continue
+            try:
+                parsed = urlsplit(destination)
+            except ValueError:
+                continue
+            if parsed.scheme or parsed.netloc:
+                continue
+            local_path = unquote(parsed.path)
+            if not local_path:
+                continue
+            path_value = Path(local_path)
+            if path_value.is_absolute():
+                candidates = [self.repository / local_path.lstrip("/")]
+            elif document_relative:
+                candidates = [record.path.parent / path_value]
+            else:
+                candidates = [
+                    self.repository / path_value,
+                    record.path.parent / path_value,
+                ]
+            for candidate in candidates:
+                resolved = candidate.resolve(strict=False)
+                if (
+                    _is_within(resolved, self.repository)
+                    and candidate.is_file()
+                ):
+                    evidence_files.add(resolved)
+                    break
+        return evidence_files
+
+    def _is_executable_evidence(self, path: Path) -> bool:
+        if os.access(path, os.X_OK):
+            return True
+        relative = path.relative_to(self.repository)
+        parts = {part.casefold() for part in relative.parts[:-1]}
+        name = relative.name.casefold()
+        test_named = (
+            name.startswith("test_")
+            or ".test." in name
+            or ".spec." in name
+            or name in {"runtests.jl", "runtests.py"}
+        )
+        return (
+            path.suffix.casefold() in EXECUTABLE_EVIDENCE_SUFFIXES
+            and (
+                bool(parts & EXECUTABLE_EVIDENCE_DIRECTORIES)
+                or test_named
             )
         )
 
