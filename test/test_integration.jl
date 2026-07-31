@@ -33,8 +33,9 @@
     return
   end
 
-  # Load test data - use payload3.json
-  test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+  # Load the co-shipped current-wire simulation payload.
+  test_payload =
+    JSON.parsefile(joinpath(@__DIR__, "..", "assets", "startup-warmup.json"))
 
   # Helper function to make HTTP requests
   function make_request(method, endpoint; body=nothing, query=nothing)
@@ -208,7 +209,11 @@
               "name" => "Left",
               "position" => [0.0, 0.0],
               "data" => Dict(
-                "slots" => [Dict("id" => "left-slot", "type" => "Qubit", "backgroundNoise" => nothing)],
+                "slots" => [Dict(
+                  "id" => "left-slot",
+                  "type" => "Qubit",
+                  "backgroundNoise" => Dict("type" => "default", "parameters" => Any[]),
+                )],
                 "protocols" => Any[],
               ),
             ),
@@ -217,7 +222,11 @@
               "name" => "Right",
               "position" => [1.0, 1.0],
               "data" => Dict(
-                "slots" => [Dict("id" => "right-slot", "type" => "Qubit", "backgroundNoise" => nothing)],
+                "slots" => [Dict(
+                  "id" => "right-slot",
+                  "type" => "Qubit",
+                  "backgroundNoise" => Dict("type" => "default", "parameters" => Any[]),
+                )],
                 "protocols" => Any[],
               ),
             ),
@@ -227,7 +236,15 @@
               "id" => "connection",
               "source" => "left-node",
               "target" => "right-node",
-              "data" => Dict("protocols" => Any[]),
+              "isLogic" => false,
+              "data" => Dict(
+                "protocols" => Any[],
+                "distanceMeters" => 1_000.0,
+                "propagationDelaySeconds" => 0.000005,
+                "refractiveIndex" => 1.5,
+                "lossDbPerKm" => 0.2,
+                "transmissivity" => 0.95,
+              ),
             ),
           ],
           "protocols" => Any[],
@@ -265,6 +282,127 @@
       incompatible_data = parse_response(incompatible_response)
       @test incompatible_data["error"]["code"] == "VALIDATION_ERROR"
       @test occursin("does not support Qubit slots", incompatible_data["error"]["message"])
+  end
+
+  @testset "Strict Simulation Payload Boundary" begin
+      for field in ("variables", "simulationConfig")
+        payload = deepcopy(test_payload)
+        delete!(payload, field)
+        response = make_request("POST", "/parse_network_graph"; body=payload)
+        @test response.status == 400
+        error = parse_response(response)["error"]
+        @test error["code"] == "VALIDATION_ERROR"
+        @test occursin(field, error["message"])
+      end
+
+      parse_with_export_config = deepcopy(test_payload)
+      parse_with_export_config["simulationConfig"]["time"] = 1.0
+      parse_with_export_config["simulationConfig"]["timeStep"] = 0.1
+      response = make_request(
+        "POST",
+        "/parse_network_graph";
+        body=parse_with_export_config,
+      )
+      @test response.status == 400
+      @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+
+      for field in (
+        "distanceMeters",
+        "propagationDelaySeconds",
+        "refractiveIndex",
+        "lossDbPerKm",
+        "transmissivity",
+      )
+        payload = deepcopy(test_payload)
+        delete!(payload["net"]["edges"][1]["data"], field)
+        response = make_request("POST", "/parse_network_graph"; body=payload)
+        @test response.status == 400
+        @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+      end
+
+      virtual_with_physical_data = deepcopy(test_payload)
+      virtual_with_physical_data["name"] = "invalid-virtual-physical-data"
+      virtual_with_physical_data["net"]["edges"][1]["isLogic"] = true
+      response = make_request(
+        "POST",
+        "/parse_network_graph";
+        body=virtual_with_physical_data,
+      )
+      @test response.status == 400
+      @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+
+      invalid_nested_payloads = Dict{String,Any}[]
+
+      invalid_node_id = deepcopy(test_payload)
+      invalid_node_id["net"]["nodes"][1]["id"] = 1
+      push!(invalid_nested_payloads, invalid_node_id)
+
+      extra_slot_field = deepcopy(test_payload)
+      extra_slot_field["net"]["nodes"][1]["data"]["slots"][1]["legacy"] = true
+      push!(invalid_nested_payloads, extra_slot_field)
+
+      missing_background_field = deepcopy(test_payload)
+      delete!(
+        missing_background_field["net"]["nodes"][1]["data"]["slots"][1][
+          "backgroundNoise"
+        ],
+        "parameters",
+      )
+      push!(invalid_nested_payloads, missing_background_field)
+
+      extra_background_parameter_field = deepcopy(test_payload)
+      extra_background_parameter_field["net"]["nodes"][1]["data"]["slots"][1][
+        "backgroundNoise"
+      ]["parameters"] = [Dict("name" => "t1", "value" => 1.0, "legacy" => true)]
+      push!(invalid_nested_payloads, extra_background_parameter_field)
+
+      extra_protocol_field = deepcopy(test_payload)
+      extra_protocol_field["net"]["edges"][1]["data"]["protocols"][1]["legacy"] = true
+      push!(invalid_nested_payloads, extra_protocol_field)
+
+      missing_protocol_parameter_value = deepcopy(test_payload)
+      missing_protocol_parameter_value["net"]["edges"][1]["data"]["protocols"][1][
+        "parameters"
+      ] = [Dict("name" => "success_prob", "type" => "Float64")]
+      push!(invalid_nested_payloads, missing_protocol_parameter_value)
+
+      extra_variable_reference_field = deepcopy(test_payload)
+      extra_variable_reference_field["net"]["edges"][1]["data"]["protocols"][1][
+        "parameters"
+      ] = [Dict(
+        "name" => "success_prob",
+        "type" => "Float64",
+        "value" => Dict("kind" => "variable", "id" => "rate", "legacy" => true),
+      )]
+      push!(invalid_nested_payloads, extra_variable_reference_field)
+
+      unknown_value_kind = deepcopy(test_payload)
+      unknown_value_kind["net"]["edges"][1]["data"]["protocols"][1][
+        "parameters"
+      ] = [Dict(
+        "name" => "success_prob",
+        "type" => "Float64",
+        "value" => Dict("kind" => "unknown_application_tag", "source" => "1"),
+      )]
+      push!(invalid_nested_payloads, unknown_value_kind)
+
+      for payload in invalid_nested_payloads
+        response = make_request("POST", "/parse_network_graph"; body=payload)
+        @test response.status == 400
+        @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
+      end
+
+      export_with_extra_slot = deepcopy(test_payload)
+      merge!(
+        export_with_extra_slot["simulationConfig"],
+        Dict("time" => 1.0, "timeStep" => 0.1),
+      )
+      export_with_extra_slot["net"]["nodes"][1]["data"]["slots"][1]["legacy"] =
+        true
+      response =
+        make_request("POST", "/export_script"; body=export_with_extra_slot)
+      @test response.status == 400
+      @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
   end
 
   @testset "Protocol Types Endpoint" begin
@@ -318,11 +456,24 @@
         entangler_tag=counterpart_id,
         consumer_tag=counterpart_id,
         client_type="Float64",
+        script_export=false,
       )
         payload = deepcopy(test_payload)
         payload["name"] = name
         payload["variables"] = Any[]
-        payload["simulationConfig"] = Dict("time" => 0.01, "timeStep" => 0.01)
+        payload["simulationConfig"] = if script_export
+          Dict(
+            "time" => 0.01,
+            "timeStep" => 0.01,
+            "qubitRepresentation" => "QuantumOpticsRepr",
+            "qumodeRepresentation" => "QuantumOpticsRepr",
+          )
+        else
+          Dict(
+            "qubitRepresentation" => "QuantumOpticsRepr",
+            "qumodeRepresentation" => "QuantumOpticsRepr",
+          )
+        end
         protocols = payload["net"]["edges"][1]["data"]["protocols"]
         entangler = only(filter(
           protocol -> protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglerProt),
@@ -332,20 +483,18 @@
           protocol -> protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
           protocols,
         ))
-        entangler_parameter = only(filter(
-          parameter -> parameter["name"] == "tag",
-          entangler["parameters"],
-        ))
-        consumer_parameter = only(filter(
-          parameter -> parameter["name"] == "tag",
-          consumer["parameters"],
-        ))
         # Deliberately stale/forged snapshots: authoritative constructor
         # metadata must identify the semantic field on the running server.
-        entangler_parameter["type"] = client_type
-        entangler_parameter["value"] = entangler_tag
-        consumer_parameter["type"] = client_type
-        consumer_parameter["value"] = consumer_tag
+        entangler["parameters"] = [Dict(
+          "name" => "tag",
+          "type" => client_type,
+          "value" => entangler_tag,
+        )]
+        consumer["parameters"] = [Dict(
+          "name" => "tag",
+          "type" => client_type,
+          "value" => consumer_tag,
+        )]
         return payload
       end
 
@@ -440,7 +589,10 @@
         simulation["name"]
         for simulation in parse_response(simulations_before)["simulations"]
       )
-      export_payload = tagged_protocol_payload("named-tag-http-export")
+      export_payload = tagged_protocol_payload(
+        "named-tag-http-export";
+        script_export=true,
+      )
       export_response_one = make_request("POST", "/export_script"; body=export_payload)
       export_response_two = make_request("POST", "/export_script"; body=export_payload)
       @test export_response_one.status == 200
@@ -454,6 +606,7 @@
       nothing_export_payload = tagged_protocol_payload(
         "named-tag-http-export-nothing";
         entangler_tag="nothing",
+        script_export=true,
       )
       nothing_export_response = make_request(
         "POST",
@@ -467,18 +620,22 @@
         tagged_protocol_payload(
           "named-tag-http-export-consumer-nothing";
           consumer_tag="nothing",
+          script_export=true,
         ),
         tagged_protocol_payload(
           "named-tag-http-export-short";
           entangler_tag="EntanglementCounterpart",
+          script_export=true,
         ),
         tagged_protocol_payload(
           "named-tag-http-export-unknown";
           entangler_tag="Main.UnknownTag",
+          script_export=true,
         ),
         tagged_protocol_payload(
           "named-tag-http-export-general-datatype";
           entangler_tag="Core.Int64",
+          script_export=true,
         ),
       ]
       for invalid_payload in invalid_export_payloads
@@ -648,8 +805,11 @@
       )]
 
       entangler = payload["net"]["edges"][1]["data"]["protocols"][1]
-      pairstate = only(filter(parameter -> parameter["name"] == "pairstate", entangler["parameters"]))
-      pairstate["value"] = Dict("kind" => "variable", "id" => "zoo_pair_state")
+      entangler["parameters"] = [Dict(
+        "name" => "pairstate",
+        "type" => "Symbolic",
+        "value" => Dict("kind" => "variable", "id" => "zoo_pair_state"),
+      )]
 
       try
         create_response = make_request("POST", "/parse_network_graph"; body=payload)
@@ -975,6 +1135,23 @@
 
       edge_properties =
         contract["components"]["schemas"]["PhysicalEdgeData"]["properties"]
+      @test Set(contract["components"]["schemas"]["PhysicalEdgeData"]["required"]) ==
+        Set([
+          "protocols",
+          "distanceMeters",
+          "propagationDelaySeconds",
+          "refractiveIndex",
+          "lossDbPerKm",
+          "transmissivity",
+        ])
+      @test contract["components"]["schemas"]["PhysicalEdgeData"][
+        "additionalProperties"
+      ] == false
+      @test contract["components"]["schemas"]["VirtualEdgeData"]["required"] ==
+        ["protocols"]
+      @test contract["components"]["schemas"]["VirtualEdgeData"][
+        "additionalProperties"
+      ] == false
       @test edge_properties["distanceMeters"]["type"] == ["number", "null"]
       @test edge_properties["distanceMeters"]["minimum"] == 0
       @test edge_properties["propagationDelaySeconds"]["type"] == "number"
@@ -986,6 +1163,29 @@
       @test edge_properties["transmissivity"]["type"] == ["number", "null"]
       @test edge_properties["transmissivity"]["minimum"] == 0
       @test edge_properties["transmissivity"]["maximum"] == 1
+
+      parse_request =
+        contract["components"]["schemas"]["ParseNetworkGraphRequest"]
+      export_request =
+        contract["components"]["schemas"]["ExportSimulationScriptRequest"]
+      @test parse_request["additionalProperties"] == false
+      @test export_request["additionalProperties"] == false
+      @test parse_request["properties"]["simulationConfig"]["\$ref"] ==
+        "#/components/schemas/SimulationRepresentationConfig"
+      @test export_request["properties"]["simulationConfig"]["\$ref"] ==
+        "#/components/schemas/ScriptExportSimulationConfig"
+      @test contract["components"]["schemas"]["SimulationNodeData"]["properties"][
+        "slots"
+      ]["items"]["\$ref"] == "#/components/schemas/SimulationSlot"
+      @test contract["components"]["schemas"]["SimulationProtocol"]["properties"][
+        "parameters"
+      ]["items"]["\$ref"] == "#/components/schemas/ProtocolParameter"
+      @test contract["components"]["schemas"]["ProtocolParameter"]["properties"][
+        "value"
+      ]["\$ref"] == "#/components/schemas/ConstructorParameterValue"
+      @test contract["components"]["schemas"]["SimulationVariable"]["properties"][
+        "value"
+      ]["\$ref"] == "#/components/schemas/VariableDefinitionValue"
 
       numeric_schema =
         contract["components"]["schemas"]["NumericExpressionRequest"]

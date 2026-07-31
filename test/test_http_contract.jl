@@ -116,6 +116,119 @@
   editor_commit_request = operation_schemas["commitMcpEditorCommandRequest"]
   @test !haskey(editor_commit_request["properties"], "operation_id")
 
+  parse_request = document["components"]["schemas"]["ParseNetworkGraphRequest"]
+  export_request =
+    document["components"]["schemas"]["ExportSimulationScriptRequest"]
+  @test parse_request["additionalProperties"] == false
+  @test export_request["additionalProperties"] == false
+  @test Set(parse_request["required"]) ==
+    Set(["name", "variables", "simulationConfig", "net"])
+  @test export_request["required"] == parse_request["required"]
+  @test parse_request["properties"]["simulationConfig"]["\$ref"] ==
+    "#/components/schemas/SimulationRepresentationConfig"
+  @test export_request["properties"]["simulationConfig"]["\$ref"] ==
+    "#/components/schemas/ScriptExportSimulationConfig"
+  @test !haskey(document["components"]["schemas"], "NetworkGraphRequest")
+  @test operation_schemas["parseNetworkGraphRequest"]["\$ref"] ==
+    "#/components/schemas/ParseNetworkGraphRequest"
+  @test operation_schemas["exportSimulationScriptRequest"]["\$ref"] ==
+    "#/components/schemas/ExportSimulationScriptRequest"
+
+  representation_config =
+    document["components"]["schemas"]["SimulationRepresentationConfig"]
+  export_config =
+    document["components"]["schemas"]["ScriptExportSimulationConfig"]
+  @test representation_config["additionalProperties"] == false
+  @test Set(representation_config["required"]) ==
+    Set(["qubitRepresentation", "qumodeRepresentation"])
+  @test export_config["additionalProperties"] == false
+  @test Set(export_config["required"]) == Set([
+    "time",
+    "timeStep",
+    "qubitRepresentation",
+    "qumodeRepresentation",
+  ])
+
+  physical_data = document["components"]["schemas"]["PhysicalEdgeData"]
+  virtual_data = document["components"]["schemas"]["VirtualEdgeData"]
+  physical_fields = Set([
+    "distanceMeters",
+    "propagationDelaySeconds",
+    "refractiveIndex",
+    "lossDbPerKm",
+    "transmissivity",
+  ])
+  @test physical_data["additionalProperties"] == false
+  @test Set(physical_data["required"]) == union(physical_fields, Set(["protocols"]))
+  @test virtual_data["additionalProperties"] == false
+  @test virtual_data["required"] == ["protocols"]
+  @test isempty(intersect(physical_fields, Set(keys(virtual_data["properties"]))))
+  @test document["components"]["schemas"]["PhysicalSimulationEdge"]["properties"][
+    "isLogic"
+  ]["const"] == false
+  @test document["components"]["schemas"]["VirtualSimulationEdge"]["properties"][
+    "isLogic"
+  ]["const"] == true
+
+  node_data = document["components"]["schemas"]["SimulationNodeData"]
+  slot = document["components"]["schemas"]["SimulationSlot"]
+  background = document["components"]["schemas"]["SimulationBackgroundNoise"]
+  background_parameter =
+    document["components"]["schemas"]["BackgroundNoiseParameter"]
+  protocol = document["components"]["schemas"]["SimulationProtocol"]
+  protocol_parameter = document["components"]["schemas"]["ProtocolParameter"]
+  for schema in (
+    node_data,
+    slot,
+    background,
+    background_parameter,
+    protocol,
+    protocol_parameter,
+  )
+    @test schema["additionalProperties"] == false
+  end
+  @test node_data["properties"]["slots"]["items"]["\$ref"] ==
+    "#/components/schemas/SimulationSlot"
+  @test Set(slot["required"]) == Set(["id", "type", "backgroundNoise"])
+  @test slot["properties"]["backgroundNoise"]["\$ref"] ==
+    "#/components/schemas/SimulationBackgroundNoise"
+  @test Set(background["required"]) == Set(["type", "parameters"])
+  @test background["properties"]["parameters"]["items"]["\$ref"] ==
+    "#/components/schemas/BackgroundNoiseParameter"
+  @test Set(background_parameter["required"]) == Set(["name", "value"])
+  @test Set(protocol["required"]) == Set(["id", "type", "parameters"])
+  @test protocol["properties"]["parameters"]["items"]["\$ref"] ==
+    "#/components/schemas/ProtocolParameter"
+  @test Set(protocol_parameter["required"]) == Set(["name", "type", "value"])
+  @test !haskey(document["components"]["schemas"], "EdgeProtocol")
+
+  variable_reference =
+    document["components"]["schemas"]["VariableReferenceValue"]
+  numeric_expression =
+    document["components"]["schemas"]["NumericExpressionValue"]
+  states_zoo = document["components"]["schemas"]["StatesZooValue"]
+  for schema in (variable_reference, numeric_expression, states_zoo)
+    @test schema["additionalProperties"] == false
+  end
+  @test Set(variable_reference["required"]) == Set(["kind", "id"])
+  @test Set(numeric_expression["required"]) == Set(["kind", "source"])
+  @test Set(states_zoo["required"]) ==
+    Set(["kind", "state_type", "parameters"])
+  @test protocol_parameter["properties"]["value"]["\$ref"] ==
+    "#/components/schemas/ConstructorParameterValue"
+  @test document["components"]["schemas"]["SimulationVariable"]["properties"][
+    "value"
+  ]["\$ref"] == "#/components/schemas/VariableDefinitionValue"
+  opaque_value = document["components"]["schemas"]["OpaqueSimulatorValue"]
+  @test length(opaque_value["oneOf"]) == 6
+  @test opaque_value["oneOf"][5]["items"]["\$ref"] ==
+    "#/components/schemas/OpaqueSimulatorValue"
+  @test opaque_value["oneOf"][6]["not"]["required"] == ["kind"]
+  @test opaque_value["oneOf"][6]["additionalProperties"]["\$ref"] ==
+    "#/components/schemas/OpaqueSimulatorValue"
+  @test states_zoo["properties"]["parameters"] ==
+    Dict("type" => "object", "additionalProperties" => Dict("type" => "number"))
+
   evaluation_failure = operation_schemas["evaluationFailure"]
   @test Set(evaluation_failure["required"]) ==
     Set(["success", "error_code", "error", "error_type"])

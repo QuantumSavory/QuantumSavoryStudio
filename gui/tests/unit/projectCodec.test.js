@@ -1197,7 +1197,7 @@ describe('backend payload codecs', () => {
     ])
   })
 
-  it('adds script configuration to an existing simulation payload without rebuilding it', () => {
+  it('projects only declared script-export fields without mutating its input', () => {
     const project = createEmptyProject('Script')
     project.description = 'Not simulator input'
     project.annotations.push({
@@ -1212,6 +1212,8 @@ describe('backend payload codecs', () => {
     project.simulationConfig.qumodeRepresentation = 'GabsRepr'
 
     const simulationPayload = toSimulationPayload(project)
+    simulationPayload.legacyRuntimeState = { status: 'stale' }
+    const originalSimulationPayload = structuredClone(simulationPayload)
     const payload = toScriptExportPayloadFromSimulationPayload(simulationPayload, {
       ...project.simulationConfig,
       time: 2.5,
@@ -1228,20 +1230,37 @@ describe('backend payload codecs', () => {
     expect(payload).not.toHaveProperty('description')
     expect(payload).not.toHaveProperty('annotations')
     expect(payload).not.toHaveProperty('schemaVersion')
+    expect(payload).not.toHaveProperty('legacyRuntimeState')
+    expect(Object.keys(payload).sort()).toEqual([
+      'name',
+      'net',
+      'simulationConfig',
+      'variables',
+    ])
     expect(payload).not.toBe(simulationPayload)
-    expect(payload.net).toBe(simulationPayload.net)
-    expect(payload.variables).toBe(simulationPayload.variables)
+    expect(payload.net).not.toBe(simulationPayload.net)
+    expect(payload.variables).not.toBe(simulationPayload.variables)
+    payload.net.protocols.push({ id: 'result-only' })
+    expect(simulationPayload).toEqual(originalSimulationPayload)
+
+    expect(() => toScriptExportPayloadFromSimulationPayload(
+      simulationPayload,
+      { time: 2.5 },
+    )).toThrow(/positive timeStep/)
+    expect(() => toScriptExportPayloadFromSimulationPayload(
+      simulationPayload,
+      { time: 0, timeStep: 0.25 },
+    )).toThrow(/positive time/)
   })
 
-  it('normalizes stale representation choices at every payload boundary', () => {
+  it('rejects stale representation choices at the API boundary', () => {
     const project = createEmptyProject('Stale representations')
     project.simulationConfig.qubitRepresentation = 'GabsRepr'
     project.simulationConfig.qumodeRepresentation = 'CliffordRepr'
 
-    expect(toSimulationPayload(project).simulationConfig).toEqual({
-      qubitRepresentation: 'QuantumOpticsRepr',
-      qumodeRepresentation: 'QuantumOpticsRepr',
-    })
+    expect(() => toSimulationPayload(project)).toThrow(
+      /requires a supported qubitRepresentation/,
+    )
     expect(encodeStoredProject(project).simulationConfig).toMatchObject({
       qubitRepresentation: 'QuantumOpticsRepr',
       qumodeRepresentation: 'QuantumOpticsRepr',

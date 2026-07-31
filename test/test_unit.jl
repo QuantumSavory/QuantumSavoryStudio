@@ -63,9 +63,60 @@
 
   # Load test data
   test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload.json"))
+  function current_simulation_payload()
+    payload =
+      JSON.parsefile(joinpath(@__DIR__, "..", "assets", "startup-warmup.json"))
+    entangler = only(filter(
+      protocol ->
+        protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglerProt),
+      payload["net"]["edges"][1]["data"]["protocols"],
+    ))
+    entangler["parameters"] = Any[
+      Dict{String,Any}("name" => "pairstate", "type" => "Symbolic", "value" => nothing),
+      Dict{String,Any}("name" => "success_prob", "type" => "Float64", "value" => nothing),
+      Dict{String,Any}("name" => "attempt_time", "type" => "Float64", "value" => nothing),
+      Dict{String,Any}(
+        "name" => "retry_lock_time",
+        "type" => ["Nothing", "Float64"],
+        "value" => nothing,
+      ),
+      Dict{String,Any}(
+        "name" => "chooseslotA",
+        "type" => ["Int64", "Function"],
+        "value" => nothing,
+      ),
+      Dict{String,Any}(
+        "name" => "chooseslotB",
+        "type" => ["Int64", "Function"],
+        "value" => nothing,
+      ),
+      Dict{String,Any}(
+        "name" => "tag",
+        "type" => ["Nothing", "DataType"],
+        "value" => nothing,
+      ),
+    ]
+    return payload
+  end
+  function strip_physical_edge_fields!(edge)
+    for field in (
+      "distanceMeters",
+      "propagationDelaySeconds",
+      "refractiveIndex",
+      "lossDbPerKm",
+      "transmissivity",
+    )
+      delete!(edge["data"], field)
+    end
+    return edge
+  end
 
   @testset "Julia Script Export" begin
-    payload = JSON.parsefile(joinpath(@__DIR__, "..", "gui", "src", "demos", "1.Entangler.Example.json"))
+    payload = current_simulation_payload()
+    filter!(
+      protocol -> protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglerProt),
+      payload["net"]["edges"][1]["data"]["protocols"],
+    )
     payload["name"] = "../Export Demo?"
     payload["simulationConfig"] = Dict(
       "time" => 0.02,
@@ -600,16 +651,14 @@
     Base.include_string(duplicate_name_module, duplicate_name_script, "duplicate-name-export.jl")
     @test getfield(duplicate_name_module, :nodeid)("Amherst") == 2
 
-    contextual_payload = JSON.parsefile(joinpath(
-      @__DIR__,
-      "..",
-      "gui",
-      "src",
-      "demos",
-      "1.Entangler.Example.json",
-    ))
+    contextual_payload = current_simulation_payload()
     contextual_payload["name"] = "Contextual Function Export"
-    contextual_payload["simulationConfig"] = Dict("time" => 0.001, "timeStep" => 0.001)
+    contextual_payload["simulationConfig"] = Dict(
+      "time" => 0.001,
+      "timeStep" => 0.001,
+      "qubitRepresentation" => "QuantumOpticsRepr",
+      "qumodeRepresentation" => "QuantumOpticsRepr",
+    )
     contextual_payload["variables"] = Any[
       Dict{String,Any}(
         "id" => "node-context-function",
@@ -917,11 +966,13 @@
     @test invalid_protocol_error.status_code == 400
     @test occursin("unknown protocol type", lowercase(invalid_protocol_error.message))
 
+    empty_network_payload = deepcopy(payload)
+    empty_network_payload["name"] = "Empty Network"
+    empty!(empty_network_payload["net"]["nodes"])
+    empty!(empty_network_payload["net"]["edges"])
+    empty!(empty_network_payload["net"]["protocols"])
     empty_network_error = try
-      WebQuantumSavory.generate_julia_script(Dict(
-        "name" => "Empty Network",
-        "net" => Dict("nodes" => Any[], "edges" => Any[], "protocols" => Any[]),
-      ))
+      WebQuantumSavory.generate_julia_script(empty_network_payload)
       nothing
     catch error
       error
@@ -929,19 +980,9 @@
     @test empty_network_error isa WebQuantumSavory.APIError
     @test occursin("at least one node", empty_network_error.message)
 
-    empty_register_payload = Dict(
-      "name" => "Empty Register",
-      "net" => Dict(
-        "nodes" => [Dict(
-          "id" => "node",
-          "name" => "Node",
-          "position" => [0, 0],
-          "data" => Dict("slots" => Any[], "protocols" => Any[]),
-        )],
-        "edges" => Any[],
-        "protocols" => Any[],
-      ),
-    )
+    empty_register_payload = deepcopy(payload)
+    empty_register_payload["name"] = "Empty Register"
+    empty!(empty_register_payload["net"]["nodes"][1]["data"]["slots"])
     empty_register_error = try
       WebQuantumSavory.generate_julia_script(empty_register_payload)
       nothing
@@ -1765,7 +1806,7 @@
   end
 
   @testset "Named AbstractTag Protocol Parameters" begin
-    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload = current_simulation_payload()
     simulation_name = "named_abstract_tag_protocol_parameters"
     payload["name"] = simulation_name
     state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
@@ -2193,14 +2234,8 @@
   @testset "Server Startup Warmup" begin
       @test WebQuantumSavory.start_startup_warmup!() === nothing
       @test !WebQuantumSavory.STARTUP_WARMUP_COMPLETE[]
-      @test basename(WebQuantumSavory._latest_startup_warmup_demo()) ==
-        "2.Entangler.Example.with.consumer.json"
-      mktempdir() do demos_dir
-        touch(joinpath(demos_dir, "2.second.json"))
-        touch(joinpath(demos_dir, "10.tenth.json"))
-        @test basename(WebQuantumSavory._latest_startup_warmup_demo(demos_dir)) ==
-          "10.tenth.json"
-      end
+      @test basename(WebQuantumSavory.STARTUP_WARMUP_PAYLOAD_FILE) ==
+        "startup-warmup.json"
 
       state_names_before = Set(keys(WebQuantumSavory.STATE))
       report, warmup_stderr = mktemp() do _, stderr_io
@@ -2211,7 +2246,7 @@
         seekstart(stderr_io)
         return report, read(stderr_io, String)
       end
-      @test report.demo == "2.Entangler.Example.with.consumer.json"
+      @test report.fixture == "startup-warmup.json"
       @test report.protocol_count == 2
       @test report.generated_state_count > 0
       @test report.states_zoo_type == "BarrettKokBellPair"
@@ -2273,6 +2308,42 @@
         @test e isa WebQuantumSavory.APIError
         @test e.message == "Missing required field: 'net' must be present"
       end
+
+      for required_field in ("variables", "simulationConfig")
+        invalid_payload = deepcopy(test_payload)
+        delete!(invalid_payload, required_field)
+        error = try
+          WebQuantumSavory.validate_payload(invalid_payload)
+          nothing
+        catch caught
+          caught
+        end
+        @test error isa WebQuantumSavory.APIError
+        @test occursin(required_field, error.message)
+      end
+
+      invalid_config = deepcopy(test_payload)
+      invalid_config["simulationConfig"] = Any[]
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        invalid_config,
+      )
+      for representation_field in ("qubitRepresentation", "qumodeRepresentation")
+        invalid_config = deepcopy(test_payload)
+        delete!(invalid_config["simulationConfig"], representation_field)
+        error = try
+          WebQuantumSavory.validate_payload(invalid_config)
+          nothing
+        catch caught
+          caught
+        end
+        @test error isa WebQuantumSavory.APIError
+        @test occursin("fields do not match", error.message)
+      end
+      parse_with_export_config = deepcopy(test_payload)
+      parse_with_export_config["simulationConfig"]["time"] = 1.0
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        parse_with_export_config,
+      )
 
       # Test missing nodes field
       invalid_payload = deepcopy(test_payload)
@@ -2342,6 +2413,7 @@
 
       permitted_virtual = deepcopy(duplicate_physical)
       permitted_virtual["net"]["edges"][2]["isLogic"] = true
+      strip_physical_edge_fields!(permitted_virtual["net"]["edges"][2])
       permitted_virtual["net"]["edges"][2]["data"]["protocols"] = [Dict(
         "id" => "virtual-consumer",
         "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
@@ -2360,6 +2432,17 @@
       end
       @test forbidden_error isa WebQuantumSavory.APIError
       @test occursin("not permitted on a virtual edge", forbidden_error.message)
+
+      virtual_with_physical_value = deepcopy(permitted_virtual)
+      virtual_with_physical_value["net"]["edges"][2]["data"]["distanceMeters"] = nothing
+      virtual_shape_error = try
+        WebQuantumSavory.validate_payload(virtual_with_physical_value)
+        nothing
+      catch error
+        error
+      end
+      @test virtual_shape_error isa WebQuantumSavory.APIError
+      @test occursin("fields do not match", virtual_shape_error.message)
 
       for invalid_delay in (true, -1, Inf, "slow")
         invalid_payload = deepcopy(test_payload)
@@ -2397,17 +2480,213 @@
         @test occursin(message, physical_error.message)
       end
 
+      for field in (
+        "distanceMeters",
+        "propagationDelaySeconds",
+        "refractiveIndex",
+        "lossDbPerKm",
+        "transmissivity",
+      )
+        missing_physical = deepcopy(test_payload)
+        delete!(missing_physical["net"]["edges"][1]["data"], field)
+        missing_error = try
+          WebQuantumSavory.validate_payload(missing_physical)
+          nothing
+        catch error
+          error
+        end
+        @test missing_error isa WebQuantumSavory.APIError
+        @test occursin("fields do not match", missing_error.message)
+      end
+
+      nullable_physical_values = deepcopy(test_payload)
+      for field in (
+        "distanceMeters",
+        "refractiveIndex",
+        "lossDbPerKm",
+        "transmissivity",
+      )
+        nullable_physical_values["net"]["edges"][1]["data"][field] = nothing
+      end
+      @test WebQuantumSavory.validate_payload(nullable_physical_values)["success"] == true
+
       independent_physical_values = deepcopy(test_payload)
       independent_physical_values["net"]["edges"][1]["data"]["distanceMeters"] = 1.0
       independent_physical_values["net"]["edges"][1]["data"]["lossDbPerKm"] = 0.2
       independent_physical_values["net"]["edges"][1]["data"]["transmissivity"] = 0.1
       @test WebQuantumSavory.validate_payload(independent_physical_values)["success"] == true
+
+      function rejected_payload_shape(mutate!)
+        invalid_payload = deepcopy(test_payload)
+        mutate!(invalid_payload)
+        error = try
+          WebQuantumSavory.validate_payload(invalid_payload)
+          nothing
+        catch caught
+          caught
+        end
+        @test error isa WebQuantumSavory.APIError
+        return error
+      end
+
+      for mutate! in (
+        payload -> (payload["net"]["nodes"][1]["id"] = 1),
+        payload -> (payload["net"]["nodes"][1]["name"] = true),
+        payload -> (payload["net"]["edges"][1]["id"] = 1),
+        payload -> (payload["net"]["edges"][1]["source"] = true),
+        payload -> (payload["net"]["edges"][1]["target"] = 2),
+      )
+        @test occursin("must be a string", rejected_payload_shape(mutate!).message)
+      end
+
+      for mutate! in (
+        payload -> (payload["net"]["nodes"][1]["data"]["slots"][1]["legacy"] = true),
+        payload -> delete!(
+          payload["net"]["nodes"][1]["data"]["slots"][1],
+          "backgroundNoise",
+        ),
+      )
+        @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
+      end
+      wrong_slot = rejected_payload_shape(payload ->
+        payload["net"]["nodes"][1]["data"]["slots"][1] = "slot")
+      @test occursin("must be an object", wrong_slot.message)
+
+      for mutate! in (
+        payload -> (
+          payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"]["legacy"] =
+            true
+        ),
+        payload -> delete!(
+          payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"],
+          "parameters",
+        ),
+      )
+        @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
+      end
+      wrong_background = rejected_payload_shape(payload ->
+        payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = nothing)
+      @test occursin("must be an object", wrong_background.message)
+
+      background_parameter(payload) =
+        payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"]["parameters"][1]
+      for mutate! in (
+        payload -> (background_parameter(payload)["legacy"] = true),
+        payload -> delete!(background_parameter(payload), "value"),
+      )
+        @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
+      end
+      wrong_background_parameter =
+        rejected_payload_shape(payload -> (background_parameter(payload)["name"] = 1))
+      @test occursin("must be a string", wrong_background_parameter.message)
+
+      node_protocol(payload) =
+        payload["net"]["nodes"][1]["data"]["protocols"][1]
+      for mutate! in (
+        payload -> (node_protocol(payload)["legacy"] = true),
+        payload -> delete!(node_protocol(payload), "parameters"),
+      )
+        @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
+      end
+      wrong_protocol = rejected_payload_shape(payload ->
+        payload["net"]["nodes"][1]["data"]["protocols"][1] = "protocol")
+      @test occursin("must be an object", wrong_protocol.message)
+
+      protocol_parameter(payload) = node_protocol(payload)["parameters"][1]
+      for mutate! in (
+        payload -> (protocol_parameter(payload)["legacy"] = true),
+        payload -> delete!(protocol_parameter(payload), "value"),
+      )
+        @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
+      end
+      wrong_protocol_parameter =
+        rejected_payload_shape(payload -> (protocol_parameter(payload)["type"] = 1))
+      @test occursin("must be a nonblank string", wrong_protocol_parameter.message)
+
+      tagged_value_payload(kind, value) = begin
+        payload = deepcopy(test_payload)
+        protocol_parameter(payload)["value"] =
+          merge(Dict{String,Any}("kind" => kind), value)
+        payload
+      end
+      extra_variable_reference =
+        tagged_value_payload("variable", Dict("id" => "variable-id"))
+      protocol_parameter(extra_variable_reference)["value"]["legacy"] = true
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        extra_variable_reference,
+      )
+      missing_variable_id =
+        tagged_value_payload("variable", Dict{String,Any}())
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        missing_variable_id,
+      )
+      missing_numeric_source =
+        tagged_value_payload("numeric_expression", Dict{String,Any}())
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        missing_numeric_source,
+      )
+      extra_numeric_field = tagged_value_payload(
+        "numeric_expression",
+        Dict("source" => "1 + 1", "legacy" => true),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        extra_numeric_field,
+      )
+      extra_states_zoo_field = tagged_value_payload(
+        "states_zoo",
+        Dict(
+          "state_type" => "DepolarizedBellPair",
+          "parameters" => Dict("p" => 0.9),
+          "legacy" => true,
+        ),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        extra_states_zoo_field,
+      )
+      missing_states_zoo_parameters = tagged_value_payload(
+        "states_zoo",
+        Dict("state_type" => "DepolarizedBellPair"),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        missing_states_zoo_parameters,
+      )
+      unknown_kind = tagged_value_payload(
+        "unknown_application_tag",
+        Dict("source" => "opaque"),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        unknown_kind,
+      )
+      nested_tag = deepcopy(test_payload)
+      protocol_parameter(nested_tag)["value"] = Dict(
+        "simulator_owned_option" => Dict(
+          "kind" => "numeric_expression",
+          "source" => "1 + 1",
+        ),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        nested_tag,
+      )
+      variable_reference_variable = deepcopy(test_payload)
+      variable_reference_variable["variables"] = [Dict(
+        "id" => "derived",
+        "name" => "derived",
+        "type" => "Float64",
+        "value" => Dict("kind" => "variable", "id" => "source"),
+      )]
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        variable_reference_variable,
+      )
+      opaque_value = Dict("simulator_owned_option" => Any[1, "two"])
+      @test WebQuantumSavory._validate_wire_value(
+        opaque_value;
+        allow_variable_reference=true,
+        context="Opaque test value",
+      ) === opaque_value
   end
 
   @testset "Simulation Variables" begin
-      # Legacy payloads have no variables field and remain valid.
-      legacy_variables = WebQuantumSavory._parse_variables(test_payload)
-      @test isempty(legacy_variables)
+      @test isempty(WebQuantumSavory._parse_variables(test_payload))
       @test WebQuantumSavory.validate_payload(test_payload)["success"] == true
 
       variable_payload = deepcopy(test_payload)
@@ -2504,7 +2783,7 @@
   end
 
   @testset "Variable-backed Protocol Parameters" begin
-      runtime_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      runtime_payload = current_simulation_payload()
       simulation_name = "variable_backed_protocol_parameters"
       runtime_payload["name"] = simulation_name
       runtime_payload["variables"] = [
@@ -2689,6 +2968,7 @@
       virtual_edge = deepcopy(with_virtual["net"]["edges"][1])
       virtual_edge["id"] = "virtual-edge"
       virtual_edge["isLogic"] = true
+      strip_physical_edge_fields!(virtual_edge)
       virtual_edge["data"]["protocols"] = Any[]
       push!(with_virtual["net"]["edges"], virtual_edge)
       virtual_graph = WebQuantumSavory.build_graph(
@@ -2699,7 +2979,7 @@
   end
 
   @testset "Physical Propagation Delays" begin
-      payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      payload = current_simulation_payload()
       simulation_name = "physical_propagation_delays"
       payload["name"] = simulation_name
       payload["net"]["edges"][1]["data"]["distanceMeters"] = 12_500.0
@@ -2721,6 +3001,7 @@
       virtual_edge = deepcopy(payload["net"]["edges"][1])
       virtual_edge["id"] = "virtual-edge"
       virtual_edge["isLogic"] = true
+      strip_physical_edge_fields!(virtual_edge)
       virtual_edge["data"]["protocols"] = [Dict(
         "id" => "virtual-consumer",
         "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
@@ -2750,18 +3031,16 @@
       @test virtual_context.node_a == 1
       @test virtual_context.node_b == 2
 
-      legacy_edge = deepcopy(payload["net"]["edges"][1])
-      delete!(legacy_edge["data"], "distanceMeters")
-      delete!(legacy_edge["data"], "propagationDelaySeconds")
-      delete!(legacy_edge["data"], "refractiveIndex")
-      delete!(legacy_edge["data"], "lossDbPerKm")
-      delete!(legacy_edge["data"], "transmissivity")
-      legacy_context = WebQuantumSavory._edge_function_context(legacy_edge, 1, 2)
-      @test isnothing(legacy_context.distance_meters)
-      @test legacy_context.delay_seconds == 0.0
-      @test isnothing(legacy_context.refractive_index)
-      @test isnothing(legacy_context.loss_db_per_km)
-      @test isnothing(legacy_context.transmissivity)
+      missing_physical_field = deepcopy(payload["net"]["edges"][1])
+      delete!(missing_physical_field["data"], "distanceMeters")
+      missing_field_error = try
+        WebQuantumSavory._edge_function_context(missing_physical_field, 1, 2)
+        nothing
+      catch error
+        error
+      end
+      @test missing_field_error isa WebQuantumSavory.APIError
+      @test occursin("distanceMeters", missing_field_error.message)
 
       try
         state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
@@ -2796,15 +3075,16 @@
       )
 
       # No-noise slots still need a positional `nothing` entry so background
-      # operations can index the register by slot. Exercise object, string, and
-      # missing representations while keeping one real background in place.
-      default_noise_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      # operations can index the register by slot. Every current-wire slot
+      # carries the same explicit background object shape.
+      default_noise_payload = current_simulation_payload()
       default_noise_payload["net"]["nodes"][1]["data"]["slots"][2]["backgroundNoise"] = Dict(
         "type" => "T1Decay",
         "parameters" => [Dict("name" => "t1", "value" => 5.0)],
       )
-      delete!(default_noise_payload["net"]["nodes"][2]["data"]["slots"][1], "backgroundNoise")
-      default_noise_payload["net"]["nodes"][2]["data"]["slots"][2]["backgroundNoise"] = "default"
+      for slot in default_noise_payload["net"]["nodes"][2]["data"]["slots"]
+        slot["backgroundNoise"] = Dict("type" => "default", "parameters" => Any[])
+      end
 
       default_noise_validation = WebQuantumSavory.validate_payload(default_noise_payload)
       default_noise_registers, _, _ = WebQuantumSavory.create_registers_from_nodes(default_noise_validation)
@@ -2833,7 +3113,7 @@
   end
 
   @testset "Register Names" begin
-      named_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      named_payload = current_simulation_payload()
       simulation_name = "named_registers"
       named_payload["name"] = simulation_name
 
@@ -3087,7 +3367,7 @@
 
   @testset "State Cleanup" begin
     # Exercise cleanup with a live assigned state so register back-references are removed.
-    cleanup_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    cleanup_payload = current_simulation_payload()
     validation_result = WebQuantumSavory.validate_payload(cleanup_payload)
     g = WebQuantumSavory.build_graph(validation_result)
     registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
@@ -4021,7 +4301,7 @@
   end
 
   @testset "Cooperative Simulation Lifecycle" begin
-    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload = current_simulation_payload()
     simulation_name = "cooperative_lifecycle"
     payload["name"] = simulation_name
 
@@ -4109,7 +4389,7 @@
 
   @testset "Diagnostic Broken Protocol Panic" begin
     withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "true") do
-      payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      payload = current_simulation_payload()
       simulation_name = "mock_broken_protocol_panic"
       payload["name"] = simulation_name
       payload["net"]["protocols"] = Any[
@@ -4167,7 +4447,7 @@
 
   @testset "Cleanup Stale Simulations - Basic Test" begin
     # Load payload3 for testing
-    test_payload3 = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    test_payload3 = current_simulation_payload()
     
     # Create and setup a simulation
     simulation_name = "cleanup_test_basic"
@@ -4209,7 +4489,7 @@
 
   @testset "Cleanup Stale Simulations - Running Simulation Test" begin
     # Load payload3 for testing
-    test_payload3 = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    test_payload3 = current_simulation_payload()
     
     # Create and setup a simulation
     simulation_name = "cleanup_test_running"
@@ -4265,7 +4545,7 @@
 
   @testset "Cleanup Stale Simulations - Auto-Destroy of Purged Simulation Test" begin
     # Load payload3 for testing
-    test_payload3 = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    test_payload3 = current_simulation_payload()
     
     # Create and setup a simulation
     simulation_name = "cleanup_test_autodestroy_purged"
@@ -4320,7 +4600,7 @@
 
   @testset "Cleanup Stale Simulations - Auto-Destroy of Timed Out Simulation Test" begin
     # Test that timed-out simulations (execution_time_exceeded=true) also get auto-destroyed
-    test_payload3 = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    test_payload3 = current_simulation_payload()
     
     # Create and setup a simulation
     simulation_name = "cleanup_test_autodestroy_timeout"
@@ -4656,7 +4936,7 @@
   end
 
   @testset "Live Tag Operations and Queries" begin
-    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload = current_simulation_payload()
     simulation_name = "tag_operations_unit"
     payload["name"] = simulation_name
     state = nothing
@@ -5650,7 +5930,7 @@
     @test !occursin("cast_value", bounded_script_expression)
     @test Meta.parse(bounded_script_expression) isa Expr
 
-    background_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    background_payload = current_simulation_payload()
     background_payload["name"] = "numeric_expression_background_runtime"
     background_payload["variables"] = [Dict(
       "id" => "background-rate",
@@ -5687,10 +5967,15 @@
     @test [register.backgrounds[2].t1 for register in background_registers] ==
       [12.0, 22.0]
 
+    background_export_payload = deepcopy(background_payload)
+    merge!(
+      background_export_payload["simulationConfig"],
+      Dict("time" => 0.02, "timeStep" => 0.01),
+    )
     background_script = withenv(
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
     ) do
-      WebQuantumSavory.generate_julia_script(background_payload)
+      WebQuantumSavory.generate_julia_script(background_export_payload)
     end
     @test first(findfirst("# Resolve GUI node names", background_script)) <
       first(findfirst("# Registers", background_script))
@@ -5720,7 +6005,7 @@
     @test [register.backgrounds[2].t1 for register in exported_background_registers] ==
       [12.0, 22.0]
 
-    runtime_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    runtime_payload = current_simulation_payload()
     runtime_payload["name"] = "numeric_expression_runtime"
     runtime_payload["net"]["edges"][1]["data"]["distanceMeters"] = 100.0
     runtime_payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = 0.2
@@ -5778,7 +6063,12 @@
       @test first_assignment.success_prob ≈ 0.0575
       @test second_assignment.success_prob ≈ 0.115
 
-      script = WebQuantumSavory.generate_julia_script(runtime_payload)
+      runtime_export_payload = deepcopy(runtime_payload)
+      merge!(
+        runtime_export_payload["simulationConfig"],
+        Dict("time" => 0.02, "timeStep" => 0.01),
+      )
+      script = WebQuantumSavory.generate_julia_script(runtime_export_payload)
       @test occursin("(loss + transmissivity) * delay / 4", script)
       @test occursin("nodeid(\"Cambridge\")", script)
       @test !occursin("nodeid = Base.getproperty", script)
@@ -5811,6 +6101,10 @@
 
     nonexecuting_payload = deepcopy(runtime_payload)
     nonexecuting_payload["name"] = "numeric_expression_nonexecuting_export"
+    merge!(
+      nonexecuting_payload["simulationConfig"],
+      Dict("time" => 0.02, "timeStep" => 0.01),
+    )
     empty!(nonexecuting_payload["variables"])
     parameter_by_name = Dict(
       parameter["name"] => parameter

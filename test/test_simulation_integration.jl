@@ -38,11 +38,10 @@
   default_slot(id) = Dict(
     "id" => id,
     "type" => "Qubit",
-    "backgroundNoise" => Dict(
-      "type" => "default",
-      "doc" => "No background noise",
-      "parameters" => Any[],
-    ),
+      "backgroundNoise" => Dict(
+        "type" => "default",
+        "parameters" => Any[],
+      ),
   )
 
   function simulation_node(id, name, slots, protocols)
@@ -59,15 +58,25 @@
   end
 
   function simulation_edge(id, source, target, protocols; is_logic=false)
+    data = Dict{String,Any}(
+      "type" => "connection",
+      "protocols" => protocols,
+    )
+    if !is_logic
+      merge!(data, Dict{String,Any}(
+        "distanceMeters" => 1_000.0,
+        "propagationDelaySeconds" => 0.000005,
+        "refractiveIndex" => 1.5,
+        "lossDbPerKm" => 0.2,
+        "transmissivity" => 0.95,
+      ))
+    end
     Dict(
       "id" => id,
       "source" => source,
       "target" => target,
       "isLogic" => is_logic,
-      "data" => Dict(
-        "type" => "connection",
-        "protocols" => protocols,
-      ),
+      "data" => data,
     )
   end
 
@@ -109,6 +118,10 @@
     Dict(
       "name" => name,
       "variables" => Any[],
+      "simulationConfig" => Dict(
+        "qubitRepresentation" => "QuantumOpticsRepr",
+        "qumodeRepresentation" => "QuantumOpticsRepr",
+      ),
       "net" => Dict(
         "nodes" => Any[
           simulation_node("node-a", "A", Any[default_slot("slot-a")], Any[tracker("a")]),
