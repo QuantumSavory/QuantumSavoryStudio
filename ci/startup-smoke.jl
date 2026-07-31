@@ -63,14 +63,28 @@ function source_evaluation_request_denied(port::Int)
 end
 
 function local_only_routes_absent(port::Int)
-    for path in ("/_mcp/status", "/dev/manipulate_state")
-        response = http_response(
-            port,
-            "GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
-        )
-        missing_response(response) || return false
-    end
-    return true
+    mcp_response = http_response(
+        port,
+        "GET /_mcp/status HTTP/1.1\r\n" *
+        "Host: 127.0.0.1\r\n" *
+        "Connection: close\r\n\r\n",
+    )
+    missing_response(mcp_response) || return false
+
+    # Use the route's registered method and a payload that would produce 400 if
+    # the development handler were present. A GET probe cannot distinguish an
+    # omitted POST-only route from a registered one.
+    body = "{}"
+    development_response = http_response(
+        port,
+        "POST /dev/manipulate_state HTTP/1.1\r\n" *
+        "Host: 127.0.0.1\r\n" *
+        "Content-Type: application/json\r\n" *
+        "Content-Length: $(ncodeunits(body))\r\n" *
+        "Connection: close\r\n\r\n" *
+        body,
+    )
+    return missing_response(development_response)
 end
 
 function diagnostic_protocol_absent(port::Int)
