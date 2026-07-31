@@ -21,7 +21,7 @@ SwagUI = "bf05d729-34b2-4f1f-a2f1-2452bece7ebc"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [sources]
-QuantumSavory = {rev = "b419b1268a5e5e3a91de64d88ecaa758610540db", url = "https://github.com/QuantumSavory/QuantumSavory.jl.git"}
+QuantumSavory = {rev = "b00a894e4584f3821df88b34fb096289bc7dd2a4", url = "https://github.com/QuantumSavory/QuantumSavory.jl.git"}
 
 [compat]
 Base64 = "1.11.0"
