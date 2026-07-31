@@ -88,7 +88,7 @@ platform_info=$(curl --fail --silent --show-error \
 printf '%s' "$platform_info" \
   | grep -Eq '"unsafe_code_evaluation"[[:space:]]*:[[:space:]]*false'
 printf '%s' "$platform_info" \
-  | grep -Eq '"available"[[:space:]]*:[[:space:]]*false'
+  | grep -Eq '"mcp"[[:space:]]*:[[:space:]]*\{[^}]*"available"[[:space:]]*:[[:space:]]*false'
 
 evaluation_body="$temporary_dir/evaluation.json"
 evaluation_status=$(curl --silent --show-error \
