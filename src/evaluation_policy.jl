@@ -1,4 +1,11 @@
 const UNSAFE_EVALUATION_ENV_VAR = "WQS_ENABLE_SOURCE_EVALUATION"
+const SOURCE_EVALUATION_PROFILE_ENV_VAR = "WQS_DEPLOYMENT_PROFILE"
+const LOCAL_SOURCE_EVALUATION_PROFILE = "local"
+const PUBLIC_SOURCE_EVALUATION_PROFILE = "public"
+const SOURCE_EVALUATION_PROFILES = (
+  LOCAL_SOURCE_EVALUATION_PROFILE,
+  PUBLIC_SOURCE_EVALUATION_PROFILE,
+)
 const UNSAFE_EVALUATION_DISABLED_CODE = "UNSAFE_EVALUATION_DISABLED"
 const EVALUATION_FAILED_CODE = "EVALUATION_FAILED"
 
@@ -10,12 +17,27 @@ function _parse_unsafe_evaluation_override(value::AbstractString)
   throw(ArgumentError("$UNSAFE_EVALUATION_ENV_VAR must be 'true' or 'false'"))
 end
 
-"""Return whether server-process Julia evaluation is explicitly enabled."""
+"""Validate the product deployment profile used by the source-evaluation policy."""
+function _parse_source_evaluation_profile(value::Union{Nothing,AbstractString})
+  value in SOURCE_EVALUATION_PROFILES && return String(value)
+
+  throw(ArgumentError(
+    "$SOURCE_EVALUATION_PROFILE_ENV_VAR is required and must be 'local' or 'public'",
+  ))
+end
+
+"""Return whether server-process Julia evaluation is enabled for this profile."""
 function unsafe_code_evaluation_enabled(;
+  deployment_profile::Union{Nothing,AbstractString}=get(
+    ENV,
+    SOURCE_EVALUATION_PROFILE_ENV_VAR,
+    nothing,
+  ),
   override::Union{Nothing,AbstractString}=get(ENV, UNSAFE_EVALUATION_ENV_VAR, nothing),
 )
-  override === nothing && return false
-  return _parse_unsafe_evaluation_override(override)
+  profile = _parse_source_evaluation_profile(deployment_profile)
+  opted_in = override === nothing ? false : _parse_unsafe_evaluation_override(override)
+  return profile == LOCAL_SOURCE_EVALUATION_PROFILE && opted_in
 end
 
 function unsafe_evaluation_disabled_error()
@@ -23,7 +45,10 @@ function unsafe_evaluation_disabled_error()
     "Unsafe Julia code evaluation is disabled",
     403,
     UNSAFE_EVALUATION_DISABLED_CODE,
-    Dict{String,Any}("configuration_variable" => UNSAFE_EVALUATION_ENV_VAR),
+    Dict{String,Any}(
+      "configuration_variable" => UNSAFE_EVALUATION_ENV_VAR,
+      "deployment_profile_variable" => SOURCE_EVALUATION_PROFILE_ENV_VAR,
+    ),
   )
 end
 

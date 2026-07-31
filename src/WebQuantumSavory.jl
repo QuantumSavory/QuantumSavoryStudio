@@ -113,8 +113,8 @@ end
 include("tag_metadata.jl")
 
 function main()
-  # Validate an explicit override before Genie starts and handles route-loading
-  # errors internally. Environment-specific defaults are resolved at use time.
+  # Validate the deployment profile and explicit override before Genie starts
+  # and handles route-loading errors internally.
   unsafe_code_evaluation_enabled()
   # Fail before Genie starts if the diagnostic-protocol flag is malformed.
   mock_broken_protocol_enabled()

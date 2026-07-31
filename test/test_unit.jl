@@ -3292,13 +3292,99 @@
   end
 
   @testset "Unsafe Evaluation Policy" begin
-    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(override=nothing)
-    @test WebQuantumSavory.unsafe_code_evaluation_enabled(override="true")
-    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(override="false")
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="local",
+      override=nothing,
+    )
+    @test WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="local",
+      override="true",
+    )
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="local",
+      override="false",
+    )
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="public",
+      override=nothing,
+    )
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="public",
+      override="false",
+    )
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile="public",
+      override="true",
+    )
+
     for malformed in (" TRUE ", "False", "1", "yes", "")
       @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
+        deployment_profile="local",
         override=malformed,
       )
+      @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
+        deployment_profile="public",
+        override=malformed,
+      )
+    end
+    @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
+      deployment_profile=nothing,
+      override="false",
+    )
+    for malformed in ("dev", "test", "prod", "LOCAL", " public ", "")
+      @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
+        deployment_profile=malformed,
+        override="false",
+      )
+    end
+
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+    ) do
+      @test WebQuantumSavory.unsafe_code_evaluation_enabled()
+    end
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "public",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+    ) do
+      @test !WebQuantumSavory.unsafe_code_evaluation_enabled()
+      disabled = try
+        WebQuantumSavory.Sandbox.test_code("x -> x + 1")
+        nothing
+      catch error
+        error
+      end
+      @test disabled isa WebQuantumSavory.APIError
+      if disabled isa WebQuantumSavory.APIError
+        @test disabled.status_code == 403
+        @test disabled.error_code ==
+          WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
+      end
+    end
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => nothing,
+    ) do
+      @test !WebQuantumSavory.unsafe_code_evaluation_enabled()
+    end
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => nothing,
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
+    ) do
+      @test_throws ArgumentError WebQuantumSavory.main()
+    end
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "staging",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
+    ) do
+      @test_throws ArgumentError WebQuantumSavory.main()
+    end
+    withenv(
+      WebQuantumSavory.SOURCE_EVALUATION_PROFILE_ENV_VAR => "local",
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "yes",
+    ) do
+      @test_throws ArgumentError WebQuantumSavory.main()
     end
 
     failure = WebQuantumSavory.evaluation_failure_response(
@@ -3331,6 +3417,38 @@
     @test occursin(
       "sensitive response-boundary details",
       development_error_response["details"]["evaluation_error"],
+    )
+  end
+
+  @testset "Native Evaluator Site Inventory" begin
+    source_root = normpath(joinpath(@__DIR__, "..", "src"))
+    native_evaluator_sites = Tuple{String,String}[]
+    evaluator_gateway_sites = Tuple{String,String}[]
+    for (root, _, files) in walkdir(source_root)
+      for filename in sort(filter(name -> endswith(name, ".jl"), files))
+        path = joinpath(root, filename)
+        relative_path = relpath(path, normpath(joinpath(source_root, "..")))
+        for line in eachline(path)
+          stripped = strip(line)
+          startswith(stripped, "#") && continue
+          occursin(
+            r"(^|[^A-Za-z0-9_])(?:Base\.|Core\.)?eval\s*\(",
+            stripped,
+          ) && push!(native_evaluator_sites, (relative_path, stripped))
+          occursin(r"\b_evaluate_in_module\s*\(", stripped) &&
+            push!(evaluator_gateway_sites, (relative_path, stripped))
+        end
+      end
+    end
+
+    @test native_evaluator_sites == [(
+      joinpath("src", "restricted_evaluation.jl"),
+      "Base.eval(evaluation_module, expression)",
+    )]
+    @test !isempty(evaluator_gateway_sites)
+    @test all(
+      site -> first(site) == joinpath("src", "restricted_evaluation.jl"),
+      evaluator_gateway_sites,
     )
   end
 

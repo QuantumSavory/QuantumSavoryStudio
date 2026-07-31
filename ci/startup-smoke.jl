@@ -23,6 +23,28 @@ function status_ready(port::Int)
     end
 end
 
+function source_evaluation_disabled(port::Int)
+    socket = try
+        connect(ip"127.0.0.1", port)
+    catch
+        return false
+    end
+
+    try
+        write(
+            socket,
+            "GET /platform_info HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+        )
+        response = read(socket, String)
+        successful = startswith(response, "HTTP/1.1 200") ||
+                     startswith(response, "HTTP/1.0 200")
+        return successful &&
+               occursin(r"\"unsafe_code_evaluation\"\s*:\s*false", response)
+    finally
+        close(socket)
+    end
+end
+
 function startup_smoke()
     port = parse(Int, get(ENV, "WEBQUANTUMSAVORY_CI_SERVER_PORT", "8123"))
     1 <= port <= 65535 || throw(ArgumentError("invalid smoke-test port"))
@@ -33,7 +55,8 @@ function startup_smoke()
     configured_command = addenv(
         Cmd(command; dir=APP_ROOT),
         "GENIE_ENV" => "prod",
-        "WQS_ENABLE_SOURCE_EVALUATION" => "false",
+        "WQS_DEPLOYMENT_PROFILE" => "public",
+        "WQS_ENABLE_SOURCE_EVALUATION" => "true",
         "WEBQUANTUMSAVORY_ENABLE_MCP" => "false",
     )
     process = run(
@@ -47,7 +70,12 @@ function startup_smoke()
             process_running(process) || error(
                 "server exited with code $(process.exitcode) before its status endpoint became ready",
             )
-            status_ready(port) && return
+            if status_ready(port)
+                source_evaluation_disabled(port) || error(
+                    "public profile exposed unsafe source evaluation",
+                )
+                return
+            end
             sleep(0.25)
         end
         error("server did not become ready within $STARTUP_TIMEOUT_SECONDS seconds")

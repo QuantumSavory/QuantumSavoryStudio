@@ -5,6 +5,7 @@
 # If you want to selectively run tests, use `$ julia --project runtests.jl test_file_1 test_file_2`
 
 ENV["GENIE_ENV"] = "test"
+get!(ENV, "WQS_DEPLOYMENT_PROFILE", "local")
 push!(LOAD_PATH, abspath(normpath(joinpath("..", "src"))))
 
 cd("..")
