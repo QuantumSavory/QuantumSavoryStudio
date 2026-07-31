@@ -13,7 +13,7 @@
 Normative failure handoff and diagnostic disclosure is defined by
 [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
 [SUB-009](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-009--private-http-contract-and-failure-handoff),
-and [CMP-013](../../v-model/04-component-contracts.md#cmp-013--frontend-error-envelope-preservation).
+and [CMP-013](../../v-model/04-component-contracts/mcp-http.md#cmp-013--frontend-error-envelope-preservation).
 This reference records the current HTTP machinery and its remaining verification gaps.
 
 ## Product boundary
@@ -93,8 +93,9 @@ success schema. Representative shapes are:
 `julia`, `genie`, `quantumsavory`, and `app`; its `quantumsavory` object requires the
 version, tracked revision/source, tree hash, and commit fields; and `capabilities`
 requires `unsafe_code_evaluation` plus the closed local MCP capability object. Package
-and source strings may be `null` when introspection is unavailable. No camel-cased
-response field is supported.
+and source strings may be `null` when introspection is unavailable. The detailed
+QuantumSavory version equals `versions.quantumsavory`. No camel-cased response field is
+supported. `/docs` derives this nested schema from the same OpenAPI source.
 
 The top-level serialized `status` is a coarse created/prepared/complete value, not the
 complete execution phase. Running, pause acknowledgement, progress, and errors are in

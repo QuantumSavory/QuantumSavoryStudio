@@ -12,7 +12,7 @@ Normative export fidelity, side-effect, and help behavior is defined by
 [STK-003](../../v-model/01-stakeholder-outcomes.md#stk-003--continue-with-standalone-simulation-source),
 [SYS-007](../../v-model/02-system-requirements/gui-and-simulation.md#sys-007--generate-faithful-pedagogical-source),
 [SUB-008](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-008--side-effect-bounded-script-generation-boundary),
-and [CMP-007](../../v-model/04-component-contracts.md#cmp-007--deterministic-script-binding-and-imports).
+and [CMP-007](../../v-model/04-component-contracts/design-runtime.md#cmp-007--deterministic-script-binding-and-imports).
 This reference records the current generator and evidence gaps.
 
 ## Product purpose

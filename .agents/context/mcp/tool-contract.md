@@ -11,10 +11,10 @@
 
 The normative target is defined by
 [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness),
-[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources),
+[CMP-011](../../v-model/04-component-contracts/mcp-http.md#cmp-011--shared-guimcp-play-readiness),
+[CMP-012](../../v-model/04-component-contracts/mcp-http.md#cmp-012--truthful-mcp-metadata-and-result-resources),
 and
-[CMP-016](../../v-model/04-component-contracts.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
+[CMP-016](../../v-model/04-component-contracts/mcp-http.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
 
 ## Current contract
 

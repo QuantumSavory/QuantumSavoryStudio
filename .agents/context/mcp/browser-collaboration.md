@@ -13,7 +13,7 @@ Normative browser authority and recovery are defined by
 [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
 [SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-readback-recovery-boundary),
 and
-[CMP-016](../../v-model/04-component-contracts.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
+[CMP-016](../../v-model/04-component-contracts/mcp-http.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
 
 ## Current binding and mutation flow
 

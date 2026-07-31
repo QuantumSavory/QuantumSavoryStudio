@@ -13,9 +13,9 @@
 Normative release-2.0 behavior is defined by
 [SYS-017](../../v-model/02-system-requirements/gui-and-simulation.md#sys-017--enforce-the-current-project-schema),
 [SYS-018](../../v-model/02-system-requirements/operations-and-deployment.md#sys-018--commit-project-replacement-only-after-candidate-preparation),
-[CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
+[CMP-014](../../v-model/04-component-contracts/projects-platform.md#cmp-014--strict-project-codec-admission),
 and
-[CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
+[CMP-015](../../v-model/04-component-contracts/projects-platform.md#cmp-015--candidate-first-project-session-transaction).
 The strict-schema and candidate-first transaction chains through CMP-015 are
 implemented, but need a current frontend execution record after the platform-information
 boundary correction; the exhaustive candidate-first browser-system matrix remains

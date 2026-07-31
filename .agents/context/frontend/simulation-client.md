@@ -12,7 +12,7 @@
 Normative lifecycle, diagnostic, and MCP Play behavior is defined by
 [SYS-005](../../v-model/02-system-requirements/gui-and-simulation.md#sys-005--control-the-simulation-lifecycle),
 [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
-and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+and [CMP-011](../../v-model/04-component-contracts/mcp-http.md#cmp-011--shared-guimcp-play-readiness).
 This reference records the current frontend controller and its gaps.
 
 ## Phase and capabilities
@@ -40,10 +40,12 @@ Simulation-status callers pass the project name as a string. Tag callers pass an
 `kind` discriminant and nonempty string IDs; the client does not infer a default kind,
 read a wire-name alias, or coerce identifier types.
 
-`ApiConnector` caches the exact snake_case `/platform_info` DTO without adding display
-or durable-project aliases and returns `null` before a successful load. Capability
-checks read `capabilities.unsafe_code_evaluation` directly. Display normalization and
-durable project conversion are separate consumers of that raw boundary.
+`ApiConnector` validates the exact snake_case `/platform_info` DTO, then caches a
+detached immutable snapshot without display or durable-project aliases. It returns
+`null` before a successful load and retains the last valid snapshot after a failed
+refresh. Capability checks read `capabilities.unsafe_code_evaluation` directly. Display
+normalization and durable project conversion are separate consumers of that raw
+boundary.
 
 The Runner's “Run for” value is an additional duration. The controller adds it to
 current simulated time and submits the backend's absolute cumulative target. Resume
