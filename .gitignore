@@ -53,8 +53,5 @@ node_modules/
 /gui/cloc_report.txt
 /ci-artifacts/
 
-# Database
-db/*.sqlite
-
 # environment variables file
 .env
