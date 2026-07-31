@@ -123,12 +123,14 @@ const selectedProtocol = ref(null)
 const pendingDefinition = ref(null)
 const pendingProtocol = ref(null)
 const pendingError = ref('')
+const resolveVariable = id => props.variables.find(variable => variable.id === id)
 const pendingComplete = computed(() => {
   if (!pendingDefinition.value || !pendingProtocol.value) return false
   try {
     return validateProtocolConstructorDraft(
       pendingDefinition.value,
       pendingProtocol.value,
+      { resolveVariable },
     )
   } catch {
     return false
@@ -233,6 +235,7 @@ function commitPendingProtocol() {
     validateProtocolConstructorDraft(
       pendingDefinition.value,
       pendingProtocol.value,
+      { resolveVariable },
     )
   } catch (error) {
     pendingError.value = error?.message || 'Complete every required constructor field.'

@@ -80,8 +80,8 @@ function normalizeSeededParameter(parameter, definition) {
 }
 
 /** Validate a metadata-backed constructor draft before layout generation. */
-export function validateProtocolConstructorDraft(definition, protocol = null) {
-  return validateConstructorDraft(definition, protocol)
+export function validateProtocolConstructorDraft(definition, protocol = null, options = {}) {
+  return validateConstructorDraft(definition, protocol, options)
 }
 
 /**

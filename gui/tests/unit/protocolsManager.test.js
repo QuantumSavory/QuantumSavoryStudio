@@ -32,22 +32,29 @@ const ProtocolConstructorFormStub = {
       this.protocol.parameters[1].value = [0.5]
       this.$emit('commit')
     },
+    link() {
+      this.protocol.parameters[0].value = { kind: 'variable', id: 'clients' }
+      this.protocol.parameters[1].value = [0.5]
+      this.$emit('commit')
+    },
   },
   template: `
     <button
       class="complete-required"
       @click="complete"
     >Complete required inputs</button>
+    <button class="link-required" @click="link">Link required input</button>
   `,
 }
 
-function mountManager(protocols = []) {
+function mountManager({ protocols = [], variables = [] } = {}) {
   return mount(ProtocolsManager, {
     props: {
       protocols,
       protocolGroupName: 'node',
       protocolClass: class TestProtocol {},
       ownerId: 'switch',
+      variables,
     },
     global: {
       provide: {
@@ -135,5 +142,32 @@ describe('ProtocolsManager required constructor drafts', () => {
     committed()
     await nextTick()
     expect(wrapper.find('[data-testid="add-protocol-draft"]').exists()).toBe(false)
+  })
+
+  it('disables create when a linked required Variable becomes Default', async () => {
+    const wrapper = mountManager({
+      variables: [{
+        id: 'clients',
+        type: 'Vector{Int64}',
+        selectedType: 'Vector{Int64}',
+        value: [2],
+      }],
+    })
+
+    await wrapper.get('.menu-item').trigger('click')
+    await wrapper.get('.link-required').trigger('click')
+    await nextTick()
+    expect(wrapper.get('.add-pending-protocol').attributes('disabled')).toBeUndefined()
+
+    await wrapper.setProps({
+      variables: [{
+        id: 'clients',
+        type: 'default',
+        selectedType: 'default',
+        value: null,
+      }],
+    })
+    expect(wrapper.get('.add-pending-protocol').attributes('disabled')).toBeDefined()
+    expect(wrapper.emitted('designOperations')).toBeUndefined()
   })
 })
