@@ -97,6 +97,12 @@
   @test Set(keys(
     document["paths"]["/run_simulation"]["post"]["responses"],
   )) == Set(["202", "default"])
+  run_request = document["components"]["schemas"]["RunSimulationRequest"]
+  @test run_request["additionalProperties"] == false
+  @test Set(run_request["required"]) == Set(["name", "time_units"])
+  @test run_request["properties"]["name"] ==
+    Dict("type" => "string", "minLength" => 1, "pattern" => "\\S")
+  @test run_request["properties"]["time_units"] == Dict("type" => "number")
 
   validate_code_request = operation_schemas["validateCodeRequest"]
   @test validate_code_request["additionalProperties"] == false

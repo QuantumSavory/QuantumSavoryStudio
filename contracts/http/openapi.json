@@ -2511,18 +2511,11 @@
         "properties": {
           "name": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "time_units": {
-            "oneOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "minLength": 1
-              }
-            ]
+            "type": "number"
           }
         }
       },

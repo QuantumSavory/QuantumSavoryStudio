@@ -210,24 +210,12 @@ end
 ########################################################
 
 function _parse_time_input(time_units_raw)
-  time_units = try
-    if time_units_raw isa AbstractString
-      parse(Float64, time_units_raw)
-    elseif time_units_raw isa Real && !(time_units_raw isa Bool)
-      Float64(time_units_raw)
-    else
-      throw(validation_error(
-        "time_units must be a number or string",
-        Dict("received_type" => string(typeof(time_units_raw))),
-      ))
-    end
-  catch e
-    isa(e, APIError) && rethrow(e)
+  time_units_raw isa Real && !(time_units_raw isa Bool) ||
     throw(validation_error(
-      "Invalid time_units value: $(time_units_raw)",
-      Dict("error" => string(e)),
+      "time_units must be a number",
+      Dict("received_type" => string(typeof(time_units_raw))),
     ))
-  end
+  time_units = Float64(time_units_raw)
   isfinite(time_units) || throw(validation_error("time_units must be finite"))
   return time_units
 end

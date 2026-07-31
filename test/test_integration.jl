@@ -942,6 +942,7 @@
 
       for body in (
         Dict("name" => "not-looked-up", "time_units" => true),
+        Dict("name" => "not-looked-up", "time_units" => "5"),
         Dict("name" => "not-looked-up", "time_units" => 5, "legacy" => true),
         Dict("name" => "  ", "time_units" => 5),
       )
