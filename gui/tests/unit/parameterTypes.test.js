@@ -8,6 +8,7 @@ import {
   inferParameterInputOption,
   isNumericExpressionValue,
   parameterInputIsComplete,
+  parameterInputOptionForVariable,
   parseNumericParameterValue,
   parseNumericVectorParameterValue,
   resolveParameterInputOption,
@@ -49,6 +50,24 @@ describe('parameter input descriptors', () => {
       .toThrow('Boolean required field')
     expect(() => buildConstructorParameterInputOptions('Float64', { required: null }))
       .toThrow('Boolean required field')
+  })
+
+  it('never maps a Default Variable onto a required concrete branch', () => {
+    const variable = {
+      type: 'default',
+      selectedType: 'default',
+      value: null,
+    }
+    expect(parameterInputOptionForVariable(
+      'Vector{Int64}',
+      { required: false },
+      variable,
+    )?.id).toBe('default')
+    expect(parameterInputOptionForVariable(
+      'Vector{Int64}',
+      { required: true },
+      variable,
+    )).toBeNull()
   })
 
   it('expands Function once and keeps unsupported declared members visible', () => {

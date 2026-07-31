@@ -199,6 +199,7 @@ export function parameterInputOptionForVariable(inputType, metadata, variable) {
   const semanticType = variable?.selectedType === 'default'
     ? 'default'
     : variable?.type
+  if (String(semanticType).toLowerCase() === 'default') return null
   return options.find(option => (
     option.enabled
     && option.inputKind !== 'default'
