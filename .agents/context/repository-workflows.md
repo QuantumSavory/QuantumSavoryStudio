@@ -94,6 +94,7 @@ as current passing execution evidence without a durable run record.
 
 ## Support evidence gap
 
-The CI-selected Julia and Node versions are explicit, but maintained jobs do not yet
-exercise macOS, Windows, Firefox, or WebKit. Treat those environments as supported
-product intent with planned verification, not as currently passing evidence.
+The approved support matrix is Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, and the
+release-lock-selected Chromium build. Current jobs have not yet pinned the host or
+exercised the integrated production bundle as the system under test. Other hosts and
+browser engines are outside the approved release-2.0 support claim.

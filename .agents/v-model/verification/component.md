@@ -1,22 +1,11 @@
 # Component Verification Actions
 
-## UNITV-001 — Verify codec warning and version handling
-
-- **Covers:** CMP-001
-- **Method:** test
-- **Procedure:** Run older, current, newer, negative, missing, non-integer, malformed-marker, hydration, cloning, and nonmutation fixtures.
-- **Environment / configuration:** Node 24 Vitest/jsdom
-- **Pass criterion:** Every noncurrent/malformed marker yields warning diagnostics and reaches normalization; no throw arises solely from classification; references hydrate into independent values without source mutation.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current codec tests explicitly require future-version rejection and do not require warning diagnostics.
-
 ## UNITV-002 — Verify atomic design reconciliation
 
 - **Covers:** CMP-002
 - **Method:** test
 - **Procedure:** Run valid/invalid create-update-delete, mixed transactions, ID collisions, aliases, async validation, and retained-reference fixtures.
-- **Environment / configuration:** Node 24 Vitest/jsdom
+- **Environment / configuration:** Node Vitest/jsdom
 - **Pass criterion:** Invalid candidates leave no mutation; valid candidates allocate fresh IDs, resolve aliases, and preserve asserted live identities/references.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js)
@@ -59,12 +48,12 @@
 
 - **Covers:** CMP-006
 - **Method:** test
-- **Procedure:** Run permitted and rejected identifiers/heads, property/module access, macros, imports, commands, local/context bindings, symbolic names, target-type/range, and filesystem canaries in both policy states.
-- **Environment / configuration:** Julia backend unit environment with evaluation disabled and enabled
-- **Pass criterion:** Permitted forms and placement bindings work in fresh modules; every forbidden/capability fixture is denied before evaluation; target-type/range checks match each fixture.
+- **Procedure:** Run permitted and rejected identifiers/heads, property/module access, macros, imports, commands, local/context bindings, symbolic names, target-type/range, filesystem canaries, local gate states, and public denial.
+- **Environment / configuration:** Julia backend unit environment with missing/false/true local opt-in and public mode
+- **Pass criterion:** Permitted local forms and placement bindings work only when enabled; every forbidden/capability fixture is denied before evaluation; public mode always denies; target-type/range checks match each fixture.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
-- **Nonconformance:** Fixtures lack direct import/using and discriminating command/macro-head cases; the complex-parameter fallback in `parser.jl` bypasses the allowlist. Complete site coverage requires UNITV-013.
+- **Nonconformance:** Fixtures lack direct import/using and discriminating command/macro-head cases; public denial is not implemented; the complex-parameter fallback bypasses the allowlist. Complete site coverage requires UNITV-013.
 
 ## UNITV-007 — Verify deterministic export bindings
 
@@ -76,17 +65,6 @@
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
 - **Nonconformance:** No current execution record exists.
-
-## UNITV-008 — Verify session operation-ledger mechanics
-
-- **Covers:** CMP-008
-- **Method:** test
-- **Procedure:** Exercise concurrent/later exact replay, different tool/normalized arguments, successful/rejected/unknown outcomes, more than 256 IDs, browser rebind, and transport restart.
-- **Environment / configuration:** Julia collaboration hub with deterministic session/binding and dispatch fingerprints
-- **Pass criterion:** Exact replay returns the original terminal outcome without delivery; mismatches return `OPERATION_ID_CONFLICT`; no entry is evicted/cleared on rebind; unknown never replays; restart starts an empty namespace.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests encode a 256-entry ID-only successful-result cache cleared with the binding.
 
 ## UNITV-009 — Verify single-session transport and logger
 

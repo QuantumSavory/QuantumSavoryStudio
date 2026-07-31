@@ -1,84 +1,79 @@
 # Frontend Project Document Reference
 
 - **Context need:** Reference
-- **Open when:** Changing project persistence, import/export, schema compatibility,
-  names, browser storage, or collaboration/simulation/script projections.
+- **Open when:** Changing project persistence, import/export, schema admission, names,
+  browser storage, replacement transitions, or downstream projections.
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
-- **Related specification IDs:** STK-006, SYS-003, SYS-015, SUB-002, SUB-014,
-  CMP-001, CMP-010
-- **Review when:** A durable field, schema version, normalization, projection, storage
-  key, or project-transition rule changes.
+- **Related specification IDs:** STK-010, STK-011, SYS-002, SYS-017, SYS-018, SUB-002,
+  SUB-015, SUB-016, CMP-014, CMP-015
+- **Review when:** A durable field, schema version, admission rule, normalization,
+  projection, storage key, or project-transition phase changes.
 
-Normative project behavior is defined by
-[STK-006](../../v-model/01-stakeholder-outcomes.md#stk-006--attempt-schema-mismatched-projects-without-a-compatibility-promise),
-[SYS-003](../../v-model/02-system-requirements/gui-and-simulation.md#sys-003--warn-and-attempt-project-schema-differences),
-[SYS-015](../../v-model/02-system-requirements/operations-and-deployment.md#sys-015--discard-the-active-project-when-replacement-starts),
-[CMP-001](../../v-model/04-component-contracts.md#cmp-001--codec-warning-version-and-identity-invariants),
-and [CMP-010](../../v-model/04-component-contracts.md#cmp-010--destructive-project-session-transition).
-This reference describes the current machinery and its deltas from those records.
+Normative release-2.0 behavior is defined by
+[SYS-017](../../v-model/02-system-requirements/gui-and-simulation.md#sys-017--enforce-the-current-project-schema),
+[SYS-018](../../v-model/02-system-requirements/operations-and-deployment.md#sys-018--commit-project-replacement-only-after-candidate-preparation),
+[CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
+and
+[CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
+Those records are approved targets; current source remains nonconformant where stated
+below.
 
 ## Canonical shapes
 
 The live frontend graph contains model objects and object references. Durable documents
-use IDs and plain data. `projectCodec.js` is the canonical translation boundary.
+use IDs and plain data. `projectCodec.js` is the current translation boundary.
 
 | Shape | Includes | Excludes |
 | --- | --- | --- |
-| Stored/exported project | Schema metadata, named project, network, descriptions, annotations, map/session-safe project fields | Transient editor, request, and live simulation state |
+| Stored/exported project | Schema metadata, name, network, descriptions, annotations, map/session-safe fields | Transient editor, request, and live simulation state |
 | Collaboration snapshot | Canonical design content | Storage metadata, UI-only state, runtime slot state |
 | Simulation payload | Validated/minimized network and resolved physical values | Storage/UI state, descriptions, annotations |
 | Script-export payload | Simulation projection plus run configuration | Frontend-only presentation data |
 
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
-The target excludes transient editor metadata, but current constructor normalization
-retains string `latex` and the codec clones unrecognized additive fields. Imported
-constructor preview/error fields can therefore round-trip today; treat that as a current
-exception, not permission to add more durable UI state.
+Current normalization can preserve unrecognized additive fields, including selected
+preview/error data. Release 2.0 instead targets an explicit durable field set, while
+expressly extensible nested maps remain defined by their owning schema.
 
-## Version and compatibility
+## Current source versus approved schema target
 
-Current stored schema is version 1, independently of the software version. There is no
-cross-release guarantee in the baseline. The target warning/open behavior is in
-[SYS-003](../../v-model/02-system-requirements/gui-and-simulation.md#sys-003--warn-and-attempt-project-schema-differences):
-schema classification does not replace ordinary structural validation, and structural
-invalidity can still end the attempt with a structured error.
+Current source writes schema version 1. It coerces missing/non-integer markers to schema
+0, accepts some older/negative inputs, and rejects future integers. Import also performs
+a software-major confirmation independently of schema classification.
 
-Current code coerces missing/non-integer markers to schema 0, accepts negative integer
-markers without warning, and rejects future integers. Existing software-major
-confirmation is also not the required schema warning. These are conformance gaps.
-Normalization of old or additive shapes is opportunistic recovery, not evidence of a
-compatibility promise.
+Release 2.0 has no migration or best-effort version path:
 
-The UI import preflight is stricter than the codec: it currently requires network node,
-edge, and protocol arrays before decoding. Do not claim that every codec-accepted partial
-legacy document is accepted by the interactive import path.
+- encoding writes version 2;
+- admission requires exact integer version 2 and the canonical durable shape;
+- incompatible input fails before normalization, hydration, storage, or session effects;
+- rejection returns structured expected/actual/path diagnostics and never rewrites or
+  deletes the source document.
+
+These are planned requirements, not claims about the current codec.
 
 ## Browser persistence
 
-Named projects use browser `localStorage`, including a metadata index and recent-project
-pointer. Exact keys and contents are implementation details; the cross-release policy is
-defined by [STK-006](../../v-model/01-stakeholder-outcomes.md#stk-006--attempt-schema-mismatched-projects-without-a-compatibility-promise).
-There is no server-side saved-project store.
+Named projects currently use browser `localStorage`, including a metadata index and
+recent-project pointer. There is no server-side saved-project store. Exact storage keys
+remain implementation details.
 
-Save As protects an existing different name unless overwrite is explicit, then aligns
-the stored name, active name, and simulation namespace. Unsaved state combines a
-canonical serialized snapshot with an explicit dirty flag. MCP design edits mark dirty
-and never save automatically.
+Release-2.0 failure handling preserves incompatible stored documents. An automatic-open
+failure may clear only the recent-project pointer needed to avoid repeated boot failure;
+it must not delete or rewrite the saved document.
 
-## Project transitions
+## Current transitions versus approved transaction
 
-The destructive ordering and supersession rules are defined by
-[SYS-015](../../v-model/02-system-requirements/operations-and-deployment.md#sys-015--discard-the-active-project-when-replacement-starts)
-and [CMP-010](../../v-model/04-component-contracts.md#cmp-010--destructive-project-session-transition).
-They concern the active browser session, not deletion of a previously persisted named
-project; backend simulation records have their own destroy/retention lifecycle.
+Current saved/import/demo flows often fetch, preflight, and decode before active-session
+teardown, so selected failures preserve the active project. Candidate creation and
+storage, however, are not one side-effect-free prepare/atomic-commit transaction across
+all replacement entry points.
 
-Current open/import/demo preflight and decode, and new-project creation/storage, occur
-before active-session teardown. Rejection or failure can therefore preserve the active
-project; an overlapping create may also leave its stored candidate. That ordering is a
-conformance gap.
+The approved target prepares an isolated candidate under a transition generation,
+rechecks ownership, and only then commits teardown, persistence, and installation.
+Failed, cancelled, incompatible, invalid, or stale candidates preserve active work and
+persist nothing.
 
 ## Frontend-only fields
 
@@ -92,5 +87,5 @@ derived attachment edges/bounds remain presentation data.
 - **Storage:** [`gui/src/models/ProjectStore.js`](../../../gui/src/models/ProjectStore.js).
 - **Transitions:** [`gui/src/composables/useProjectSession.js`](../../../gui/src/composables/useProjectSession.js).
 - **Import preflight:** [`gui/src/composables/useImportExport.js`](../../../gui/src/composables/useImportExport.js).
-- **Unit evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
+- **Current tests:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
   and [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js).

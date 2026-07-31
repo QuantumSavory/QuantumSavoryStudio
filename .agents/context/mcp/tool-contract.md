@@ -2,107 +2,56 @@
 
 - **Context need:** Reference
 - **Open when:** Changing contract versions, tools, resources, schemas, annotations,
-  dispatch, sessions, revisions, operation IDs, or stable errors.
+  dispatch, sessions, revisions, recovery errors, or consumers.
 - **Do not open when:** Changing unrelated GUI editing or operational sidecar setup.
-- **Related specification IDs:** SYS-012, SYS-016, SUB-012, SUB-013, CMP-008,
-  CMP-009, CMP-011, CMP-012
+- **Related specification IDs:** SYS-012, SUB-012, SUB-013, CMP-009, CMP-011, CMP-012,
+  CMP-016
 - **Review when:** `contracts/mcp/`, a dispatch branch, resource template, error code,
-  session rule, or replay rule changes.
+  session rule, or recovery rule changes.
 
-Normative collaboration, retry, Run, annotation, and resource behavior is defined by
+The normative target is defined by
 [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely),
-[CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants),
 [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness),
-and [CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
-This reference records current registry/dispatch mechanics and conformance deltas.
+[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources),
+and
+[CMP-016](../../v-model/04-component-contracts.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
 
-## Contract source
+## Current contract
 
-`contracts/mcp/v1/tools.json` is the only tool metadata/schema registry. The sidecar
-loads it at startup; frontend contract checks and backend dispatch use the same operation
-names. Do not maintain a second list in Julia or JavaScript.
+`contracts/mcp/v1/tools.json` is the current metadata/schema registry. The sidecar loads
+it at startup; frontend contract checks and backend dispatch consume the same operation
+names. Version 1 advertises 23 tools across design/catalog reads, authoring, simulation
+lifecycle, and simulation reads.
 
-Version 1 currently advertises 23 tools:
+Current design mutations require `operation_id` and `expected_revision`. The backend
+retains at most 256 successful ID-only results per binding and clears them on
+bind/unbind. Mutation/lifecycle tools currently advertise idempotence. Current resource
+adapters can advertise unavailable HTML/PNG content and interpolate opaque IDs without
+safe encoding.
 
-| Group | Count | Execution boundary |
-| --- | ---: | --- |
-| Design/catalog reads | 4 | Catalogs direct in backend; design reads through browser |
-| Authoring operations | 9 | Browser design-command service |
-| Simulation lifecycle | 5 | Browser simulation controller |
-| Simulation reads | 5 | Backend simulation service with binding/revision checks |
+Those facts describe source at the profile target; they are not the release-2.0 contract.
 
-Counts and exact members describe current machinery. Version 1 synchronizes the
-frontend, backend, and sidecar shipped in one WebQuantumSavory release. It is not a
-backward-compatibility promise across releases; tools, schemas, result fields, resources,
-and errors may change incompatibly.
+## Approved release-2.0 target
 
-## Resources
+The co-shipped contract advances to version 2 without a v1 adapter:
 
-The sidecar publishes current-design and simulation-state resources plus catalog,
-slot-result, and protocol-result templates. Backend adapters return primitive/JSON,
-HTML, or PNG representations.
+- design mutations retain `expected_revision` and remove public operation IDs;
+- stale work cannot mutate, accepted work advances revision once, and uncertain
+  mutation is never replayed automatically;
+- callers read authoritative design or lifecycle state before issuing fresh work;
+- mutation/lifecycle tools do not claim intrinsic idempotence;
+- Run shares GUI readiness and records the prepared revision;
+- advertised result resources are URI-safe, nonempty, and readable in both declared
+  formats, with structured malformed/not-found errors.
 
-The required representation and error surface is defined by
-[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
-
-Current adapters advertise both formats before establishing that both exist, can return
-`nothing` content, and interpolate identifiers without percent-encoding while matching
-`/` as a path separator. Existing transport tests list resources but do not read every
-bound representation. Those are implementation and verification gaps, not optional
-parts of the resource contract.
-
-## Revision and operation fields
-
-Design mutations require the caller's `expected_revision`; GUI and MCP changes advance
-one collaboration revision. Lifecycle tools act on the current browser state after draft
-flush and intentionally omit that field.
-
-The session-lifetime ledger, conflict, uncertainty, rebind, and restart rules are
-specified by
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-The annotation rule is in
-[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
-
-Current code instead retains only 256 successful results, clears them on bind/unbind,
-does not bind an ID to tool/arguments, does not retain rejected/unknown outcomes, and
-marks mutation/lifecycle tools idempotent. Treat every one of those differences as a
-conformance gap.
-
-## Simulation run
-
-The Play-equivalence and prepared-revision contract is defined by
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-
-The current browser relay already shares the controller, but the hub records
-`prepared_source_revision` only after explicit prepare. Direct-run revision recording is
-a conformance gap.
-
-## Error and recovery categories
-
-The normative error/recovery outcomes are defined by
-[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-operation-recovery-boundary)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-Current hub code has binding-expiry, stale-revision, and selected desynchronization
-handling, but its binding-scoped success cache cannot implement the baselined retry and
-uncertainty outcomes.
-
-Simulation reads verify binding generation, simulation namespace, and design revision
-before and after the read. This does not freeze concurrent simulation internals into one
-transactional snapshot.
-
-## Additional current gaps
-
-- Successful reads for every advertised resource template lack durable system evidence.
-- Result schemas are often only the generic object default.
+All frontend, backend, and sidecar consumers must move to v2 atomically before v1 is
+removed. No MCP compatibility is promised across WebQuantumSavory releases.
 
 ## Anchors
 
-- **Contract:** [`contracts/mcp/v1/tools.json`](../../../contracts/mcp/v1/tools.json).
+- **Current registry:** [`contracts/mcp/v1/tools.json`](../../../contracts/mcp/v1/tools.json).
 - **Sidecar loader/resources:** [`mcp/main.jl`](../../../mcp/main.jl).
 - **Backend dispatch:** [`src/mcp_adapters.jl`](../../../src/mcp_adapters.jl).
 - **Hub semantics:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
-- **Browser simulation relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js)
-  and [simulation client reference](../frontend/simulation-client.md).
+- **Browser simulation relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js).
 - **Transport evidence:** [`mcp/test/http_integration.jl`](../../../mcp/test/http_integration.jl).

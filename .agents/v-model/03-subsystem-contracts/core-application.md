@@ -9,16 +9,16 @@ requirements.
 - **Parents:** SYS-001, SYS-011, SYS-013
 - **Acceptance criterion:** Local startup serves GUI/API without MCP unless explicitly enabled; public startup serves GUI/API without MCP; neither mode loads an account or server-project store; sidecar failure cannot replace the main HTTP runtime.
 - **Verification:** INTV-001 (test)
-- **Origin / risk:** Maintainer-confirmed deployment and current launcher architecture; medium boundary risk
+- **Origin / risk:** Maintainer-confirmed deployment boundary; medium boundary risk
 - **Context:** [Backend architecture](../../context/backend/architecture.md)
 
 ## SUB-002 — Browser project document and projection boundary
 
-- **Normative statement:** Translation among hydrated browser models, browser-owned durable documents, collaboration snapshots, simulator payloads, and script-export payloads shall preserve declared semantics without mutating the source, while schema markers only trigger warning and best-effort recovery.
-- **Parents:** SYS-002, SYS-003
-- **Acceptance criterion:** A discriminating fixture round-trips durable fields in the same release; every differing/malformed marker emits a warning and does not block ordinary structural validation/decode solely by classification; each projection includes only declared fields; source values remain unchanged.
+- **Normative statement:** Translation among admitted browser models, browser-owned durable documents, collaboration snapshots, simulator payloads, and script-export payloads shall preserve declared semantics without mutating the source.
+- **Parents:** SYS-002
+- **Acceptance criterion:** A discriminating current-schema fixture round-trips durable fields in the same release; each projection includes only declared fields; endpoint references hydrate into independent values; all source values remain unchanged.
 - **Verification:** INTV-002 (test)
-- **Origin / risk:** Maintainer-confirmed schema policy and frontend codec boundary; high data-boundary risk
+- **Origin / risk:** Frontend codec/projection boundary after schema admission is separated into SUB-015; high data-boundary risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)
 
 ## SUB-003 — Shared atomic authoring boundary
@@ -65,3 +65,12 @@ requirements.
 - **Verification:** INTV-007 (test)
 - **Origin / risk:** Maintainer-confirmed error and cleanup behavior; high observability/resource risk
 - **Context:** [Simulation runtime](../../context/backend/simulation-runtime.md)
+
+## SUB-015 — Strict nonmutating project-schema admission
+
+- **Normative statement:** Project schema admission shall validate an isolated raw document for exact current version and canonical durable shape before normalization, hydration, storage, or active-session effects.
+- **Parents:** SYS-017
+- **Acceptance criterion:** Exact version-2 canonical documents pass to projection/decode; every other marker class and unsupported durable field fails with stable structured diagnostics; admission neither mutates the source nor writes/deletes browser storage.
+- **Verification:** INTV-015 (test)
+- **Origin / risk:** Maintainer-approved release-2.0 schema boundary; high compatibility/data-loss risk
+- **Context:** [Project documents](../../context/frontend/project-documents.md)

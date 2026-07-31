@@ -2,12 +2,12 @@
 
 - **Context need:** Reference
 - **Open when:** Adding or changing routes, request validation, response envelopes,
-  Swagger, simulation naming, or error helpers.
+  private API generation, simulation naming, or error helpers.
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
 - **Related specification IDs:** SYS-006, SYS-008, SUB-007, SUB-009, CMP-013
-- **Review when:** A public/internal route, error code, status code, or Swagger schema
-  changes.
+- **Review when:** A route, error code, status code, private-contract descriptor, or
+  generated API shape changes.
 
 Normative failure handoff and diagnostic disclosure is defined by
 [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
@@ -19,9 +19,8 @@ This reference records the current HTTP machinery and known drift.
 
 The HTTP API exists to support the bundled GUI. It is not a separately supported
 external-integration product, and route stability is not promised independently of the
-frontend release. Swagger and adjacent route documentation remain maintainability tools:
-keep them synchronized with the frontend-support contract without implying cross-release
-API compatibility.
+frontend release. Current adjacent Swagger blocks are maintainability tools, not an
+external compatibility promise.
 
 “Private” describes compatibility and product audience, not network access control. The
 public education deployment exposes the same routes with the GUI and intentionally adds
@@ -91,7 +90,16 @@ Some frontend callers also swallow transport failures or replace them with fallb
 values. Those are nonconformances with structured Log-tab reporting, not conventions to
 copy.
 
-## Known contract gaps
+## Approved generated-contract target
+
+Release 2.0 targets one canonical route descriptor source that drives registration and
+generated private API output. Every retained route must appear once with matching method
+and required request/success/error shapes and must have a co-shipped consumer or explicit
+backend-only exception. Hand-maintained route schemas are retired only when the
+generator, coverage inventory, and real error-handoff tests land; none of that target is
+implemented at the profile-target commit.
+
+## Known current contract gaps
 
 - Swagger describes some `simulation_running` fields as string enums although the
   serialized value is Boolean.
@@ -112,9 +120,10 @@ Treat these as visible gaps, not as documentation to normalize around current so
 
 ## Change surfaces
 
-For a wire change, inspect the handler and Swagger together, backend integration tests,
-the frontend API connector/codec, and MCP contract/adapters when the surface is shared.
-Use [repository workflows](../repository-workflows.md) to select checks.
+Until the generated contract lands, inspect the handler and adjacent Swagger together.
+Also inspect backend integration tests, the frontend connector/codec, and MCP
+contract/adapters when the surface is shared. Use
+[repository workflows](../repository-workflows.md) to select checks.
 
 ## Anchors
 

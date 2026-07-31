@@ -2,20 +2,19 @@
 
 - **Context need:** Task playbook
 - **Open when:** Enabling, starting, stopping, testing, upgrading, recovering the MCP
-  sidecar, or coordinating a cross-component tool/resource rollout.
-- **Do not open when:** Reasoning about authoring semantics or only looking up one
-  tool/schema contract.
-- **Related specification IDs:** SYS-011, SYS-012, SUB-011, SUB-013, CMP-009
+  sidecar, or coordinating a cross-component contract rollout.
+- **Do not open when:** Reasoning about authoring semantics or only looking up one schema.
+- **Related specification IDs:** SYS-011, SYS-012, SUB-011, SUB-012, SUB-013, CMP-009
 - **Review when:** Environment configuration, dependency pin, transport adapter,
-  supervisor lifecycle, operational diagnostics, or tool/resource rollout changes.
+  supervisor lifecycle, operational diagnostics, or contract rollout changes.
 
 ## Enable safely
 
 Prerequisites:
 
-- Genie must bind a loopback host.
-- The MCP port must be an integer from 1 through 65535 and differ from the backend port.
-- No untrusted local process should be assumed excluded by the loopback boundary.
+- Genie and the sidecar listener must be loopback-only.
+- The MCP port must be 1 through 65535 and differ from the backend port.
+- No untrusted local process should be assumed excluded by loopback.
 
 Start the integrated application:
 
@@ -23,13 +22,10 @@ Start the integrated application:
 WEBQUANTUMSAVORY_ENABLE_MCP=true ./bin/server
 ```
 
-The feature flag accepts exactly lowercase `true` or `false`.
-`WEBQUANTUMSAVORY_MCP_PORT` overrides the default sidecar port. The sidecar does not
-start merely because the feature is available; the supported browser flow explicitly
-initializes it. A headerless local caller can reach the backend start route, so this is
-user-flow gating rather than authentication.
+The feature flag accepts lowercase `true` or `false`. The browser flow explicitly
+initializes one sidecar session; enabling the feature alone does not start collaboration.
 
-## Work on the isolated application
+## Validate the boundary
 
 From the repository root:
 
@@ -37,49 +33,27 @@ From the repository root:
 julia --startup-file=no --project=mcp -e 'using Pkg; Pkg.instantiate()'
 julia --startup-file=no --project=mcp mcp/test/runtests.jl
 ./ci/mcp-unit.sh
+./ci/browser.sh
 ```
 
-Use `./ci/browser.sh` or the focused MCP browser scenario when browser binding,
-authoring, lifecycle relay, or activity presentation changes.
-
-## Change tools or resources
-
-1. Update the versioned JSON contract first.
-2. Add or revise the shared browser handler for an authoring operation and migrate its
-   equivalent GUI action.
-3. Update backend dispatch/resource adapters and sidecar registration.
-4. Exercise backend hub/supervisor, sidecar loader/transport, frontend bridge/contract,
-   and browser collaboration evidence in proportion to the change.
-5. Update V-model requirements/actions when observable behavior or evidence changes.
+For a contract rollout, change the versioned JSON registry first, then update backend,
+browser, and sidecar consumers together. Exercise registry loading, dispatch, resources,
+transport, browser binding, and recovery before removing the old co-shipped version.
 
 ## Upgrade ModelContextProtocol
 
 The dependency is exactly pinned because the adapter uses source-annotated private
-transport behavior and installs a safe logger.
-
-1. Read the upstream commit/file references at the top of
-   `mcp/src/single_session_http_transport.jl`.
-2. Diff the new dependency implementation against every adapted lifecycle/session/logger
-   assumption.
-3. Preserve single-session rejection, close/wait signaling, safe log-level behavior, and
-   raw-transcript suppression.
-4. Run sidecar unit, real transport, supervisor, and browser collaboration checks.
-5. Reconsider process isolation only if scoped logger and lifecycle hooks now exist.
+transport behavior and installs a safe logger. Before upgrading, re-diff the upstream
+sources named in `mcp/src/single_session_http_transport.jl`; preserve single-session
+rejection, close/wait signaling, safe log-level behavior, and transcript suppression.
 
 ## Recover
 
-- Normal Stop unbinds the browser before stopping the sidecar.
-- On binding desynchronization or `OUTCOME_UNKNOWN`, inspect the visible project and
-  simulation state, then explicitly create a fresh browser binding, read current state,
-  and use a fresh operation ID. The baselined transport-session ledger must retain the
-  uncertain ID so it cannot replay; current code instead clears pending commands and its
-  success cache on unbind/rebind, so treat the old ID as burned even though the server
-  forgets it.
-- On startup failure, use bounded sanitized supervisor diagnostics. Never paste or
-  preserve capabilities/session IDs in documentation or committed logs.
-- Unexpected sidecar exit revokes its capability and ends the transport-session retry
-  scope. Restart requires a fresh browser binding, current-state read, and fresh
-  operation IDs.
+Current v1 recovery uses operation IDs and a bounded cache; consult
+[the contract reference](tool-contract.md) before modifying it. The approved v2 flow is
+state readback, not automatic replay: inspect the visible project and simulation state,
+create a fresh binding after restart when needed, read current state, then issue fresh
+work. Never preserve capabilities, session IDs, or raw transport logs in documentation.
 
 ## Anchors
 
@@ -88,9 +62,3 @@ transport behavior and installs a safe logger.
 - **Transport adapter:** [`mcp/src/single_session_http_transport.jl`](../../../mcp/src/single_session_http_transport.jl).
 - **Canonical checks:** [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh) and
   [`ci/browser.sh`](../../../ci/browser.sh).
-
-## Compatibility boundary
-
-The checked-in `contracts/mcp/v1/` version synchronizes the frontend, backend, and
-sidecar shipped together. It does not promise backward-compatible tools, schemas,
-resources, errors, or result fields across WebQuantumSavory releases.

@@ -6,11 +6,11 @@ actions.
 
 ## SYS-001 — Start the integrated local application
 
-- **Normative statement:** From a clean supported checkout, the product shall build the locked browser application and serve it with the frontend-support HTTP API from one launcher on localhost.
+- **Normative statement:** From a prepared supported checkout, the product shall build the locked browser application and serve it with the frontend-support HTTP API from one launcher on localhost.
 - **Parents:** STK-001, STK-002, STK-008
-- **Acceptance criterion:** The launcher installs locked frontend dependencies, produces the browser bundle, starts the backend, and makes the root GUI and health surface reachable from a desktop browser.
+- **Acceptance criterion:** The launcher installs locked frontend dependencies, produces the browser bundle, starts the backend, and makes the root GUI and health surface reachable from a desktop browser after the Julia environment has been instantiated.
 - **Verification:** SYSV-001 (test)
-- **Origin / risk:** Released local startup and maintainer-confirmed primary use; low integration risk
+- **Origin / risk:** Released local startup with the setup prerequisite made explicit; low integration risk
 - **Context:** [Backend architecture](../../context/backend/architecture.md)
 
 ## SYS-002 — Author and retain a canonical browser design
@@ -22,18 +22,9 @@ actions.
 - **Origin / risk:** Released browser/project behavior; high divergence/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)
 
-## SYS-003 — Warn and attempt project-schema differences
-
-- **Normative statement:** The product shall clearly warn about every differing, missing, or malformed project schema marker and then attempt a best-effort decode without rejecting solely because of version classification.
-- **Parents:** STK-006
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers each create a user-visible warning and proceed through ordinary structural validation and best-effort decode; usable content opens, structurally unusable content ends with a structured Tools Log failure, and version classification alone never rejects a document.
-- **Verification:** SYSV-003 (test)
-- **Origin / risk:** Maintainer interview; current future-version rejection is nonconformant; high data-loss risk
-- **Context:** [Project documents](../../context/frontend/project-documents.md)
-
 ## SYS-004 — Expose authoritative supported-input metadata
 
-- **Normative statement:** The backend shall expose the current constructor, placement, tag, representation, and structured-state metadata needed by the GUI without requiring it to duplicate backend catalogs.
+- **Normative statement:** The backend shall expose the current constructor, placement, tag, representation, and structured-state metadata needed by the GUI without requiring it to duplicate simulator catalogs.
 - **Parents:** STK-001, STK-002
 - **Acceptance criterion:** The GUI can render and submit each advertised input kind from returned metadata; unsupported or non-advertised types are rejected; explicit allowlists do not silently expand with dependency internals.
 - **Verification:** SYSV-004 (test)
@@ -75,3 +66,12 @@ actions.
 - **Verification:** SYSV-008 (test)
 - **Origin / risk:** Maintainer interview; current route/client behavior is mixed; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)
+
+## SYS-017 — Enforce the current project schema
+
+- **Normative statement:** The product shall admit only documents carrying the exact current project-schema version and canonical durable shape, and shall refuse all other schema markers before hydration or decode side effects.
+- **Parents:** STK-010
+- **Acceptance criterion:** The current encoder emits schema version 2; exact version-2 canonical documents reach decode; older, newer, negative, missing, non-integer, malformed, or unsupported durable shapes return structured expected/actual/path diagnostics without modifying or deleting the input.
+- **Verification:** SYSV-018 (test)
+- **Origin / risk:** Maintainer-approved release-2.0 breaking schema contract; high compatibility/data-loss risk
+- **Context:** [Project documents](../../context/frontend/project-documents.md)

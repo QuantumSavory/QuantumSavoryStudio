@@ -5,22 +5,22 @@
 - **Covers:** SUB-001
 - **Method:** test
 - **Procedure:** Start local, MCP-enabled local, and public profiles; inspect processes and account/project-storage surfaces.
-- **Environment / configuration:** Clean local environments plus public Podman container
+- **Environment / configuration:** Clean local environments plus a maintained public deployment
 - **Pass criterion:** Normal/public modes serve GUI/API without MCP or account/project stores; local enablement uses the sidecar; sidecar failure leaves the main runtime available.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Local modes have separate artifacts; no public profile exists.
+- **Nonconformance:** Local modes have separate artifacts; no maintained public profile exists.
 
-## INTV-002 — Verify project warning and projection boundaries
+## INTV-002 — Verify current-schema projection boundaries
 
 - **Covers:** SUB-002
 - **Method:** test
-- **Procedure:** Project asymmetric fixtures for every schema-marker class; compare warnings, output, and source identity/content.
-- **Environment / configuration:** Vitest/jsdom with real codec and warning adapter
-- **Pass criterion:** Every differing/malformed marker warns without version-only rejection; usable fixtures decode/hydrate; exclusions hold; sources remain unchanged.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current codec tests hard-reject future integers and omit required warnings.
+- **Procedure:** Round-trip an asymmetric admitted project and derive collaboration, simulation, and script-export projections while comparing source identity/content.
+- **Environment / configuration:** Vitest/jsdom with real codec and projection helpers
+- **Pass criterion:** Current-schema durable fields round-trip; hydration creates independent references; each projection includes/excludes its declared fields; all inputs remain unchanged.
+- **Status:** implemented
+- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
+- **Nonconformance:** Current fixtures use schema version 1 and no single discriminating fixture asserts every projection and source-identity clause together.
 
 ## INTV-003 — Verify shared atomic authoring
 
@@ -88,27 +88,27 @@
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
 - **Nonconformance:** The panel scenario mocks its endpoint; the background scenario reaches the real route for selected semantics. Help is general, with no exhaustive feature/omission inventory.
 
-## INTV-009 — Verify private route/error/log boundary
+## INTV-009 — Verify private route/error/log handoff
 
 - **Covers:** SUB-009
 - **Method:** test
-- **Procedure:** Compare routes/Swagger with handlers; pass distinct 400/403/404/500 and cleanup envelopes through connector, controller, and log model.
-- **Environment / configuration:** Generated API document plus real backend/frontend
-- **Pass criterion:** Descriptions match current co-shipped shapes; every supported route translates failure; frontend Log values equal transmitted code/message/status/details/diagnostics.
+- **Procedure:** Pass distinct validation, policy, missing, cleanup, and unexpected failures through real handlers, connector, controller, and log model.
+- **Environment / configuration:** Real backend/frontend with discriminating envelope canaries
+- **Pass criterion:** Every supported route translates failures; frontend Log values equal transmitted code/classification/message/status/details/diagnostics without fallback success or message-only collapse.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Swagger drift, missing-body 500s, message-only connector errors, and swallowed/fallback client paths prevent implementation status.
+- **Nonconformance:** Missing-body 500s, message-only connector errors, deployment redaction, and swallowed/fallback client paths prevent implementation status.
 
-## INTV-010 — Verify source admission and external containment
+## INTV-010 — Verify local source admission and public denial
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Inventory source entries, exercise parser/allowlist/gate/evaluator in both states, and run public-sandbox canaries.
-- **Environment / configuration:** Pinned source, dynamic unit/HTTP fixtures, public Podman sandbox
-- **Pass criterion:** Every executing source reaches the gate and allowlist before evaluation; forbidden canaries fail; pure export works disabled; public canaries cannot escape external containment.
+- **Procedure:** Inventory source entries, exercise parser/allowlist/gate/evaluator with missing/false/true local opt-in, and repeat canaries in public mode.
+- **Environment / configuration:** Pinned source plus dynamic unit/HTTP fixtures in local and public profiles
+- **Pass criterion:** Every executing source reaches the gate and allowlist before evaluation; forbidden canaries fail; pure export works disabled; missing/false local and all public execution deny; true local execution admits only the restricted subset.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** No entry inventory, disabled-server mode, or public sandbox artifact exists; `dev`/`test` defaults bypass explicit opt-in, and the complex-parameter fallback bypasses the allowlist.
+- **Nonconformance:** No durable entry inventory, disabled-server mode, or public-deny artifact exists; `dev`/`test` defaults bypass explicit opt-in, and the complex-parameter fallback bypasses the allowlist.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 
@@ -121,16 +121,16 @@
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`test/test_sidecar_supervisor.jl`](../../../test/test_sidecar_supervisor.jl)
 - **Nonconformance:** Live-browser unexpected-exit recovery is untested; blocking-cleanup fixtures are manually released instead of proving a bound.
 
-## INTV-012 — Verify editor revision and operation-recovery protocol
+## INTV-012 — Verify editor binding and revision protocol
 
 - **Covers:** SUB-012
 - **Method:** test
-- **Procedure:** Exercise binding/expiry, revisions, exact/conflicting IDs, 257 outcomes, delivery/acknowledgement loss, rebind, and restart.
+- **Procedure:** Exercise binding ownership/expiry, browser/GUI revisions, stale mutation, serial delivery, acknowledgement revision/hash, rebind, and restart.
 - **Environment / configuration:** Real backend hub/browser bridge with controllable lease and delivery
-- **Pass criterion:** Every pre/post-delivery case yields its documented result without duplicate mutation; the session ledger survives browser rebind and ends only with transport-session restart.
+- **Pass criterion:** One binding owns current state; stale work does not mutate; accepted design work advances revision once; acknowledgement matches canonical revision/hash; rebind/restart begins from visible current state.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Hub and bridge tests are independent and encode a bounded binding-scoped success cache rather than the confirmed ledger.
+- **Nonconformance:** Hub and bridge tests are independent and encode contract-v1 operation IDs plus a binding-scoped success cache.
 
 ## INTV-013 — Verify MCP contract, Play, resources, and transport
 
@@ -141,15 +141,4 @@
 - **Pass criterion:** One registry drives metadata; dispatch owners are correct; Play semantics/errors/revision match GUI; HTML/PNG are readable; errors are structured; only intrinsically safe tools advertise idempotence.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Current tests list resources and selected handlers, while current annotations, direct Run, and resource adapters violate the criterion.
-
-## INTV-014 — Verify destructive active-project transitions
-
-- **Covers:** SUB-014
-- **Method:** test
-- **Procedure:** Delay candidate retrieval/preflight/decode for every replacement class, inject rejection/failure, and overlap two transitions while observing all session owners.
-- **Environment / configuration:** Browser project-session integration with controllable promises
-- **Pass criterion:** Active graph/name/selection/polls/results/binding clear before candidate work; stale completions cannot displace the latest result; cancellation or failure of the latest transition stays empty, and failure logs a structured error.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests assert candidate-first behavior and preservation after rejection.
+- **Nonconformance:** Current contract is v1; tests list resources and selected handlers, while current annotations, direct Run, and resource adapters violate the criterion.

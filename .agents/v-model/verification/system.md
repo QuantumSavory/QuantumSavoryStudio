@@ -1,39 +1,28 @@
 # System Verification Actions
 
-No product suite was run for this documentation-only update.
+No product suite was run for this documentation-only release-2.0 baseline.
 
 ## SYSV-001 — Verify the supported local launcher end to end
 
 - **Covers:** SYS-001
 - **Method:** test
-- **Procedure:** From a clean checkout, run the documented launcher and request the root GUI and health surface from a desktop browser.
-- **Environment / configuration:** CI-selected Julia/Node versions and locked frontend dependencies
+- **Procedure:** From a prepared checkout, run the documented launcher and request the root GUI and health surface from a desktop browser.
+- **Environment / configuration:** Supported release environment with instantiated Julia and locked frontend dependencies
 - **Pass criterion:** The launcher builds the locked frontend, starts a loopback backend, and serves a usable GUI and health response.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Component CI scripts do not execute `bin/server` as one black-box user action.
+- **Nonconformance:** Component CI scripts do not execute `bin/server` as one black-box production-bundle user action.
 
 ## SYSV-002 — Verify canonical browser authoring
 
 - **Covers:** SYS-002
 - **Method:** test
-- **Procedure:** Exercise browser edits, Save As/reopen in the same release, and selected projections with discriminating fixtures.
-- **Environment / configuration:** Node 24 Vitest/jsdom plus Chromium/Vite workflows
+- **Procedure:** Exercise browser edits, current-schema Save As/reopen in the same release, and selected projections with discriminating fixtures.
+- **Environment / configuration:** Node Vitest/jsdom plus Chromium/Vite workflows
 - **Pass criterion:** Edits occur once; reopen preserves asserted semantics in browser storage; projections are nonmutating and exclude asserted fields.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
-- **Nonconformance:** No one system fixture asserts every documented project field or explicitly proves absence of server project writes.
-
-## SYSV-003 — Verify schema warnings and best-effort open
-
-- **Covers:** SYS-003
-- **Method:** test
-- **Procedure:** Import structurally usable and unusable documents carrying older, newer, negative, missing, non-integer, and malformed schema markers through a real browser.
-- **Environment / configuration:** Supported desktop browser with real project codec, session, user-visible warning observer, and Tools Log
-- **Pass criterion:** Each noncurrent/malformed marker warns before ordinary structural validation; usable documents reach decode and open; structurally unusable ones log a structured failure; none fails solely from version classification.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current codec/tests silently normalize several classes and hard-reject a future integer.
+- **Nonconformance:** Existing artifacts target schema version 1; no one system fixture asserts every documented project field or explicitly proves absence of server project writes.
 
 ## SYSV-004 — Verify authoritative metadata-driven inputs
 
@@ -77,7 +66,7 @@ No product suite was run for this documentation-only update.
 - **Pass criterion:** Text/filename are stable, source parses/runs its supported path, registry and canary remain unchanged, and every selected simplification has corresponding help.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** A background-noise scenario reaches the real route and inspects selected output, but no action combines that real response with download, parse/run, disabled-backend canary/registry checks, and feature-specific help.
+- **Nonconformance:** A background-noise scenario reaches the real route and inspects selected output, but no action combines that response with download, parse/run, disabled-backend canary/registry checks, and feature-specific help.
 
 ## SYSV-008 — Verify structured API failures in the Tools Log
 
@@ -89,3 +78,14 @@ No product suite was run for this documentation-only update.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Common backend envelopes and some lifecycle logs exist, but connector paths discard bodies and other callers use alert/inline-only handling.
+
+## SYSV-018 — Verify strict project-schema admission
+
+- **Covers:** SYS-017
+- **Method:** test
+- **Procedure:** Import and reopen current, older, newer, negative, missing, non-integer, malformed, unsupported-field, and structurally invalid documents through the real browser product.
+- **Environment / configuration:** Supported browser with real storage, codec, import/session flow, and Tools Log
+- **Pass criterion:** Version-2 canonical documents open; every other class fails before hydration/session/storage effects with structured expected/actual/path diagnostics; source and stored input remain unchanged.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current source emits schema version 1, normalizes several noncurrent markers, and lacks the release-2.0 field-set gate and system fixture.

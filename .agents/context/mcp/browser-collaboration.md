@@ -2,89 +2,52 @@
 
 - **Context need:** Reference
 - **Open when:** Changing browser binding, leases, canonical snapshots, revisions, draft
-  flushing, command commit, GUI-originated changes, or lifecycle relay.
+  flushing, command commit, GUI-originated changes, lifecycle relay, or readback recovery.
 - **Do not open when:** Starting/upgrading the sidecar or changing tool schemas alone.
-- **Related specification IDs:** SYS-011, SYS-012, SYS-016, SUB-003, SUB-012,
-  SUB-013, CMP-002, CMP-008, CMP-011
-- **Review when:** Binding ownership, revision/hash semantics, command execution, or
-  collaboration teardown changes.
+- **Related specification IDs:** SYS-011, SYS-012, SUB-003, SUB-012, SUB-013, CMP-002,
+  CMP-011, CMP-016
+- **Review when:** Binding ownership, revision/hash semantics, command execution,
+  acknowledgement, readback, or collaboration teardown changes.
 
-Normative browser authority, revision, operation-recovery, and Play behavior is defined
-by [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely),
-[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-operation-recovery-boundary),
-and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-This reference describes the current bridge/hub machinery and its gaps.
+Normative browser authority and recovery are defined by
+[SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
+[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-readback-recovery-boundary),
+and
+[CMP-016](../../v-model/04-component-contracts.md#cmp-016--revision-guarded-mutation-and-readback-recovery).
 
-## Binding
+## Current binding and mutation flow
 
-One browser editor owns a renewable lease. The browser binds:
-
-- canonical schema-v1 design content;
-- a recursively key-sorted SHA-256 synchronization fingerprint;
-- the scoped simulation namespace;
-- revision and generation state.
-
-The fingerprint detects synchronization changes; it is not authentication. The browser
-heartbeats every two seconds against the current eight-second lease, while command
-polling retries on its own cadence. Exact timings are current implementation values, not
-product-level commitments.
-
-Project transitions await unbind. Page exit/disposal uses a best-effort beacon, with
-lease expiry as fallback. Cancellable `beforeunload` owns the unsaved warning and is not
-treated as proof that the page exited.
-
-## Design reads and writes
+One browser editor owns a renewable lease and binds canonical design content, a sorted
+SHA-256 synchronization fingerprint, simulation namespace, revision, and generation.
+The fingerprint detects synchronization change; it is not authentication.
 
 Before a design read or lifecycle action, the browser flushes active editor drafts.
-Invalid or busy drafts return explicit errors rather than a stale snapshot.
-
-Authoring commands:
-
-1. enter the backend queue with the expected collaboration revision;
-2. execute serially in the browser through the shared candidate/validation boundary;
-3. reconcile atomically into the visible project;
-4. mark the project dirty without saving;
-5. commit canonical snapshot/hash/revision acknowledgement.
-
-Browser-allocated IDs and transaction-local aliases prevent MCP callers from selecting
-durable ID formats. GUI-originated design changes publish snapshots into the same
-revision stream.
+Authoring commands currently enter the backend queue with an expected collaboration
+revision, execute serially through the browser command service, reconcile into the
+visible project, mark it dirty, and acknowledge snapshot/hash/revision. GUI-originated
+changes publish into the same revision stream.
 
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
-unclassified deep-watch synchronization fallback. The shared-handler requirement for
-new MCP operations is specified by SUB-003/CMP-002.
+unclassified deep-watch synchronization fallback.
 
-## Lifecycle and reads
+## Approved readback recovery
 
-Lifecycle mutations currently relay through the existing browser simulation controller,
-although direct Run bypasses part of the GUI capability/readiness path described in
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-Catalog reads and simulation-result reads do not mutate the design; simulation reads use
-backend services and verify collaboration context around the read.
+Current v1 operation IDs and successful-result cache are implementation debt. Release
+2.0 targets:
 
-## Delivery failures
+1. stale or pre-delivery-failed work does not mutate;
+2. accepted design work advances the collaboration revision exactly once;
+3. the transport never automatically replays an uncertain mutation;
+4. after reply loss, the caller reads canonical design revision/hash or lifecycle state;
+5. rebind/restart begins from visible current state and accepts only fresh work.
 
-The required pre-delivery, post-delivery, rebind, and restart outcomes are specified by
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-Current code can cancel selected pre-delivery cases and desynchronize a binding after
-impossible acknowledgement, but its bounded binding-scoped success cache does not retain
-the required terminal outcomes across rebind. See [tool contract](tool-contract.md) for
-the complete current delta.
+This target is planned and must not be described as current behavior until contract v2,
+hub, browser bridge, sidecar, and fault-injection evidence land together.
 
 ## Anchors
 
 - **Browser bridge:** [`gui/src/features/mcp/McpEditorBridge.js`](../../../gui/src/features/mcp/McpEditorBridge.js).
 - **Canonical snapshot:** [`gui/src/features/mcp/canonicalDesign.js`](../../../gui/src/features/mcp/canonicalDesign.js).
 - **Hub:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
-- **Unit evidence:** [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js).
-- **System evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js).
-
-## Unresolved questions
-
-- May the unclassified GUI-change watcher remain a supported fallback, or is it
-  migration debt with a retirement trigger?
-
-Current lease, polling, and queue sizes remain implementation choices; the supported
-session/binding cardinality is defined by SYS-011/SYS-012.
+- **Current unit evidence:** [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js).
+- **Current system evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js).

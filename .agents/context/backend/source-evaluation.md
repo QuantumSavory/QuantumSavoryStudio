@@ -9,9 +9,9 @@
 - **Review when:** Any source-bearing entry point, allowlist, context binding, error
   disclosure rule, or evaluation gate changes.
 
-Normative admission, opt-in, containment, and disclosure behavior is defined by
+Normative admission, opt-in, public-denial, and disclosure behavior is defined by
 [STK-005](../../v-model/01-stakeholder-outcomes.md#stk-005--control-native-source-risk),
-[SYS-009](../../v-model/02-system-requirements/operations-and-deployment.md#sys-009--default-deny-and-externally-contain-native-source-execution),
+[SYS-009](../../v-model/02-system-requirements/operations-and-deployment.md#sys-009--default-deny-and-locally-restrict-native-source-execution),
 and [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
 This reference records the current evaluator and its gaps.
 
@@ -25,9 +25,9 @@ The restricted language reduces risk but is not a security sandbox: accepted Jul
 executes natively in the server process without memory, operation, or safely
 interruptible in-process time metering.
 
-Both the local and public education profiles may enable the opt-in. A public deployment
-that does so must run the application inside an external container/host sandbox. The
-whitelist is defense in depth and cannot replace that deployment boundary.
+Only local loopback operation may honor the opt-in in the approved target. Public
+operation denies native evaluation rather than treating the allowlist or a deployment
+container as a sufficient sandbox.
 
 Safe non-source paths include ordinary numeric/intrinsic conversion, known predefined
 functions, structured States Zoo recipes, pure script-source validation/emission, and
@@ -106,5 +106,4 @@ in the V-model.
 
 - Status-code uniformity is not required, but every failure still needs a structured
   result recorded in the GUI Log tab.
-- Maintained CI lacks both a real disabled-server action and a public-container
-  external-sandbox action.
+- Maintained CI lacks both a real disabled-server action and a public-mode denial action.

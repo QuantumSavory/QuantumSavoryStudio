@@ -1,7 +1,8 @@
 # Stakeholder Outcomes
 
 These maintainer-confirmed outcomes describe operational value without fixing package or
-file topology.
+file topology. Release 2.0 intentionally retires earlier schema-recovery, destructive
+replacement, operation-ledger, and broad-platform outcomes rather than reusing their IDs.
 
 ## STK-001 — Model quantum networks interactively
 
@@ -34,28 +35,19 @@ file topology.
 
 - **Normative statement:** A local GUI user shall be able to attach one agent for collaborative help while the visible browser design remains authoritative and agent edits remain unsaved until the user saves.
 - **Parents:** None
-- **Acceptance criterion:** In one local browser session, a user initializes collaboration, observes an agent edit immediately, sees the project marked unsaved, resolves stale or uncertain work without duplicate mutation, and stops without an automatic save.
+- **Acceptance criterion:** In one local browser session, a user observes valid agent edits immediately, rejects stale work without mutation, resolves an uncertain reply by inspecting visible current state before issuing fresh work, and stops without an automatic save.
 - **Verification:** ACC-004 (demonstration)
-- **Origin / risk:** Maintainer-confirmed local GUI/MCP relationship; high concurrent-edit/data-loss risk
+- **Origin / risk:** Maintainer-confirmed local GUI/MCP relationship and simplified recovery decision; high concurrent-edit/data-loss risk
 - **Context:** [MCP architecture](../context/mcp/architecture.md)
 
 ## STK-005 — Control native-source risk
 
-- **Normative statement:** An operator shall be able to keep native Julia evaluation disabled by default and explicitly enable only the restricted subset while treating its whitelist as risk reduction rather than a sandbox.
+- **Normative statement:** An operator shall be able to keep native Julia evaluation disabled by default, explicitly enable only the restricted subset for local loopback use, and keep it disabled in public operation.
 - **Parents:** None
-- **Acceptance criterion:** Default operation denies every native-source execution path while structured safe values remain usable; opt-in admits only the restricted language, and an enabled public instance runs inside an external deployment sandbox.
+- **Acceptance criterion:** Missing or false opt-in denies every native-source execution path while structured safe values remain usable; true local opt-in admits only the restricted language; public mode denies execution regardless of the local opt-in.
 - **Verification:** ACC-005 (demonstration)
-- **Origin / risk:** Maintainer interview and restricted-evaluation implementation; critical host-integrity risk
+- **Origin / risk:** Maintainer-approved release-2.0 safety policy; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
-
-## STK-006 — Attempt schema-mismatched projects without a compatibility promise
-
-- **Normative statement:** A GUI user shall receive a clear warning and a best-effort open attempt for a project whose schema marker differs from, is missing from, or is malformed for the current release, without a backward- or forward-compatibility guarantee.
-- **Parents:** None
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed schema markers each produce a warning and proceed through ordinary structural validation toward decode; a version classification alone never hard-rejects the document.
-- **Verification:** ACC-006 (demonstration)
-- **Origin / risk:** Maintainer interview overriding earlier inferred compatibility intent; high user-data risk
-- **Context:** [Project documents](../context/frontend/project-documents.md)
 
 ## STK-007 — Bound inactive simulation retention
 
@@ -70,34 +62,53 @@ file topology.
 
 - **Normative statement:** An operator shall be able to run the primary localhost application and an Internet-reachable educational deployment where an anonymous learner can use the GUI without accounts, authentication, or a server-side saved-project store.
 - **Parents:** None
-- **Acceptance criterion:** Local and public Podman profiles serve the same GUI/backend product; an unauthenticated public browser completes the primary educational GUI flow; named projects persist only in each browser, process restart loses live simulations, and the public profile starts no MCP service.
+- **Acceptance criterion:** Local and public profiles serve the same GUI/backend product; an unauthenticated public browser completes the primary educational GUI flow; named projects persist only in each browser, process restart loses live simulations, and public mode starts neither MCP nor native-source evaluation.
 - **Verification:** ACC-008 (demonstration)
-- **Origin / risk:** Maintainer interview; medium deployment/isolation risk
+- **Origin / risk:** Maintainer-approved release-2.0 deployment boundary; medium deployment/isolation risk
 - **Context:** [Product boundary and deployment](../context/product-boundary-and-deployment.md)
 
-## STK-009 — Use supported desktop environments
+## STK-010 — Open only current-schema project documents
 
-- **Normative statement:** A GUI user shall be able to use WebQuantumSavory from a standards-compliant HTML5/JavaScript desktop browser with a local host on Linux, macOS, or Windows.
+- **Normative statement:** A GUI user shall receive a clear refusal when a project document is not written in the current project schema, without a migration or compatibility promise.
 - **Parents:** None
-- **Acceptance criterion:** The maintained Julia/Node matrix installs and starts on each host family, and the Chromium, Firefox, and WebKit browser builds selected by the committed Playwright lock complete the primary GUI workflow; mobile operation is not required.
-- **Verification:** ACC-009 (demonstration)
-- **Origin / risk:** Maintainer interview; medium portability risk
+- **Acceptance criterion:** A current-schema document opens, while older, newer, negative, missing, non-integer, malformed, or structurally unsupported documents fail with a structured visible reason and are not rewritten or deleted.
+- **Verification:** ACC-010 (demonstration)
+- **Origin / risk:** Maintainer-approved release-2.0 breaking schema policy; high user-data risk
+- **Context:** [Project documents](../context/frontend/project-documents.md)
+
+## STK-011 — Preserve active work during project replacement
+
+- **Normative statement:** A GUI user shall retain the active project unless a requested replacement has been prepared successfully and is ready to become the new active project.
+- **Parents:** None
+- **Acceptance criterion:** Failed, cancelled, incompatible, invalid, or superseded opens/imports/demos/new-project requests leave the active project unchanged; a successful owning request replaces it once.
+- **Verification:** ACC-011 (demonstration)
+- **Origin / risk:** Maintainer-approved release-2.0 candidate-first transition policy; high data-loss/state risk
+- **Context:** [Project documents](../context/frontend/project-documents.md)
+
+## STK-012 — Use the maintained desktop environment
+
+- **Normative statement:** A GUI user shall be able to install and operate WebQuantumSavory on the release-declared Linux desktop and Chromium environment.
+- **Parents:** None
+- **Acceptance criterion:** On Ubuntu 24.04 x86_64 with Julia 1.12.x, Node 24.x, and the release-lock-selected Chromium build, the integrated product installs, starts, and completes the primary model/save/Play workflow; other hosts, browser engines, and mobile are not supported release environments.
+- **Verification:** ACC-012 (demonstration)
+- **Origin / risk:** Maintainer-approved release-2.0 support narrowing; medium portability risk
 - **Context:** [Product boundary and deployment](../context/product-boundary-and-deployment.md)
 
 ## Operational scenarios
 
-- Browser modeling, local persistence, simulation, diagnostics, and source handoff.
-- Explicit one-user/one-agent collaboration on a loopback deployment.
+- Browser modeling, current-schema persistence, simulation, diagnostics, and source handoff.
+- Explicit one-user/one-agent collaboration with revision/readback recovery on loopback.
 - Account-free localhost operation and a stateless public educational GUI.
-- Default-denied restricted source execution and bounded simulation retention.
+- Default-denied local restricted-source execution and bounded simulation retention.
 
 ## Explicit exclusions
 
 - The HTTP API is not an independently supported external-client product.
-- MCP is not remote, public, headless, multi-user, or an automatic-save service.
+- MCP is not remote, public, headless, multi-user, an automatic-save service, or an
+  operation-replay journal.
 - Public deployment makes no application-level per-visitor live-state isolation or
   multi-instance coordination promise.
 - Project schemas, local-storage keys, and MCP contracts have no cross-release
-  compatibility guarantee.
+  compatibility guarantee or migration adapter.
 - The restricted Julia language is not a security sandbox or metered execution service.
-- Mobile browsers are unsupported.
+- macOS, Windows, Firefox, WebKit, and mobile are not supported release environments.

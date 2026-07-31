@@ -1,15 +1,15 @@
 # Acceptance Actions
 
 Repository maintainers are the acceptance authority. These demonstrations remain
-planned until a durable acceptance record exists.
+planned until a durable release-2.0 acceptance record exists.
 
 ## ACC-001 — Validate interactive network modeling
 
 - **Covers:** STK-001
 - **Method:** demonstration
-- **Procedure:** On a clean supported local installation, create a discriminating network in the browser, save it, close/reopen it in the same release, and compare documented design semantics.
-- **Environment / configuration:** CI-selected Julia/Node versions on one supported desktop host/browser
-- **Pass criterion:** Nodes, directed endpoint roles, slots, protocols, representations, links, descriptions, and annotations retain their documented values in browser-local storage without an account or server project copy.
+- **Procedure:** On a prepared supported local installation, create a discriminating network in the browser, save it, close/reopen it in the same release, and compare documented design semantics.
+- **Environment / configuration:** Supported release environment
+- **Pass criterion:** Nodes, directed endpoint roles, slots, protocols, representations, links, descriptions, and annotations retain their documented values in browser-local storage.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Unit/browser artifacts cover portions, but no maintainer acceptance record covers the complete semantic fixture.
@@ -30,7 +30,7 @@ planned until a durable acceptance record exists.
 - **Covers:** STK-003
 - **Method:** demonstration
 - **Procedure:** Export a representative supported visual project, compare selected GUI semantics with the source, review omission help, run its default path locally, then make and run one edit.
-- **Environment / configuration:** CI-selected Julia environment outside the web server
+- **Environment / configuration:** Supported Julia environment outside the web server
 - **Pass criterion:** The file is readable, independently editable, faithful for every selected supported feature, executable without WebQuantumSavory, and explicit in help about every selected omission/simplification.
 - **Status:** planned
 - **Evidence:** None
@@ -40,34 +40,23 @@ planned until a durable acceptance record exists.
 
 - **Covers:** STK-004
 - **Method:** demonstration
-- **Procedure:** Enable local collaboration, bind one browser/client, apply GUI and agent edits, retry an operation, provoke stale/conflicting/uncertain work, run through Play, read both result formats, inspect unsaved state, and stop.
+- **Procedure:** Enable local collaboration, bind one browser/client, apply GUI and agent edits, provoke stale revision and a lost reply, inspect visible current state, issue only fresh work, run through Play, read both result formats, inspect unsaved state, and stop.
 - **Environment / configuration:** Loopback browser/backend/sidecar with one supported MCP client
-- **Pass criterion:** Browser state remains authoritative; valid edits are visible/unsaved; exact retry does not reapply; conflict and uncertainty do not mutate/replay; Run follows GUI readiness; HTML/PNG read; Stop saves nothing automatically.
+- **Pass criterion:** Browser state remains authoritative; valid edits are visible/unsaved; stale work does not mutate; uncertain work is resolved by readback without automatic replay; Run follows GUI readiness; HTML/PNG read; Stop saves nothing automatically.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Existing E2E covers a successful subset but not the confirmed operation ledger, direct-Run parity, representation, or uncertainty cases.
+- **Nonconformance:** Existing E2E covers a successful subset but not the release-2.0 readback recovery, direct-Run parity, or complete representation cases.
 
-## ACC-005 — Validate operator control and containment of source execution
+## ACC-005 — Validate operator control of source execution
 
 - **Covers:** STK-005
 - **Method:** demonstration
-- **Procedure:** Run local and public-style profiles with the opt-in absent and true, exercise source and safe structured paths, inspect full diagnostics, and probe the external public sandbox boundary.
-- **Environment / configuration:** Local host plus externally sandboxed public Podman deployment
-- **Pass criterion:** Default mode executes no source canary and retains safe paths; enabled mode admits only the restricted subset; backend-produced diagnostics remain complete in both profiles; a public canary cannot cross the external sandbox boundary.
+- **Procedure:** Run local mode with the opt-in missing, false, and true, exercise source and safe structured paths, then attempt the same source canaries in public mode.
+- **Environment / configuration:** Local loopback and public deployment profiles
+- **Pass criterion:** Missing/false local mode executes no source canary and retains safe paths; true local mode admits only the restricted subset; public mode executes no source canary regardless of the local opt-in.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Component tests cover gate/guard portions, but absent `dev`/`test` overrides enable evaluation, the complex-parameter fallback is unguarded, no public sandbox artifact exists, and production redacts evaluation internals.
-
-## ACC-006 — Validate warning and best-effort project recovery
-
-- **Covers:** STK-006
-- **Method:** demonstration
-- **Procedure:** With a populated active project, start imports for usable and unusable documents carrying older, newer, negative, missing, non-integer, and malformed schema markers.
-- **Environment / configuration:** Supported desktop browser with a user-visible warning observer and Tools Log
-- **Pass criterion:** Every marker class warns and proceeds through ordinary structural validation rather than hard rejection; usable content reaches decode and opens; structurally unusable content logs a structured failure; the prior active session is discarded once each import starts.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current code/tests reject future versions and preserve the active project on preflight failure.
+- **Nonconformance:** Component tests cover gate/guard portions, but absent `dev`/`test` overrides currently enable evaluation, the complex-parameter fallback is unguarded, and no public-profile demonstration exists.
 
 ## ACC-007 — Validate bounded and failure-aware service operation
 
@@ -84,20 +73,42 @@ planned until a durable acceptance record exists.
 
 - **Covers:** STK-008
 - **Method:** demonstration
-- **Procedure:** Start the localhost profile and a public Podman profile, complete the primary educational GUI flow anonymously, save projects in two browser profiles, create live simulations, restart the servers, and inspect services and persistence.
-- **Environment / configuration:** Local host and Internet-reachable Podman test deployment
-- **Pass criterion:** Both profiles require no account; each browser owns only its local saved projects; backend restart removes live simulations; no server project database appears; public mode starts no MCP service.
+- **Procedure:** Start local and public profiles, complete the primary educational GUI flow anonymously, save projects in two browser profiles, create live simulations, restart the servers, and inspect services and persistence.
+- **Environment / configuration:** Local host and Internet-reachable test deployment
+- **Pass criterion:** Both profiles require no account; each browser owns only its local saved projects; backend restart removes live simulations; no server project database appears; public mode starts neither MCP nor native-source evaluation.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Browser local-storage and process-memory behavior have source evidence, but no Podman definition or deployment demonstration exists.
+- **Nonconformance:** Browser local-storage and process-memory behavior have source evidence, but no maintained public deployment artifact or demonstration exists.
 
-## ACC-009 — Validate supported desktop environments
+## ACC-010 — Validate strict current-schema project admission
 
-- **Covers:** STK-009
+- **Covers:** STK-010
 - **Method:** demonstration
-- **Procedure:** Install/start the local application on each host family and complete the primary modeling/Play/save workflow with every browser build selected by the committed Playwright lock.
-- **Environment / configuration:** Linux, macOS, Windows; CI-selected Julia/Node versions; lock-selected Chromium, Firefox, and WebKit
-- **Pass criterion:** Every host starts the product and every engine completes the workflow without a platform-specific blocker; no mobile run is required.
+- **Procedure:** Open/import current, older, newer, negative, missing, non-integer, malformed, and unsupported-shape documents while preserving copies of every input.
+- **Environment / configuration:** Supported desktop browser with warning/error observer and Tools Log
+- **Pass criterion:** The current-schema document opens; every other class fails with a structured visible reason; no rejected document is rewritten or deleted.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Maintained CI currently exercises only Ubuntu and Chromium.
+- **Nonconformance:** Current source uses schema version 1, accepts several noncurrent classes, and has no release-2.0 strict-schema demonstration.
+
+## ACC-011 — Validate candidate-first project replacement
+
+- **Covers:** STK-011
+- **Method:** demonstration
+- **Procedure:** From a populated active project, attempt delayed, cancelled, invalid, incompatible, failing, superseded, and successful saved/import/demo/new-project replacements.
+- **Environment / configuration:** Supported desktop browser with visible project/session state
+- **Pass criterion:** Every unsuccessful or superseded candidate preserves active work and persists nothing; the successful latest candidate replaces the active project once.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current source preflights many candidates before teardown, but no one acceptance artifact proves all replacement owners and persistence effects.
+
+## ACC-012 — Validate the supported release environment
+
+- **Covers:** STK-012
+- **Method:** demonstration
+- **Procedure:** Install a prepared release checkout, start the integrated production application, and complete the primary model/save/Play workflow.
+- **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
+- **Pass criterion:** Installation, startup, modeling, save/reopen, and Play complete without an environment-specific blocker.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current CI uses `ubuntu-latest`, exercises Chromium through Vite's development server, and has no maintainer release-acceptance record.

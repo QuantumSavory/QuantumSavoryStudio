@@ -3,14 +3,6 @@
 These records retain only non-obvious invariants needed to implement or verify the
 logical boundaries.
 
-## CMP-001 — Codec warning, version, and identity invariants
-
-- **Normative statement:** Project decoding shall classify every differing/missing/malformed schema marker as a warning, shall not throw solely for version classification, and shall attempt independent nonmutating normalization and endpoint-reference hydration.
-- **Parents:** SUB-002
-- **Acceptance criterion:** Older, newer, negative, missing, non-integer, and malformed markers return warning diagnostics without version-only rejection; documented structurally recoverable inputs enter normalization and hydrate references into independent values without mutating their source.
-- **Verification:** UNITV-001 (test)
-- **Context:** [Project documents](../context/frontend/project-documents.md)
-
 ## CMP-002 — Candidate-based design reconciliation
 
 - **Normative statement:** A design command shall run serially on an isolated candidate, validate before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and preserve retained live object identities during atomic reconciliation.
@@ -48,11 +40,11 @@ logical boundaries.
 
 ## CMP-006 — Restricted-source admission and evaluation invariant
 
-- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the environment gate.
+- **Normative statement:** Every native evaluation path shall apply one identifier allowlist and explicit forbidden-head guard to parsed source before any lowering or evaluation, add only server-owned placement bindings, evaluate in a fresh module, and remain behind the local environment gate.
 - **Parents:** SUB-010
-- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the gate and guard; permitted forms and placement names work; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; numeric type/range checks remain enforced.
+- **Acceptance criterion:** Static inventory and adversarial tests show every execution path reaches the local gate and guard; permitted forms and placement names work locally; forbidden heads, identifiers, property/module access, and capability canaries fail before evaluation; public mode and numeric type/range checks remain enforced.
 - **Verification:** UNITV-006 (test), UNITV-013 (inspection)
-- **Origin / risk:** Restricted allowlist/evaluator design and tests; critical host-integrity risk
+- **Origin / risk:** Restricted allowlist/evaluator design and approved public-deny policy; critical host-integrity risk
 - **Context:** [Restricted source evaluation](../context/backend/source-evaluation.md)
 
 ## CMP-007 — Deterministic script binding and imports
@@ -64,14 +56,6 @@ logical boundaries.
 - **Origin / risk:** Import registry and export tests; medium reproducibility risk
 - **Context:** [Script export](../context/backend/script-export.md)
 
-## CMP-008 — Session operation-ledger and unknown-outcome invariants
-
-- **Normative statement:** One MCP transport session shall retain every claimed operation ID with its tool, normalized arguments, and terminal success/error/unknown outcome until session end, without eviction or clearing on browser rebind.
-- **Parents:** SUB-012
-- **Acceptance criterion:** Exact concurrent/later replay returns the original outcome without delivery; different tool/arguments returns nonretryable `OPERATION_ID_CONFLICT` without mutation; more than 256 IDs and browser rebind retain all entries; `OUTCOME_UNKNOWN` remains nonreplayable; transport restart creates a fresh namespace.
-- **Verification:** UNITV-008 (test), UNITV-014 (test)
-- **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
-
 ## CMP-009 — Single-session transport and safe operational logging
 
 - **Normative statement:** The sidecar transport shall accept one initialized MCP session until restart, reject a second session, release waiters on close, and prevent client log-level requests from exposing raw transport transcripts or replacing the safe process logger.
@@ -80,14 +64,6 @@ logical boundaries.
 - **Verification:** UNITV-009 (test)
 - **Origin / risk:** Pinned dependency adapter and sidecar tests; high local-secret risk
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
-
-## CMP-010 — Destructive project-session transition
-
-- **Normative statement:** A project replacement shall invalidate the old transition generation, tear down all active-session owners, publish an empty graph/name/selection before awaiting candidate work, and never restore the old session after candidate cancel or failure.
-- **Parents:** SUB-014
-- **Acceptance criterion:** Every replacement entry point observes empty active state during delayed fetch/preflight/decode; a superseded completion cannot displace the latest result; cancellation or failure of the latest transition leaves empty state, and each failure appends at least one structured Tools Log record.
-- **Verification:** UNITV-015 (test)
-- **Context:** [Project documents](../context/frontend/project-documents.md)
 
 ## CMP-011 — Shared GUI/MCP Play readiness
 
@@ -101,7 +77,7 @@ logical boundaries.
 
 - **Normative statement:** MCP metadata shall mark only intrinsically repeat-safe tools with `idempotentHint`, and every successful slot/protocol result shall provide URI-safe, readable, nonempty HTML and PNG resources with structured malformed/not-found failures.
 - **Parents:** SUB-013
-- **Acceptance criterion:** Registry inspection rejects mutation/lifecycle idempotence based only on replay caching; opaque IDs round-trip through resource URIs; every successful result reads both MIME types; unavailable or malformed requests return stable structured errors.
+- **Acceptance criterion:** Registry inspection rejects mutation/lifecycle idempotence claims; opaque IDs round-trip through resource URIs; every successful result reads both MIME types; unavailable or malformed requests return stable structured errors.
 - **Verification:** UNITV-017 (test)
 - **Context:** [MCP tool contract](../context/mcp/tool-contract.md)
 
@@ -112,3 +88,30 @@ logical boundaries.
 - **Acceptance criterion:** Discriminating validation, policy, missing, cleanup, and unexpected envelopes with nested canary fields produce Log records with equal transmitted values and no message-only collapse or silent fallback.
 - **Verification:** UNITV-018 (test)
 - **Context:** [Simulation client](../context/frontend/simulation-client.md)
+
+## CMP-014 — Strict project-codec admission
+
+- **Normative statement:** The project codec shall require integer schema version 2 and the canonical durable field set before normalization or hydration, then clone and hydrate admitted values without mutating the source.
+- **Parents:** SUB-015
+- **Acceptance criterion:** Version-2 canonical fixtures decode independently; older, newer, negative, missing, non-integer, malformed, and unsupported-field fixtures return stable structured errors before decode side effects; encoding always emits version 2.
+- **Verification:** UNITV-019 (test)
+- **Origin / risk:** Maintainer-approved release-2.0 schema invariant; high compatibility/data-loss risk
+- **Context:** [Project documents](../context/frontend/project-documents.md)
+
+## CMP-015 — Candidate-first project-session transaction
+
+- **Normative statement:** A project replacement shall prepare a side-effect-free candidate under one transition generation, recheck ownership, and commit teardown, persistence, and installation as one owning transition without restoring prior state.
+- **Parents:** SUB-016
+- **Acceptance criterion:** Delayed fetch/preflight/decode observes the old active session; failure/cancellation preserves it; stale completion has no effect; a successful owning candidate clears old session owners, persists where applicable, and becomes active exactly once.
+- **Verification:** UNITV-020 (test)
+- **Origin / risk:** Maintainer-approved release-2.0 candidate-first invariant; high data-loss/state risk
+- **Context:** [Project documents](../context/frontend/project-documents.md)
+
+## CMP-016 — Revision-guarded mutation and readback recovery
+
+- **Normative statement:** The collaboration path shall serialize design mutations against the caller's expected revision, acknowledge one resulting revision/hash, never automatically replay an uncertain mutation, and require state readback before fresh work.
+- **Parents:** SUB-012
+- **Acceptance criterion:** Stale or pre-delivery-failed work does not mutate; accepted work advances revision once; lost acknowledgement is distinguishable by later design or lifecycle readback; rebind/restart starts from current visible state without replay-cache or operation-ledger dependence.
+- **Verification:** UNITV-021 (test)
+- **Origin / risk:** Maintainer-approved release-2.0 simplified recovery invariant; high duplicate-mutation risk
+- **Context:** [Browser collaboration](../context/mcp/browser-collaboration.md)

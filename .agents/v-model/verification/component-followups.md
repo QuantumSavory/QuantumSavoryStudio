@@ -1,7 +1,7 @@
 # Component Verification Follow-ups
 
-These planned actions cover discriminating gaps and confirmed behavior not encoded by
-the current component suites.
+These planned actions cover discriminating gaps and approved release-2.0 behavior not
+encoded by the current component suites.
 
 ## UNITV-010 — Verify reordered-node runtime/export mapping
 
@@ -40,34 +40,12 @@ the current component suites.
 
 - **Covers:** CMP-006
 - **Method:** inspection
-- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value through the environment gate, parser, allowlist guard, and server-owned context.
+- **Procedure:** Inventory native evaluation sites and trace every user-controlled source value through the local environment gate, parser, allowlist guard, server-owned context, and public-mode denial.
 - **Environment / configuration:** Pinned source with a durable evaluator inventory
-- **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context.
+- **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context; public mode cannot enable evaluation.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** No durable inventory covers the guarded paths in `types.jl` and `Sandbox.jl`; the complex-parameter fallback in `parser.jl` is gated but unguarded.
-
-## UNITV-014 — Verify hash-only acknowledgement uncertainty
-
-- **Covers:** CMP-008
-- **Method:** test
-- **Procedure:** Acknowledge expected revision/operation ID with only the wrong design hash and then retry that operation after browser rebind.
-- **Environment / configuration:** Julia collaboration hub and browser acknowledgement fixture
-- **Pass criterion:** The hub records `OUTCOME_UNKNOWN`, locks edits, retains that terminal outcome through rebind, and never redelivers the operation.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current hash-mismatch fixture is absent, and unknown outcomes are not retained in the operation cache.
-
-## UNITV-015 — Verify destructive project-session failure
-
-- **Covers:** CMP-010
-- **Method:** test
-- **Procedure:** From a populated session, start every replacement class with delayed and failing fetch/preflight/decode plus a superseding transition.
-- **Environment / configuration:** Node 24 Vitest/jsdom project-session harness
-- **Pass criterion:** Active graph/name/selection/session owners clear before awaits; stale candidates cannot displace the latest result; cancellation or failure of the latest transition remains empty, and each failure logs at least one structured error.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current tests require failed preflight to preserve the active project.
+- **Nonconformance:** No durable inventory covers the guarded paths in `types.jl` and `Sandbox.jl`; the complex-parameter fallback in `parser.jl` is gated but unguarded; public denial is absent.
 
 ## UNITV-016 — Verify shared GUI/MCP Play readiness
 
@@ -96,8 +74,41 @@ the current component suites.
 - **Covers:** CMP-013
 - **Method:** test
 - **Procedure:** Feed validation, policy, missing, cleanup, and unexpected envelopes with distinct nested canaries through JSON reader, API methods, controllers, and log normalization.
-- **Environment / configuration:** Node 24 Vitest/jsdom frontend utilities and composables
+- **Environment / configuration:** Node Vitest/jsdom frontend utilities and composables
 - **Pass criterion:** Code/classification, message, status, details, and diagnostic values reach at least one Log record unchanged; no envelope is deployment-redacted or becomes message-only, `undefined`, or a fallback success.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current shared JSON reader throws a message-only `Error`, and several legacy calls swallow or replace failures.
+
+## UNITV-019 — Verify strict project-codec admission
+
+- **Covers:** CMP-014
+- **Method:** test
+- **Procedure:** Encode/decode version-2 canonical, older, newer, negative, missing, non-integer, malformed, unsupported-field, hydration, cloning, and source-nonmutation fixtures.
+- **Environment / configuration:** Node Vitest/jsdom
+- **Pass criterion:** Encoding emits version 2; only canonical version-2 input reaches normalization/hydration; every other class returns stable expected/actual/path diagnostics before side effects; admitted output is independent.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current codec emits version 1, coerces several markers, preserves additive fields, and explicitly rejects only future versions.
+
+## UNITV-020 — Verify candidate-first project-session transaction
+
+- **Covers:** CMP-015
+- **Method:** test
+- **Procedure:** From a populated session, delay and fail every candidate phase for each replacement class, inject cancellation and supersession, and observe storage plus active owners.
+- **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
+- **Pass criterion:** Old active state remains throughout candidate preparation; rejected/stale candidates write nothing; one latest successful candidate performs teardown, persistence, and installation exactly once.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current tests preserve active state after selected preflight failure but candidate preparation, storage, and commit are not one transaction.
+
+## UNITV-021 — Verify revision-guarded readback recovery
+
+- **Covers:** CMP-016
+- **Method:** test
+- **Procedure:** Exercise stale revision, accepted mutation, pre-delivery failure, post-commit reply loss, lifecycle reply loss, rebind, restart, and absence of replay-cache state.
+- **Environment / configuration:** Collaboration hub/browser acknowledgement fixture with deterministic faults
+- **Pass criterion:** Stale/pre-delivery work does not mutate; accepted design work advances once; no uncertain work replays automatically; readback exposes current design/lifecycle state; rebind/restart accepts only fresh work without an operation ledger.
+- **Status:** planned
+- **Evidence:** None
+- **Nonconformance:** Current contract/hub require operation IDs and maintain a bounded binding-scoped successful-result cache.
