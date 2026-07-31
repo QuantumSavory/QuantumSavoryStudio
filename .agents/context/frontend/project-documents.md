@@ -34,9 +34,10 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
 The codec emits explicit declared-field projections and does not preserve undeclared
-additive fields. The schema's recursive, untagged `Any` parameter value is the named
-extension point for simulator-owned opaque data; objects with a `kind` discriminator
-remain governed by closed tagged-value definitions.
+additive fields. The schema names two extension points: recursive, untagged `Any`
+parameter values for simulator-owned opaque data, and the numeric parameter map owned
+by a selected StatesZoo state family. Objects with a `kind` discriminator remain
+governed by closed tagged-value definitions.
 
 `contracts/project/v2.schema.json` is the sole canonical durable field authority. The
 co-shipped JSON Schema closes every application-owned object boundary with
