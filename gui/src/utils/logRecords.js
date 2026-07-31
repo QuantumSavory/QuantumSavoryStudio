@@ -221,28 +221,39 @@ export function createAppLogRecord({
 export function backendLogEventToAppLog(event) {
   assertBackendLogEvent(event)
   if (event.severity === 'panic') {
-    return createAppLogRecord({
+    return {
       id: event.id,
       timestamp: event.timestamp,
-      level: event.severity,
+      level: 'panic',
+      source: event.source,
+      subsystem: null,
+      group: null,
       message: event.summary,
-      producer: event.source,
-      raw: event,
+      details: {},
       fullMessage: event.message,
       exceptionType: event.exception_type,
       stacktrace: event.stacktrace,
-    })
+      count: 1,
+      raw: event,
+    }
   }
-  return createAppLogRecord({
+  return {
     id: event.id,
     timestamp: event.timestamp,
     level: event.severity,
+    source: event.source,
+    subsystem: null,
+    group: event.source === 'Simulator'
+      ? normalizeLogGroup(event.details.group)
+      : null,
     message: event.message,
-    producer: event.source,
     details: event.details,
-    raw: event,
     fullMessage: event.message,
-  })
+    exceptionType: null,
+    stacktrace: null,
+    count: 1,
+    raw: event,
+  }
 }
 
 export function serializeLogValue(value) {

@@ -40,6 +40,20 @@ function backendPanic(overrides = {}) {
   }
 }
 
+function withoutKey(value, key) {
+  const copy = { ...value }
+  delete copy[key]
+  return copy
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(deepFreeze)
+    Object.freeze(value)
+  }
+  return value
+}
+
 describe('log record boundaries', () => {
   it('maps explicit app producers without guessing backend aliases', () => {
     expect(normalizeLogSource('Map')).toEqual({ source: 'App', subsystem: 'Map' })
@@ -97,9 +111,50 @@ describe('log record boundaries', () => {
     }
   })
 
+  it('rejects every omitted field and invalid scalar or details type', () => {
+    for (const key of Object.keys(backendEvent())) {
+      expect(() => assertBackendLogEvent(withoutKey(backendEvent(), key))).toThrow()
+    }
+    for (const key of Object.keys(backendPanic())) {
+      expect(() => assertBackendLogEvent(withoutKey(backendPanic(), key))).toThrow()
+    }
+
+    for (const invalid of [
+      backendEvent({ id: 1 }),
+      backendEvent({ id: '' }),
+      backendEvent({ timestamp: null }),
+      backendEvent({ timestamp: '' }),
+      backendEvent({ source: false }),
+      backendEvent({ source: '' }),
+      backendEvent({ severity: 'panic' }),
+      backendEvent({ severity: 'warn' }),
+      backendEvent({ severity: 1 }),
+      backendEvent({ message: {} }),
+      backendEvent({ details: null }),
+      backendEvent({ details: [] }),
+      backendPanic({ id: 1 }),
+      backendPanic({ timestamp: null }),
+      backendPanic({ source: '' }),
+      backendPanic({ severity: 'error' }),
+      backendPanic({ summary: null }),
+      backendPanic({ exception_type: 1 }),
+      backendPanic({ message: {} }),
+      backendPanic({ stacktrace: [] }),
+    ]) {
+      expect(() => assertBackendLogEvent(invalid)).toThrow(/backend|canonical/)
+    }
+  })
+
   it('requires an exact response envelope and matching count', () => {
     const response = { success: true, logs: [backendEvent(), backendPanic()], count: 2 }
     expect(assertBackendLogResponse(response)).toBe(response)
+    for (const key of Object.keys(response)) {
+      expect(() => assertBackendLogResponse(withoutKey(response, key))).toThrow()
+    }
+    expect(() => assertBackendLogResponse({ ...response, success: false })).toThrow(/invalid/)
+    expect(() => assertBackendLogResponse({ ...response, logs: {} })).toThrow(/invalid/)
+    expect(() => assertBackendLogResponse({ ...response, count: 2.5 })).toThrow(/count/)
+    expect(() => assertBackendLogResponse({ ...response, count: -1 })).toThrow(/count/)
     expect(() => assertBackendLogResponse({ ...response, count: 1 })).toThrow(/count/)
     expect(() => assertBackendLogResponse({ ...response, extra: true })).toThrow(/exactly/)
     expect(() => assertBackendLogResponse({ ...response, logs: [{ ...backendEvent(), msg: 'x' }] }))
@@ -108,14 +163,16 @@ describe('log record boundaries', () => {
 
   it('owns the sole backend-event to app-view conversion', () => {
     const ordinary = backendLogEventToAppLog(backendEvent({
+      source: 'Protocol Worker',
       details: { group: 'protocol', event: 'pair_entangled' }
     }))
     const panic = backendLogEventToAppLog(backendPanic())
 
     expect(ordinary).toMatchObject({
       level: 'debug',
-      source: 'Simulator',
-      group: 'protocol',
+      source: 'Protocol Worker',
+      subsystem: null,
+      group: null,
       message: 'Entangled a pair',
       details: { group: 'protocol', event: 'pair_entangled' },
     })
@@ -126,6 +183,23 @@ describe('log record boundaries', () => {
       fullMessage: 'index [100]',
       exceptionType: 'BoundsError',
       stacktrace: 'frame one\nframe two',
+    })
+  })
+
+  it('converts frozen transport records without mutating them', () => {
+    const event = deepFreeze(backendEvent({
+      details: { group: 'protocol', nested: { attempt: 2 } }
+    }))
+    const before = JSON.stringify(event)
+
+    const converted = backendLogEventToAppLog(event)
+    const normalized = normalizeLogRecord(converted)
+
+    expect(JSON.stringify(event)).toBe(before)
+    expect(normalized).toMatchObject({
+      source: 'Simulator',
+      group: 'protocol',
+      eventData: { nested: { attempt: 2 } },
     })
   })
 })
