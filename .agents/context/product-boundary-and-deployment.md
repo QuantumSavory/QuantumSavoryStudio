@@ -64,12 +64,12 @@ declared.
 ## Persistence and compatibility
 
 Named projects are stored only in browser `localStorage`; live simulations are
-process-local. Release 2.0 targets the closed co-shipped
+process-local. The frontend writes and strictly admits the closed co-shipped
 `contracts/project/v2.schema.json` with no migration or best-effort compatibility path.
 Rejected documents remain untouched; failed bootstrap automatic-open may clear only its
 stale recent-project navigation pointer, and active-project replacement commits only
-after a valid candidate is ready. Current source still writes schema version 1 and does
-not implement the complete approved transaction.
+after a valid candidate is ready. Strict schema admission is implemented; the complete
+candidate-first replacement transaction is not.
 
 MCP contract compatibility is likewise not promised across releases. The approved
 contract-v2 readback recovery is planned and differs from the current v1 operation-ID

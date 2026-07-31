@@ -1,7 +1,7 @@
 # Operational System Verification Actions
 
 These actions cover source risk, retention, MCP, deployment, candidate-first replacement,
-and supported environments. No product suite was run for this documentation baseline.
+and supported environments. The strict-schema slice did not change their status.
 
 ## SYSV-009 — Verify local source gate and public denial
 

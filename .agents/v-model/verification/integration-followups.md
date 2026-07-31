@@ -13,10 +13,9 @@
   reaches normalization/hydration; every application-owned object rejects undeclared
   fields unless the schema explicitly names an extension point; every rejection is
   structured, and no source or browser-storage mutation occurs during admission.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current codec emits version 1, coerces several marker classes,
-  preserves additive fields, and lacks the release-2.0 admission boundary.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this integration boundary.
 
 ## INTV-016 — Verify candidate-first active-project transitions
 

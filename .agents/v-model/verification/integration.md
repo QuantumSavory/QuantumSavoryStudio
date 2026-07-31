@@ -20,7 +20,9 @@
 - **Pass criterion:** Fields round-trip, hydration is independent, projections select declared fields, and inputs remain unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
-- **Nonconformance:** Version-1 fixtures do not cover every projection in one case.
+- **Nonconformance:** Current fixtures use schema version 2 and assert the projection
+  clauses separately; no single discriminating fixture covers every projection and
+  source-identity clause together.
 
 ## INTV-003 — Verify shared atomic authoring
 

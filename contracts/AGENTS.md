@@ -20,9 +20,11 @@ prose in `.agents/context/`, not beside a second schema.
 
 ## Contract rules
 
-- `mcp/v1/` remains active until all consumers move together.
-- `project/v2.schema.json` is the project-v2 field authority. Close application-owned
-  objects; name every extension point.
+- `mcp/v1/` remains active until every co-shipped consumer moves together; approved v2
+  requirements alone do not change runtime behavior.
+- `project/v2.schema.json` is the project-document field authority. Compile it as strict
+  JSON Schema 2020-12; close application-owned objects and name each extension point.
+  Change schema, codec, fixtures, and admission tests together; add no pre-v2 migration.
 - `http/openapi.json` is the OpenAPI 3.1 route authority. Every operation has one stable
   ID, exposure, exact request/success schema, and canonical default error response.
 - Derive backend paths, frontend operation maps, and sidecar bridge paths from OpenAPI;

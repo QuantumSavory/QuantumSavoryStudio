@@ -16,8 +16,8 @@ Normative release-2.0 behavior is defined by
 [CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
 and
 [CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
-Those records are approved targets; current source remains nonconformant where stated
-below.
+The strict-schema chain through CMP-014 is implemented. The candidate-first transaction
+in CMP-015 remains an approved target and a current conformance gap.
 
 ## Canonical shapes
 
@@ -33,23 +33,20 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
-Current normalization can preserve unrecognized additive fields, including selected
-preview/error data.
+The codec emits explicit declared-field projections and does not preserve undeclared
+additive fields. The schema's recursive, untagged `Any` parameter value is the named
+extension point for simulator-owned opaque data; objects with a `kind` discriminator
+remain governed by closed tagged-value definitions.
 
-Release 2.0 instead uses `contracts/project/v2.schema.json` as the sole canonical durable
-field authority. That planned co-shipped JSON Schema is closed: every
-application-owned object boundary uses `additionalProperties: false`, and no nested map
-is extensible unless the schema explicitly names that extension point. Until the contract
-lands, version 2 remains planned; do not infer its field set from the permissive version-1
-normalizer.
+`contracts/project/v2.schema.json` is the sole canonical durable field authority. The
+co-shipped JSON Schema closes every application-owned object boundary with
+`additionalProperties: false`; no nested map is extensible unless the schema explicitly
+names that extension point.
 
-## Current source versus approved schema target
+## Current strict-schema behavior
 
-Current source writes schema version 1. It coerces missing/non-integer markers to schema
-0, accepts some older/negative inputs, and rejects future integers. Import also performs
-a software-major confirmation independently of schema classification.
-
-Release 2.0 has no migration or best-effort version path:
+The frontend imports the schema into a strict Ajv 2020 validator. It has no migration or
+best-effort version path:
 
 - encoding writes version 2;
 - admission requires exact integer version 2 and the canonical durable shape;
@@ -58,13 +55,19 @@ Release 2.0 has no migration or best-effort version path:
 - rejection returns structured expected/actual/path diagnostics and never rewrites or
   deletes the source document.
 
-These are planned requirements, not claims about the current codec.
+Import conflict lookup and project-session platform/version confirmation happen only
+after admission. The software-major confirmation remains distinct from schema
+classification: a schema-valid document can still require confirmation when its
+recorded software major differs.
 
 ## Browser persistence
 
 Named projects currently use browser `localStorage`, including a metadata index and
 recent-project pointer. There is no server-side saved-project store. Exact storage keys
 remain implementation details.
+
+The metadata index is maintained by current save/open/delete operations. Startup does
+not scan old project documents or rebuild the index from legacy fields.
 
 Release-2.0 failure handling preserves incompatible stored documents. An automatic-open
 failure during bootstrap may clear only the stale recent-project navigation pointer
@@ -73,10 +76,10 @@ pointer, and none may delete or rewrite a stored project document.
 
 ## Current transitions versus approved transaction
 
-Current saved/import/demo flows often fetch, preflight, and decode before active-session
-teardown, so selected failures preserve the active project. Candidate creation and
-storage, however, are not one side-effect-free prepare/atomic-commit transaction across
-all replacement entry points.
+Saved/import/demo flows decode before active-session teardown, reject noncurrent
+documents before session or storage effects, and generation-guard overlapping opens.
+Candidate creation, persistence, teardown, and installation are not yet one
+side-effect-free prepare/atomic-commit transaction across every replacement entry point.
 
 The approved target prepares an isolated candidate under a transition generation,
 rechecks ownership, and only then commits teardown, persistence, and installation.
@@ -97,4 +100,8 @@ derived attachment edges/bounds remain presentation data.
 - **Transitions:** [`gui/src/composables/useProjectSession.js`](../../../gui/src/composables/useProjectSession.js).
 - **Import preflight:** [`gui/src/composables/useImportExport.js`](../../../gui/src/composables/useImportExport.js).
 - **Current tests:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
-  and [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js).
+  [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js),
+  [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js),
+  and focused browser flows in
+  [`gui/tests/e2e/description.spec.js`](../../../gui/tests/e2e/description.spec.js) and
+  [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js).

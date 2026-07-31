@@ -1,7 +1,6 @@
 # Component Verification Follow-ups
 
-These planned actions cover discriminating gaps and approved release-2.0 behavior not
-encoded by the current component suites.
+These actions cover discriminating gaps and approved release-2.0 behavior.
 
 ## UNITV-010 — Verify reordered-node runtime/export mapping
 
@@ -89,9 +88,9 @@ encoded by the current component suites.
 - **Procedure:** Validate and encode/decode schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field fixtures at every application-owned object boundary, plus hydration, cloning, and source-nonmutation fixtures.
 - **Environment / configuration:** Node Vitest/jsdom with the co-shipped `contracts/project/v2.schema.json`
 - **Pass criterion:** Encoding emits schema-valid version 2; every application-owned object is closed with no implicit extension point; only schema-valid input reaches normalization/hydration, every other class returns stable expected/actual/path diagnostics before side effects, and admitted output is independent.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current codec emits version 1, coerces several markers, preserves additive fields, and explicitly rejects only future versions.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this component boundary.
 
 ## UNITV-020 — Verify candidate-first project-session transaction
 

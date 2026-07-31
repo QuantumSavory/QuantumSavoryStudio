@@ -1,8 +1,8 @@
 # Verification and Acceptance
 
-No action is `passing`: the baseline mini-V inspected durable artifacts, and later
-feature work added tests and local executions, but no stable execution record proves a
-complete pass criterion in its named environment.
+The strict project-schema slice has passing component and integration evidence and
+partial browser-system evidence. Other release-2.0 actions retain their recorded
+status; no acceptance demonstration is passing.
 
 ## Action routes
 

@@ -97,7 +97,9 @@ planned until a durable release-2.0 acceptance record exists.
 - **Pass criterion:** The schema-valid document opens; every other class fails with a structured visible reason; no rejected document is rewritten or deleted, and no undeclared application-owned field is treated as an implicit extension.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Current source uses schema version 1, accepts several noncurrent classes, and has no release-2.0 strict-schema demonstration.
+- **Nonconformance:** Strict version-2 admission has unit, integration, and focused
+  browser evidence, but no maintainer acceptance record demonstrates every input class,
+  visible reason, and rejected-document preservation outcome.
 
 ## ACC-011 — Validate candidate-first project replacement
 

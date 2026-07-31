@@ -22,6 +22,11 @@ components inherit the narrower `components/AGENTS.md`.
 
 - Route project encoding and projections through `projectCodec`; route active-project
   changes through the project-session owner.
+- Admit raw project documents against `contracts/project/v2.schema.json` before
+  normalization, hydration, conflict lookup, storage, platform fetches, or session
+  effects. Do not add old-schema coercion or migration.
+- Keep durable encoders as explicit declared-field projections; simulator payloads and
+  collaboration snapshots remain separate projections of the admitted model.
 - Route authoring through the shared design-command service and gate lifecycle work on
   the capability model.
 - Preserve durable IDs and retained object identity across graph reconciliation.

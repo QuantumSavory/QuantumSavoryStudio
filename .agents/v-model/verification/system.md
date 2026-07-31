@@ -1,6 +1,8 @@
 # System Verification Actions
 
-No durable full-system run record accompanies this profile.
+The strict project-schema slice has focused Chromium evidence. No durable complete
+full-system run record accompanies this profile; other actions retain the status and
+gaps recorded below.
 
 ## SYSV-001 — Verify the supported local launcher end to end
 
@@ -24,7 +26,9 @@ No durable full-system run record accompanies this profile.
 - **Pass criterion:** Each edit changes the canonical model once; named save/reopen retains every documented durable field in browser storage; each projection includes exactly its declared subset, excludes every other documented field, and leaves the canonical model unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
-- **Nonconformance:** Existing artifacts target schema version 1; no one system fixture asserts every documented project field or explicitly proves absence of server project writes.
+- **Nonconformance:** Existing version-2 artifacts cover persistence and projections,
+  but no one system fixture asserts every documented project field and explicitly proves
+  absence of server project writes.
 
 ## SYSV-004 — Verify authoritative metadata-driven inputs
 
@@ -88,6 +92,9 @@ No durable full-system run record accompanies this profile.
 - **Procedure:** Import and reopen schema-valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents through the real browser product.
 - **Environment / configuration:** Supported browser with real storage, codec, import/session flow, and Tools Log
 - **Pass criterion:** Documents valid against `contracts/project/v2.schema.json` open; the co-shipped schema closes every application-owned object and names any extension point explicitly; every other class fails before hydration/session/storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current source emits schema version 1, normalizes several noncurrent markers, and lacks the release-2.0 field-set gate and system fixture.
+- **Status:** implemented
+- **Evidence:** [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`gui/tests/e2e/description.spec.js`](../../../gui/tests/e2e/description.spec.js)
+- **Nonconformance:** Focused browser tests prove version-2 save/reopen/import and a
+  selected structured rejection. No one real-browser fixture drives every marker class,
+  malformed shape, and closed application-owned boundary while asserting unchanged
+  input/storage and the Tools Log.

@@ -4,8 +4,9 @@
 - **Conformance status:** incomplete
 - **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
-- **Profile target:** Approved release-2.0 behavior against source at
-  `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56`
+- **Profile target:** Approved release-2.0 behavior; operational/HTTP slice reviewed at
+  `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56` and strict project-schema slice reviewed
+  at `91d620084c08ee836b08120aa9bc3d9e4bea845a`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -13,9 +14,10 @@
 This repository-specific map claims no external framework compliance. Approved
 maintainer decisions define intent; code, tests, public prose, and history supply
 context without overriding it. Canonical OpenAPI, exact non-2xx errors, public-profile
-source denial, and the release support boundary now conform; strict project admission,
-candidate-first replacement, readback recovery, cleanup, and shared Play/resources
-remain incomplete.
+source denial, the release support boundary, and strict project admission now conform.
+Candidate-first replacement, readback recovery, cleanup, and shared Play/resources
+remain incomplete. Strict project admission has passing component and integration
+evidence and partial browser-system evidence.
 
 ## Left-side specification
 
@@ -38,9 +40,10 @@ remain incomplete.
     [current partial suites](verification/component.md);
     [planned follow-ups](verification/component-followups.md)
 
-The baseline came from a documentation-only mini-V. Later feature work added tests and
-local executions, but no stable execution record proves a complete named criterion, so
-actions remain at most `implemented`; none is `passing`.
+The strict-schema mini-V executed the frontend unit/build path and focused serial
+Chromium flows. UNITV-019 and INTV-015 are `passing`; SYSV-018 is `implemented` with an
+exhaustive browser-matrix gap; acceptance remains `planned`. Actions outside this slice
+retain their recorded status and do not become passing from adjacent local runs.
 
 ## Source basis
 
