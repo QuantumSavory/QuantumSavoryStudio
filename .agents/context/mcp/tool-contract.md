@@ -18,23 +18,13 @@ and
 
 ## Current contract
 
-`contracts/mcp/v1/tools.json` is the current metadata/schema registry. The sidecar loads
-it at startup; frontend contract checks and backend dispatch consume the same operation
-names. Version 1 advertises 23 tools across design/catalog reads, authoring, simulation
-lifecycle, and simulation reads.
+`contracts/mcp/v2/tools.json` is the sole metadata/schema registry; no v1 registry,
+adapter, or migration path remains. The sidecar derives its advertised version and tool
+registry from this file. Frontend contract checks and backend dispatch consume the same
+operation names. Version 2 advertises 23 tools across design/catalog reads, authoring,
+simulation lifecycle, and simulation reads.
 
-Current design mutations require `operation_id` and `expected_revision`. The backend
-retains at most 256 successful ID-only results per binding and clears them on
-bind/unbind. Within v1, `simulation_prepare` and `simulation_run` now share the
-browser-owned GUI readiness path and report the prepared design revision. Mutation and
-lifecycle tools still advertise idempotence. Current resource adapters can advertise
-unavailable HTML/PNG content and interpolate opaque IDs without safe encoding.
-
-Those facts describe source at the profile target; they are not the release-2.0 contract.
-
-## Approved release-2.0 target
-
-The co-shipped contract advances to version 2 without a v1 adapter:
+The current recovery rules are:
 
 - design mutations retain `expected_revision` and remove public operation IDs;
 - stale work cannot mutate, accepted work advances revision once, and uncertain
@@ -42,17 +32,34 @@ The co-shipped contract advances to version 2 without a v1 adapter:
 - callers read authoritative design or lifecycle state before issuing fresh work;
 - mutation/lifecycle tools do not claim intrinsic idempotence;
 - Run shares GUI readiness and records the prepared revision;
-- advertised result resources are URI-safe, nonempty, and readable in both declared
-  formats, with structured malformed/not-found errors.
+- only a successful slot/protocol result with valid nonempty HTML and PNG advertises
+  resource links;
+- resource identifiers use strict RFC 3986 unreserved-segment encoding and decode
+  exactly once, so reserved characters, `%`, `+`, and Unicode round-trip without
+  collisions;
+- backend and sidecar trust boundaries independently validate MIME type, base64,
+  nonempty UTF-8 HTML, and the PNG signature.
 
-All frontend, backend, and sidecar consumers must move to v2 atomically before v1 is
-removed. No MCP compatibility is promised across WebQuantumSavory releases.
+Exactly four result templates are advertised: slot HTML/PNG and protocol HTML/PNG.
+Successful slot/protocol tool results contain one text item and two `resource_link`
+items while retaining the same links in `structuredContent`.
+
+Malformed and unavailable resource requests retain stable structured payloads through
+the backend and sidecar adapters. The pinned ModelContextProtocol resource-provider
+handler does not expose that payload as JSON-RPC `error.data`; it emits generic
+`INTERNAL_ERROR` with the serialized payload in `error.message`. Treat full external
+resource-error structure as an upstream conformance gap, not as a reason to patch the
+transport locally.
+
+No MCP compatibility is promised across WebQuantumSavory releases. Make later breaking
+changes atomically across the registry, frontend, backend, sidecar, tests, and V-model.
 
 ## Anchors
 
-- **Current registry:** [`contracts/mcp/v1/tools.json`](../../../contracts/mcp/v1/tools.json).
+- **Current registry:** [`contracts/mcp/v2/tools.json`](../../../contracts/mcp/v2/tools.json).
 - **Sidecar loader/resources:** [`mcp/main.jl`](../../../mcp/main.jl).
 - **Backend dispatch:** [`src/mcp_adapters.jl`](../../../src/mcp_adapters.jl).
+- **Backend resource codec:** [`src/mcp_resources.jl`](../../../src/mcp_resources.jl).
 - **Hub semantics:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
 - **Browser simulation relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js).
 - **Transport evidence:** [`mcp/test/http_integration.jl`](../../../mcp/test/http_integration.jl).

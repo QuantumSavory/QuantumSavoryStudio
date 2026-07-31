@@ -14,7 +14,7 @@ Normative collaboration behavior is defined by
 [SYS-011](../../v-model/02-system-requirements/operations-and-deployment.md#sys-011--gate-local-collaboration-explicitly),
 and
 [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work).
-This explanation records the current process split and the approved recovery direction.
+This explanation records the current process split and recovery boundary.
 
 ## One product, four actors
 
@@ -49,10 +49,11 @@ The sidecar and backend listeners are loopback-only and use an ephemeral capabil
 internal calls. This excludes ordinary remote access, not every local process; it is not
 user authentication or a general sandbox.
 
-Current contract v1 uses operation IDs and a bounded binding-scoped successful-result
-cache. The approved release-2.0 contract replaces replay recovery with expected-revision
-mutation and authoritative design/lifecycle readback after uncertain replies. That target
-is not yet implemented.
+Current contract v2 has no public operation ID, mutation ledger, or successful-result
+cache. Design mutations serialize against `expected_revision`. A write known to have
+failed before browser delivery is retryable; once delivery may have occurred, the
+response is non-retryable and names authoritative `design_get` or `simulation_status`
+readback. Neither the hub nor the sidecar automatically replays uncertain work.
 
 Operational diagnostics redact recognized capabilities, credentials, session IDs,
 binary bodies, and raw transcript fields. This is distinct from ordinary
@@ -60,14 +61,18 @@ simulation/API diagnostics, whose structured details remain observable.
 
 The sidecar's capability-authenticated backend calls are registered by OpenAPI operation
 ID rather than duplicated paths. Exact backend errors, malformed responses, and network
-failures remain structured through tool and resource translation; this does not relax
-the separate operational-secret redaction rules above.
+failures retain distinct structured payloads through the application-owned bridge.
+The pinned MCP provider currently rewrites a resource-provider exception to generic
+JSON-RPC `INTERNAL_ERROR`: the structured payload remains serialized in its message but
+not in `error.data`. This upstream limitation does not affect tool-result errors and
+does not relax the separate operational-secret redaction rules above.
 
 ## Anchors
 
 - **Configuration/supervision:** [`src/mcp_config.jl`](../../../src/mcp_config.jl) and
   [`src/sidecar_supervisor.jl`](../../../src/sidecar_supervisor.jl).
 - **Coordination:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
+- **Backend resources:** [`src/mcp_resources.jl`](../../../src/mcp_resources.jl).
 - **Sidecar:** [`mcp/main.jl`](../../../mcp/main.jl).
 - **Detailed contract:** [MCP tool contract](tool-contract.md).
 - **Browser state flow:** [Browser collaboration](browser-collaboration.md).

@@ -59,8 +59,12 @@ literal endpoint suffixes in sidecar callers.
 The sidecar accepts only exact backend success objects or the canonical non-2xx
 `error.code/message/details` envelope. Network failure, invalid JSON, malformed success,
 and malformed error responses retain distinct classifications and diagnostics.
-Resource failures propagate as structured JSON instead of message-only exceptions;
-best-effort activity reporting warns when delivery fails.
+Resource failures retain structured payloads through the backend bridge and
+`BackendRequestError`. The pinned ModelContextProtocol resource-provider handler then
+maps provider exceptions to generic JSON-RPC `INTERNAL_ERROR`; the serialized payload is
+visible in `error.message`, but `error.data` is unavailable. Do not monkey-patch the
+transport to claim stronger behavior. Best-effort activity reporting warns when
+delivery fails.
 
 ## Change tools or resources
 
@@ -83,11 +87,11 @@ rejection, close/wait signaling, safe log-level behavior, and transcript suppres
 
 ## Recover
 
-Current v1 recovery uses operation IDs and a bounded cache; consult
-[the contract reference](tool-contract.md) before modifying it. The approved v2 flow is
-state readback, not automatic replay: inspect the visible project and simulation state,
-create a fresh binding after restart when needed, read current state, then issue fresh
-work. Never preserve capabilities, session IDs, or raw transport logs in documentation.
+Current v2 recovery is state readback, not automatic replay: after an uncertain design
+write call `design_get`; after uncertain lifecycle work call `simulation_status`.
+Create a fresh binding after restart when needed, read current state, then issue fresh
+work. Consult [the contract reference](tool-contract.md) before modifying this boundary.
+Never preserve capabilities, session IDs, or raw transport logs in documentation.
 
 ## Anchors
 

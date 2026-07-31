@@ -13,7 +13,8 @@ and `../routes.jl`.
 - Open [simulation runtime](../.agents/context/backend/simulation-runtime.md) for state,
   lifecycle, logs, tags, cleanup, or resource changes.
 - Open [browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
-  editor binding, revision acknowledgements, or prepared-lifecycle reporting.
+  editor binding/revision/lifecycle; open [the MCP tool contract](../.agents/context/mcp/tool-contract.md)
+  for backend dispatch, result/resource, or recovery-error changes.
 - Open [source evaluation](../.agents/context/backend/source-evaluation.md) for any
   source-bearing value, validator, lexical context, or evaluation-policy change.
 - Open [metadata](../.agents/context/backend/constructor-and-tag-metadata.md),

@@ -45,10 +45,9 @@ lifecycle state: canonical snapshot, hash, and design revision remain untouched.
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
 unclassified deep-watch synchronization fallback.
 
-## Approved readback recovery
+## Current readback recovery
 
-Current v1 operation IDs and successful-result cache are implementation debt. Release
-2.0 targets:
+Contract v2 and the hub use no public operation IDs, replay cache, or operation ledger:
 
 1. stale or pre-delivery-failed work does not mutate;
 2. accepted design work advances the collaboration revision exactly once;
@@ -56,8 +55,13 @@ Current v1 operation IDs and successful-result cache are implementation debt. Re
 4. after reply loss, the caller reads canonical design revision/hash or lifecycle state;
 5. rebind/restart begins from visible current state and accepts only fresh work.
 
-This target is planned and must not be described as current behavior until contract v2,
-hub, browser bridge, sidecar, and fault-injection evidence land together.
+Revision allocation is monotonic for the lifetime of a hub, including rebinds, so a
+fresh binding cannot accidentally accept a stale revision from an earlier binding. A
+fresh backend process binds the browser's visible document as its new baseline. Current
+component fixtures cover pre-delivery timeout, delivery uncertainty, late
+acknowledgement, lifecycle uncertainty, rebind, fresh-process state, and the absence of
+ledger fields. A deterministic full-stack bridge-reply-loss/sidecar-restart action
+remains an evidence gap.
 
 ## Anchors
 

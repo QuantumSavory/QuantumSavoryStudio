@@ -5,8 +5,8 @@
   persistence, trust boundaries, or supported environments.
 - **Do not open when:** Looking up one route, project field, tool schema, or test command.
 - **Related specification IDs:** STK-001, STK-002, STK-004, STK-005, STK-008, STK-010,
-  STK-011, STK-012, SYS-001, SYS-008, SYS-009, SYS-011, SYS-013, SYS-017, SYS-018,
-  SYS-019
+  STK-011, STK-012, SYS-001, SYS-008, SYS-009, SYS-011, SYS-012, SYS-013, SYS-017,
+  SYS-018, SYS-019
 - **Review when:** Product actors, component roles, deployment profiles, persistence,
   authentication, schema, source policy, or support policy changes.
 
@@ -72,9 +72,11 @@ after a valid owning candidate is ready. Strict schema admission and the candida
 component/integration transaction are implemented; its exhaustive browser-system matrix
 remains incomplete.
 
-MCP contract compatibility is likewise not promised across releases. The approved
-contract-v2 readback recovery is planned and differs from the current v1 operation-ID
-cache.
+MCP contract compatibility is likewise not promised across releases. Contract v2 is the
+sole co-shipped MCP schema: it has no public operation IDs or replay cache and requires
+authoritative design or lifecycle readback after an uncertain write reply. Component
+recovery evidence exists; the consolidated cross-process fault matrix remains
+incomplete.
 
 ## Anchors
 
