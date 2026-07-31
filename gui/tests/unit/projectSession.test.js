@@ -1,6 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, watch } from 'vue'
-import { createEmptyProject, encodeStoredProject } from '../../src/utils/projectCodec'
+import {
+  PROJECT_SCHEMA_VERSION,
+  createEmptyProject,
+  encodeStoredProject,
+} from '../../src/utils/projectCodec'
 import { useProjectSession } from '../../src/composables/useProjectSession'
 
 function createHarness({
@@ -208,6 +212,38 @@ describe('project session', () => {
     expect(harness.calls.reset).not.toHaveBeenCalled()
     expect(harness.calls.closeWindows).not.toHaveBeenCalled()
     expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['open', harness => harness.session.open('B'), true],
+    ['import', (harness, document) => harness.session.importProject(document, 'B'), false],
+    ['demo', (harness, document) => harness.session.openDemo(document), false],
+  ])('rejects a noncurrent document during %s before session or storage effects', async (
+    _operation,
+    run,
+    stored,
+  ) => {
+    const document = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    document.schemaVersion = PROJECT_SCHEMA_VERSION - 1
+    const harness = createHarness({ projects: stored ? { B: document } : {} })
+    const activeProject = harness.projectData.value
+    const activeName = harness.currentProjectName.value
+    const activeSelection = harness.selectedItem.value
+
+    expect(await run(harness, document)).toBe(false)
+
+    expect(harness.projectData.value).toBe(activeProject)
+    expect(harness.currentProjectName.value).toBe(activeName)
+    expect(harness.selectedItem.value).toBe(activeSelection)
+    expect(harness.store.saveProject).not.toHaveBeenCalled()
+    expect(harness.store.openProject).not.toHaveBeenCalled()
+    expect(harness.store.setRecentProjectName).not.toHaveBeenCalled()
+    expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+    expect(harness.calls.reset).not.toHaveBeenCalled()
+    expect(harness.calls.closeWindows).not.toHaveBeenCalled()
+    expect(harness.showError).toHaveBeenCalledWith(
+      expect.stringMatching(/schema validation.*schemaVersion/i),
+    )
   })
 
   it('allows only the newest overlapping open to commit', async () => {

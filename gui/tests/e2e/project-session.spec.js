@@ -30,12 +30,27 @@ async function seedProjects(page, names) {
   await page.addInitScript(projectNames => {
     for (const name of projectNames) {
       localStorage.setItem(`cqn_project_${name}`, JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         name,
         description: '',
+        annotations: [],
         variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
+        simulationConfig: {
+          time: 1,
+          timeStep: 0.1,
+          qubitRepresentation: 'QuantumOpticsRepr',
+          qumodeRepresentation: 'QuantumOpticsRepr'
+        },
+        net: {
+          nodes: [],
+          edges: [],
+          protocols: [],
+          physicalConfig: {
+            refractiveIndex: 1.468,
+            lossDbPerKm: 0.2,
+            nodeTemplate: { slots: [] }
+          }
+        },
         uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
       }))
     }
@@ -107,7 +122,7 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
   await expect(page.locator('.project-name-label')).toHaveText('Project B')
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cqn_project_Project B')))
-  expect(stored).toMatchObject({ schemaVersion: 1, name: 'Project B' })
+  expect(stored).toMatchObject({ schemaVersion: 2, name: 'Project B' })
   expect(stored.net.nodes).toHaveLength(2)
   expect(stored.simulationConfig).toMatchObject({
     qubitRepresentation: 'CliffordRepr',
@@ -194,12 +209,27 @@ test('a late startup restore cannot replace a user-created session', async ({ pa
 
   await page.addInitScript(() => {
     const oldProject = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: 'Old Project',
       description: 'old snapshot',
+      annotations: [],
       variables: [],
-      simulationConfig: { time: 1, timeStep: 0.1 },
-      net: { nodes: [], edges: [], protocols: [] },
+      simulationConfig: {
+        time: 1,
+        timeStep: 0.1,
+        qubitRepresentation: 'QuantumOpticsRepr',
+        qumodeRepresentation: 'QuantumOpticsRepr'
+      },
+      net: {
+        nodes: [],
+        edges: [],
+        protocols: [],
+        physicalConfig: {
+          refractiveIndex: 1.468,
+          lossDbPerKm: 0.2,
+          nodeTemplate: { slots: [] }
+        }
+      },
       uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
     }
     localStorage.setItem('cqn_project_Old Project', JSON.stringify(oldProject))

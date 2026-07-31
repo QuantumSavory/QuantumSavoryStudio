@@ -3,7 +3,10 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { McpEditorBridge } from '../../src/features/mcp/McpEditorBridge'
 import Variable, { STATES_ZOO_VALUE_KIND } from '../../src/models/Variable'
-import { createEmptyProject } from '../../src/utils/projectCodec'
+import {
+  PROJECT_SCHEMA_VERSION,
+  createEmptyProject,
+} from '../../src/utils/projectCodec'
 
 beforeAll(() => {
   if (!globalThis.crypto?.subtle) {
@@ -73,7 +76,7 @@ describe('McpEditorBridge', () => {
       contract_version: 1,
       snapshot: expect.objectContaining({
         name: 'Bridge Project',
-        schemaVersion: 1,
+        schemaVersion: PROJECT_SCHEMA_VERSION,
       }),
       hash: expect.stringMatching(/^[0-9a-f]{64}$/),
     }))
@@ -177,7 +180,7 @@ describe('McpEditorBridge', () => {
     const acknowledgement = client.commit.mock.calls.at(-1)[0]
     expect(acknowledgement.success).toBe(true)
     expect(acknowledgement.result.document).toEqual({
-      schemaVersion: 1,
+      schemaVersion: PROJECT_SCHEMA_VERSION,
       name: 'Bridge Project',
       description: 'Browser-owned',
       states: [expect.objectContaining({ id: 'state', name: 'rho' })],

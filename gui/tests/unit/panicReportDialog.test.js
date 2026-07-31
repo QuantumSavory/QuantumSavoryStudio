@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import PanicReportDialog from '../../src/components/PanicReportDialog.vue'
+import { createEmptyProject, encodeStoredProject } from '../../src/utils/projectCodec'
 
 const AppDialogStub = {
   props: ['show', 'title'],
@@ -34,14 +35,8 @@ const panic = {
   stacktrace: 'BoundsError\n [1] getindex\n [2] run_simulation',
 }
 
-const project = {
-  schemaVersion: 1,
-  name: 'Unsafe / Project',
-  description: 'Full canonical project',
-  variables: [],
-  simulationConfig: { time: 1, timeStep: 0.1 },
-  net: { nodes: [{ id: 'node-1' }], edges: [], protocols: [] },
-}
+const project = encodeStoredProject(createEmptyProject('Unsafe / Project'))
+project.description = 'Full canonical project'
 
 let wrappers = []
 

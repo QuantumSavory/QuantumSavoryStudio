@@ -1,8 +1,14 @@
 {
+  "schemaVersion": 2,
   "name": "2. Entangler Example with consumer",
   "description": "",
+  "annotations": [],
+  "variables": [],
   "simulationConfig": {
-    "time": 10
+    "time": 10,
+    "timeStep": 0.1,
+    "qubitRepresentation": "QuantumOpticsRepr",
+    "qumodeRepresentation": "QuantumOpticsRepr"
   },
   "net": {
     "nodes": [
@@ -21,26 +27,16 @@
               "type": "Qubit",
               "backgroundNoise": {
                 "type": "default",
-                "doc": "No background noise",
                 "parameters": []
-              },
-              "lastOperationTime": 0,
-              "assignment": false,
-              "isLocked": true,
-              "representationType": "default"
+              }
             },
             {
               "id": "slot_VSOCk6",
               "type": "Qubit",
               "backgroundNoise": {
                 "type": "default",
-                "doc": "No background noise",
                 "parameters": []
-              },
-              "lastOperationTime": 0,
-              "assignment": false,
-              "isLocked": false,
-              "representationType": "default"
+              }
             }
           ],
           "protocols": []
@@ -61,26 +57,16 @@
               "type": "Qubit",
               "backgroundNoise": {
                 "type": "default",
-                "doc": "No background noise",
                 "parameters": []
-              },
-              "lastOperationTime": 0,
-              "assignment": false,
-              "isLocked": true,
-              "representationType": "default"
+              }
             },
             {
               "id": "slot_8m2toj",
               "type": "Qubit",
               "backgroundNoise": {
                 "type": "default",
-                "doc": "No background noise",
                 "parameters": []
-              },
-              "lastOperationTime": 0,
-              "assignment": false,
-              "isLocked": false,
-              "representationType": "default"
+              }
             }
           ],
           "protocols": []
@@ -95,6 +81,8 @@
         "isLogic": false,
         "data": {
           "type": "connection",
+          "curvePoints": [],
+          "physicalOverrides": null,
           "protocols": [
             {
               "id": "protocol_lR7xcK",
@@ -102,91 +90,129 @@
               "parameters": [
                 {
                   "name": "sim",
-                  "type": "ConcurrentSim.Simulation"
+                  "type": "ConcurrentSim.Simulation",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "net",
-                  "type": "QuantumSavory.RegisterNet"
+                  "type": "QuantumSavory.RegisterNet",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "nodeA",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "nodeB",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "pairstate",
-                  "type": "Symbolic"
+                  "type": "Symbolic",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "success_prob",
-                  "type": "Float64"
+                  "type": "Float64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "attempt_time",
-                  "type": "Float64"
+                  "type": "Float64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "local_busy_time_pre",
-                  "type": "Float64"
+                  "type": "Float64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "local_busy_time_post",
-                  "type": "Float64"
+                  "type": "Float64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "retry_lock_time",
                   "type": [
                     "Nothing",
                     "Float64"
-                  ]
+                  ],
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "rounds",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "attempts",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "chooseA",
                   "type": [
                     "Int64",
                     "Function"
-                  ]
+                  ],
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "chooseB",
                   "type": [
                     "Int64",
                     "Function"
-                  ]
+                  ],
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "randomize",
-                  "type": "Bool"
+                  "type": "Bool",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "uselock",
-                  "type": "Bool"
+                  "type": "Bool",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "margin",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "hardmargin",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "tag",
                   "type": [
                     "Nothing",
                     "DataType"
-                  ]
+                  ],
+                  "selectedType": "default",
+                  "value": null
                 }
               ]
             },
@@ -196,30 +222,42 @@
               "parameters": [
                 {
                   "name": "sim",
-                  "type": "ConcurrentSim.Simulation"
+                  "type": "ConcurrentSim.Simulation",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "net",
-                  "type": "QuantumSavory.RegisterNet"
+                  "type": "QuantumSavory.RegisterNet",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "nodeA",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "nodeB",
-                  "type": "Int64"
+                  "type": "Int64",
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "period",
                   "type": [
                     "Nothing",
                     "Float64"
-                  ]
+                  ],
+                  "selectedType": "default",
+                  "value": null
                 },
                 {
                   "name": "tag",
-                  "type": "Any"
+                  "type": "Any",
+                  "selectedType": "default",
+                  "value": null
                 }
               ]
             }
@@ -227,7 +265,14 @@
         }
       }
     ],
-    "protocols": []
+    "protocols": [],
+    "physicalConfig": {
+      "refractiveIndex": 1.468,
+      "lossDbPerKm": 0.2,
+      "nodeTemplate": {
+        "slots": []
+      }
+    }
   },
   "uiGlobal": {
     "map": {

@@ -1,3 +1,6 @@
+import Ajv2020 from 'ajv/dist/2020.js'
+
+import projectDocumentSchema from '../../../contracts/project/v2.schema.json'
 import Edge from '../models/Edge'
 import FloatingProtocol from '../models/FloatingProtocol'
 import Node from '../models/Node'
@@ -26,7 +29,16 @@ import {
 } from './parameterTypes'
 import { normalizeRepresentationConfig } from './representations'
 
-export const PROJECT_SCHEMA_VERSION = 1
+const projectDocumentValidator = new Ajv2020({
+  allErrors: true,
+  coerceTypes: false,
+  removeAdditional: false,
+  strict: true,
+  strictNumbers: true,
+  useDefaults: false,
+}).compile(projectDocumentSchema)
+
+export const PROJECT_SCHEMA_VERSION = projectDocumentSchema.properties.schemaVersion.const
 
 const DEFAULT_PROJECT_NAME = 'New Project'
 const DEFAULT_SIMULATION_TIME = 1.0
@@ -69,6 +81,119 @@ function cloneValue(value) {
   return value
 }
 
+function pointerToken(value) {
+  return String(value).replaceAll('~', '~0').replaceAll('/', '~1')
+}
+
+function pointerPath(error) {
+  if (error.keyword === 'required') {
+    return `${error.instancePath}/${pointerToken(error.params.missingProperty)}`
+  }
+  if (error.keyword === 'additionalProperties') {
+    return `${error.instancePath}/${pointerToken(error.params.additionalProperty)}`
+  }
+  return error.instancePath || '/'
+}
+
+function pointerValue(document, path) {
+  if (path === '/') return document
+  return path
+    .slice(1)
+    .split('/')
+    .map(token => token.replaceAll('~1', '/').replaceAll('~0', '~'))
+    .reduce((value, token) => value?.[token], document)
+}
+
+function diagnosticActual(value) {
+  if (value === undefined) return 'missing'
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+    return value
+  }
+  return Array.isArray(value) ? 'array' : 'object'
+}
+
+function diagnosticExpected(error, path) {
+  if (path === '/schemaVersion') return PROJECT_SCHEMA_VERSION
+  if (error.keyword === 'required') return 'present'
+  if (error.keyword === 'additionalProperties') return 'declared field'
+  if (error.keyword === 'const') return error.params.allowedValue
+  if (error.keyword === 'enum') return error.params.allowedValues
+  if (error.keyword === 'type') return error.params.type
+  if (error.keyword === 'minItems') return `at least ${error.params.limit} items`
+  if (error.keyword === 'maxItems') return `at most ${error.params.limit} items`
+  if (error.keyword === 'minLength') return `at least ${error.params.limit} characters`
+  if (error.keyword === 'pattern') return `string matching ${error.params.pattern}`
+  if (error.keyword === 'minimum') return `number >= ${error.params.limit}`
+  if (error.keyword === 'maximum') return `number <= ${error.params.limit}`
+  if (error.keyword === 'exclusiveMinimum') return `number > ${error.params.limit}`
+  if (error.keyword === 'exclusiveMaximum') return `number < ${error.params.limit}`
+  if (error.keyword === 'uniqueItems') return 'unique items'
+  if (error.keyword === 'oneOf') return 'exactly one declared shape'
+  if (error.keyword === 'anyOf') return 'one declared shape'
+  if (error.keyword === 'not') return 'value outside the forbidden shape'
+  return error.message || error.keyword
+}
+
+function schemaDiagnostics(document, errors) {
+  return (errors || [])
+    .map(error => {
+      const path = pointerPath(error)
+      return {
+        path,
+        expected: diagnosticExpected(error, path),
+        actual: diagnosticActual(pointerValue(document, path)),
+      }
+    })
+    .sort((left, right) => (
+      right.path.split('/').length - left.path.split('/').length
+      || Number(left.actual === 'missing') - Number(right.actual === 'missing')
+      || left.path.localeCompare(right.path)
+      || JSON.stringify(left.expected).localeCompare(JSON.stringify(right.expected))
+    ))
+}
+
+function diagnosticText(value) {
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+export class ProjectSchemaError extends Error {
+  constructor(diagnostics) {
+    const first = diagnostics[0] || {
+      path: '/',
+      expected: `project schema version ${PROJECT_SCHEMA_VERSION}`,
+      actual: 'invalid',
+    }
+    super(
+      `Project schema validation failed at ${first.path}: expected `
+      + `${diagnosticText(first.expected)}, received ${diagnosticText(first.actual)}`,
+    )
+    this.name = 'ProjectSchemaError'
+    this.code = 'PROJECT_SCHEMA_INVALID'
+    this.path = first.path
+    this.expected = first.expected
+    this.actual = first.actual
+    this.diagnostics = diagnostics.map(diagnostic => ({ ...diagnostic }))
+    this.details = {
+      path: this.path,
+      expected: cloneValue(this.expected),
+      actual: cloneValue(this.actual),
+      diagnostics: this.diagnostics.map(diagnostic => ({ ...diagnostic })),
+    }
+  }
+}
+
+/**
+ * Admit one raw project document without coercion, mutation, hydration, or storage.
+ */
+export function admitProjectDocument(document) {
+  if (!projectDocumentValidator(document)) {
+    throw new ProjectSchemaError(
+      schemaDiagnostics(document, projectDocumentValidator.errors),
+    )
+  }
+  return document
+}
+
 function omitFields(value, fields) {
   if (!isRecord(value)) return {}
   return Object.fromEntries(
@@ -107,7 +232,7 @@ function normalizeNodeTemplate(value, context) {
     return {
       id: slot.id,
       type: slot.type,
-      backgroundNoise: normalizeBackgroundNoise(slot.backgroundNoise, context),
+      backgroundNoise: plainBackgroundNoise(slot.backgroundNoise, context),
     }
   })
   return { slots }
@@ -132,7 +257,6 @@ function normalizePhysicalConfig(value, context = {}) {
     }),
   )
   return {
-    ...cloneValue(source),
     ...normalizedValues,
     nodeTemplate: normalizeNodeTemplate(source.nodeTemplate, context),
   }
@@ -159,7 +283,11 @@ function normalizeCurvePoints(value, edgeId) {
       throw new Error(`Project edge ${edgeId} curve point ${index + 1} must be smooth or sharp`)
     }
     ids.add(point.id)
-    return cloneValue(point)
+    return {
+      id: point.id,
+      position: [...point.position],
+      type: point.type,
+    }
   })
 }
 
@@ -181,10 +309,7 @@ function normalizePhysicalOverrides(value, edgeId) {
       return [parameter.overrideField, configured ?? null]
     }),
   )
-  return {
-    ...cloneValue(value),
-    ...normalizedValues,
-  }
+  return normalizedValues
 }
 
 export function normalizeProjectName(value, fallback = DEFAULT_PROJECT_NAME) {
@@ -544,34 +669,68 @@ function hydrateEdge(rawEdge, nodeMap) {
   return edge
 }
 
+function plainConstructorParameter(rawParameter, identity, context) {
+  const parameter = normalizeConstructorParameter(rawParameter, context)
+  return {
+    [identity]: parameter[identity],
+    type: cloneValue(parameter.type),
+    selectedType: parameter.selectedType,
+    value: cloneValue(parameter.value),
+  }
+}
+
+function plainBackgroundNoise(value, context = {}) {
+  const source = normalizeBackgroundNoise(value, context)
+  return {
+    type: source.type,
+    parameters: source.parameters.map((parameter, index) => (
+      plainConstructorParameter(
+        parameter,
+        'field',
+        `Background ${source.type} parameter ${index + 1}`,
+      )
+    )),
+  }
+}
+
 function plainProtocol(protocol) {
   const source = isRecord(protocol) ? protocol : {}
   return {
-    ...omitFields(source, new Set(['parameters'])),
+    id: source.id,
+    type: source.type,
     parameters: Array.isArray(source.parameters)
-      ? source.parameters.map((parameter, index) => normalizeConstructorParameter(
+      ? source.parameters.map((parameter, index) => plainConstructorParameter(
           parameter,
+          'name',
           `Protocol parameter ${index + 1}`,
         ))
       : [],
   }
 }
 
-function plainNode(node, { resetRuntimeSlotState = false } = {}) {
+function plainSlot(slot, context = {}) {
+  const source = isRecord(slot) ? slot : {}
+  return {
+    id: source.id,
+    type: source.type,
+    backgroundNoise: plainBackgroundNoise(source.backgroundNoise, context),
+  }
+}
+
+function plainNode(node, context = {}) {
   const source = isRecord(node) ? node : {}
   const sourceData = isRecord(source.data) ? source.data : {}
-  const slots = Array.isArray(sourceData.slots)
-    ? sourceData.slots.map(slot => ({
-        ...(isRecord(slot) ? cloneValue(slot) : {}),
-        ...(resetRuntimeSlotState ? { isLocked: false, assignment: false } : {}),
-      }))
-    : []
   return {
-    ...omitFields(source, new Set(['data'])),
+    id: source.id,
+    name: source.name,
     position: Array.isArray(source.position) ? [...source.position] : source.position,
     data: {
-      ...omitFields(sourceData, new Set(['slots', 'protocols'])),
-      slots,
+      ...(typeof sourceData.type === 'string' && sourceData.type
+        ? { type: sourceData.type }
+        : {}),
+      slots: Array.isArray(sourceData.slots)
+        ? sourceData.slots.map(slot => plainSlot(slot, context))
+        : [],
       protocols: Array.isArray(sourceData.protocols)
         ? sourceData.protocols.map(plainProtocol)
         : [],
@@ -588,15 +747,9 @@ function plainEdge(edge) {
   const sourceData = isRecord(source.data) ? source.data : {}
   const isLogic = source.isLogic === true
   const data = {
-    ...omitFields(
-      sourceData,
-      new Set([
-        'protocols',
-        'curvePoints',
-        'physicalOverrides',
-        ...RESOLVED_PHYSICAL_EDGE_FIELDS,
-      ]),
-    ),
+    ...(typeof sourceData.type === 'string' && sourceData.type
+      ? { type: sourceData.type }
+      : {}),
     protocols: Array.isArray(sourceData.protocols)
       ? sourceData.protocols.map(plainProtocol)
       : [],
@@ -606,7 +759,7 @@ function plainEdge(edge) {
     data.physicalOverrides = normalizePhysicalOverrides(sourceData.physicalOverrides, source.id)
   }
   return {
-    ...omitFields(source, new Set(['source', 'target', 'data', 'isLogic'])),
+    id: source.id,
     source: endpointId(source.source),
     target: endpointId(source.target),
     isLogic,
@@ -615,7 +768,37 @@ function plainEdge(edge) {
 }
 
 function plainVariable(variable) {
-  return normalizeVariableRecord(variable)
+  const source = normalizeVariableRecord(variable)
+  return {
+    id: source.id,
+    name: source.name,
+    type: source.type,
+    selectedType: source.selectedType,
+    value: cloneValue(source.value),
+    ...(typeof source.statesZooTraceSourceId === 'string'
+      && source.statesZooTraceSourceId
+      ? { statesZooTraceSourceId: source.statesZooTraceSourceId }
+      : {}),
+  }
+}
+
+function plainPlatformInfo(value) {
+  if (!isRecord(value)) return null
+  const versions = isRecord(value.versions) ? value.versions : {}
+  const version = (...keys) => {
+    const resolved = keys.map(key => versions[key]).find(candidate => (
+      typeof candidate === 'string' && candidate
+    ))
+    return resolved ?? null
+  }
+  return {
+    versions: {
+      julia: version('julia'),
+      genie: version('genie'),
+      quantumSavory: version('quantumSavory', 'quantumsavory'),
+      app: version('app', 'webQuantumSavory', 'webquantumsavory'),
+    },
+  }
 }
 
 function normalizeMap(rawMap, context) {
@@ -625,7 +808,6 @@ function normalizeMap(rawMap, context) {
   const fallbackZoom = finiteNumber(context.defaultMapZoom, DEFAULT_MAP_ZOOM)
   const source = isRecord(rawMap) ? rawMap : {}
   return {
-    ...omitFields(source, new Set(['position', 'zoom'])),
     position: Array.isArray(source.position) && source.position.length === 2
       ? [...source.position]
       : fallbackPosition,
@@ -657,11 +839,12 @@ export function createEmptyProject(name = DEFAULT_PROJECT_NAME) {
 }
 
 /**
- * Decode a stored v0/v1 project into model instances plus storage metadata.
+ * Admit and decode a version-2 project into model instances plus storage metadata.
  * The storage key is authoritative because it is how the project was selected.
  */
 export function decodeStoredProject(raw, context = {}) {
-  const source = isRecord(raw) ? raw : {}
+  admitProjectDocument(raw)
+  const source = raw
   const schemaVersion = Number.isInteger(source.schemaVersion) ? source.schemaVersion : 0
   if (schemaVersion > PROJECT_SCHEMA_VERSION) {
     throw new Error(
@@ -763,43 +946,26 @@ export function encodeStoredProject(project, context = {}) {
     : {}
   const mapSource = context.map || context.uiGlobal?.map
   const uiGlobal = {
-    ...omitFields(context.uiGlobal, new Set(['map'])),
     map: normalizeMap(mapSource, context),
   }
   const platformInfo = context.platformInfo ?? source.platformInfo
   const representationConfig = normalizeRepresentationConfig(sourceSimulationConfig)
 
-  return {
-    ...omitFields(source, new Set([
-      'name',
-      'description',
-      'annotations',
-      'variables',
-      'simulationConfig',
-      'net',
-      ...STORAGE_ONLY_PROJECT_FIELDS,
-    ])),
+  const document = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name,
     description: typeof source.description === 'string' ? source.description : '',
     annotations: normalizeAnnotations(source.annotations),
     variables: Array.isArray(source.variables) ? source.variables.map(plainVariable) : [],
     simulationConfig: {
-      ...omitFields(sourceSimulationConfig, new Set([
-        'time',
-        'timeStep',
-        'qubitRepresentation',
-        'qumodeRepresentation',
-      ])),
       time: finiteNumber(sourceSimulationConfig.time, DEFAULT_SIMULATION_TIME),
       timeStep: finiteNumber(sourceSimulationConfig.timeStep, DEFAULT_SIMULATION_TIME_STEP),
       ...representationConfig,
     },
-    ...(isRecord(platformInfo) ? { platformInfo: cloneValue(platformInfo) } : {}),
+    ...(isRecord(platformInfo) ? { platformInfo: plainPlatformInfo(platformInfo) } : {}),
     net: {
-      ...omitFields(sourceNet, new Set(['nodes', 'edges', 'protocols', 'physicalConfig'])),
       nodes: Array.isArray(sourceNet.nodes)
-        ? sourceNet.nodes.map(node => plainNode(node, { resetRuntimeSlotState: true }))
+        ? sourceNet.nodes.map(node => plainNode(node, context))
         : [],
       edges: Array.isArray(sourceNet.edges) ? sourceNet.edges.map(plainEdge) : [],
       protocols: Array.isArray(sourceNet.protocols)
@@ -809,6 +975,8 @@ export function encodeStoredProject(project, context = {}) {
     },
     uiGlobal,
   }
+  admitProjectDocument(document)
+  return document
 }
 
 /**
@@ -823,12 +991,7 @@ export function encodeDesignDocument(project) {
   delete document.platformInfo
   delete document.uiGlobal
 
-  for (const node of document.net?.nodes || []) {
-    delete node.expanded
-    for (const slot of node.data?.slots || []) {
-      for (const field of TRANSIENT_SLOT_FIELDS) delete slot[field]
-    }
-  }
+  admitProjectDocument(document)
   return document
 }
 
@@ -905,16 +1068,7 @@ export function toSimulationPayload(project) {
   const physicalConfig = normalizePhysicalConfig(sourceNet.physicalConfig)
 
   return {
-    ...omitFields(source, new Set([
-      'schemaVersion',
-      'description',
-      'annotations',
-      'simulationConfig',
-      'platformInfo',
-      'uiGlobal',
-      'variables',
-      'net',
-    ])),
+    name: normalizeProjectName(source.name),
     simulationConfig: normalizeRepresentationConfig(source.simulationConfig),
     variables: Array.isArray(source.variables)
       ? source.variables.map((variable, index) => {
@@ -932,7 +1086,6 @@ export function toSimulationPayload(project) {
         })
       : [],
     net: {
-      ...omitFields(sourceNet, new Set(['nodes', 'edges', 'protocols', 'physicalConfig'])),
       nodes: Array.isArray(sourceNet.nodes)
         ? sourceNet.nodes.map(node => {
             const plain = plainNode(node)

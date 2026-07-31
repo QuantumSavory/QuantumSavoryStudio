@@ -1,0 +1,944 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webquantumsavory.org/contracts/project/v2.schema.json",
+  "title": "WebQuantumSavory project document version 2",
+  "description": "The closed durable project and collaboration-document contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "name",
+    "description",
+    "annotations",
+    "variables",
+    "simulationConfig",
+    "net"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "name": {
+      "$ref": "#/$defs/nonBlankString"
+    },
+    "description": {
+      "type": "string"
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation"
+      }
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variable"
+      }
+    },
+    "simulationConfig": {
+      "$ref": "#/$defs/simulationConfig"
+    },
+    "platformInfo": {
+      "$ref": "#/$defs/platformInfo"
+    },
+    "net": {
+      "$ref": "#/$defs/network"
+    },
+    "uiGlobal": {
+      "$ref": "#/$defs/uiGlobal"
+    }
+  },
+  "$defs": {
+    "nonBlankString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "nullableString": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "mapPosition": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        {
+          "type": "number",
+          "minimum": -85.051129,
+          "maximum": 85.051129
+        }
+      ],
+      "items": false
+    },
+    "geographicPosition": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        }
+      ],
+      "items": false
+    },
+    "typeDescriptor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonBlankString"
+          }
+        }
+      ]
+    },
+    "variableReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "variable"
+        },
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        }
+      }
+    },
+    "numericExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "const": "numeric_expression"
+        },
+        "source": {
+          "$ref": "#/$defs/nonBlankString"
+        }
+      }
+    },
+    "statesZooValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "state_type",
+        "parameters"
+      ],
+      "properties": {
+        "kind": {
+          "const": "states_zoo"
+        },
+        "state_type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "parameters": {
+          "description": "Explicit extension point keyed by the selected simulator state-family parameter names.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "opaqueParameterValue": {
+      "description": "Explicit extension point for simulator-owned Any parameter values. Objects with a kind discriminator remain governed by the closed tagged-value schemas.",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/opaqueParameterValue"
+          }
+        },
+        {
+          "type": "object",
+          "not": {
+            "properties": {
+              "kind": {}
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/opaqueParameterValue"
+          }
+        }
+      ]
+    },
+    "parameterValue": {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {}
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "variable",
+              "numeric_expression",
+              "states_zoo"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "variable"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "$ref": "#/$defs/variableReference"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "numeric_expression"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "$ref": "#/$defs/numericExpression"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "states_zoo"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "$ref": "#/$defs/statesZooValue"
+            }
+          }
+        ]
+      },
+      "else": {
+        "$ref": "#/$defs/opaqueParameterValue"
+      }
+    },
+    "protocolParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "selectedType",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "type": {
+          "$ref": "#/$defs/typeDescriptor"
+        },
+        "selectedType": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "value": {
+          "$ref": "#/$defs/parameterValue"
+        }
+      }
+    },
+    "backgroundParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "type",
+        "selectedType",
+        "value"
+      ],
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "type": {
+          "$ref": "#/$defs/typeDescriptor"
+        },
+        "selectedType": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "value": {
+          "$ref": "#/$defs/parameterValue"
+        }
+      }
+    },
+    "backgroundNoise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/backgroundParameter"
+          }
+        }
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "backgroundNoise"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "backgroundNoise": {
+          "$ref": "#/$defs/backgroundNoise"
+        }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "parameters"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocolParameter"
+          }
+        }
+      }
+    },
+    "nodeData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slots",
+        "protocols"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slot"
+          }
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocol"
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "position",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "name": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "position": {
+          "$ref": "#/$defs/mapPosition"
+        },
+        "data": {
+          "$ref": "#/$defs/nodeData"
+        }
+      }
+    },
+    "curvePoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "position",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "position": {
+          "$ref": "#/$defs/mapPosition"
+        },
+        "type": {
+          "enum": [
+            "smooth",
+            "sharp"
+          ]
+        }
+      }
+    },
+    "physicalOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "distanceMeters",
+        "refractiveIndex",
+        "delaySeconds",
+        "lossDbPerKm",
+        "transmissivity"
+      ],
+      "properties": {
+        "distanceMeters": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refractiveIndex": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delaySeconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lossDbPerKm": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transmissivity": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "logicalEdgeData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocols"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocol"
+          }
+        }
+      }
+    },
+    "physicalEdgeData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocols",
+        "curvePoints",
+        "physicalOverrides"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocol"
+          }
+        },
+        "curvePoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/curvePoint"
+          }
+        },
+        "physicalOverrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/physicalOverrides"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "logicalEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "target",
+        "isLogic",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "source": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "target": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "isLogic": {
+          "const": true
+        },
+        "data": {
+          "$ref": "#/$defs/logicalEdgeData"
+        }
+      }
+    },
+    "physicalEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source",
+        "target",
+        "isLogic",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "source": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "target": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "isLogic": {
+          "const": false
+        },
+        "data": {
+          "$ref": "#/$defs/physicalEdgeData"
+        }
+      }
+    },
+    "edge": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/logicalEdge"
+        },
+        {
+          "$ref": "#/$defs/physicalEdge"
+        }
+      ]
+    },
+    "nodeTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slots"
+      ],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slot"
+          }
+        }
+      }
+    },
+    "physicalConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refractiveIndex",
+        "lossDbPerKm",
+        "nodeTemplate"
+      ],
+      "properties": {
+        "refractiveIndex": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "lossDbPerKm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "nodeTemplate": {
+          "$ref": "#/$defs/nodeTemplate"
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "edges",
+        "protocols",
+        "physicalConfig"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocol"
+          }
+        },
+        "physicalConfig": {
+          "$ref": "#/$defs/physicalConfig"
+        }
+      }
+    },
+    "annotationBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "west",
+        "south",
+        "east",
+        "north"
+      ],
+      "properties": {
+        "west": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "south": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "east": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "north": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        }
+      }
+    },
+    "annotationArea": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeCorner"
+      ],
+      "properties": {
+        "freeCorner": {
+          "$ref": "#/$defs/geographicPosition"
+        }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "markdown",
+        "bounds",
+        "backgroundColor",
+        "borderColor",
+        "area"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "markdown": {
+          "type": "string"
+        },
+        "bounds": {
+          "$ref": "#/$defs/annotationBounds"
+        },
+        "backgroundColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "borderColor": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "area": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/annotationArea"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "selectedType",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "name": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "type": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "selectedType": {
+          "$ref": "#/$defs/nonBlankString"
+        },
+        "value": {
+          "$ref": "#/$defs/parameterValue"
+        },
+        "statesZooTraceSourceId": {
+          "$ref": "#/$defs/nonBlankString"
+        }
+      }
+    },
+    "simulationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time",
+        "timeStep",
+        "qubitRepresentation",
+        "qumodeRepresentation"
+      ],
+      "properties": {
+        "time": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "timeStep": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "qubitRepresentation": {
+          "enum": [
+            "QuantumOpticsRepr",
+            "QuantumMCRepr",
+            "CliffordRepr"
+          ]
+        },
+        "qumodeRepresentation": {
+          "enum": [
+            "QuantumOpticsRepr",
+            "QuantumMCRepr",
+            "GabsRepr"
+          ]
+        }
+      }
+    },
+    "platformVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "julia",
+        "genie",
+        "quantumSavory",
+        "app"
+      ],
+      "properties": {
+        "julia": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "genie": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "quantumSavory": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "app": {
+          "$ref": "#/$defs/nullableString"
+        }
+      }
+    },
+    "platformInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "versions"
+      ],
+      "properties": {
+        "versions": {
+          "$ref": "#/$defs/platformVersions"
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "zoom"
+      ],
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/mapPosition"
+        },
+        "zoom": {
+          "type": "number"
+        }
+      }
+    },
+    "uiGlobal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "map"
+      ],
+      "properties": {
+        "map": {
+          "$ref": "#/$defs/map"
+        }
+      }
+    }
+  }
+}

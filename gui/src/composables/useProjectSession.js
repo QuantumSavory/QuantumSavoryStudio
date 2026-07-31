@@ -124,8 +124,8 @@ export function useProjectSession({
   }
 
   async function preflightProject(raw, name) {
-    const platformInfo = await ensurePlatformInfo()
     const decoded = decodeStoredProject(raw, codecContext(name))
+    const platformInfo = await ensurePlatformInfo()
     const mismatch = compareProjectVersions(decoded.platformInfo?.versions, platformInfo?.versions)
     if (mismatch) {
       const accepted = await confirmVersionMismatch(
@@ -224,12 +224,8 @@ export function useProjectSession({
     transitionPhase.value = 'preparing'
     try {
       const name = canonicalName(demoData?.name || 'Demo Project')
-      const platformInfo = await ensurePlatformInfo()
-      const decoded = decodeStoredProject(
-        { ...demoData, platformInfo },
-        codecContext(name)
-      )
-      if (generation !== transitionGeneration.value) return false
+      const decoded = await preflightProject(demoData, name)
+      if (!decoded || generation !== transitionGeneration.value) return false
 
       transitionPhase.value = 'committing'
       const replacementBarrier = projectReplacementBarrier()
@@ -375,7 +371,7 @@ export function useProjectSession({
     const generation = ++transitionGeneration.value
     transitionPhase.value = 'preparing'
     try {
-      const candidate = await preflightProject({ ...data, name }, name)
+      const candidate = await preflightProject(data, name)
       if (!candidate || generation !== transitionGeneration.value) return false
 
       transitionPhase.value = 'committing'

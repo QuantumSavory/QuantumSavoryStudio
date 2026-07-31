@@ -363,7 +363,7 @@ test.describe('Map annotations and Tools presentation', () => {
     const stored = await page.evaluate(() => (
       JSON.parse(localStorage.getItem('cqn_project_Map Annotation Browser Test'))
     ))
-    expect(stored.schemaVersion).toBe(1)
+    expect(stored.schemaVersion).toBe(2)
     expect(stored.annotations).toEqual(await currentAnnotations(page))
 
     const downloadPromise = page.waitForEvent('download')

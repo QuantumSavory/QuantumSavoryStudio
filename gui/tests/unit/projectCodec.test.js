@@ -7,12 +7,16 @@ import Variable, {
   VariableReference,
   isStatesZooTraceVariable,
 } from '../../src/models/Variable'
+import entanglerDemo from '../../src/demos/1.Entangler.Example.json'
+import entanglerConsumerDemo from '../../src/demos/2.Entangler.Example.with.consumer.json'
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DEFAULT_PHYSICAL_CONFIG,
   PROJECT_SCHEMA_VERSION,
+  ProjectSchemaError,
   TRANSIENT_SLOT_FIELDS,
+  admitProjectDocument,
   createEmptyProject,
   decodeDesignDocument,
   decodeStoredProject,
@@ -62,7 +66,10 @@ describe('collaborative design codec', () => {
     expect(canonicalSlot).toEqual({
       id: 'slot_a',
       type: 'Qubit',
-      backgroundNoise: DEFAULT_NOISE,
+      backgroundNoise: {
+        type: DEFAULT_NOISE.type,
+        parameters: [],
+      },
     })
     for (const field of TRANSIENT_SLOT_FIELDS) {
       expect(canonicalSlot).not.toHaveProperty(field)
@@ -93,6 +100,7 @@ describe('collaborative design codec', () => {
       name: 'A',
       position: [0, 0],
       data: {
+        type: 'City',
         protocols: [],
         slots: [{
           id: 'slot_a',
@@ -134,31 +142,40 @@ describe('collaborative design codec', () => {
       })
   })
 
-  it('preserves schema-v1 literal-only background parameters without inventing a type', () => {
+  it('rejects incomplete background parameter records before hydration', () => {
     const project = createEmptyProject('Legacy background')
-    project.schemaVersion = 1
     project.net.nodes.push({
       id: 'node_a',
       name: 'A',
       position: [0, 0],
       data: {
+        type: 'City',
         protocols: [],
         slots: [{
           id: 'slot_a',
           type: 'Qubit',
           backgroundNoise: {
             type: 'LegacyNoise',
-            parameters: [{ field: 'rate', value: 0.25 }],
+            parameters: [{
+              field: 'rate',
+              type: 'Float64',
+              selectedType: 'Float64',
+              value: 0.25,
+            }],
           },
         }],
       },
     })
 
-    const decoded = decodeDesignDocument(project)
-    const parameter = decoded.net.nodes[0].data.slots[0].backgroundNoise.parameters[0]
-    expect(parameter).toEqual({ field: 'rate', value: 0.25 })
-    expect(toSimulationPayload(decoded).net.nodes[0].data.slots[0].backgroundNoise.parameters)
-      .toEqual([{ name: 'rate', value: 0.25 }])
+    const document = encodeDesignDocument(project)
+    delete document.net.nodes[0].data.slots[0].backgroundNoise.parameters[0].type
+    const original = structuredClone(document)
+
+    expect(() => decodeDesignDocument(document)).toThrow(ProjectSchemaError)
+    expect(() => decodeDesignDocument(document)).toThrow(
+      /backgroundNoise\/parameters\/0\/type/,
+    )
+    expect(document).toEqual(original)
   })
 })
 
@@ -196,6 +213,7 @@ describe('States Zoo trace variable ownership', () => {
 
 function legacyProject() {
   return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     name: 'Embedded Name',
     description: '# Project notes',
     annotations: [{
@@ -206,42 +224,56 @@ function legacyProject() {
       borderColor: '#123ABC',
       area: { freeCorner: [-75, 40] },
     }],
-    futureProjectField: { enabled: true },
     variables: [
       {
         id: 'variable_state',
         name: 'state',
         type: 'Symbolic',
+        selectedType: 'Symbolic',
         value: {
           kind: 'states_zoo',
           state_type: 'DepolarizedBellPair',
           parameters: { fidelity: 0.9 },
         },
-        futureVariableField: 'preserve me',
       },
     ],
-    simulationConfig: { time: 0.5, timeStep: 0.01, futureConfigField: 7 },
-    platformInfo: { versions: { app: '1.0.0' } },
+    simulationConfig: {
+      time: 0.5,
+      timeStep: 0.01,
+      qubitRepresentation: 'QuantumOpticsRepr',
+      qumodeRepresentation: 'QuantumOpticsRepr',
+    },
+    platformInfo: {
+      versions: {
+        julia: '1.12.0',
+        genie: '5.35.15',
+        quantumSavory: '0.8.0',
+        app: '2.0.0',
+      },
+    },
     uiGlobal: {
-      map: { position: [-72.5, 42.3], zoom: 8, bearing: 10 },
-      futureUiField: true,
+      map: { position: [-72.5, 42.3], zoom: 8 },
     },
     net: {
-      futureNetField: 'preserve me',
       nodes: [
         {
           id: 'node_b',
           name: 'B',
           position: [-71, 42],
-          futureNodeField: 2,
           data: {
             type: 'City',
-            slots: [{ id: 'slot_b', type: 'Qubit', backgroundNoise: null }],
+            slots: [{
+              id: 'slot_b',
+              type: 'Qubit',
+              backgroundNoise: {
+                type: 'QuantumSavory.NoBackground',
+                parameters: [],
+              },
+            }],
             protocols: [{
               id: 'node_protocol',
               type: 'NodeProtocol',
               parameters: [],
-              futureProtocolField: true,
             }],
           },
         },
@@ -251,7 +283,14 @@ function legacyProject() {
           position: [-73, 42],
           data: {
             type: 'City',
-            slots: [{ id: 'slot_a', type: 'Qubit', backgroundNoise: 'default' }],
+            slots: [{
+              id: 'slot_a',
+              type: 'Qubit',
+              backgroundNoise: {
+                type: 'QuantumSavory.NoBackground',
+                parameters: [],
+              },
+            }],
             protocols: [],
           },
         },
@@ -261,15 +300,85 @@ function legacyProject() {
         source: 'node_a',
         target: 'node_b',
         isLogic: false,
-        futureEdgeField: 'preserve me',
         data: {
           type: 'connection',
           protocols: [{ id: 'edge_protocol', type: 'EdgeProtocol', parameters: [] }],
+          curvePoints: [],
+          physicalOverrides: null,
         },
       }],
       protocols: [{ id: 'floating_protocol', type: 'FloatingProtocol', parameters: [] }],
+      physicalConfig: {
+        refractiveIndex: 1.468,
+        lossDbPerKm: 0.2,
+        nodeTemplate: { slots: [] },
+      },
     },
   }
+}
+
+function fullPhysicalOverrides(overrides = {}) {
+  return {
+    distanceMeters: null,
+    refractiveIndex: null,
+    delaySeconds: null,
+    lossDbPerKm: null,
+    transmissivity: null,
+    ...overrides,
+  }
+}
+
+function discriminatingStoredProject() {
+  const project = legacyProject()
+  project.net.nodes[0].data.slots[0].backgroundNoise.parameters.push({
+    field: 'rate',
+    type: 'Float64',
+    selectedType: 'Float64',
+    value: 0.25,
+  })
+  project.net.nodes[0].data.protocols[0].parameters.push({
+    name: 'settings',
+    type: 'Any',
+    selectedType: 'Any',
+    value: { nested: { enabled: true } },
+  }, {
+    name: 'linked',
+    type: 'Float64',
+    selectedType: 'Float64',
+    value: { kind: 'variable', id: 'variable_state' },
+  }, {
+    name: 'expression',
+    type: 'Float64',
+    selectedType: 'expression:Float64',
+    value: { kind: 'numeric_expression', source: '1 / 2' },
+  })
+  project.net.edges[0].data.curvePoints.push({
+    id: 'curve_1',
+    position: [-72, 43],
+    type: 'smooth',
+  })
+  project.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({
+    distanceMeters: 1200,
+  })
+  project.net.edges.push({
+    id: 'edge_logic',
+    source: 'node_a',
+    target: 'node_b',
+    isLogic: true,
+    data: {
+      type: 'virtual',
+      protocols: [],
+    },
+  })
+  project.net.physicalConfig.nodeTemplate.slots.push({
+    id: 'template_slot',
+    type: 'Qumode',
+    backgroundNoise: {
+      type: 'QuantumSavory.NoBackground',
+      parameters: [],
+    },
+  })
+  return project
 }
 
 describe('createEmptyProject', () => {
@@ -312,17 +421,174 @@ describe('createEmptyProject', () => {
   })
 })
 
+describe('project schema v2 admission', () => {
+  it.each([
+    ['entangler', entanglerDemo],
+    ['entangler with consumer', entanglerConsumerDemo],
+  ])('keeps the %s demo on the current closed schema', (_name, demo) => {
+    const original = structuredClone(demo)
+
+    expect(admitProjectDocument(demo)).toBe(demo)
+    expect(decodeStoredProject(demo).schemaVersion).toBe(PROJECT_SCHEMA_VERSION)
+    expect(demo).toEqual(original)
+  })
+
+  it.each([
+    ['older', 1],
+    ['newer', 3],
+    ['negative', -1],
+    ['noninteger', 2.5],
+    ['string', '2'],
+    ['null', null],
+    ['missing', undefined],
+  ])('rejects a %s schema marker with stable diagnostics', (_label, version) => {
+    const raw = legacyProject()
+    if (version === undefined) delete raw.schemaVersion
+    else raw.schemaVersion = version
+    const original = structuredClone(raw)
+
+    let error
+    try {
+      admitProjectDocument(raw)
+    } catch (caught) {
+      error = caught
+    }
+
+    const expectedActual = version === undefined ? 'missing' : version
+    expect(error).toBeInstanceOf(ProjectSchemaError)
+    expect(error).toMatchObject({
+      code: 'PROJECT_SCHEMA_INVALID',
+      path: '/schemaVersion',
+      expected: PROJECT_SCHEMA_VERSION,
+      actual: expectedActual,
+    })
+    expect(error.details).toMatchObject({
+      path: '/schemaVersion',
+      expected: PROJECT_SCHEMA_VERSION,
+      actual: expectedActual,
+    })
+    expect(raw).toEqual(original)
+  })
+
+  it.each([null, [], 'project'])('rejects malformed document root %j', raw => {
+    expect(() => admitProjectDocument(raw)).toThrow(ProjectSchemaError)
+    try {
+      admitProjectDocument(raw)
+    } catch (error) {
+      expect(error.path).toBe('/')
+      expect(error.expected).toBe('object')
+    }
+  })
+
+  it('rejects undeclared fields at every application-owned object boundary', () => {
+    const cases = [
+      ['/unexpected', project => { project.unexpected = true }],
+      ['/simulationConfig/unexpected', project => { project.simulationConfig.unexpected = true }],
+      ['/net/unexpected', project => { project.net.unexpected = true }],
+      ['/net/nodes/0/unexpected', project => { project.net.nodes[0].unexpected = true }],
+      ['/net/nodes/0/data/unexpected', project => { project.net.nodes[0].data.unexpected = true }],
+      ['/net/nodes/0/data/slots/0/unexpected', project => {
+        project.net.nodes[0].data.slots[0].unexpected = true
+      }],
+      ['/net/nodes/0/data/slots/0/backgroundNoise/unexpected', project => {
+        project.net.nodes[0].data.slots[0].backgroundNoise.unexpected = true
+      }],
+      ['/net/nodes/0/data/slots/0/backgroundNoise/parameters/0/unexpected', project => {
+        project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0].unexpected = true
+      }],
+      ['/net/nodes/0/data/protocols/0/unexpected', project => {
+        project.net.nodes[0].data.protocols[0].unexpected = true
+      }],
+      ['/net/nodes/0/data/protocols/0/parameters/0/unexpected', project => {
+        project.net.nodes[0].data.protocols[0].parameters[0].unexpected = true
+      }],
+      ['/net/nodes/0/data/protocols/0/parameters/1/value/unexpected', project => {
+        project.net.nodes[0].data.protocols[0].parameters[1].value.unexpected = true
+      }],
+      ['/net/nodes/0/data/protocols/0/parameters/2/value/unexpected', project => {
+        project.net.nodes[0].data.protocols[0].parameters[2].value.unexpected = true
+      }],
+      ['/net/edges/0/unexpected', project => { project.net.edges[0].unexpected = true }],
+      ['/net/edges/0/data/unexpected', project => {
+        project.net.edges[0].data.unexpected = true
+      }],
+      ['/net/edges/0/data/curvePoints/0/unexpected', project => {
+        project.net.edges[0].data.curvePoints[0].unexpected = true
+      }],
+      ['/net/edges/0/data/physicalOverrides/unexpected', project => {
+        project.net.edges[0].data.physicalOverrides.unexpected = true
+      }],
+      ['/net/edges/1/data/unexpected', project => {
+        project.net.edges[1].data.unexpected = true
+      }],
+      ['/net/physicalConfig/unexpected', project => {
+        project.net.physicalConfig.unexpected = true
+      }],
+      ['/net/physicalConfig/nodeTemplate/unexpected', project => {
+        project.net.physicalConfig.nodeTemplate.unexpected = true
+      }],
+      ['/net/physicalConfig/nodeTemplate/slots/0/unexpected', project => {
+        project.net.physicalConfig.nodeTemplate.slots[0].unexpected = true
+      }],
+      ['/annotations/0/unexpected', project => { project.annotations[0].unexpected = true }],
+      ['/annotations/0/bounds/unexpected', project => {
+        project.annotations[0].bounds.unexpected = true
+      }],
+      ['/annotations/0/area/unexpected', project => {
+        project.annotations[0].area.unexpected = true
+      }],
+      ['/variables/0/unexpected', project => { project.variables[0].unexpected = true }],
+      ['/variables/0/value/unexpected', project => {
+        project.variables[0].value.unexpected = true
+      }],
+      ['/platformInfo/unexpected', project => { project.platformInfo.unexpected = true }],
+      ['/platformInfo/versions/unexpected', project => {
+        project.platformInfo.versions.unexpected = true
+      }],
+      ['/uiGlobal/unexpected', project => { project.uiGlobal.unexpected = true }],
+      ['/uiGlobal/map/unexpected', project => { project.uiGlobal.map.unexpected = true }],
+    ]
+
+    for (const [path, mutate] of cases) {
+      const raw = discriminatingStoredProject()
+      mutate(raw)
+      const original = structuredClone(raw)
+      let error
+      try {
+        admitProjectDocument(raw)
+      } catch (caught) {
+        error = caught
+      }
+      expect(error, path).toBeInstanceOf(ProjectSchemaError)
+      expect(error.diagnostics, path).toContainEqual({
+        path,
+        expected: 'declared field',
+        actual: true,
+      })
+      expect(raw, path).toEqual(original)
+    }
+  })
+
+  it('admits the explicit opaque Any-value extension without opening tagged objects', () => {
+    const raw = discriminatingStoredProject()
+    expect(admitProjectDocument(raw)).toBe(raw)
+
+    raw.net.nodes[0].data.protocols[0].parameters[0].value.kind = 'custom'
+    expect(() => admitProjectDocument(raw)).toThrow(ProjectSchemaError)
+  })
+})
+
 describe('decodeStoredProject', () => {
-  it('hydrates legacy storage into model identities and makes the storage name authoritative', () => {
-    const getDefaultNoise = vi.fn(() => DEFAULT_NOISE)
-    const decoded = decodeStoredProject(legacyProject(), {
+  it('hydrates current storage into independent model identities and honors the storage name', () => {
+    const raw = legacyProject()
+    const original = structuredClone(raw)
+    const decoded = decodeStoredProject(raw, {
       storageName: 'Storage Name',
-      defaultBackgroundNoise: getDefaultNoise,
       minimumTime: 1,
       minimumTimeStep: 0.1,
     })
 
-    expect(decoded.schemaVersion).toBe(0)
+    expect(decoded.schemaVersion).toBe(PROJECT_SCHEMA_VERSION)
     expect(decoded.project.name).toBe('Storage Name')
     expect(decoded.project.description).toBe('# Project notes')
     expect(decoded.project.annotations).toEqual([{
@@ -333,11 +599,9 @@ describe('decodeStoredProject', () => {
       borderColor: '#123abc',
       area: { freeCorner: [-75, 40] },
     }])
-    expect(decoded.project.futureProjectField).toEqual({ enabled: true })
     expect(decoded.project.simulationConfig).toEqual({
       time: 1,
       timeStep: 0.1,
-      futureConfigField: 7,
       qubitRepresentation: 'QuantumOpticsRepr',
       qumodeRepresentation: 'QuantumOpticsRepr',
     })
@@ -345,15 +609,12 @@ describe('decodeStoredProject', () => {
     const [nodeB, nodeA] = decoded.project.net.nodes
     expect(nodeB).toBeInstanceOf(Node)
     expect(nodeA).toBeInstanceOf(Node)
-    expect(nodeB.futureNodeField).toBe(2)
     expect(nodeB.data.protocols[0]).toBeInstanceOf(FloatingProtocol)
-    expect(nodeB.data.protocols[0].futureProtocolField).toBe(true)
 
     const [edge] = decoded.project.net.edges
     expect(edge).toBeInstanceOf(Edge)
     expect(edge.source).toBe(nodeB)
     expect(edge.target).toBe(nodeA)
-    expect(edge.futureEdgeField).toBe('preserve me')
     expect(edge.data.protocols[0]).toBeInstanceOf(FloatingProtocol)
     expect(edge.data.curvePoints).toEqual([])
     expect(edge.data.physicalOverrides).toBeNull()
@@ -370,108 +631,29 @@ describe('decodeStoredProject', () => {
       state_type: 'DepolarizedBellPair',
       parameters: { fidelity: 0.9 },
     })
-    expect(decoded.project.variables[0].futureVariableField).toBe('preserve me')
 
     const firstNoise = nodeB.data.slots[0].backgroundNoise
     const secondNoise = nodeA.data.slots[0].backgroundNoise
-    expect(firstNoise).toEqual(DEFAULT_NOISE)
-    expect(secondNoise).toEqual(DEFAULT_NOISE)
+    expect(firstNoise).toEqual({ type: DEFAULT_NOISE.type, parameters: [] })
+    expect(secondNoise).toEqual({ type: DEFAULT_NOISE.type, parameters: [] })
     expect(firstNoise).not.toBe(secondNoise)
-    expect(firstNoise).not.toBe(DEFAULT_NOISE)
-    expect(getDefaultNoise).toHaveBeenCalledTimes(2)
-
-    expect(decoded.map).toEqual({ position: [-72.5, 42.3], zoom: 8, bearing: 10 })
-    expect(decoded.uiGlobal.futureUiField).toBe(true)
-    expect(decoded.platformInfo).toEqual({ versions: { app: '1.0.0' } })
+    expect(decoded.map).toEqual({ position: [-72.5, 42.3], zoom: 8 })
+    expect(decoded.platformInfo).toEqual(raw.platformInfo)
+    expect(raw).toEqual(original)
+    expect(decoded.project.net.nodes[0]).not.toBe(raw.net.nodes[0])
+    expect(decoded.project.variables[0].value).not.toBe(raw.variables[0].value)
   })
 
-  it('accepts missing storage fields and partial network envelopes', () => {
-    const decoded = decodeStoredProject({ name: 'Partial', net: {} }, {
-      defaultMapCenter: [1, 2],
-      defaultMapZoom: 3,
-    })
-
-    expect(decoded.project).toMatchObject({
-      name: 'Partial',
-      description: '',
-      annotations: [],
-      variables: [],
-      simulationConfig: {
-        time: 1,
-        timeStep: 0.1,
-        qubitRepresentation: 'QuantumOpticsRepr',
-        qumodeRepresentation: 'QuantumOpticsRepr',
-      },
-      net: {
-        nodes: [],
-        edges: [],
-        protocols: [],
-        physicalConfig: {
-          refractiveIndex: 1.468,
-          lossDbPerKm: 0.2,
-          nodeTemplate: { slots: [] },
-        },
-      },
-    })
-    expect(decoded.map).toEqual({ position: [1, 2], zoom: 3 })
-  })
-
-  it('uses copied exported map defaults when storage has no map state', () => {
-    const decoded = decodeStoredProject({ name: 'Defaults', net: {} })
+  it('uses independent map defaults for an admitted collaboration document', () => {
+    const document = encodeDesignDocument(createEmptyProject('Defaults'))
+    const decoded = decodeStoredProject(document)
 
     expect(decoded.map).toEqual({ position: DEFAULT_MAP_CENTER, zoom: DEFAULT_MAP_ZOOM })
     expect(decoded.map.position).not.toBe(DEFAULT_MAP_CENTER)
   })
 
-  it('normalizes non-default legacy noise strings into editable objects', () => {
+  it('adds fresh runtime slot state only after schema admission', () => {
     const raw = legacyProject()
-    raw.net.nodes[0].data.slots[0].backgroundNoise = 'CustomNoise'
-
-    const { project } = decodeStoredProject(raw)
-
-    expect(project.net.nodes[0].data.slots[0].backgroundNoise).toEqual({
-      type: 'CustomNoise',
-      parameters: [],
-    })
-  })
-
-  it('normalizes a slot-only node template without names, protocols, or runtime state', () => {
-    const raw = legacyProject()
-    raw.net.physicalConfig = {
-      refractiveIndex: 1.5,
-      nodeTemplate: {
-        name: 'Not persisted',
-        protocols: [{ id: 'not_persisted' }],
-        slots: [{
-          id: 'template_slot',
-          type: 'Qumode',
-          backgroundNoise: 'ThermalNoise',
-          isLocked: true,
-          ui_expanded: true,
-        }],
-      },
-    }
-
-    const { project } = decodeStoredProject(raw)
-
-    expect(project.net.physicalConfig.nodeTemplate).toEqual({
-      slots: [{
-        id: 'template_slot',
-        type: 'Qumode',
-        backgroundNoise: {
-          type: 'ThermalNoise',
-          parameters: [],
-        },
-      }],
-    })
-    expect(project.net.physicalConfig.nodeTemplate).not.toHaveProperty('name')
-    expect(project.net.physicalConfig.nodeTemplate).not.toHaveProperty('protocols')
-  })
-
-  it('clears stale runtime slot state during hydration without mutating storage input', () => {
-    const raw = legacyProject()
-    raw.net.nodes[0].data.slots[0].isLocked = true
-    raw.net.nodes[0].data.slots[0].assignment = { remoteSlot: 'slot_a' }
     const original = structuredClone(raw)
 
     const { project } = decodeStoredProject(raw)
@@ -480,13 +662,6 @@ describe('decodeStoredProject', () => {
     expect(slot.isLocked).toBe(false)
     expect(slot.assignment).toBe(false)
     expect(raw).toEqual(original)
-  })
-
-  it('rejects unsupported future schemas before hydration', () => {
-    expect(() => decodeStoredProject({
-      ...createEmptyProject('Future'),
-      schemaVersion: PROJECT_SCHEMA_VERSION + 1,
-    })).toThrow(/newer than supported/)
   })
 
   it('rejects duplicate node IDs and dangling edge references', () => {
@@ -502,7 +677,7 @@ describe('decodeStoredProject', () => {
   it('rejects malformed and duplicate persisted annotations', () => {
     const malformed = legacyProject()
     malformed.annotations[0].backgroundColor = 'white'
-    expect(() => decodeStoredProject(malformed)).toThrow(/six-digit hex color/)
+    expect(() => decodeStoredProject(malformed)).toThrow(/backgroundColor/)
 
     const duplicate = legacyProject()
     duplicate.annotations.push(structuredClone(duplicate.annotations[0]))
@@ -511,17 +686,15 @@ describe('decodeStoredProject', () => {
 
   it('normalizes physical routes and overrides while rejecting ambiguous or invalid data', () => {
     const raw = legacyProject()
-    raw.net.physicalConfig = { refractiveIndex: 1.5 }
+    raw.net.physicalConfig.refractiveIndex = 1.5
     raw.net.edges[0].data.curvePoints = [{
       id: 'curve_1',
       position: [-72, 43],
       type: 'smooth',
     }]
-    raw.net.edges[0].data.physicalOverrides = {
+    raw.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({
       distanceMeters: 1200,
-      refractiveIndex: null,
-      delaySeconds: null,
-    }
+    })
 
     const { project } = decodeStoredProject(raw)
     // Node-order normalization reverses route anchors with the endpoints.
@@ -552,42 +725,43 @@ describe('decodeStoredProject', () => {
     })
     expect(() => decodeStoredProject(duplicate)).toThrow(/duplicate physical edge endpoints/)
     duplicate.net.edges[1].isLogic = true
+    duplicate.net.edges[1].data = {
+      type: duplicate.net.edges[1].data.type,
+      protocols: duplicate.net.edges[1].data.protocols,
+    }
     expect(() => decodeStoredProject(duplicate)).not.toThrow()
 
     const invalid = legacyProject()
     invalid.net.edges[0].data.curvePoints = [{
       id: 'bad', position: [-72, 43], type: 'rounded',
     }]
-    expect(() => decodeStoredProject(invalid)).toThrow(/smooth or sharp/)
+    expect(() => decodeStoredProject(invalid)).toThrow(/curvePoints/)
     invalid.net.edges[0].data.curvePoints = []
-    invalid.net.edges[0].data.physicalOverrides = { delaySeconds: -1 }
-    expect(() => decodeStoredProject(invalid)).toThrow(/nonnegative/)
-    invalid.net.edges[0].data.physicalOverrides = { lossDbPerKm: -0.1 }
-    expect(() => decodeStoredProject(invalid)).toThrow(/nonnegative/)
-    invalid.net.edges[0].data.physicalOverrides = { transmissivity: 1.1 }
-    expect(() => decodeStoredProject(invalid)).toThrow(/0 through 1/)
-    invalid.net.edges[0].data.physicalOverrides = null
-    invalid.net.edges[0].isLogic = 'true'
-    expect(() => decodeStoredProject(invalid)).toThrow(/isLogic must be a boolean/)
+    invalid.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({ delaySeconds: -1 })
+    expect(() => decodeStoredProject(invalid)).toThrow(/delaySeconds/)
+    invalid.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({ lossDbPerKm: -0.1 })
+    expect(() => decodeStoredProject(invalid)).toThrow(/lossDbPerKm/)
+    invalid.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({ transmissivity: 1.1 })
+    expect(() => decodeStoredProject(invalid)).toThrow(/transmissivity/)
 
     const invalidGlobalLoss = legacyProject()
-    invalidGlobalLoss.net.physicalConfig = { lossDbPerKm: -0.1 }
-    expect(() => decodeStoredProject(invalidGlobalLoss)).toThrow(/nonnegative/)
+    invalidGlobalLoss.net.physicalConfig.lossDbPerKm = -0.1
+    expect(() => decodeStoredProject(invalidGlobalLoss)).toThrow(/lossDbPerKm/)
 
     const polarNode = legacyProject()
     polarNode.net.nodes[0].position = [0, 89]
-    expect(() => decodeStoredProject(polarNode)).toThrow(/valid position/)
+    expect(() => decodeStoredProject(polarNode)).toThrow(/position/)
 
     const polarCurve = legacyProject()
     polarCurve.net.edges[0].data.curvePoints = [{
       id: 'polar', position: [0, 89], type: 'smooth',
     }]
-    expect(() => decodeStoredProject(polarCurve)).toThrow(/invalid position/)
+    expect(() => decodeStoredProject(polarCurve)).toThrow(/curvePoints/)
   })
 })
 
 describe('encodeStoredProject', () => {
-  it('writes the v1 plain-storage shape without mutating the live model graph', () => {
+  it('writes the closed v2 storage shape without mutating the live model graph', () => {
     const decoded = decodeStoredProject(legacyProject(), {
       storageName: 'Storage Name',
       defaultBackgroundNoise: DEFAULT_NOISE,
@@ -615,23 +789,27 @@ describe('encodeStoredProject', () => {
     expect(encoded.description).toBe('# Project notes')
     expect(encoded.annotations).toEqual(decoded.project.annotations)
     expect(encoded.annotations).not.toBe(decoded.project.annotations)
-    expect(encoded.platformInfo).toEqual({ versions: { app: '2.0.0' } })
+    expect(encoded.platformInfo).toEqual({
+      versions: {
+        julia: null,
+        genie: null,
+        quantumSavory: null,
+        app: '2.0.0',
+      },
+    })
     expect(encoded.uiGlobal).toEqual({
-      futureUiField: true,
       map: { position: [10, 20], zoom: 6 },
     })
-    expect(encoded.futureProjectField).toEqual({ enabled: true })
-    expect(encoded.net.futureNetField).toBe('preserve me')
-    expect(encoded.net.nodes[0].futureNodeField).toBe(2)
-    expect(encoded.net.nodes[0].data.slots[0]).toMatchObject({
-      isLocked: false,
-      assignment: false,
-    })
+    expect(encoded).not.toHaveProperty('futureProjectField')
+    expect(encoded.net).not.toHaveProperty('futureNetField')
+    expect(encoded.net.nodes[0]).not.toHaveProperty('futureNodeField')
+    expect(encoded.net.nodes[0].data.slots[0]).not.toHaveProperty('isLocked')
+    expect(encoded.net.nodes[0].data.slots[0]).not.toHaveProperty('assignment')
     expect(encoded.net.edges[0]).toMatchObject({
       source: 'node_b',
       target: 'node_a',
-      futureEdgeField: 'preserve me',
     })
+    expect(encoded.net.edges[0]).not.toHaveProperty('futureEdgeField')
     expect(encoded.net.edges[0].data).not.toHaveProperty('distanceMeters')
     expect(encoded.net.edges[0].data).not.toHaveProperty('propagationDelaySeconds')
     expect(encoded.net.edges[0].data).not.toHaveProperty('refractiveIndex')
@@ -666,7 +844,7 @@ describe('encodeStoredProject', () => {
       defaultBackgroundNoise: DEFAULT_NOISE,
     })
 
-    expect(second.schemaVersion).toBe(1)
+    expect(second.schemaVersion).toBe(PROJECT_SCHEMA_VERSION)
     expect(second.project.net.nodes.every(node => node instanceof Node)).toBe(true)
     expect(second.project.net.edges[0].source).toBe(second.project.net.nodes[0])
     expect(second.project.net.edges[0].target).toBe(second.project.net.nodes[1])
@@ -678,8 +856,8 @@ describe('encodeStoredProject', () => {
 })
 
 describe('backend payload codecs', () => {
-  it('normalizes legacy null Variables to a backend-safe Default choice', () => {
-    const project = createEmptyProject('Legacy Variables')
+  it('normalizes empty Variables to a backend-safe Default choice', () => {
+    const project = createEmptyProject('Default Variables')
     project.variables = [
       {
         id: 'legacy-empty',
@@ -696,7 +874,8 @@ describe('backend payload codecs', () => {
       },
     ]
 
-    const decoded = decodeStoredProject(project, { storageName: project.name }).project
+    const document = encodeStoredProject(project)
+    const decoded = decodeStoredProject(document, { storageName: project.name }).project
     expect(decoded.variables[0]).toMatchObject({
       type: 'default',
       selectedType: 'default',
@@ -717,7 +896,7 @@ describe('backend payload codecs', () => {
     })
   })
 
-  it('normalizes legacy numeric drafts and round-trips exact expression tags', () => {
+  it('normalizes numeric drafts and round-trips exact expression tags', () => {
     const project = createEmptyProject('Numeric expressions')
     project.variables.push(new Variable({
       id: 'variable_delay',
@@ -776,8 +955,8 @@ describe('backend payload codecs', () => {
     ])
   })
 
-  it('normalizes the legacy protocol default sentinel to keyword omission', () => {
-    const project = createEmptyProject('Legacy protocol default')
+  it('normalizes the protocol default sentinel to keyword omission', () => {
+    const project = createEmptyProject('Protocol default')
     project.net.protocols.push(new FloatingProtocol({
       id: 'legacy-default',
       type: 'Example.Protocol',
@@ -812,15 +991,18 @@ describe('backend payload codecs', () => {
     })
 
     expect(() => encodeStoredProject(project)).toThrow(/exactly a nonblank source and kind/)
-    expect(() => decodeStoredProject({
-      ...createEmptyProject('Malformed import'),
-      variables: [{
-        id: 'variable_bad',
-        name: 'bad',
-        type: 'Float64',
-        value: { kind: 'numeric_expression', source: '   ' },
-      }],
-    })).toThrow(/exactly a nonblank source and kind/)
+    const malformedDocument = encodeStoredProject(createEmptyProject('Malformed import'))
+    malformedDocument.variables = [{
+      id: 'variable_bad',
+      name: 'bad',
+      type: 'Float64',
+      selectedType: 'expression:Float64',
+      value: { kind: 'numeric_expression', source: '   ' },
+    }]
+    expect(() => decodeStoredProject(malformedDocument)).toThrow(ProjectSchemaError)
+    expect(() => decodeStoredProject(malformedDocument)).toThrow(
+      /variables\/0\/value\/source/,
+    )
 
     project.variables[0].value = 0.5
     expect(() => toSimulationPayload(project)).toThrow(
@@ -890,7 +1072,7 @@ describe('backend payload codecs', () => {
     const payload = toSimulationPayload(project)
 
     expect(payload.name).toBe('Payload Project')
-    expect(payload.futureProjectField).toEqual({ enabled: true })
+    expect(payload).not.toHaveProperty('futureProjectField')
     expect(payload).not.toHaveProperty('schemaVersion')
     expect(payload).not.toHaveProperty('description')
     expect(payload).not.toHaveProperty('annotations')
@@ -914,7 +1096,6 @@ describe('backend payload codecs', () => {
       id: 'slot_b',
       backgroundNoise: {
         type: 'NoiseType',
-        futureNoiseField: true,
         parameters: [{ name: 'rate', value: 0.25 }],
       },
     })
