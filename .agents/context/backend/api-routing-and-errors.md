@@ -118,6 +118,10 @@ reject extras. Parse accepts representation configuration only; export also requ
 positive `time` and `timeStep`. Physical edges require every resolved physical field,
 while virtual edges forbid them.
 
+Nonblank string IDs, names, and endpoint references retain their exact wire value.
+Validation neither coerces nor trims them, and endpoint matching compares the retained
+strings exactly.
+
 Constructor values deliberately retain one simulator-owned extension point. The Web
 layer recognizes three exact `kind`-tagged variants (`variable`,
 `numeric_expression`, and `states_zoo`); recursively untagged JSON is passed to

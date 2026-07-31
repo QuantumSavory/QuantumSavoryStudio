@@ -2539,6 +2539,25 @@
         @test occursin("must be a string", rejected_payload_shape(mutate!).message)
       end
 
+      exact_string_ids = deepcopy(test_payload)
+      exact_string_ids["net"]["nodes"][1]["id"] = " node1 "
+      exact_string_ids["net"]["edges"][1]["source"] = " node1 "
+      exact_string_validation = WebQuantumSavory.validate_payload(exact_string_ids)
+      @test exact_string_validation["graph_info"]["edge_connections"][1]["source"] ==
+        " node1 "
+      @test Graphs.ne(WebQuantumSavory.build_graph(exact_string_validation)) == 1
+
+      mismatched_string_ids = deepcopy(exact_string_ids)
+      mismatched_string_ids["net"]["edges"][1]["source"] = "node1"
+      mismatched_id_error = try
+        WebQuantumSavory.validate_payload(mismatched_string_ids)
+        nothing
+      catch error
+        error
+      end
+      @test mismatched_id_error isa WebQuantumSavory.APIError
+      @test occursin("non-existent source node", mismatched_id_error.message)
+
       for mutate! in (
         payload -> (payload["net"]["nodes"][1]["data"]["slots"][1]["legacy"] = true),
         payload -> delete!(

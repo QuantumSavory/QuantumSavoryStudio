@@ -224,9 +224,9 @@ function _required_nonempty_string(object, field::String, context::String)
     "$context field '$field' must be a string",
     Dict{String,Any}("field" => field, "received_type" => string(typeof(raw_value))),
   ))
-  value = strip(String(raw_value))
-  isempty(value) && throw(validation_error("$context field '$field' must not be blank"))
-  return String(value)
+  value = String(raw_value)
+  isempty(strip(value)) && throw(validation_error("$context field '$field' must not be blank"))
+  return value
 end
 
 function _require_exact_object_fields(
