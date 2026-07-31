@@ -4,6 +4,7 @@ import { generateUUid } from './Utils.js'
 import { requestJson } from './httpClient.js'
 import { httpOperation, httpOperationPath } from './httpOperations.js'
 import { snapshotBackendPlatformInfo } from './platformInfo.js'
+import { assertBackendLogResponse } from './logRecords.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -487,11 +488,12 @@ export class ApiConnector {
   async getBackendLogs( projectName, purge = true, { signal } = {} ){
     const namespace = this.getScopedSimulationName(projectName)
     const query = new URLSearchParams({ purge: String(purge) })
-    return this.requestOperation('getSimulationLogs', {
+    const response = await this.requestOperation('getSimulationLogs', {
       pathParams: { name: namespace },
       query,
       signal,
     })
+    return assertBackendLogResponse(response)
   }
 }
 

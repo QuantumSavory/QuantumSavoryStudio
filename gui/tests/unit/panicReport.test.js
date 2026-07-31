@@ -19,6 +19,7 @@ const panic = {
   id: 'panic-123',
   timestamp: '2026-07-13T16:17:18.000Z',
   source: 'Simulator',
+  severity: 'panic',
   summary: 'A mock protocol failed',
   exception_type: 'BoundsError',
   message: 'BoundsError: attempt to access 3-element Vector at index [100]',
@@ -36,6 +37,16 @@ describe('panic report data', () => {
       message: panic.message,
       stacktrace: panic.stacktrace,
     })
+  })
+
+  it('rejects partial, aliased, and extra panic fields', () => {
+    expect(() => normalizePanic({ ...panic, exceptionType: 'BoundsError' }))
+      .toThrow(/canonical/)
+    expect(() => normalizePanic({ ...panic, stack_trace: panic.stacktrace }))
+      .toThrow(/canonical/)
+    const missing = { ...panic }
+    delete missing.exception_type
+    expect(() => normalizePanic(missing)).toThrow(/canonical/)
   })
 
   it('builds complete Markdown with panic, version, and reproduction details', () => {

@@ -19,6 +19,7 @@ function createController(api, overrides = {}) {
   })
   const scope = effectScope()
   const addLog = vi.fn()
+  const addBackendLogEvent = vi.fn()
   const showPanic = vi.fn()
   const showAlert = vi.fn()
   const flushEditors = overrides.flushEditors || vi.fn(async () => ({ valid: true }))
@@ -32,6 +33,7 @@ function createController(api, overrides = {}) {
     runReadinessExclusive,
     getBrowserRevision: overrides.getBrowserRevision || (() => null),
     addLog,
+    addBackendLogEvent,
     applicationLogs: ref([]),
     refreshAllWindows: vi.fn(),
     checkAndHideInvalidEntangledStates: vi.fn(),
@@ -45,6 +47,7 @@ function createController(api, overrides = {}) {
     controller,
     projectData,
     addLog,
+    addBackendLogEvent,
     showAlert,
     showPanic,
     flushEditors,
@@ -557,6 +560,8 @@ describe('simulation controller polling ownership', () => {
     const firstLogRequest = deferred()
     const panic = {
       id: 'panic-terminal',
+      timestamp: '2026-07-13T12:00:00.000Z',
+      source: 'Simulator',
       severity: 'panic',
       summary: 'Simulation crashed with BoundsError',
       exception_type: 'BoundsError',
@@ -578,7 +583,7 @@ describe('simulation controller polling ownership', () => {
         .mockImplementationOnce(() => firstLogRequest.promise)
         .mockResolvedValueOnce({ success: true, logs: [panic] })
     }
-    const { controller, addLog, showPanic, stop } = createController(api)
+    const { controller, addLog, addBackendLogEvent, showPanic, stop } = createController(api)
 
     controller.startPolling()
     await Promise.resolve()
@@ -595,7 +600,8 @@ describe('simulation controller polling ownership', () => {
     expect(inFlightSignal.aborted).toBe(false)
     expect(controller.pollingActive.value).toBe(false)
     expect(addLog.mock.calls.filter(([level]) => level === 'error')).toHaveLength(0)
-    expect(addLog.mock.calls.filter(([level]) => level === 'panic')).toHaveLength(1)
+    expect(addBackendLogEvent).toHaveBeenCalledOnce()
+    expect(addBackendLogEvent).toHaveBeenCalledWith(panic)
     expect(showPanic).toHaveBeenCalledTimes(1)
     stop()
   })
@@ -606,29 +612,20 @@ describe('simulation controller polling ownership', () => {
       timestamp: '2026-07-13T12:00:00.000Z',
       source: 'Simulator',
       severity: 'error',
-      group: 'protocol',
       message: 'ordinary simulator error',
-      protocol: 'ExampleProtocol'
+      details: {
+        group: 'protocol',
+        protocol: 'ExampleProtocol'
+      }
     }
     const api = {
       getBackendLogs: vi.fn(async () => ({ success: true, logs: [record] }))
     }
-    const { controller, addLog, stop } = createController(api)
+    const { controller, addBackendLogEvent, stop } = createController(api)
 
     await controller.fetchBackendLogs()
 
-    expect(addLog).toHaveBeenCalledWith(
-      'error',
-      record.message,
-      'Simulator',
-      JSON.stringify(record, null, 2),
-      expect.objectContaining({
-        id: 'log-1',
-        group: 'protocol',
-        raw: record,
-        fullMessage: record.message
-      })
-    )
+    expect(addBackendLogEvent).toHaveBeenCalledWith(record)
     stop()
   })
 
@@ -639,18 +636,18 @@ describe('simulation controller polling ownership', () => {
       source: 'Simulator',
       severity: 'debug',
       message: 'Entangled a pair',
-      group: 'protocol',
-      event: 'pair_entangled'
+      details: { group: 'protocol', event: 'pair_entangled' }
     }))
     const api = {
       getBackendLogs: vi.fn(async () => ({ success: true, logs: records }))
     }
-    const { controller, addLog, stop } = createController(api)
+    const { controller, addBackendLogEvent, stop } = createController(api)
 
     await controller.fetchBackendLogs()
 
-    expect(addLog).toHaveBeenCalledTimes(2)
-    expect(addLog.mock.calls.map(call => call[4].id)).toEqual(['pair-1', 'pair-2'])
+    expect(addBackendLogEvent).toHaveBeenCalledTimes(2)
+    expect(addBackendLogEvent.mock.calls.map(([event]) => event.id))
+      .toEqual(['pair-1', 'pair-2'])
     stop()
   })
 
@@ -678,26 +675,17 @@ describe('simulation controller polling ownership', () => {
       })),
       getBackendLogs: vi.fn(async () => ({ success: true, logs: [panic] }))
     }
-    const { controller, addLog, showPanic, stop } = createController(api)
+    const { controller, addBackendLogEvent, showPanic, stop } = createController(api)
 
     await controller.getSimulationStatus(false)
     await controller.fetchBackendLogs()
 
-    expect(addLog.mock.calls.filter(([level]) => level === 'panic')).toHaveLength(1)
-    expect(addLog).toHaveBeenCalledWith(
-      'panic',
-      panic.summary,
-      'Simulator',
-      JSON.stringify(panic, null, 2),
-      expect.objectContaining({
-        id: panic.id,
-        fullMessage: panic.message,
-        exceptionType: panic.exception_type,
-        stacktrace: panic.stacktrace
-      })
-    )
+    expect(addBackendLogEvent).toHaveBeenCalledOnce()
+    expect(addBackendLogEvent).toHaveBeenCalledWith(panic)
     expect(showPanic).toHaveBeenCalledTimes(1)
     expect(showPanic).toHaveBeenCalledWith(expect.objectContaining({ id: panic.id }))
+    expect(() => controller.ingestPanic({ ...panic, exceptionType: 'BoundsError' }))
+      .toThrow(/canonical/)
     stop()
   })
 

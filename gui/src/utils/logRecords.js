@@ -23,27 +23,11 @@ export const STRUCTURED_FILTER_CATEGORIES = Object.freeze([
 ])
 
 const STRUCTURED_CONTEXT_KEYS = new Set([
-  'id',
-  'timestamp',
-  'source',
-  'severity',
-  'level',
-  'message',
-  'msg',
-  'summary',
-  'full_message',
-  'fullMessage',
-  'exception_type',
-  'exceptionType',
-  'stacktrace',
-  'stack_trace',
   'module',
   'group',
   'event',
   'sim_time',
-  'simTime',
   'sim_process_id',
-  'simProcessId',
   'protocol',
   'nodes',
   'file',
@@ -51,35 +35,19 @@ const STRUCTURED_CONTEXT_KEYS = new Set([
   'logging_id'
 ])
 
-const WEB_API_SOURCE_ALIASES = new Set([
-  'api',
-  'backend',
-  'server',
-  'web api',
-  'webquantumsavory',
-  'web quantum savory'
+const ORDINARY_BACKEND_KEYS = Object.freeze([
+  'id', 'timestamp', 'source', 'severity', 'message', 'details'
 ])
-
-const SIMULATOR_SOURCE_ALIASES = new Set([
-  'julia',
-  'quantumsavory',
-  'quantum savory',
-  'simulation',
-  'simulator'
+const PANIC_BACKEND_KEYS = Object.freeze([
+  'id', 'timestamp', 'source', 'severity', 'summary', 'exception_type',
+  'message', 'stacktrace'
+])
+const ORDINARY_BACKEND_SEVERITIES = new Set([
+  'debug', 'info', 'success', 'warning', 'error'
 ])
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function firstString(...values) {
-  return values.find(value => typeof value === 'string' && value.length > 0)
-    || values.find(value => typeof value === 'string')
-    || ''
-}
-
-function firstDefined(...values) {
-  return values.find(value => value !== undefined && value !== null)
 }
 
 function stringValue(value) {
@@ -108,21 +76,65 @@ function unique(values) {
   return [...new Set(values)]
 }
 
-function rawRecord(raw) {
-  return isRecord(raw) ? raw : {}
+function exactKeys(value, expected) {
+  return isRecord(value)
+    && Object.keys(value).length === expected.length
+    && expected.every(key => Object.hasOwn(value, key))
 }
 
-function structuredValue(record, raw, ...keys) {
-  return firstDefined(
-    ...keys.map(key => record[key]),
-    ...keys.map(key => raw[key])
-  )
+function requireString(record, key, { nonempty = false } = {}) {
+  const value = record[key]
+  if (typeof value !== 'string' || (nonempty && value.length === 0)) {
+    throw new TypeError(`backend log event.${key} must be ${nonempty ? 'a non-empty' : 'a'} string`)
+  }
+}
+
+export function assertBackendLogEvent(event) {
+  if (!isRecord(event)) throw new TypeError('backend log event must be an object')
+  if (event.severity === 'panic') {
+    if (!exactKeys(event, PANIC_BACKEND_KEYS)) {
+      throw new TypeError('backend panic event must contain exactly the canonical panic fields')
+    }
+    for (const key of PANIC_BACKEND_KEYS) requireString(event, key, {
+      nonempty: ['id', 'timestamp', 'source'].includes(key)
+    })
+    return event
+  }
+
+  if (!exactKeys(event, ORDINARY_BACKEND_KEYS)) {
+    throw new TypeError('backend log event must contain exactly the canonical ordinary fields')
+  }
+  for (const key of ['id', 'timestamp', 'source']) requireString(event, key, { nonempty: true })
+  requireString(event, 'severity')
+  requireString(event, 'message')
+  if (!ORDINARY_BACKEND_SEVERITIES.has(event.severity)) {
+    throw new TypeError('backend log event.severity is invalid')
+  }
+  if (!isRecord(event.details)) {
+    throw new TypeError('backend log event.details must be an object')
+  }
+  return event
+}
+
+export function assertBackendLogResponse(response) {
+  if (!exactKeys(response, ['success', 'logs', 'count'])) {
+    throw new TypeError('backend logs response must contain exactly success, logs, and count')
+  }
+  if (response.success !== true || !Array.isArray(response.logs)) {
+    throw new TypeError('backend logs response is invalid')
+  }
+  if (!Number.isInteger(response.count) || response.count < 0 || response.count !== response.logs.length) {
+    throw new TypeError('backend logs response.count must equal logs.length')
+  }
+  response.logs.forEach(assertBackendLogEvent)
+  return response
 }
 
 export function projectNodeNameMap(nodes = []) {
   return new Map(nodes.map((node, index) => [
     String(index + 1),
-    firstString(node?.name, node?.id, `Node ${index + 1}`)
+    [node?.name, node?.id, `Node ${index + 1}`]
+      .find(value => typeof value === 'string' && value.length > 0)
   ]))
 }
 
@@ -145,12 +157,12 @@ export function normalizeLogLevel(level) {
 
 export function normalizeLogSource(source) {
   const suppliedSource = typeof source === 'string' ? source.trim() : ''
-  const normalized = suppliedSource.toLowerCase()
-  if (WEB_API_SOURCE_ALIASES.has(normalized)) return { source: 'Web API', subsystem: null }
-  if (SIMULATOR_SOURCE_ALIASES.has(normalized)) return { source: 'Simulator', subsystem: null }
+  if (suppliedSource === 'Web API' || suppliedSource === 'Simulator') {
+    return { source: suppliedSource, subsystem: null }
+  }
   return {
     source: 'App',
-    subsystem: normalized === 'app' || !suppliedSource ? null : suppliedSource
+    subsystem: suppliedSource === 'App' || !suppliedSource ? null : suppliedSource
   }
 }
 
@@ -162,32 +174,75 @@ export function normalizeLogGroup(group) {
 
 export const normalizeLogSeverity = normalizeLogLevel
 
-export function parseLegacyLogDetails(value) {
-  if (typeof value !== 'string') return value
+function internalDetails(details) {
+  if (details === null || details === undefined) return {}
+  return isRecord(details) ? details : { value: details }
+}
 
-  try {
-    return JSON.parse(value)
-  } catch {
-    return value
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\r/g, '\r')
+export function createAppLogRecord({
+  id,
+  timestamp,
+  level,
+  message,
+  producer = 'App',
+  details = {},
+  raw,
+  fullMessage = null,
+  exceptionType = null,
+  stacktrace = null,
+}) {
+  const source = normalizeLogSource(producer)
+  const normalizedLevel = normalizeLogSeverity(level)
+  const normalizedDetails = internalDetails(details)
+  return {
+    id: id == null || String(id).length === 0 ? null : String(id),
+    timestamp: typeof timestamp === 'string' ? timestamp : new Date().toISOString(),
+    level: normalizedLevel,
+    source: source.source,
+    subsystem: source.subsystem,
+    group: source.source === 'Simulator'
+      ? normalizeLogGroup(normalizedDetails.group)
+      : null,
+    message: String(message ?? ''),
+    details: normalizedDetails,
+    fullMessage,
+    exceptionType,
+    stacktrace,
+    count: 1,
+    raw: raw ?? {
+      source: source.source,
+      severity: normalizedLevel,
+      message: String(message ?? ''),
+      details: normalizedDetails,
+    },
   }
 }
 
-export function parseRawLogDetails(value) {
-  const parsed = parseLegacyLogDetails(value)
-  if (parsed === null || parsed === undefined) return parsed
-  return isRecord(parsed) || Array.isArray(parsed) ? parsed : { details: parsed }
-}
-
-export function rawLogPayload(log) {
-  if (!isRecord(log)) return log
-  if (log.raw !== undefined && log.raw !== null) return log.raw
-  if (log.extendedInfo !== undefined && log.extendedInfo !== null) {
-    return parseRawLogDetails(log.extendedInfo)
+export function backendLogEventToAppLog(event) {
+  assertBackendLogEvent(event)
+  if (event.severity === 'panic') {
+    return createAppLogRecord({
+      id: event.id,
+      timestamp: event.timestamp,
+      level: event.severity,
+      message: event.summary,
+      producer: event.source,
+      raw: event,
+      fullMessage: event.message,
+      exceptionType: event.exception_type,
+      stacktrace: event.stacktrace,
+    })
   }
-  return log
+  return createAppLogRecord({
+    id: event.id,
+    timestamp: event.timestamp,
+    level: event.severity,
+    message: event.message,
+    producer: event.source,
+    details: event.details,
+    raw: event,
+    fullMessage: event.message,
+  })
 }
 
 export function serializeLogValue(value) {
@@ -220,65 +275,44 @@ export function serializeLogValue(value) {
 }
 
 export function normalizeLogRecord(log, { nodes = [] } = {}) {
-  const record = isRecord(log) ? log : { message: String(log ?? '') }
-  const level = normalizeLogLevel(record.level ?? record.severity)
-  const normalizedSource = normalizeLogSource(record.source)
-  const source = normalizedSource.source
-  const message = firstString(
-    level === 'panic' ? record.summary : undefined,
-    record.message,
-    record.msg,
-    record.summary
-  )
-  const fullMessage = firstString(
-    record.fullMessage,
-    record.full_message,
-    record.message,
-    record.msg,
-    message
-  )
-  const exceptionType = firstString(record.exceptionType, record.exception_type)
-  const stacktrace = firstString(record.stacktrace, record.stack_trace)
-  const raw = rawLogPayload(record)
-  const structuredRaw = rawRecord(raw)
-  const subsystem = source === 'App'
-    ? firstString(
-      record.subsystem,
-      normalizedSource.subsystem,
-      isRecord(raw) ? raw.subsystem : undefined
-    ) || null
+  const record = isRecord(log) ? log : createAppLogRecord({ message: log })
+  const level = normalizeLogLevel(record.level)
+  const source = typeof record.source === 'string' ? record.source : 'App'
+  const message = typeof record.message === 'string' ? record.message : ''
+  const fullMessage = typeof record.fullMessage === 'string' ? record.fullMessage : message
+  const exceptionType = typeof record.exceptionType === 'string' ? record.exceptionType : ''
+  const stacktrace = typeof record.stacktrace === 'string' ? record.stacktrace : ''
+  const raw = record.raw ?? record
+  const structuredRaw = isRecord(record.details) ? record.details : {}
+  const subsystem = source === 'App' && typeof record.subsystem === 'string'
+    ? record.subsystem
     : null
   const group = source === 'Simulator'
-    ? normalizeLogGroup(structuredValue(record, structuredRaw, 'group'))
+    ? normalizeLogGroup(record.group ?? structuredRaw.group)
     : null
-  const event = stringValue(structuredValue(record, structuredRaw, 'event'))
-  const simTimeValue = structuredValue(record, structuredRaw, 'sim_time', 'simTime')
+  const event = stringValue(structuredRaw.event)
+  const simTimeValue = structuredRaw.sim_time
   const simTime = finiteNumber(simTimeValue)
-  const simProcessId = structuredValue(
-    record,
-    structuredRaw,
-    'sim_process_id',
-    'simProcessId'
-  ) ?? null
-  const protocol = stringValue(structuredValue(record, structuredRaw, 'protocol'))
+  const simProcessId = structuredRaw.sim_process_id ?? null
+  const protocol = stringValue(structuredRaw.protocol)
   const participatingNodeIds = unique(flattenNodeIds(
-    structuredValue(record, structuredRaw, 'nodes')
+    structuredRaw.nodes
   ))
   const relatedNodeIds = unique([
     ...participatingNodeIds,
-    ...flattenNodeIds(structuredValue(record, structuredRaw, 'src_node')),
-    ...flattenNodeIds(structuredValue(record, structuredRaw, 'dst_node')),
-    ...flattenNodeIds(structuredValue(record, structuredRaw, 'remote_nodes')),
-    ...flattenNodeIds(structuredValue(record, structuredRaw, 'client_nodes'))
+    ...flattenNodeIds(structuredRaw.src_node),
+    ...flattenNodeIds(structuredRaw.dst_node),
+    ...flattenNodeIds(structuredRaw.remote_nodes),
+    ...flattenNodeIds(structuredRaw.client_nodes)
   ])
   const nodeNames = relatedNodeIds.map(nodeId => resolveLogNodeName(nodeId, nodes))
   const eventData = Object.fromEntries(
     Object.entries(structuredRaw).filter(([key]) => !STRUCTURED_CONTEXT_KEYS.has(key))
   )
-  const moduleName = stringValue(structuredValue(record, structuredRaw, 'module'))
-  const file = stringValue(structuredValue(record, structuredRaw, 'file'))
-  const line = structuredValue(record, structuredRaw, 'line') ?? null
-  const loggingId = structuredValue(record, structuredRaw, 'logging_id') ?? null
+  const moduleName = stringValue(structuredRaw.module)
+  const file = stringValue(structuredRaw.file)
+  const line = structuredRaw.line ?? null
+  const loggingId = structuredRaw.logging_id ?? null
   const isStructured = source === 'Simulator' && (
     group !== null
     || event !== null

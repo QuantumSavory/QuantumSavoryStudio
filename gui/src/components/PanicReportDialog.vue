@@ -114,7 +114,7 @@ const props = defineProps({
   },
   panic: {
     type: Object,
-    default: () => ({}),
+    default: null,
   },
   serializeProject: {
     type: Function,
@@ -142,7 +142,18 @@ const reportErrors = ref([])
 const statusMessage = ref('')
 const fallbackTextarea = ref(null)
 
-const normalizedPanic = computed(() => normalizePanic(props.panic))
+const EMPTY_PANIC_VIEW = Object.freeze({
+  id: '',
+  timestamp: '',
+  source: '',
+  summary: '',
+  exceptionType: '',
+  message: '',
+  stacktrace: '',
+})
+const normalizedPanic = computed(() => (
+  props.show ? normalizePanic(props.panic) : EMPTY_PANIC_VIEW
+))
 const panicKey = computed(() => normalizedPanic.value.id || JSON.stringify(normalizedPanic.value))
 
 watch(

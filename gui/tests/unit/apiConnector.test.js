@@ -23,7 +23,7 @@ describe('ApiConnector project namespaces', () => {
     localStorage.setItem('user_uuid', 'user')
     globalThis.fetch = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ success: true, logs: [] })
+      json: async () => ({ success: true, logs: [], count: 0 })
     }))
   })
 
@@ -108,6 +108,41 @@ describe('ApiConnector project namespaces', () => {
     expect(fetch.mock.calls[1][0]).toBe(
       'http://api.test/logs/user_A%2FB%3F?purge=false',
     )
+  })
+
+  it('admits only exact backend log response and event DTOs', async () => {
+    const canonical = {
+      id: 'log-1',
+      timestamp: '2026-07-31T12:00:00.000Z',
+      source: 'Simulator',
+      severity: 'info',
+      message: 'canonical',
+      details: { group: 'protocol' },
+    }
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ success: true, logs: [canonical], count: 1 }),
+    }))
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.getBackendLogs('Project')).resolves.toEqual({
+      success: true,
+      logs: [canonical],
+      count: 1,
+    })
+
+    for (const invalid of [
+      { ...canonical, msg: 'alias' },
+      { ...canonical, level: 'info' },
+      { ...canonical, group: 'protocol' },
+      { ...canonical, details: '{"group":"protocol"}' },
+    ]) {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, logs: [invalid], count: 1 }),
+      })
+      await expect(connector.getBackendLogs('Project')).rejects.toThrow(/canonical|details/)
+    }
   })
 
   it('sends custom-function placement context for validation', async () => {

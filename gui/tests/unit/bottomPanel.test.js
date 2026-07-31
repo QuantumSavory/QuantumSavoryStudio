@@ -125,7 +125,7 @@ describe('BottomPanel bounds contract', () => {
       {
         logs: [
           { id: 'panic-1', level: 'panic' },
-          { id: 'panic-2', severity: 'PANIC' },
+          { id: 'panic-2', level: 'PANIC' },
           { id: 'error-1', level: 'error' }
         ]
       }

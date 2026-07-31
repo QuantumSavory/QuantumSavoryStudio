@@ -475,7 +475,7 @@ const logCounts = computed(() => {
   }
 
   props.logs.forEach(log => {
-    counts[normalizeLogSeverity(log.level ?? log.severity)] += 1
+    counts[normalizeLogSeverity(log.level)] += 1
   })
 
   return counts

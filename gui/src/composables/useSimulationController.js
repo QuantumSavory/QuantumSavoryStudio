@@ -1,6 +1,8 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { api as sharedApi } from '../utils/ApiConnector'
-import { normalizeLogSeverity, normalizeLogSource } from '../utils/logRecords.js'
+import {
+  assertBackendLogEvent,
+} from '../utils/logRecords.js'
 import {
   SimulationPhase,
   createSimulationState,
@@ -61,6 +63,7 @@ export function useSimulationController({
   runReadinessExclusive = work => work(),
   getBrowserRevision = () => null,
   addLog,
+  addBackendLogEvent,
   applicationLogs,
   refreshAllWindows,
   checkAndHideInvalidEntangledStates,
@@ -211,46 +214,17 @@ export function useSimulationController({
     return { payload, failure: null }
   }
 
-  function panicDetails(record = {}) {
-    const message = String(record.message || record.full_message || record.fullMessage || record.summary || 'Simulator panic')
-    const summary = String(record.summary || message.split('\n')[0] || 'Simulator panic')
-    const exceptionType = String(record.exception_type || record.exceptionType || 'Exception')
-    const stacktrace = String(record.stacktrace || record.stack_trace || '')
-    const timestamp = record.timestamp || new Date().toISOString()
-    const id = String(
-      record.id
-      || record.panic_id
-      || `panic:${timestamp}:${exceptionType}:${summary}`
-    )
-
-    return {
-      id,
-      timestamp,
-      source: 'Simulator',
-      severity: 'panic',
-      summary,
-      exception_type: exceptionType,
-      message,
-      stacktrace
-    }
-  }
-
   function ingestPanic(record) {
-    if (!record || typeof record !== 'object') return false
-    const panic = panicDetails(record)
-    if (seenPanicIds.has(panic.id)) return false
-    seenPanicIds.add(panic.id)
+    if (record == null) return false
+    assertBackendLogEvent(record)
+    if (record.severity !== 'panic') {
+      throw new TypeError('simulation_panic must be a canonical panic event')
+    }
+    if (seenPanicIds.has(record.id)) return false
+    seenPanicIds.add(record.id)
 
-    addLog('panic', panic.summary, 'Simulator', JSON.stringify(record, null, 2), {
-      id: panic.id,
-      timestamp: panic.timestamp,
-      group: record.group,
-      raw: record,
-      fullMessage: panic.message,
-      exceptionType: panic.exception_type,
-      stacktrace: panic.stacktrace
-    })
-    showPanic?.(panic)
+    addBackendLogEvent(record)
+    showPanic?.({ ...record })
     return true
   }
 
@@ -279,7 +253,7 @@ export function useSimulationController({
       throw responseError(response, 'Failed to parse network graph')
     }
     dispatch({ type: 'PARSED', message: response.message, backendState: response.state })
-    if (showSuccessLogs) addLog('success', 'Network graph parsed OK', 'Web API', JSON.stringify(response, null, 2))
+    if (showSuccessLogs) addLog('success', 'Network graph parsed OK', 'Web API', response)
     return true
   }
 
@@ -294,7 +268,7 @@ export function useSimulationController({
       throw responseError(response, 'Failed to prepare simulation')
     }
     dispatch({ type: 'PREPARED', message: response.message, backendState: response.state })
-    addLog('success', 'Simulation prepared OK', 'Web API', JSON.stringify(response, null, 2))
+    addLog('success', 'Simulation prepared OK', 'Web API', response)
     return true
   }
 
@@ -569,7 +543,13 @@ export function useSimulationController({
     const logs = applicationLogs?.value || []
     const lastLog = logs[logs.length - 1]
     if (lastLog?.message?.startsWith('Running step')) {
-      lastLog.extendedInfo = JSON.stringify(response, null, 2)
+      lastLog.details = { response }
+      lastLog.raw = {
+        source: lastLog.source,
+        severity: 'success',
+        message: lastLog.message,
+        details: lastLog.details,
+      }
       lastLog.level = 'success'
     }
   }
@@ -586,7 +566,7 @@ export function useSimulationController({
       if (!contextIsCurrent(context)) return null
       const applied = applyBackendResponse(response)
       if (applied && updatePreviousLog) updatePreviousRunningLog(response)
-      else if (applied && addLogs) addLog('success', 'Simulation status retrieved OK', 'Web API', JSON.stringify(response, null, 2))
+      else if (applied && addLogs) addLog('success', 'Simulation status retrieved OK', 'Web API', response)
       return response
     } catch (error) {
       if (!contextIsCurrent(context) || isAbortError(error)) return null
@@ -734,25 +714,14 @@ export function useSimulationController({
       }
       logFetchFailureReported = false
       for (const backendLog of response.logs) {
-        const severity = normalizeLogSeverity(backendLog.severity || backendLog.level)
-        if (severity === 'panic') {
+        if (backendLog.severity === 'panic') {
           ingestPanic(backendLog)
           continue
         }
 
-        const message = String(backendLog.message || backendLog.msg || '')
-        const normalized = message.trim().toLowerCase()
+        const normalized = backendLog.message.trim().toLowerCase()
         if (normalized === 'simulation started' || normalized.startsWith('simulation progress')) continue
-        const source = normalizeLogSource(backendLog.source || 'Simulator').source
-        addLog(severity, message, source, JSON.stringify(backendLog, null, 2), {
-          id: backendLog.id,
-          timestamp: backendLog.timestamp,
-          group: backendLog.group,
-          raw: backendLog,
-          fullMessage: backendLog.full_message || backendLog.fullMessage || message,
-          exceptionType: backendLog.exception_type || backendLog.exceptionType || null,
-          stacktrace: backendLog.stacktrace || backendLog.stack_trace || null
-        })
+        addBackendLogEvent(backendLog)
       }
     } catch (error) {
       if (

@@ -9,7 +9,7 @@ import {
 const TIMESTAMP = '2026-07-13T12:34:56.000Z'
 
 function log(overrides = {}) {
-  return {
+  const record = {
     id: 'log-1',
     timestamp: TIMESTAMP,
     level: 'info',
@@ -19,6 +19,8 @@ function log(overrides = {}) {
     raw: { subsystem: 'Map', action: 'routine' },
     ...overrides
   }
+  record.details = overrides.details ?? record.raw
+  return record
 }
 
 function structuredLog(overrides = {}) {
@@ -48,14 +50,13 @@ function checkboxWithLabel(wrapper, label) {
 }
 
 describe('log record presentation model', () => {
-  it('normalizes legacy sources, preserves simulator severity, and searches structured fields', () => {
+  it('preserves the canonical panic app view and searches its raw fields', () => {
     const normalized = normalizeLogRecord(log({
-      severity: 'PANIC',
-      level: undefined,
-      source: 'QuantumSavory',
-      summary: 'Simulator stopped',
-      message: 'BoundsError: attempt to access 3-element Vector at index [100]',
-      exception_type: 'BoundsError',
+      level: 'panic',
+      source: 'Simulator',
+      message: 'Simulator stopped',
+      fullMessage: 'BoundsError: attempt to access 3-element Vector at index [100]',
+      exceptionType: 'BoundsError',
       stacktrace: 'raise at MockBrokenProtocol.jl:42',
       raw: { process: 'diagnostic_process', slot: 100 }
     }))
@@ -82,8 +83,8 @@ describe('log record presentation model', () => {
     expect(areConsecutiveLogsEqual(base, {
       ...base,
       id: 'log-2',
-      source: 'System',
-      raw: { subsystem: 'System' }
+      source: 'App',
+      subsystem: 'System'
     })).toBe(false)
   })
 })
@@ -197,11 +198,11 @@ describe('LogsPanel', () => {
       props: {
         showTimestamps: false,
         logs: [
-          log({ id: 'app', source: 'Layout Tools', message: 'Layout complete' }),
-          log({ id: 'api', source: 'Backend', level: 'error', message: 'HTTP request failed' }),
+          log({ id: 'app', source: 'App', subsystem: 'Layout Tools', message: 'Layout complete' }),
+          log({ id: 'api', source: 'Web API', level: 'error', message: 'HTTP request failed' }),
           log({
             id: 'sim',
-            source: 'QuantumSavory',
+            source: 'Simulator',
             level: 'warning',
             group: 'protocol',
             message: 'Simulator warning'
@@ -210,8 +211,8 @@ describe('LogsPanel', () => {
             id: 'panic',
             source: 'Simulator',
             level: 'panic',
-            summary: 'Unexpected simulator exception',
-            message: 'BoundsError at index 100'
+            message: 'Unexpected simulator exception',
+            fullMessage: 'BoundsError at index 100'
           })
         ]
       }
@@ -277,7 +278,7 @@ describe('LogsPanel', () => {
     const wrapper = mount(LogsPanel, {
       props: {
         logs: [
-          log({ id: 'app', source: 'System' }),
+          log({ id: 'app', source: 'App', subsystem: 'System' }),
           log({ id: 'api', source: 'Web API' }),
           log({ id: 'sim', source: 'Simulator' })
         ]

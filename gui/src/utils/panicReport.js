@@ -2,6 +2,7 @@ import {
   normalizeSystemInformation,
   unavailableSystemInformation,
 } from './systemInformation.js'
+import { assertBackendLogEvent } from './logRecords.js'
 
 export const PANIC_ISSUE_URL = 'https://github.com/QuantumSavory/WebQuantumSavory/issues/new'
 
@@ -35,24 +36,21 @@ function fencedText(value) {
   return `${fence}text\n${text}\n${fence}`
 }
 
-/**
- * Normalize the primitive panic object supplied by the simulator status/log APIs.
- * Snake-case backend fields are canonical; aliases keep the reporting boundary
- * useful for callers which have already adapted the object for JavaScript.
- */
-export function normalizePanic(panic = {}) {
-  const source = panic && typeof panic === 'object' ? panic : {}
-  const message = firstText(source.message, source.full_message, source.fullMessage)
-  const summary = firstString(source.summary, message.split('\n')[0]) || 'Simulator panic'
+/** Map the exact backend panic DTO into the report presentation model. */
+export function normalizePanic(panic) {
+  assertBackendLogEvent(panic)
+  if (panic.severity !== 'panic') {
+    throw new TypeError('panic report input must be a canonical panic event')
+  }
 
   return {
-    id: firstString(source.id, source.panic_id, source.panicId),
-    timestamp: firstString(source.timestamp, source.time),
-    source: firstString(source.source) || 'Simulator',
-    summary,
-    exceptionType: firstString(source.exception_type, source.exceptionType, source.type),
-    message: message || summary,
-    stacktrace: firstText(source.stacktrace, source.stack_trace, source.stackTrace),
+    id: panic.id,
+    timestamp: panic.timestamp,
+    source: panic.source,
+    summary: panic.summary,
+    exceptionType: panic.exception_type,
+    message: panic.message,
+    stacktrace: panic.stacktrace,
   }
 }
 

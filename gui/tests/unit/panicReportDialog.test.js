@@ -30,6 +30,7 @@ const panic = {
   id: 'panic-dialog-1',
   timestamp: '2026-07-13T17:00:00Z',
   source: 'Simulator',
+  severity: 'panic',
   summary: 'Diagnostic protocol crashed',
   exception_type: 'BoundsError',
   message: 'BoundsError at index 100',

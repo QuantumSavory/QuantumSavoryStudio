@@ -91,10 +91,8 @@ import { createSimulationControllerAdapter } from './features/mcp/simulationCont
 import { frontendBuildInfo } from './utils/frontendBuildInfo.js'
 import {
   areConsecutiveLogsEqual,
-  normalizeLogGroup,
-  normalizeLogSeverity,
-  normalizeLogSource,
-  parseRawLogDetails
+  backendLogEventToAppLog,
+  createAppLogRecord
 } from './utils/logRecords.js'
 
 // Import demo projects
@@ -142,77 +140,26 @@ function rememberApplicationLogId(id, logEntry) {
   }
 }
 
-function addLog(level, message, source = 'App', extendedInfo = null, options = {}) {
-  const normalizedLevel = normalizeLogSeverity(level)
-  const normalizedSource = normalizeLogSource(source)
-  const hasStableId = options.id !== undefined
-    && options.id !== null
-    && String(options.id).length > 0
-  const stableId = hasStableId ? String(options.id) : null
-
+function appendLogRecord(logEntry, { stableId = false } = {}) {
   if (stableId) {
-    const existing = applicationLogIds.get(stableId)
+    const existing = applicationLogIds.get(logEntry.id)
     if (existing) return existing
   }
 
-  const suppliedRaw = options.raw ?? parseRawLogDetails(extendedInfo)
-  const rawGroup = suppliedRaw && typeof suppliedRaw === 'object' && !Array.isArray(suppliedRaw)
-    ? suppliedRaw.group
-    : null
-  const normalizedGroup = normalizedSource.source === 'Simulator'
-    ? normalizeLogGroup(options.group ?? rawGroup)
-    : null
-  const incomingLog = {
-    level: normalizedLevel,
-    message,
-    source: normalizedSource.source,
-    subsystem: normalizedSource.subsystem,
-    group: normalizedGroup
-  }
-
-  // Check if this message is the same as the last log entry
   const lastLog = applicationLogs.value[applicationLogs.value.length - 1];
   if (
     !stableId
     && lastLog
-    && areConsecutiveLogsEqual(lastLog, incomingLog)
+    && areConsecutiveLogsEqual(lastLog, logEntry)
   ) {
-    // Update the timestamp of the existing log entry
-    lastLog.timestamp = options.timestamp || new Date().toISOString();
+    lastLog.timestamp = logEntry.timestamp;
     lastLog.count = (lastLog.count || 1) + 1;
-    rememberApplicationLogId(stableId, lastLog)
     return lastLog;
   }
 
-  const raw = suppliedRaw && typeof suppliedRaw === 'object' && !Array.isArray(suppliedRaw)
-    ? { ...suppliedRaw }
-    : suppliedRaw === null
-      ? {}
-      : { details: suppliedRaw }
-  raw.source ??= normalizedSource.source
-  raw.severity ??= normalizedLevel
-  raw.message ??= message
-  if (normalizedSource.subsystem) raw.subsystem ??= normalizedSource.subsystem
-
-  const logEntry = {
-    id: stableId || generateUUid('log'),
-    timestamp: options.timestamp || new Date().toISOString(),
-    level: normalizedLevel,
-    message,
-    source: normalizedSource.source,
-    subsystem: normalizedSource.subsystem,
-    group: normalizedGroup,
-    extendedInfo,
-    raw,
-    fullMessage: options.fullMessage || null,
-    exceptionType: options.exceptionType || null,
-    stacktrace: options.stacktrace || null,
-    count: 1
-  };
-  
   applicationLogs.value.push(logEntry);
   const storedLogEntry = applicationLogs.value[applicationLogs.value.length - 1]
-  rememberApplicationLogId(stableId, storedLogEntry)
+  if (stableId) rememberApplicationLogId(logEntry.id, storedLogEntry)
   
   // Keep only the last maxLogs entries
   if (applicationLogs.value.length > maxLogs.value) {
@@ -224,6 +171,28 @@ function addLog(level, message, source = 'App', extendedInfo = null, options = {
   }
 
   return storedLogEntry
+}
+
+function addLog(level, message, producer = 'App', details = null, options = {}) {
+  const hasStableId = options.id !== undefined
+    && options.id !== null
+    && String(options.id).length > 0
+  return appendLogRecord(createAppLogRecord({
+    id: hasStableId ? String(options.id) : generateUUid('log'),
+    timestamp: options.timestamp,
+    level,
+    message,
+    producer,
+    details,
+    raw: options.raw,
+    fullMessage: options.fullMessage || null,
+    exceptionType: options.exceptionType || null,
+    stacktrace: options.stacktrace || null,
+  }), { stableId: hasStableId })
+}
+
+function addBackendLogEvent(event) {
+  return appendLogRecord(backendLogEventToAppLog(event), { stableId: true })
 }
 
 const activePanic = ref(null)
@@ -401,6 +370,7 @@ const {
     mcpBridge?.binding ? mcpBridge.revision : null
   ),
   addLog,
+  addBackendLogEvent,
   applicationLogs,
   refreshAllWindows,
   checkAndHideInvalidEntangledStates,
