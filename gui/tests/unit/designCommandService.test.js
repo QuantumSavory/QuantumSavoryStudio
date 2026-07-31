@@ -1020,7 +1020,7 @@ describe('DesignCommandService', () => {
             {
               name: 'tag',
               type: 'DataType',
-              selectedType: 'DataType',
+              selectedType: 'Nothing',
               value: 'nothing',
             },
           ],
@@ -1031,7 +1031,12 @@ describe('DesignCommandService', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'enabled', type: 'Bool', value: true }),
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
-        expect.objectContaining({ name: 'tag', type: 'Any', value: 'nothing' }),
+        expect.objectContaining({
+          name: 'tag',
+          type: 'Any',
+          selectedType: 'Nothing',
+          value: 'nothing',
+        }),
       ]),
     )
 
@@ -1311,6 +1316,99 @@ describe('DesignCommandService', () => {
         type: 'Nothing',
         value: 'nothing',
       }])
+  })
+
+  it('rejects explicit parameter branches that contradict intrinsic wire values', async () => {
+    const project = createEmptyProject('Intrinsic consistency')
+    project.net.nodes.push(new Node({
+      id: 'node_a',
+      name: 'Alice',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const markDirty = vi.fn()
+    const service = serviceFor(project, {
+      markDirty,
+      protocolCatalog: () => ({
+        node: [{
+          type: 'Example.IntrinsicProtocol',
+          parameters: [{
+            field: 'tag',
+            type: ['Nothing', 'DataType'],
+            kind: 'named_tag_type',
+            nullable: true,
+          }, {
+            field: 'remote',
+            type: ['QuantumSavory.Wildcard', 'Int64'],
+          }],
+        }],
+        edge: [],
+        floating: [],
+      }),
+    })
+    const before = encodeDesignDocument(project)
+    const contradictions = [{
+      name: 'tag',
+      selectedType: 'DataType',
+      value: 'nothing',
+      message: 'Selected parameter type DataType does not match intrinsic value nothing.',
+    }, {
+      name: 'remote',
+      selectedType: 'Int64',
+      value: 'Wildcard',
+      message: 'Selected parameter type Int64 does not match intrinsic value Wildcard.',
+    }]
+
+    for (const { message, ...parameter } of contradictions) {
+      await expect(service.execute({
+        operations: [{
+          kind: 'protocols.create',
+          placement: 'node',
+          owner_id: 'node_a',
+          value: {
+            type: 'Example.IntrinsicProtocol',
+            parameters: [parameter],
+          },
+        }],
+      })).rejects.toMatchObject({
+        code: 'VALIDATION_FAILED',
+        message,
+      })
+      expect(encodeDesignDocument(project)).toEqual(before)
+    }
+    expect(markDirty).not.toHaveBeenCalled()
+
+    await service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'node_a',
+        value: {
+          type: 'Example.IntrinsicProtocol',
+          parameters: [{
+            name: 'tag',
+            value: 'nothing',
+          }, {
+            name: 'remote',
+            value: 'Wildcard',
+          }],
+        },
+      }],
+    })
+    expect(project.net.nodes[0].data.protocols[0].parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'tag',
+          selectedType: 'Nothing',
+          value: 'nothing',
+        }),
+        expect.objectContaining({
+          name: 'remote',
+          selectedType: 'QuantumSavory.Wildcard',
+          value: 'Wildcard',
+        }),
+      ]),
+    )
   })
 
   it('enforces authoritative bounds for direct and linked evaluated expressions', async () => {

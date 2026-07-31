@@ -402,7 +402,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeDefined()
   })
 
-  it('uses the standard union selector for old nullable tag snapshots', async () => {
+  it('does not reinterpret an explicit schema-v2 branch from a contradictory value', async () => {
     api._config.value = {
       protocolTypes: {
         node: [],
@@ -429,7 +429,7 @@ describe('ProtocolConstructorForm', () => {
     const wrapper = mountForm({
       protocol: { type: ENTANGLER_TYPE, parameters: [parameter] },
       category: 'edge',
-      variables: [{ id: 'tag-variable', name: 'legacy tag', type: 'DataType' }]
+      variables: [{ id: 'tag-variable', name: 'catalog tag', type: 'DataType' }]
     }, {
       stubs: { NamedTagTypeAutocomplete: NamedTagTypeAutocompleteStub }
     })
@@ -439,9 +439,10 @@ describe('ProtocolConstructorForm', () => {
       'Nothing',
       'Tag'
     ])
-    expect(typeSelector.element.value).toBe('Nothing')
-    expect(parameter.selectedType).toBe('Nothing')
-    expect(wrapper.findComponent({ name: 'NamedTagTypeAutocomplete' }).exists()).toBe(false)
+    expect(typeSelector.element.value).toBe('DataType')
+    expect(parameter.selectedType).toBe('DataType')
+    expect(wrapper.getComponent({ name: 'NamedTagTypeAutocomplete' }).props('modelValue'))
+      .toBe('nothing')
     expect(wrapper.find('.unknown-type-indicator').exists()).toBe(false)
     expect(wrapper.get('.param-item-row').classes()).not.toContain('grayed-parameter')
     expect(wrapper.get('[aria-label="Set tag from a variable"]').attributes('disabled'))
@@ -629,7 +630,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('.unknown-type-indicator').exists()).toBe(true)
   })
 
-  it('allows unlinking a legacy variable reference from a newly semantic tag field', async () => {
+  it('allows unlinking an incompatible variable reference from a named-tag field', async () => {
     api._config.value = {
       protocolTypes: {
         node: [],
@@ -646,16 +647,25 @@ describe('ProtocolConstructorForm', () => {
         }]
       }
     }
-    const parameter = { name: 'tag', type: 'Any', value: new VariableReference('legacy-tag') }
+    const parameter = {
+      name: 'tag',
+      type: 'Any',
+      value: new VariableReference('incompatible-tag'),
+    }
     const wrapper = mountForm({
       protocol: { type: ENTANGLER_TYPE, parameters: [parameter] },
       category: 'edge',
-      variables: [{ id: 'legacy-tag', name: 'legacy tag', type: 'DataType' }]
+      variables: [{
+        id: 'incompatible-tag',
+        name: 'incompatible tag',
+        type: 'DataType',
+      }]
     }, {
       stubs: { NamedTagTypeAutocomplete: NamedTagTypeAutocompleteStub }
     })
 
-    expect(wrapper.get('.variable-selector').text()).toContain('Incompatible variable: legacy tag')
+    expect(wrapper.get('.variable-selector').text())
+      .toContain('Incompatible variable: incompatible tag')
     const unlink = wrapper.get('[aria-label="Use a direct value for tag"]')
     expect(unlink.attributes('disabled')).toBeUndefined()
     await unlink.trigger('click')

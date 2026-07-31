@@ -992,14 +992,6 @@ export class DesignCommandService {
   ) {
     const choices = buildParameterInputOptions(declaredType, metadata, descriptorOptions)
     const value = parameter.value
-    // Intrinsic legacy values remain authoritative even when an older snapshot
-    // carried a contradictory selectedType.
-    if (value === 'nothing') {
-      return choices.find(option => option.id === 'Nothing') || choices[0]
-    }
-    if (value === 'Wildcard') {
-      return choices.find(option => isWildcardType(option.id)) || choices[0]
-    }
     if (Object.hasOwn(parameter, 'selectedType')) {
       const selectedType = requireString(parameter.selectedType, 'Selected parameter type')
       const selected = choices.find(option => option.id === selectedType)
@@ -1013,6 +1005,16 @@ export class DesignCommandService {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
           `Selected parameter type is unsupported: ${selectedType}.`,
+        )
+      }
+      const intrinsic = choices.find(option => (
+        (value === 'nothing' && option.id === 'Nothing')
+        || (value === 'Wildcard' && isWildcardType(option.id))
+      ))
+      if (intrinsic && intrinsic.id !== selected.id) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `Selected parameter type ${selectedType} does not match intrinsic value ${value}.`,
         )
       }
       return selected
