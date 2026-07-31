@@ -162,6 +162,13 @@ function load_tool_recovery_policies(contract=TOOL_CONTRACT)
 end
 
 const TOOL_RECOVERY_POLICIES = load_tool_recovery_policies()
+const AMBIGUOUS_BRIDGE_ERROR_CODES = Set([
+  "INTERNAL_ERROR",
+  "INVALID_JSON_RESPONSE",
+  "MALFORMED_ERROR_RESPONSE",
+  "MALFORMED_SUCCESS_RESPONSE",
+  "NETWORK_ERROR",
+])
 
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
@@ -311,7 +318,7 @@ end
 function normalize_tool_error(tool_name, error_payload)
   structured = plain_dictionary(error_payload)
   policy = get(TOOL_RECOVERY_POLICIES, string(tool_name), nothing)
-  if get(structured, "code", nothing) == "NETWORK_ERROR" &&
+  if get(structured, "code", nothing) in AMBIGUOUS_BRIDGE_ERROR_CODES &&
     policy !== nothing &&
     !policy.read_only
     details = plain_dictionary(

@@ -169,25 +169,30 @@ end
     @test unreachable[2]["retryable"] === true
     @test occursin("connection refused", unreachable[2]["details"]["exception_message"])
 
-    design_uncertain = normalize_tool_error(
-        "topology_edit",
-        unreachable[2],
-    )
-    @test design_uncertain["retryable"] === false
-    @test design_uncertain["details"]["readback_required"] === true
-    @test design_uncertain["details"]["readback_tool"] == "design_get"
+    for code in AMBIGUOUS_BRIDGE_ERROR_CODES
+        bridge_failure = deepcopy(unreachable[2])
+        bridge_failure["code"] = code
 
-    lifecycle_uncertain = normalize_tool_error(
-        "simulation_run",
-        unreachable[2],
-    )
-    @test lifecycle_uncertain["retryable"] === false
-    @test lifecycle_uncertain["details"]["readback_required"] === true
-    @test lifecycle_uncertain["details"]["readback_tool"] == "simulation_status"
+        design_uncertain = normalize_tool_error(
+            "topology_edit",
+            bridge_failure,
+        )
+        @test design_uncertain["retryable"] === false
+        @test design_uncertain["details"]["readback_required"] === true
+        @test design_uncertain["details"]["readback_tool"] == "design_get"
 
-    read_failure = normalize_tool_error("design_get", unreachable[2])
-    @test read_failure["retryable"] === true
-    @test !haskey(read_failure["details"], "readback_required")
+        lifecycle_uncertain = normalize_tool_error(
+            "simulation_run",
+            bridge_failure,
+        )
+        @test lifecycle_uncertain["retryable"] === false
+        @test lifecycle_uncertain["details"]["readback_required"] === true
+        @test lifecycle_uncertain["details"]["readback_tool"] == "simulation_status"
+
+        read_failure = normalize_tool_error("design_get", bridge_failure)
+        @test read_failure["retryable"] === true
+        @test !haskey(read_failure["details"], "readback_required")
+    end
 
     structured = BackendRequestError(Dict{String,Any}(
         "code" => "NOT_FOUND",

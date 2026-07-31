@@ -269,6 +269,47 @@ function _lease_live(hub::CollaborationHub, binding::EditorBinding)
   return hub.clock() - binding.heartbeat_at <= Dates.Second(MCP_EDITOR_LEASE_SECONDS)
 end
 
+function _pending_readback_tool(pending::PendingBrowserCommand)
+  pending.mutates_design && return "design_get"
+  payload = get(pending.command, "payload", Dict{String,Any}())
+  get(payload, "type", "") == "simulation_action" && return "simulation_status"
+  return nothing
+end
+
+function _cancelled_pending_error(
+  pending::PendingBrowserCommand,
+  code::String,
+  message::String,
+  unknown_message::String,
+)
+  if !pending.delivered
+    return Dict{String,Any}(
+      "code" => code,
+      "message" => message,
+      "retryable" => false,
+      "details" => Dict{String,Any}(),
+    )
+  end
+  readback_tool = _pending_readback_tool(pending)
+  if readback_tool === nothing
+    return Dict{String,Any}(
+      "code" => code,
+      "message" => message,
+      "retryable" => true,
+      "details" => Dict{String,Any}(),
+    )
+  end
+  return Dict{String,Any}(
+    "code" => "OUTCOME_UNKNOWN",
+    "message" => unknown_message,
+    "retryable" => false,
+    "details" => Dict{String,Any}(
+      "readback_required" => true,
+      "readback_tool" => readback_tool,
+    ),
+  )
+end
+
 function _cancel_pending_locked!(
   hub::CollaborationHub,
   code::String,
@@ -277,11 +318,11 @@ function _cancel_pending_locked!(
     "The editor disappeared after command delivery; the outcome is unknown.",
 )
   for pending in values(hub.pending)
-    error = Dict{String,Any}(
-      "code" => pending.delivered ? "OUTCOME_UNKNOWN" : code,
-      "message" => pending.delivered ? unknown_message : message,
-      "retryable" => false,
-      "details" => Dict{String,Any}(),
+    error = _cancelled_pending_error(
+      pending,
+      code,
+      message,
+      unknown_message,
     )
     isready(pending.response) || put!(pending.response, Dict("ok" => false, "error" => error))
   end
@@ -548,13 +589,6 @@ function design_mirror(hub::CollaborationHub=collaboration_hub())
       "document" => deepcopy(hub.snapshot),
     )
   end
-end
-
-function _pending_readback_tool(pending::PendingBrowserCommand)
-  pending.mutates_design && return "design_get"
-  payload = get(pending.command, "payload", Dict{String,Any}())
-  get(payload, "type", "") == "simulation_action" && return "simulation_status"
-  return nothing
 end
 
 function _validated_expected_revision(value)

@@ -232,7 +232,40 @@
     unknown = fetch(delivered_wait)
     @test unknown isa WebQuantumSavory.APIError
     @test unknown.error_code == "OUTCOME_UNKNOWN"
+    @test unknown.details["retryable"] == false
+    @test unknown.details["readback_required"] == true
+    @test unknown.details["readback_tool"] == "design_get"
     @test hub.binding === nothing
+
+    lifecycle_hub = WebQuantumSavory.CollaborationHub(clock=() -> now[])
+    lifecycle_binding = WebQuantumSavory.bind_editor!(
+      lifecycle_hub,
+      binding_request(generation=3),
+    )
+    lifecycle_owner = Dict(
+      "binding_id" => lifecycle_binding["binding_id"],
+      "generation" => 3,
+    )
+    lifecycle_wait = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        lifecycle_hub,
+        Dict("type" => "simulation_action", "action" => "run");
+        timeout_seconds=2,
+      )
+    catch error
+      error
+    end
+    WebQuantumSavory.next_browser_command!(
+      lifecycle_hub,
+      lifecycle_owner;
+      timeout_seconds=1,
+    )
+    now[] += Second(WebQuantumSavory.MCP_EDITOR_LEASE_SECONDS + 1)
+    lifecycle_unknown = fetch(lifecycle_wait)
+    @test lifecycle_unknown.error_code == "OUTCOME_UNKNOWN"
+    @test lifecycle_unknown.details["retryable"] == false
+    @test lifecycle_unknown.details["readback_required"] == true
+    @test lifecycle_unknown.details["readback_tool"] == "simulation_status"
   end
 
   @testset "a desynchronized owner can unbind and recover" begin
