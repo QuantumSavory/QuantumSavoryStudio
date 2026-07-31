@@ -40,13 +40,11 @@ const ENTANGLER_DEFINITION = {
     {
       field: 'success_prob',
       type: 'Float64',
-      defaultValue: 0.001,
       required: false,
     },
     {
       field: 'settings',
       type: 'Any',
-      defaultValue: { nested: { value: 'metadata' } },
       required: false,
     }
   ]
@@ -68,11 +66,10 @@ const SWAPPER_DEFINITION = {
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
       required: false,
     },
-    { field: 'rounds', type: 'Int64', defaultValue: -1, required: false },
+    { field: 'rounds', type: 'Int64', required: false },
     {
       field: 'settings',
       type: 'Any',
-      defaultValue: { nested: { value: 'metadata' } },
       required: false,
     }
   ]
@@ -236,7 +233,7 @@ describe('protocol constructor helpers', () => {
     expect(source.settings.nested.value).toBe(1)
   })
 
-  it('omits runtime metadata defaults and deeply seeds configured template values without an ID', () => {
+  it('seeds only current catalog fields and deeply clones configured values without an ID', () => {
     const fallback = createProtocolFromDefinition(ENTANGLER_DEFINITION)
     expect(parametersByName(fallback).success_prob).toMatchObject({
       selectedType: 'default',
@@ -263,11 +260,10 @@ describe('protocol constructor helpers', () => {
       selectedType: 'default',
       value: null
     })
-    expect(parametersByName(seeded).legacy.value).toBe('retained')
+    expect(parametersByName(seeded).legacy).toBeUndefined()
 
     parametersByName(seeded).success_prob.extra.nested = false
     expect(template.parameters[0].extra.nested).toBe(true)
-    expect(ENTANGLER_DEFINITION.parameters[3].defaultValue.nested.value).toBe('metadata')
   })
 
   it('preserves an explicit empty branch and validates rather than normalizing it', () => {

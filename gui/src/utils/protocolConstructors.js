@@ -99,8 +99,8 @@ export function createProtocolFromDefinition(definition) {
 /**
  * Seed a metadata-backed protocol draft from a configured template protocol.
  * Metadata supplies newly introduced fields while the template wins for every
- * field it already configures. Unknown saved fields are retained for lossless
- * cloning and can still be diagnosed by the normal constructor editor.
+ * field it already configures. Fields absent from the current catalog are not
+ * part of the constructor and are intentionally discarded.
  */
 export function seedProtocolConstructor(definition, templateProtocol = null) {
   const fallback = createProtocolFromDefinition(definition)
@@ -115,7 +115,6 @@ export function seedProtocolConstructor(definition, templateProtocol = null) {
     definition.parameters.map(parameter => [parameter?.field, parameter]),
   )
   const sourceByName = new Map(sourceParameters.map(parameter => [parameter?.name, parameter]))
-  const metadataNames = new Set(fallback.parameters.map(parameter => parameter.name))
   const parameters = fallback.parameters.map(parameter => (
     sourceByName.has(parameter.name)
       ? normalizeSeededParameter(
@@ -124,10 +123,6 @@ export function seedProtocolConstructor(definition, templateProtocol = null) {
         )
       : parameter
   ))
-
-  sourceParameters.forEach(parameter => {
-    if (!metadataNames.has(parameter?.name)) parameters.push(deepClone(parameter))
-  })
 
   delete source.id
   return {

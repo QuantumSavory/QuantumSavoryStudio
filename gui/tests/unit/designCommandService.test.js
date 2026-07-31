@@ -21,6 +21,10 @@ const DEFAULT_BACKGROUND_CATALOG = Object.freeze([{
   type: 'NoNoise',
   parameters: [],
 }])
+const SLOT_CATALOG = Object.freeze([
+  Object.freeze({ type: 'Qubit', doc: 'Qubit register.' }),
+  Object.freeze({ type: 'Qumode', doc: 'Qumode register.' }),
+])
 
 function serviceFor(project, options = {}) {
   let nextId = 0
@@ -28,7 +32,7 @@ function serviceFor(project, options = {}) {
     getProject: () => project,
     idGenerator: prefix => `${prefix}_${++nextId}`,
     defaultBackgroundNoise: () => ({ type: 'NoNoise', parameters: [] }),
-    slotCatalog: () => ['Qubit', 'Qumode'],
+    slotCatalog: () => SLOT_CATALOG,
     backgroundCatalog: () => DEFAULT_BACKGROUND_CATALOG,
     ...options,
   })
@@ -86,8 +90,25 @@ describe('DesignCommandService', () => {
     expect(directDirty).not.toHaveBeenCalled()
     expect(directCommitted).not.toHaveBeenCalled()
 
-    const exactCatalogService = serviceFor(directProject, {
+    const legacyCatalogService = serviceFor(directProject, {
       slotCatalog: () => ['Qubit'],
+    })
+    await expect(legacyCatalogService.execute({
+      operations: [{
+        kind: 'slots.create',
+        node_id: 'node_direct',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: { type: 'NoNoise', parameters: [] },
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Slot catalog is unavailable.',
+    })
+
+    const exactCatalogService = serviceFor(directProject, {
+      slotCatalog: () => [SLOT_CATALOG[0]],
       markDirty: directDirty,
       onCommitted: directCommitted,
     })
@@ -153,7 +174,7 @@ describe('DesignCommandService', () => {
     const generatedDirty = vi.fn()
     const generatedCommitted = vi.fn()
     const generatedService = serviceFor(generatedProject, {
-      slotCatalog: () => ['Qubit'],
+      slotCatalog: () => [SLOT_CATALOG[0]],
       markDirty: generatedDirty,
       onCommitted: generatedCommitted,
       generators: {
@@ -1136,7 +1157,7 @@ describe('DesignCommandService', () => {
         node: [{
           type: 'Example.Protocol',
           parameters: [
-            { field: 'enabled', type: 'Bool', defaultValue: false, required: false },
+            { field: 'enabled', type: 'Bool', required: false },
             { field: 'rounds', type: 'Int64', required: false },
             {
               field: 'tag',

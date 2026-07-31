@@ -27,7 +27,10 @@ function mountPanel(options = {}) {
 describe('layout tools physical settings', () => {
   beforeEach(() => {
     api.updateConfig({
-      slotTypes: ['Qubit', 'Qumode'],
+      slotTypes: [
+        { type: 'Qubit', doc: 'Qubit register.' },
+        { type: 'Qumode', doc: 'Qumode register.' },
+      ],
       bgNoiseOptions: [
         api.getDefaultBgNoise(),
         {

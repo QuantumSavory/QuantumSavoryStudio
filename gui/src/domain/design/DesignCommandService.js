@@ -56,6 +56,7 @@ import {
   formatStateParameterRange,
   stateParameterValueIsValid,
 } from '../../utils/stateParameterBounds.js'
+import { slotTypeIds } from '../../utils/runtimeCatalogs.js'
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
 const RUNTIME_SLOT_FIELDS = new Set(TRANSIENT_SLOT_FIELDS)
@@ -1016,10 +1017,7 @@ export class DesignCommandService {
   }
 
   requireSlotType(type) {
-    const catalog = this.slotCatalog()
-    const types = (Array.isArray(catalog) ? catalog : []).map(entry => (
-      typeof entry === 'string' ? entry : entry?.type
-    )).filter(entry => typeof entry === 'string' && entry.length)
+    const types = slotTypeIds(this.slotCatalog())
     if (!types.length) {
       throw new DesignCommandError('VALIDATION_FAILED', 'Slot catalog is unavailable.')
     }

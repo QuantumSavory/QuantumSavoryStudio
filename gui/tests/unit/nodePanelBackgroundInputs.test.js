@@ -99,7 +99,10 @@ function buttonNamed(container, name) {
 describe('NodePanel background constructor drafts', () => {
   beforeEach(() => {
     api.updateConfig({
-      slotTypes: ['Qubit', 'Qumode'],
+      slotTypes: [
+        { type: 'Qubit', doc: 'Qubit register.' },
+        { type: 'Qumode', doc: 'Qumode register.' },
+      ],
       bgNoiseOptions: [
         api.getDefaultBgNoise(),
         {

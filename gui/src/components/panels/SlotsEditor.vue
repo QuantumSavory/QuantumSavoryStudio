@@ -108,6 +108,7 @@ import { api } from '../../utils/ApiConnector'
 import { deepClone } from '../../utils/protocolConstructors'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import { createConstructorParameterDrafts } from '../../utils/constructorParameters.js'
+import { slotTypeIds } from '../../utils/runtimeCatalogs.js'
 import BackgroundNoiseConstructorForm from './BackgroundNoiseConstructorForm.vue'
 import SlotEditor from './SlotEditor.vue'
 
@@ -179,11 +180,7 @@ const resolvedNumericExpressionContext = computed(() => (
     )
 ))
 const slotTypes = computed(() => {
-  const catalog = api.config.value.slotTypes
-  const configured = (Array.isArray(catalog) ? catalog : [])
-    .map(type => typeof type === 'string' ? type : type?.type)
-    .filter(type => typeof type === 'string' && type)
-  return configured
+  return slotTypeIds(api.config.value.slotTypes)
 })
 
 function newBackgroundNoise(definition) {

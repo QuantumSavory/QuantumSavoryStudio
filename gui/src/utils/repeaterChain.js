@@ -221,8 +221,8 @@ function normalizeEnabledConstructor(setting, target, generatedPredicates = null
   }
   const constructor = seedProtocolConstructor(setting.definition, setting.protocol)
   if (generatedPredicates) {
-    setGeneratedPredicate(constructor, setting.definition, 'nodeL', generatedPredicates.nodeL)
-    setGeneratedPredicate(constructor, setting.definition, 'nodeH', generatedPredicates.nodeH)
+    setGeneratedPredicate(constructor, 'nodeL', generatedPredicates.nodeL)
+    setGeneratedPredicate(constructor, 'nodeH', generatedPredicates.nodeH)
   }
   validateProtocolConstructorDraft(setting.definition, constructor)
   return constructor
@@ -313,16 +313,10 @@ function replaceTargetProtocols(protocols, targetSimpleName, constructor, nextId
   return result
 }
 
-function setGeneratedPredicate(constructor, definition, parameterName, source) {
-  let parameter = constructor.parameters.find(candidate => candidate?.name === parameterName)
+function setGeneratedPredicate(constructor, parameterName, source) {
+  const parameter = constructor.parameters.find(candidate => candidate?.name === parameterName)
   if (!parameter) {
-    const metadataParameter = definition.parameters.find(candidate => candidate?.field === parameterName)
-    parameter = {
-      name: parameterName,
-      type: metadataParameter.type,
-      value: metadataParameter.defaultValue
-    }
-    constructor.parameters.push(parameter)
+    throw new Error(`SwapperProt constructor is missing catalog field ${parameterName}.`)
   }
 
   parameter.value = source
@@ -502,8 +496,8 @@ export function generateRepeaterChain(net, options) {
         automation.swapper.protocol
       )
       if (swapperPredicates) {
-        setGeneratedPredicate(constructor, automation.swapper.definition, 'nodeL', swapperPredicates[index].nodeL)
-        setGeneratedPredicate(constructor, automation.swapper.definition, 'nodeH', swapperPredicates[index].nodeH)
+        setGeneratedPredicate(constructor, 'nodeL', swapperPredicates[index].nodeL)
+        setGeneratedPredicate(constructor, 'nodeH', swapperPredicates[index].nodeH)
       }
       node.data.protocols = replaceTargetProtocols(
         node.data.protocols,

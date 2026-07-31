@@ -250,6 +250,7 @@ import LucideMenuIcon from '../LucideMenuIcon.vue'
 import { SIMULATION_EDITING_LOCK_MESSAGE, useUiServices } from '../../composables/uiServices'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import { createConstructorParameterDrafts } from '../../utils/constructorParameters.js'
+import { slotTypeIds } from '../../utils/runtimeCatalogs.js'
 
 // Props: node (Node instance), justCreated (bool: true if node was just created and selected)
 const props = defineProps({
@@ -302,12 +303,7 @@ const bgNoiseOptions = computed(() => {
     : []
 })
 const slotTypes = computed(() => {
-  const configured = Array.isArray(api.config.value.slotTypes)
-    ? api.config.value.slotTypes
-    : []
-  return configured
-    .map(type => typeof type === 'string' ? type : type?.type)
-    .filter(type => typeof type === 'string' && type)
+  return slotTypeIds(api.config.value.slotTypes)
 })
 
 function newBackgroundNoise(definition) {
