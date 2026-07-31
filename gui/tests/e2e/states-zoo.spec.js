@@ -666,21 +666,21 @@ test.describe('States Zoo variables', () => {
     await expect(reloadedRow.locator('.states-zoo-type-select')).toHaveValue('DepolarizedBellPair')
     await expect(reloadedRow.locator('.states-zoo-parameter-input')).toHaveValue('0.75')
 
-    const importedProject = {
-      name: 'Imported States Zoo Project',
-      variables: [{
-        id: 'variable_imported_zoo',
-        name: 'imported_state',
-        type: 'Symbolic',
-        value: {
-          kind: 'states_zoo',
-          state_type: 'DepolarizedBellPair',
-          parameters: { p: 0.25 },
-        },
-      }],
-      simulationConfig: { time: 1, timeStep: 0.1 },
-      net: { nodes: [], edges: [], protocols: [] },
-    }
+    const importedProject = await page.evaluate(() => (
+      JSON.parse(localStorage.getItem('cqn_project_Saved States Zoo Project'))
+    ))
+    importedProject.name = 'Imported States Zoo Project'
+    importedProject.variables = [{
+      id: 'variable_imported_zoo',
+      name: 'imported_state',
+      type: 'Symbolic',
+      selectedType: 'Symbolic',
+      value: {
+        kind: 'states_zoo',
+        state_type: 'DepolarizedBellPair',
+        parameters: { p: 0.25 },
+      },
+    }]
     await page.locator('.hamburger-btn').click()
     const fileChooserPromise = page.waitForEvent('filechooser')
     await page.getByText('Import', { exact: true }).click()

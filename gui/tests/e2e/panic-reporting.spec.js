@@ -8,7 +8,11 @@ async function importBrokenProject(page) {
   const demoUrl = new URL('../../src/demos/1.Entangler.Example.json', import.meta.url)
   const project = JSON.parse(await readFile(demoUrl, 'utf8'))
   project.name = 'Panic Diagnostic'
-  project.simulationConfig = { time: 1, timeStep: 0.1 }
+  project.simulationConfig = {
+    ...project.simulationConfig,
+    time: 1,
+    timeStep: 0.1,
+  }
   project.net.protocols = [{
     id: 'mock-broken-protocol',
     type: MOCK_PROTOCOL,
