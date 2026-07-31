@@ -59,6 +59,9 @@ renderers, and the GUI-default States Zoo preview. It is compilation warmup, not
 product simulation. Failure is logged and startup continues. Cleanup destroys the
 temporary state only when the workload created it and still owns that registry entry;
 do not claim unconditional cleanup of an unrelated state with the reserved name.
+The workload reads `assets/startup-warmup.json`, a minimized current request fixture
+shared with integration and public-container checks; startup never discovers a demo by
+filename or depends on the evolving browser-document schema.
 
 ## Generated frontend
 

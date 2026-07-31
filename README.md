@@ -29,8 +29,9 @@ The launcher runs `npm ci` and rebuilds the GUI before starting Genie, so the ge
 files under `public/` do not need to be checked into Git.
 
 Before a non-test server begins accepting requests, it synchronously warms the parser,
-simulator, protocol and generated-state renderers using the latest bundled demo, then
-renders the same default States Zoo state created by the GUI. The private warmup
+simulator, protocol and generated-state renderers using the minimized current-wire
+fixture in `assets/startup-warmup.json`, then renders the same default States Zoo state
+created by the GUI. The private warmup
 simulation is removed immediately afterward. This makes initial startup take longer so
 the first interactive simulation and visualization requests do not pay Julia compilation
 latency. Test-mode startup skips the automatic workload; the backend unit suite exercises
@@ -212,10 +213,25 @@ The best way to explore the API is through the interactive Swagger documentation
 - Interactive testing interface
 - Example payloads and responses
 
+The checked-in OpenAPI 3.1 document at `contracts/http/openapi.json` generates the
+active `/openapi.json` contract and Swagger UI. The parse and script-export operations
+have separate, closed request schemas. Both require exactly `name`, `variables`,
+`simulationConfig`, and `net`; parse configuration contains only the two explicit
+representation choices, while script export additionally requires positive `time` and
+`timeStep`. Application-owned network, node, slot, background, protocol, parameter,
+and edge objects reject undeclared fields.
+
+Constructor parameter values have three closed tagged forms: variable references,
+numeric expressions, and States Zoo recipes. Untagged JSON remains a recursive
+extension point for simulator-owned constructor data, but no object inside that value
+may contain a `kind` discriminator. This keeps Web-owned tags unambiguous without
+duplicating QuantumSavory constructor schemas.
+
 ### Physical Links
 
 Layout Tools stores global material defaults for refractive index and fiber
-loss. New and legacy projects resolve missing loss to **0.2 dB/km**, a
+loss. The current project codec resolves an omitted per-edge loss from the global
+default of **0.2 dB/km**, a
 representative attenuation for modern telecom single-mode fiber near the
 1550-nm window ([Corning SMF-28 Ultra specification](https://www.corning.com/media/worldwide/coc/documents/Fiber/product-information-sheets/PI-1424-AEN.pdf)).
 Each physical edge may override distance, refractive index, propagation delay,
@@ -239,12 +255,13 @@ per-edge loss; resetting transmissivity restores automatic calculation. Manual
 delay is independent, while distance overrides affect both automatic delay and
 automatic transmissivity. Map badges remain limited to distance and delay.
 
-Schema-v1 project JSON persists only material/link overrides in
+Schema-v2 project JSON persists only material/link overrides in
 `data.physicalOverrides`; it never stores derived physical values. Minimized
 simulator and script-export payloads resolve `distanceMeters`,
 `propagationDelaySeconds`, `refractiveIndex`, `lossDbPerKm`, and
-`transmissivity` for physical edges. The additive loss and transmissivity
-fields may be omitted or `null` by legacy API clients.
+`transmissivity` for physical edges. All five fields are required:
+`propagationDelaySeconds` is a nonnegative number and the other four may be
+their bounded numeric value or `null`. Virtual-edge data contains none of them.
 
 ### Protocol Inputs and Numeric Expressions
 
@@ -324,7 +341,7 @@ When unsafe evaluation is enabled, `POST /test_numeric_expression` accepts:
   "placement": "edge",
   "context": {
     "node_names": ["Alice", "Bob"],
-    "length": 100.0,
+    "distance": 100.0,
     "delay": 5e-7,
     "refractive_index": 1.5,
     "loss": 0.2,

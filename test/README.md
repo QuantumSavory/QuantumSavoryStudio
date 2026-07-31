@@ -11,11 +11,14 @@ This directory contains comprehensive tests for the WebQuantumSavory codebase.
 
 ## Test Data
 
-The unit suite primarily uses `mock/payload.json`, while the integration suite uses
-`mock/payload3.json`. Additional payloads cover more complex protocol configurations. The fixtures contain:
+The unit suite primarily uses `mock/payload.json`, while integration, startup warmup,
+and the public-container probe share `../assets/startup-warmup.json`. The fixtures contain:
 - 2 nodes (cities) with different slot configurations
 - 1 edge connecting the nodes
 - Various protocol definitions
+
+Both fixtures use only the current closed parse-request schema. Add test-specific
+constructor values in memory instead of copying historical payload snapshots.
 
 ## Running Tests
 

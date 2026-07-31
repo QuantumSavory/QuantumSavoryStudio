@@ -6,7 +6,7 @@
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
 - **Related specification IDs:** STK-010, STK-011, SYS-002, SYS-017, SYS-018, SUB-002,
-  SUB-015, SUB-016, CMP-014, CMP-015
+  SUB-004, SUB-008, SUB-015, SUB-016, CMP-014, CMP-015, CMP-017
 - **Review when:** A durable field, schema version, admission rule, normalization,
   projection, storage key, or project-transition phase changes.
 
@@ -29,8 +29,8 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 | --- | --- | --- |
 | Stored/exported project | Schema metadata, name, network, descriptions, annotations, map/session-safe fields | Transient editor, request, and live simulation state |
 | Collaboration snapshot | Canonical design content | Storage metadata, UI-only state, runtime slot state |
-| Simulation payload | Validated/minimized network and resolved physical values | Storage/UI state, descriptions, annotations |
-| Script-export payload | Simulation projection plus run configuration | Frontend-only presentation data |
+| Simulation payload | Exact `name`/`variables`/representation-config/`net` projection and all resolved physical values | Storage/UI state, descriptions, annotations, run timing |
+| Script-export payload | Fresh clone of the simulation projection plus positive `time`/`timeStep` | Frontend-only presentation data and undeclared caller fields |
 
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
@@ -39,6 +39,12 @@ additive fields. The schema names two extension points: recursive, untagged `Any
 parameter values for simulator-owned opaque data, and the numeric parameter map owned
 by a selected StatesZoo state family. Objects with a `kind` discriminator remain
 governed by closed tagged-value definitions.
+
+API projection is stricter than editable-state normalization. It requires explicit
+qubit and qumode representations and never supplies a backend default. Script export
+does not merge an override object into the simulation configuration: it carries those
+representation choices from the simulation payload and accepts only the two positive
+timing values from the export panel.
 
 `contracts/project/v2.schema.json` is the sole canonical durable field authority. The
 co-shipped JSON Schema closes every application-owned object boundary with

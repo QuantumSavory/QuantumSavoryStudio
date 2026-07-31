@@ -4,7 +4,7 @@
 - **Open when:** Changing generated Julia, import resolution, supported runtime/export
   mappings, filenames, or export-side validation.
 - **Do not open when:** Changing live simulation lifecycle or frontend download styling.
-- **Related specification IDs:** STK-003, SYS-007, SUB-008, CMP-007
+- **Related specification IDs:** STK-003, SYS-007, SUB-008, CMP-007, CMP-017
 - **Review when:** A project payload field, constructor mapping, lexical source context,
   representation, physical-link rule, or generated example changes.
 
@@ -25,7 +25,9 @@ client.
 
 For canonical supported payloads, generation:
 
-- validates input without creating, replacing, or destroying a server simulation;
+- admits the exact export request tree without creating, replacing, or destroying a
+  server simulation;
+- requires explicit qubit/qumode representations and positive `time` and `timeStep`;
 - parses and validates user source but does not execute it in the server;
 - emits deterministic source and a sanitized `.jl` filename;
 - adds only physical edges to the graph while retaining allowed protocols attached to
@@ -61,9 +63,10 @@ The existing panel-level warning is general; no maintained supported/omitted-fea
 inventory currently proves exhaustive corresponding help.
 
 The frontend builds its simulation projection once, then
-`toScriptExportPayloadFromSimulationPayload` adds only run and representation
-configuration for this endpoint. There is no separate live-project compatibility
-projection.
+`toScriptExportPayloadFromSimulationPayload` explicitly clones only `name`,
+`variables`, and `net`, carries the already-required representation choices, and adds
+the required run timing. It never spreads live-project or caller-supplied fields into
+the request, and there is no compatibility projection.
 
 ## Verification boundaries
 

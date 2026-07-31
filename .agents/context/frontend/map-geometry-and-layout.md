@@ -5,7 +5,7 @@
   generators, layers/sources, curve handles, or marker identity.
 - **Do not open when:** Changing generic UI controls, backend lifecycle, or project
   storage unrelated to geometry.
-- **Related specification IDs:** SYS-002, SUB-002, SUB-004, CMP-003
+- **Related specification IDs:** SYS-002, SUB-002, SUB-004, CMP-003, CMP-017
 - **Review when:** A persisted geometry field, coordinate model, physical formula,
   generator result, or MapLibre ownership rule changes.
 
@@ -38,9 +38,11 @@ LineString; the midpoint is inserted into its render coordinates. Curve-editing 
 changes handles, not the finalized route.
 
 Only physical edges expose physical controls, badges, curve handles, and resolved
-payload values. Virtual edges remain straight and carry no physical fields. Reject a
-second unordered physical link between the same endpoints because the backend graph
-cannot represent it.
+payload values. Their minimized data always carries `distanceMeters`,
+`propagationDelaySeconds`, `refractiveIndex`, `lossDbPerKm`, and `transmissivity`;
+only propagation delay is non-nullable. Virtual edges remain straight and carry none
+of those physical fields. Reject a second unordered physical link between the same
+endpoints because the backend graph cannot represent it.
 
 ## Annotation geometry
 

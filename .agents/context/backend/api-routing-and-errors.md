@@ -5,7 +5,8 @@
   OpenAPI, simulation naming, or error helpers.
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
-- **Related specification IDs:** SYS-006, SYS-008, SUB-007, SUB-009, CMP-013
+- **Related specification IDs:** SYS-006, SYS-008, SUB-004, SUB-007, SUB-009,
+  CMP-013, CMP-017
 - **Review when:** A public/internal route, error code, status code, or OpenAPI schema
   changes.
 
@@ -107,21 +108,28 @@ The maintained frontend-support surface includes:
 Test-support behavior is environment-gated. Consult the active OpenAPI document rather
 than copying a route inventory into agent instructions.
 
-## Runtime validation boundary and remaining gaps
+## Runtime validation boundary
 
-Backend project validation enforces selected canonical topology, representation,
-physical-link, variable, and protocol conditions. It is not a complete JSON-schema
-validator at request time. Nested malformed shapes may fail later, and handlers that
-index required fields directly can still classify missing input as `SERVER_ERROR`
-rather than `VALIDATION_ERROR`; the envelope remains canonical but the classification
-is less specific.
+Parse and script-export admission mirrors their endpoint-specific OpenAPI request trees.
+Every application-owned object is closed before graph construction or source generation:
+the top level, operation-specific configuration, network, nodes, slots, backgrounds,
+protocols, parameters, and physical/virtual edges all require their declared fields and
+reject extras. Parse accepts representation configuration only; export also requires
+positive `time` and `timeStep`. Physical edges require every resolved physical field,
+while virtual edges forbid them.
+
+Constructor values deliberately retain one simulator-owned extension point. The Web
+layer recognizes three exact `kind`-tagged variants (`variable`,
+`numeric_expression`, and `states_zoo`); recursively untagged JSON is passed to
+QuantumSavory's authoritative constructor schema. An unknown or nested `kind` never
+falls through as opaque data.
 
 The three restricted-source validators model evaluation rejection as an operation-level
 HTTP 200 result with `success:false`; malformed DTOs and policy denial remain non-2xx
 canonical failures. This distinction is explicit in their endpoint schemas.
 
-The current component and contract tests cover strict parsing, profile filtering, route
-parity, and representative polling/log handoff. The full real-browser matrix for
+The current component and contract tests cover closed parse/export request admission,
+profile filtering, route parity, and representative polling/log handoff. The full real-browser matrix for
 validation, policy, not-found, cleanup, and unexpected failures remains planned under
 SYSV-008.
 

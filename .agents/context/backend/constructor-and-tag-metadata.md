@@ -4,7 +4,7 @@
 - **Open when:** Changing protocol/background/slot catalogs, typed constructor inputs,
   named tags, live tag/query codecs, or placement metadata.
 - **Do not open when:** Editing frontend layout or changing States Zoo rendering.
-- **Related specification IDs:** SYS-004, SUB-005
+- **Related specification IDs:** SYS-004, SUB-004, SUB-005, CMP-017
 - **Review when:** QuantumSavory metadata APIs, parameter descriptors, tag signatures,
   placement rules, or tag wire values change.
 
@@ -30,6 +30,13 @@ QuantumSavory ConstructorFieldSchema
 Frontend descriptor IDs are UI choices, not Julia types on the wire. Default constructor
 selection omits the keyword so Julia applies its own default; metadata `defaultValue` is
 documentation rather than fresh draft state.
+
+Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
+values with `kind` are closed variable-reference, numeric-expression, or States Zoo
+recipes. Untagged JSON values may be recursively shaped for simulator-owned
+constructors, but no nested object may introduce `kind`; unknown discriminators are
+validation errors rather than forward-compatible fallbacks. States Zoo recipe parameter
+names and numeric ranges come from the selected simulator catalog entry.
 
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.
