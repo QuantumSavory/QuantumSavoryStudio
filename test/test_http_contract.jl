@@ -98,6 +98,21 @@
     document["paths"]["/run_simulation"]["post"]["responses"],
   )) == Set(["202", "default"])
 
+  validate_code_request = operation_schemas["validateCodeRequest"]
+  @test validate_code_request["additionalProperties"] == false
+  @test validate_code_request["required"] == ["code"]
+  @test validate_code_request["properties"]["code"] ==
+    Dict("type" => "string", "minLength" => 1)
+  @test Set(validate_code_request["properties"]["placement"]["enum"]) ==
+    Set(["node", "edge", "floating", "variable", "query"])
+
+  validate_symbolic_request =
+    operation_schemas["validateSymbolicExpressionRequest"]
+  @test validate_symbolic_request["additionalProperties"] == false
+  @test validate_symbolic_request["required"] == ["expr"]
+  @test validate_symbolic_request["properties"]["expr"] ==
+    Dict("type" => "string", "minLength" => 1)
+
   test_document = WQS.active_http_contract_document(mcp=false, test_support=true)
   test_operations = operations(test_document)
   @test length(test_operations) == 32

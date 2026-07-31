@@ -2450,7 +2450,8 @@
             ],
             "properties": {
               "code": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "placement": {
                 "type": "string",
@@ -2475,7 +2476,8 @@
             ],
             "properties": {
               "expr": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               }
             }
           },
