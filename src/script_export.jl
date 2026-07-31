@@ -4,10 +4,8 @@ const _SCRIPT_RESERVED_IDENTIFIERS = Set([
   "ConcurrentSim",
   "Core",
   "Graphs",
-  "InteractiveUtils",
   "Main",
   "QuantumSavory",
-  "REPL",
   "ResumableFunctions",
   "animation_filename",
   "animation_step",
@@ -234,7 +232,7 @@ const _SCRIPT_STATIC_IMPORT_SOURCES = (
   (QuantumSavory, :RegisterNet),
   (QuantumSavory, :get_time_tracker),
   (QuantumSavory, :registernetplot_axis),
-  (QuantumSavory, :express),
+  (QuantumSavory.StatesZoo, :normalized_state_and_weight),
   (Graphs, :SimpleGraph),
   (Graphs, :add_edge!),
   (ConcurrentSim, :run),
@@ -242,7 +240,6 @@ const _SCRIPT_STATIC_IMPORT_SOURCES = (
   (CairoMakie, :activate!),
   (CairoMakie, :Figure),
   (CairoMakie, :record),
-  (LinearAlgebra, :tr),
 )
 
 function _script_binding_source(source_module::Module, binding)
@@ -263,31 +260,33 @@ function _script_import_candidates()
   candidates = Set{Tuple{Module,Symbol}}(_SCRIPT_STATIC_IMPORT_SOURCES)
   push!(candidates, _script_binding_source(QuantumSavory.Wildcard))
 
-  for spec in values(_REPRESENTATION_SPECS)
+  for schema in QuantumSavory.representation_schemas()
+    push!(candidates, _script_binding_source(QuantumSavory, schema.constructor))
+  end
+  push!(candidates, _script_binding_source(QuantumSavory, QuantumSavory.GabsRepr))
+  push!(candidates, _script_binding_source(
+    QuantumSavory.Gabs,
+    QuantumSavory.Gabs.QuadBlockBasis,
+  ))
+  for schema in QuantumSavory.ProtocolZoo.protocol_schemas()
     push!(candidates, _script_binding_source(
-      spec.script.constructor.source_module,
-      spec.script.constructor.binding,
+      QuantumSavory.ProtocolZoo,
+      schema.constructor.constructor,
     ))
-    for argument in spec.script.arguments
-      push!(candidates, _script_binding_source(
-        argument.source_module,
-        argument.binding,
-      ))
-    end
   end
-  for entry in QuantumSavory.ProtocolZoo.available_protocol_types()
-    push!(candidates, _script_binding_source(entry.type))
+  for schema in QuantumSavory.background_schemas()
+    push!(candidates, _script_binding_source(QuantumSavory, schema.constructor))
   end
-  for entry in QuantumSavory.available_background_types()
-    push!(candidates, _script_binding_source(entry.type))
+  for schema in QuantumSavory.slot_schemas()
+    push!(candidates, _script_binding_source(QuantumSavory, schema.constructor))
   end
-  for entry in QuantumSavory.available_slot_types()
-    push!(candidates, _script_binding_source(entry.type))
+  for schema in QuantumSavory.StatesZoo.state_family_schemas()
+    source_module = isdefined(QuantumSavory.StatesZoo, nameof(schema.family)) &&
+      getfield(QuantumSavory.StatesZoo, nameof(schema.family)) === schema.family ?
+      QuantumSavory.StatesZoo : parentmodule(schema.family)
+    push!(candidates, _script_binding_source(source_module, schema.family))
   end
-  for entry in values(STATES_ZOO_TYPE_REGISTRY)
-    push!(candidates, _script_binding_source(entry.type))
-  end
-  for definition in _tag_catalog_snapshot().named
+  for definition in _tag_catalog().named
     push!(candidates, _script_binding_source(definition.type))
   end
 
@@ -760,20 +759,23 @@ function _script_states_zoo_expression(
   construct_states_zoo_recipe(recipe)
   state_type = String(recipe["state_type"])
   _, entry = _states_zoo_entry(state_type)
-  parameter_names = QuantumSavory.StatesZoo.stateparameters(entry.type)
   arguments = [
-    _script_literal(recipe["parameters"][string(name)], "$context parameter '$(name)'")
-    for name in parameter_names
+    _script_literal(
+      recipe["parameters"][string(parameter.name)],
+      "$context parameter '$(parameter.name)'",
+    ) for parameter in entry.schema.parameters
   ]
   constructor = _script_reference(imports, entry.type)
   expression = "$constructor(" * join(arguments, ", ") * ")"
   entry.weighted || return expression
-  express = _script_reference(imports, QuantumSavory, :express)
-  trace = _script_reference(imports, LinearAlgebra, :tr)
-  result = return_trace ? "(state / trace, trace)" : "state / trace"
+  normalizer = _script_reference(
+    imports,
+    QuantumSavory.StatesZoo,
+    :normalized_state_and_weight,
+  )
+  result = return_trace ? "(normalized.state, normalized.weight)" : "normalized.state"
   return "(let\n" *
-    "    state = $expression\n" *
-    "    trace = abs($express($trace(state)))\n" *
+    "    normalized = $normalizer($expression)\n" *
     "    $result\n" *
     "end)"
 end
@@ -832,17 +834,17 @@ end
 function _script_assert_constructor_numeric_bounds(
   raw_type,
   value,
-  constructor_metadata,
+  field_schema,
   context::String,
 )
-  constructor_metadata === nothing && return nothing
+  field_schema === nothing && return nothing
   converted, converted_value = _convert_parameter_value(
     _script_declared_type(raw_type),
     value,
   )
   if converted && converted_value isa Real && !(converted_value isa Bool)
-    minimum = _constructor_numeric_bound(constructor_metadata, :min)
-    maximum = _constructor_numeric_bound(constructor_metadata, :max)
+    minimum = _constructor_numeric_bound(field_schema, :minimum)
+    maximum = _constructor_numeric_bound(field_schema, :maximum)
     minimum !== nothing && converted_value < minimum &&
       throw(validation_error("$context is below its minimum"))
     maximum !== nothing && converted_value > maximum &&
@@ -858,7 +860,7 @@ function _script_value_expression(
   node_index=nothing,
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-  constructor_metadata=nothing,
+  field_schema=nothing,
 )
   numeric_expression = _parse_numeric_expression(value; context)
   if numeric_expression !== nothing
@@ -890,7 +892,7 @@ function _script_value_expression(
   _script_assert_constructor_numeric_bounds(
     raw_type,
     value,
-    constructor_metadata,
+    field_schema,
     context,
   )
   return _script_regular_expression(raw_type, value, context; imports)
@@ -1021,7 +1023,7 @@ function _script_noise_expression(
   noise_type = _resolve_type_from_string(type_name, :noise)
   noise_type === nothing && throw(validation_error("$context has unknown type '$type_name'"))
   declared_parameter_types = _constructor_parameter_types(noise_type)
-  constructor_parameter_metadata = _constructor_parameter_metadata(noise_type)
+  constructor_fields_by_name = _constructor_fields_by_name(noise_type)
   keywords = String[]
   supplied_names = Set{String}()
   for parameter in parameters
@@ -1032,21 +1034,21 @@ function _script_noise_expression(
       "$context contains duplicate parameter '$name'",
     ))
     push!(supplied_names, name)
+    haskey(declared_parameter_types, name) ||
+      throw(validation_error("$context has unknown parameter '$name'"))
     value = get(parameter, "value", nothing)
     if value === nothing ||
         (value isa AbstractString && isempty(strip(String(value))))
       continue
     end
-    haskey(declared_parameter_types, name) ||
-      throw(validation_error("$context has unknown parameter '$name'"))
     _, expression = _script_constructor_parameter_expression(
       parameter,
       variable_bindings,
       context;
       node_index,
       declared_type=declared_parameter_types[name],
-      constructor_metadata=get(
-        constructor_parameter_metadata,
+      field_schema=get(
+        constructor_fields_by_name,
         name,
         nothing,
       ),
@@ -1237,7 +1239,7 @@ function _script_constructor_parameter_expression(
   node_index=nothing,
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
   declared_type=nothing,
-  constructor_metadata=nothing,
+  field_schema=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
   name = if haskey(parameter, "name")
@@ -1296,7 +1298,7 @@ function _script_constructor_parameter_expression(
         "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'";
         node_index=node_index,
         edge_context=edge_context,
-        constructor_metadata,
+        field_schema,
         imports,
       )
       expression === nothing && throw(validation_error(
@@ -1307,7 +1309,7 @@ function _script_constructor_parameter_expression(
     _script_assert_constructor_numeric_bounds(
       binding.variable.type,
       binding.variable.value,
-      constructor_metadata,
+      field_schema,
       "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'",
     )
     return name, binding.name
@@ -1324,7 +1326,7 @@ function _script_constructor_parameter_expression(
     "$context parameter '$name'";
     node_index=node_index,
     edge_context=edge_context,
-    constructor_metadata,
+    field_schema,
     imports,
   )
   return name, expression
@@ -1350,53 +1352,56 @@ function _script_protocol!(
   raw_type = _required_nonempty_string(protocol_definition, "type", context)
   protocol_type = _resolve_type_from_string(raw_type, :protocol)
   protocol_type === nothing && throw(validation_error("$context has unknown type '$raw_type'"))
-  declared_parameter_types = _protocol_constructor_parameter_types(protocol_type)
-  constructor_parameter_metadata =
-    _protocol_constructor_parameter_metadata(protocol_type)
+  schema = QuantumSavory.ProtocolZoo.protocol_schema(protocol_type)
+  declared_parameter_types = _constructor_parameter_types(schema.constructor)
+  constructor_fields_by_name =
+    _constructor_fields_by_name(schema.constructor)
   parameters = get(protocol_definition, "parameters", Any[])
   parameters isa AbstractVector || throw(validation_error("$context parameters must be an array"))
 
   keywords = ["sim = sim", "net = network"]
+  placement_context = Dict{Symbol,Any}()
   if node_index !== nothing
-    push!(keywords, "node = $node_index")
+    placement_context[:node] = node_index
   elseif node_a !== nothing && node_b !== nothing
-    push!(keywords, "nodeA = $node_a", "nodeB = $node_b")
+    placement_context[:nodeA] = node_a
+    placement_context[:nodeB] = node_b
+  end
+  for (field, value) in _protocol_placement_kwargs(schema, placement_context)
+    push!(keywords, "$(field) = $value")
   end
 
   for parameter in parameters
     _is_object_like(parameter) || throw(validation_error("$context parameter must be an object"))
     submitted_name = _required_nonempty_string(parameter, "name", "$context parameter")
-    submitted_name in ("sim", "net", "node", "nodeA", "nodeB") && continue
-    constructor_name = get(PROTOCOL_KEYWORD_MAPPINGS, submitted_name, submitted_name)
-    value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(String(value))))
-      continue
-    end
-    haskey(declared_parameter_types, constructor_name) || throw(validation_error(
+    haskey(declared_parameter_types, submitted_name) || throw(validation_error(
       "$context has unknown parameter '$submitted_name'",
       Dict{String,Any}(
         "parameter_name" => submitted_name,
         "protocol_type" => string(protocol_type),
       ),
     ))
+    value = get(parameter, "value", nothing)
+    if value === nothing || (value isa AbstractString && isempty(strip(String(value))))
+      continue
+    end
     name, expression = _script_constructor_parameter_expression(
       parameter,
       variable_bindings,
       context;
       node_index=node_index,
       edge_context=edge_context,
-      declared_type=declared_parameter_types[constructor_name],
-      constructor_metadata=get(
-        constructor_parameter_metadata,
-        constructor_name,
+      declared_type=declared_parameter_types[submitted_name],
+      field_schema=get(
+        constructor_fields_by_name,
+        submitted_name,
         nothing,
       ),
       imports,
     )
     expression === nothing && continue
-    keyword = get(PROTOCOL_KEYWORD_MAPPINGS, name, name)
-    Base.isidentifier(keyword) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
-    push!(keywords, "$keyword = $expression")
+    Base.isidentifier(name) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
+    push!(keywords, "$name = $expression")
   end
 
   protocol_id = string(get(protocol_definition, "id", context))
@@ -1405,7 +1410,11 @@ function _script_protocol!(
     used,
     "protocol_instance_$(length(protocol_entries) + 1)",
   )
-  constructor = _script_reference(imports, protocol_type)
+  constructor = _script_reference(
+    imports,
+    QuantumSavory.ProtocolZoo,
+    protocol_type,
+  )
   push!(lines, "# $(_script_comment(context)); GUI protocol ID: $(_script_comment(protocol_id))")
   push!(lines, "$binding = $constructor(; " * join(keywords, ", ") * ")")
   process = _script_reference(imports, ConcurrentSim, Symbol("@process"))
@@ -1459,7 +1468,6 @@ function generate_julia_script(payload)
     "using ResumableFunctions",
     "using CairoMakie",
     "using LinearAlgebra",
-    "import InteractiveUtils, REPL",
     "# Explicit imports keep exporter-generated source concise and auditable.",
     import_marker,
     "",

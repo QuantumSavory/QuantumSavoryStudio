@@ -1,37 +1,12 @@
-import LinearAlgebra
-
-"""Allowlisted QuantumSavory StatesZoo type exposed by the web API."""
-const STATES_ZOO_TYPE_REGISTRY = Dict{String,NamedTuple}(
-  "BarrettKokBellPair" => (
-    order = 1,
-    display_name = "Barrett-Kok Bell Pair",
-    type = QuantumSavory.StatesZoo.BarrettKokBellPair,
-    weighted = false,
-  ),
-  "BarrettKokBellPairW" => (
-    order = 2,
-    display_name = "Barrett-Kok Bell Pair (weighted)",
-    type = QuantumSavory.StatesZoo.BarrettKokBellPairW,
-    weighted = true,
-  ),
-  "DepolarizedBellPair" => (
-    order = 3,
-    display_name = "Depolarized Bell Pair",
-    type = QuantumSavory.StatesZoo.DepolarizedBellPair,
-    weighted = false,
-  ),
-  "GenqoMultiplexedCascadedBellPairW" => (
-    order = 4,
-    display_name = "Genqo Multiplexed Cascaded Bell Pair (weighted)",
-    type = QuantumSavory.StatesZoo.Genqo.GenqoMultiplexedCascadedBellPairW,
-    weighted = true,
-  ),
-  "GenqoUnheraldedSPDCBellPairW" => (
-    order = 5,
-    display_name = "Genqo Unheralded SPDC Bell Pair (weighted)",
-    type = QuantumSavory.StatesZoo.Genqo.GenqoUnheraldedSPDCBellPairW,
-    weighted = true,
-  ),
+"""Web presentation names keyed by simulator-owned StatesZoo family IDs."""
+const STATES_ZOO_DISPLAY_NAMES = Dict(
+  "BarrettKokBellPair" => "Barrett-Kok Bell Pair",
+  "BarrettKokBellPairW" => "Barrett-Kok Bell Pair (weighted)",
+  "DepolarizedBellPair" => "Depolarized Bell Pair",
+  "GenqoMultiplexedCascadedBellPairW" =>
+    "Genqo Multiplexed Cascaded Bell Pair (weighted)",
+  "GenqoUnheraldedSPDCBellPairW" =>
+    "Genqo Unheralded SPDC Bell Pair (weighted)",
 )
 
 # CairoMakie rendering is not thread-safe. Keep construction and validation
@@ -43,18 +18,26 @@ _states_zoo_object_like(value) =
 
 function _states_zoo_entry(state_type::AbstractString)
   id = strip(String(state_type))
-  entry = get(STATES_ZOO_TYPE_REGISTRY, id, nothing)
-  entry === nothing && throw(validation_error(
+  schemas = QuantumSavory.StatesZoo.state_family_schemas()
+  index = findfirst(schema -> string(nameof(schema.family)) == id, schemas)
+  index === nothing && throw(validation_error(
     "Unknown States Zoo type: '$id'",
     Dict{String,Any}(
       "state_type" => id,
-      "allowed_state_types" => sort!(collect(keys(STATES_ZOO_TYPE_REGISTRY))),
+      "allowed_state_types" => string.(nameof.(getproperty.(schemas, :family))),
     ),
   ))
+  schema = schemas[index]
+  entry = (
+    type=schema.family,
+    schema,
+    display_name=get(STATES_ZOO_DISPLAY_NAMES, id, string(nameof(schema.family))),
+    weighted=schema.normalization === QuantumSavory.StatesZoo.WeightedState,
+  )
   return id, entry
 end
 
-function _validate_states_zoo_object_keys(object, expected::Vector{String}, context::String)
+function _validate_states_zoo_object_keys(object, expected, context::String)
   actual = Set(String(key) for key in keys(object))
   expected_set = Set(expected)
   missing = [key for key in expected if !(key in actual)]
@@ -74,80 +57,55 @@ function _validate_states_zoo_object_keys(object, expected::Vector{String}, cont
   return nothing
 end
 
-"""Return the stable, ordered API catalog for allowlisted StatesZoo types."""
+"""Project the simulator's ordered StatesZoo schemas into the Web API."""
 function get_states_zoo_types()
-  entries = sort!(collect(STATES_ZOO_TYPE_REGISTRY); by=pair -> pair.second.order)
-
   return [
     begin
-      T = entry.type
-      parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
-      parameter_ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
+      id = string(nameof(schema.family))
       Dict{String,Any}(
         "id" => id,
-        "display_name" => entry.display_name,
-        "weighted" => entry.weighted,
+        "display_name" => get(STATES_ZOO_DISPLAY_NAMES, id, id),
+        "weighted" =>
+          schema.normalization === QuantumSavory.StatesZoo.WeightedState,
         "parameters" => [
-          begin
-            bounds = parameter_ranges[parameter_name]
-            Dict{String,Any}(
-              "name" => string(parameter_name),
-              "min" => bounds.min,
-              "max" => bounds.max,
-              "good" => bounds.good,
-            )
-          end for parameter_name in parameter_names
+          Dict{String,Any}(
+            "name" => string(parameter.name),
+            "type" => string(parameter.value_type),
+            "doc" => parameter.doc,
+            "min" => parameter.minimum,
+            "max" => parameter.maximum,
+            "min_inclusive" => parameter.minimum_inclusive,
+            "max_inclusive" => parameter.maximum_inclusive,
+            "good" => parameter.recommended,
+          ) for parameter in schema.parameters
         ],
       )
-    end for (id, entry) in entries
+    end for schema in QuantumSavory.StatesZoo.state_family_schemas()
   ]
 end
 
-"""Return the finite, positive absolute trace of a constructed StatesZoo state."""
-function _states_zoo_absolute_trace(state_type::AbstractString, state)
-  trace_value = try
-    # Prefer the symbolic trace. Barrett-Kok's zero operator cannot be expressed
-    # directly, while its symbolic trace can still be evaluated safely as zero.
-    abs(QuantumSavory.express(LinearAlgebra.tr(state)))
+"""Return the density operator used for previews and its original absolute trace."""
+function _states_zoo_preview_density_operator(state_type::AbstractString, state)
+  _states_zoo_entry(state_type)
+  normalized = try
+    QuantumSavory.StatesZoo.normalized_state_and_weight(state)
   catch error
-    isa(error, APIError) && rethrow(error)
     throw(validation_error(
-      "Failed to compute the density-matrix trace for States Zoo type '$state_type'",
+      "States Zoo type '$state_type' must have a finite, positive density-matrix trace",
       Dict{String,Any}(
         "state_type" => String(state_type),
         "trace_error" => sprint(showerror, error),
       ),
     ))
   end
-
-  if !(trace_value isa Real) || !isfinite(trace_value) || trace_value <= 0
-    throw(validation_error(
-      "States Zoo type '$state_type' must have a finite, positive density-matrix trace",
-      Dict{String,Any}(
-        "state_type" => String(state_type),
-        "trace" => trace_value,
-      ),
-    ))
-  end
-  return Float64(trace_value)
-end
-
-"""Return the density operator used for previews and its original absolute trace."""
-function _states_zoo_preview_density_operator(state_type::AbstractString, state)
-  _, entry = _states_zoo_entry(state_type)
-  absolute_trace = _states_zoo_absolute_trace(state_type, state)
-  density_operator = QuantumSavory.express(state)
-  if entry.weighted
-    density_operator /= absolute_trace
-  end
-  return density_operator, absolute_trace
+  return QuantumSavory.express(normalized.state), Float64(normalized.weight)
 end
 
 """
 Validate one StatesZoo parameter object and construct only its allowlisted type.
 
-Parameter names must exactly match `stateparameters(T)`. Values must be finite
-JSON numbers inside the inclusive bounds from `stateparametersrange(T)`.
+Parameter names and finite numeric values must exactly satisfy the selected
+simulator-owned `StateFamilySchema`, including open interval endpoints.
 """
 function construct_states_zoo_state(state_type, parameters)
   state_type isa AbstractString || throw(validation_error(
@@ -162,37 +120,28 @@ function construct_states_zoo_state(state_type, parameters)
   ))
 
   T = entry.type
-  parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
-  parameter_ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
-  expected_names = string.(collect(parameter_names))
+  parameter_schemas = entry.schema.parameters
+  expected_names = string.(getproperty.(parameter_schemas, :name))
   _validate_states_zoo_object_keys(parameters, expected_names, "States Zoo parameters for '$id'")
 
   values = Any[]
-  for parameter_name in parameter_names
-    name = string(parameter_name)
+  for parameter in parameter_schemas
+    name = string(parameter.name)
     value = parameters[name]
-    bounds = parameter_ranges[parameter_name]
 
-    if !(value isa Real) || value isa Bool || !isfinite(value)
+    if !(value in parameter)
       throw(validation_error(
-        "States Zoo parameter '$name' must be a finite number",
-        Dict{String,Any}(
-          "state_type" => id,
-          "parameter" => name,
-          "received_type" => string(typeof(value)),
-        ),
-      ))
-    end
-
-    if value < bounds.min || value > bounds.max
-      throw(validation_error(
-        "States Zoo parameter '$name' is outside its declared range",
+        "States Zoo parameter '$name' is outside its declared type or range",
         Dict{String,Any}(
           "state_type" => id,
           "parameter" => name,
           "value" => value,
-          "min" => bounds.min,
-          "max" => bounds.max,
+          "received_type" => string(typeof(value)),
+          "declared_type" => string(parameter.value_type),
+          "min" => parameter.minimum,
+          "max" => parameter.maximum,
+          "min_inclusive" => parameter.minimum_inclusive,
+          "max_inclusive" => parameter.maximum_inclusive,
         ),
       ))
     end
@@ -231,11 +180,18 @@ function construct_states_zoo_recipe(recipe)
   ))
   state_type = recipe["state_type"]
   state = construct_states_zoo_state(state_type, recipe["parameters"])
-  state_type, entry = _states_zoo_entry(state_type)
-  entry.weighted || return state
-
-  absolute_trace = _states_zoo_absolute_trace(state_type, state)
-  return state / absolute_trace
+  state_type, _ = _states_zoo_entry(state_type)
+  try
+    return QuantumSavory.StatesZoo.normalized_state_and_weight(state).state
+  catch error
+    throw(validation_error(
+      "States Zoo type '$state_type' must have a finite, positive density-matrix trace",
+      Dict{String,Any}(
+        "state_type" => state_type,
+        "trace_error" => sprint(showerror, error),
+      ),
+    ))
+  end
 end
 
 """Validate the POST preview body and return its constructed state and stable ID."""

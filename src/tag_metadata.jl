@@ -26,9 +26,6 @@ const _TAG_PRESET_OPERATORS = Dict{String,Function}(
   "!=" => (!=),
 )
 
-const _TAG_CATALOG_CACHE = Ref{Any}(nothing)
-const _TAG_CATALOG_CACHE_LOCK = ReentrantLock()
-
 _tag_object(value) = value isa AbstractDict || value isa NamedTuple
 
 function _tag_get(object, key::AbstractString, default=_MISSING_TAG_VALUE)
@@ -89,90 +86,31 @@ end
 
 _tag_type_name(type) = type isa DataType ? string(nameof(type)) : string(type)
 
-function _tag_type_doc(type::DataType)
-  try
-    doc = Base.Docs.doc(type)
-    doc === nothing && return ""
-    rendered = string(doc)
-    startswith(rendered, "No documentation found") && return ""
-    return rendered
-  catch
-    return ""
-  end
-end
-
-function _named_tag_fields(type::DataType)
-  docs = Dict{Symbol,String}()
-  try
-    for item in QuantumSavory.constructor_metadata(type)
-      docs[Symbol(item.field)] = string(item.doc)
-    end
-  catch
-    # Some public tag converters (notably GraphStateStorage) intentionally have
-    # no DocStringExtensions field metadata. Structural reflection is still
-    # sufficient to expose and safely construct them.
-  end
-
-  fields = NamedTuple{(:name, :type, :doc, :position), Tuple{String, Any, String, Int}}[]
-  for (position, (name, field_type)) in enumerate(zip(fieldnames(type), fieldtypes(type)))
-    startswith(string(name), "_") && continue
-    push!(fields, (
-      name=string(name),
-      type=field_type,
-      doc=get(docs, name, ""),
-      position=position,
-    ))
-  end
-  return fields
-end
-
-function _tag_method_argument_types(method::Method)
-  signature = Base.unwrap_unionall(method.sig)
-  signature isa DataType || return Any[]
-  parameters = signature.parameters
-  length(parameters) >= 2 || return Any[]
-  return Any[parameters[2:end]...]
-end
-
-function _tag_converter_definitions()
-  definitions = _NamedTagDefinition[]
-  seen = Set{String}()
-  for method in methods(QuantumSavory.Tag)
-    arguments = _tag_method_argument_types(method)
-    length(arguments) == 1 || continue
-    type = arguments[1]
-    type isa DataType || continue
-    isconcretetype(type) || continue
-    type in (QuantumSavory.Tag, Symbol, DataType) && continue
-
-    fields = _named_tag_fields(type)
-    all(field -> _supported_tag_value_type(field.type), fields) || continue
-
-    type_id = _qualified_tag_type_id(type)
-    type_id in seen && continue
-    push!(seen, type_id)
-    push!(definitions, _NamedTagDefinition(
-      type,
-      type_id,
-      string(nameof(type)),
-      _tag_type_doc(type),
+function _named_tag_definitions()
+  definitions = map(QuantumSavory.tag_head_schemas()) do schema
+    fields = NamedTuple{
+      (:name, :type, :doc, :position),
+      Tuple{String,Any,String,Int},
+    }[
+      (
+        name=string(field.name),
+        type=field.declared_type,
+        doc=field.doc,
+        position=position,
+      ) for (position, field) in enumerate(schema.fields)
+    ]
+    _NamedTagDefinition(
+      schema.head,
+      _qualified_tag_type_id(schema.head),
+      string(nameof(schema.head)),
+      schema.doc,
       fields,
-    ))
+    )
   end
-  sort!(definitions; by=definition -> (lowercase(definition.display_name), definition.type_id))
-  return definitions
-end
-
-function _named_tag_definitions(converter_definitions=_tag_converter_definitions())
-  return filter(converter_definitions) do definition
-    definition.type <: QuantumSavory.AbstractTag
-  end
-end
-
-function _supported_tag_value_type(type)
-  type isa DataType || return false
-  return type === Symbol || type === DataType ||
-         type <: Integer || type <: AbstractFloat
+  sort!(collect(definitions); by=definition -> (
+    lowercase(definition.display_name),
+    definition.type_id,
+  ))
 end
 
 function _general_signature_id(head_type::DataType, fields)
@@ -181,21 +119,13 @@ function _general_signature_id(head_type::DataType, fields)
 end
 
 function _general_tag_signatures()
-  signatures = _GeneralTagSignature[]
-  seen = Set{String}()
-  for method in methods(QuantumSavory.Tag)
-    arguments = _tag_method_argument_types(method)
-    isempty(arguments) && continue
-    head_type = arguments[1]
-    head_type in (Symbol, DataType) || continue
-    fields = Any[arguments[2:end]...]
-    all(_supported_tag_value_type, fields) || continue
-
-    signature_id = _general_signature_id(head_type, fields)
-    signature_id in seen && continue
-    push!(seen, signature_id)
-    push!(signatures, _GeneralTagSignature(signature_id, head_type, fields))
-  end
+  signatures = [
+    _GeneralTagSignature(
+      _general_signature_id(schema.head_type, schema.field_types),
+      schema.head_type,
+      Any[schema.field_types...],
+    ) for schema in QuantumSavory.general_tag_signatures()
+  ]
   sort!(signatures; by=signature -> (
     signature.head_type === Symbol ? 0 : 1,
     length(signature.fields),
@@ -204,19 +134,15 @@ function _general_tag_signatures()
   return signatures
 end
 
-function _build_tag_catalog_snapshot()
-  converter_definitions = _tag_converter_definitions()
-  named = _named_tag_definitions(converter_definitions)
+function _tag_catalog()
+  named = _named_tag_definitions()
   general = _general_tag_signatures()
   named_by_id = Dict(definition.type_id => definition for definition in named)
   named_by_type = Dict(definition.type => definition for definition in named)
   general_by_id = Dict(signature.id => signature for signature in general)
 
   allowed_types = DataType[Int]
-  # General DataType-head tag tooling intentionally retains every safe
-  # one-argument Tag converter. Only the public named/protocol catalog is
-  # constrained to the upstream AbstractTag hierarchy.
-  append!(allowed_types, definition.type for definition in converter_definitions)
+  append!(allowed_types, definition.type for definition in named)
   allowed_by_id = Dict{String,DataType}()
   for type in allowed_types
     allowed_by_id[_qualified_tag_type_id(type)] = type
@@ -224,7 +150,6 @@ function _build_tag_catalog_snapshot()
 
   return (;
     named,
-    converter_definitions,
     general,
     named_by_id,
     named_by_type,
@@ -233,49 +158,10 @@ function _build_tag_catalog_snapshot()
   )
 end
 
-_tag_catalog_fingerprint() = Tuple(sort!(
-  UInt[objectid(method) for method in methods(QuantumSavory.Tag)],
-))
-
-"""
-Return the process-local tag catalog, reflecting QuantumSavory only when needed.
-
-WebQuantumSavory loads its tag-providing packages before serving requests, so the
-relevant `Tag` method table is normally stable. We still fingerprint its `Method`
-objects so a package or extension loaded after first use automatically invalidates
-the cached reflection without repeating field/documentation discovery on every
-request. `_invalidate_tag_catalog_cache!()` remains the deterministic test hook.
-"""
-function _tag_catalog_snapshot()
-  return lock(_TAG_CATALOG_CACHE_LOCK) do
-    while true
-      fingerprint = _tag_catalog_fingerprint()
-      cached = _TAG_CATALOG_CACHE[]
-      if cached !== nothing && cached.fingerprint == fingerprint
-        return cached.snapshot
-      end
-
-      snapshot = _build_tag_catalog_snapshot()
-      # A package can add a Tag method while its extension is loading. Do not
-      # publish a snapshot assembled across two method-table generations.
-      fingerprint == _tag_catalog_fingerprint() || continue
-      _TAG_CATALOG_CACHE[] = (; fingerprint, snapshot)
-      return snapshot
-    end
-  end
-end
-
-function _invalidate_tag_catalog_cache!()
-  lock(_TAG_CATALOG_CACHE_LOCK) do
-    _TAG_CATALOG_CACHE[] = nothing
-  end
-  return nothing
-end
-
 function _compatible_data_type_ids(signature::_GeneralTagSignature, catalog)
   signature.head_type === DataType || return String[]
   compatible_types = DataType[Int]
-  for definition in catalog.converter_definitions
+  for definition in catalog.named
     length(definition.fields) == length(signature.fields) || continue
     all(
       field.type === expected
@@ -292,7 +178,7 @@ function _resolve_named_abstract_tag_type(
   value;
   nullable::Bool,
   context::AbstractString,
-  catalog=_tag_catalog_snapshot(),
+  catalog=_tag_catalog(),
 )
   if value isa AbstractString && strip(value) == "nothing"
     nullable || throw(validation_error(
@@ -343,7 +229,7 @@ end
 
 """Return the metadata-driven catalog consumed by the Tags & Queries UI."""
 function tag_type_catalog()
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   named_tags = [
     Dict{String,Any}(
       "type_id" => definition.type_id,
@@ -625,7 +511,7 @@ function _tag_spec(payload)
   return nested === _MISSING_TAG_VALUE ? payload : _require_tag_object(nested, "Tag")
 end
 
-function _construct_tag_payload(payload; catalog=_tag_catalog_snapshot())
+function _construct_tag_payload(payload; catalog=_tag_catalog())
   spec = _tag_spec(payload)
   kind = _require_tag_string(spec, "kind"; context="tag")
   if kind == "named"
@@ -660,11 +546,10 @@ function _wire_tag_value(value)
   return string(value)
 end
 
-function _structured_tag(tag::QuantumSavory.Tag, catalog=_tag_catalog_snapshot())
-  values = collect(tag)
-  isempty(values) && return Dict{String,Any}("kind" => "unknown", "fields" => Any[])
-  head = first(values)
-  tail_values = values[2:end]
+function _structured_tag(tag::QuantumSavory.Tag, catalog=_tag_catalog())
+  parts = QuantumSavory.tag_parts(tag)
+  head = parts.head
+  tail_values = parts.fields
 
   if head isa DataType
     definition = get(catalog.named_by_type, head, nothing)
@@ -727,7 +612,7 @@ end
 
 """Validate and construct a tag, returning its safe structure and `show` text."""
 function preview_tag_payload(payload)
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   tag = _construct_tag_payload(payload; catalog)
   structured = _structured_tag(tag, catalog)
   return Dict{String,Any}(
@@ -896,21 +781,20 @@ end
 function _register_tag_entry(
   state::State,
   register,
-  id,
-  info,
+  record,
   catalog;
   structured=nothing,
   rendered=nothing,
 )
-  slot = register[info.slot]
+  slot = register[record.slot]
   node_index = QuantumSavory.parentindex(register)
   return _tag_entry(
-    info.tag,
-    id;
+    record.tag,
+    record.id;
     catalog,
     node_id=_external_node_id(state, node_index),
     slot_id=_slot_external_id(state, slot),
-    time=info.time,
+    time=record.time,
     structured,
     rendered,
   )
@@ -918,29 +802,28 @@ end
 
 function _list_register_entries(state::State, target, catalog)
   register = target.register
-  ids = if target.kind == "slot"
-    Int128[
-      id for id in register.guids
-      if register.tag_info[id].slot == target.slot.idx
-    ]
+  records = if target.kind == "slot"
+    QuantumSavory.tag_records(target.slot)
   else
-    copy(register.guids)
+    QuantumSavory.tag_records(register)
   end
   return [
-    _register_tag_entry(state, register, id, register.tag_info[id], catalog)
-    for id in Iterators.reverse(ids)
+    _register_tag_entry(state, register, record, catalog)
+    for record in Iterators.reverse(records)
   ]
 end
 
 function _list_message_entries(state::State, target, catalog)
   buffer = target.object
+  records = QuantumSavory.message_records(buffer)
   entries = Dict{String,Any}[]
-  for depth in reverse(eachindex(buffer.buffer))
-    message = buffer.buffer[depth]
-    source = message.src === nothing ? nothing : _external_node_id(state, message.src)
+  for depth in reverse(eachindex(records))
+    record = records[depth]
+    source = record.source === nothing ?
+      nothing : _external_node_id(state, record.source)
     push!(entries, _tag_entry(
-      message.tag,
-      buffer.buffer_ids[depth];
+      record.tag,
+      record.id;
       catalog,
       node_id=_external_node_id(state, target.node_index),
       source,
@@ -952,7 +835,7 @@ end
 
 """List tags for a register/slot or the contents of a message buffer."""
 function list_tags(state::State, payload)
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   target = _resolve_tag_target(state, payload)
   entries = target.kind == "message_buffer" ?
     _list_message_entries(state, target, catalog) :
@@ -963,7 +846,7 @@ end
 
 """Attach a slot tag, register-destination tag, or message-buffer entry."""
 function attach_tag!(state::State, payload)
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   target = _resolve_tag_target(state, payload; for_attach=true)
   tag = _construct_tag_payload(_require_tag_value(payload, "tag"; context="tag attachment"); catalog)
   # Validate the package-defined display path before mutating the live network.
@@ -974,11 +857,12 @@ function attach_tag!(state::State, payload)
 
   if target.kind == "message_buffer"
     put!(target.object, tag)
-    depth = length(target.object.buffer)
-    id = target.object.buffer_ids[depth]
+    records = QuantumSavory.message_records(target.object)
+    depth = length(records)
+    record = last(records)
     entry = _tag_entry(
-      tag,
-      id;
+      record.tag,
+      record.id;
       catalog,
       node_id=_external_node_id(state, target.node_index),
       depth,
@@ -988,12 +872,14 @@ function attach_tag!(state::State, payload)
   else
     slot = target.kind == "register" ? target.slot : target.object
     id = QuantumSavory.tag!(slot, tag)
-    info = target.register.tag_info[id]
+    record = only(
+      record for record in QuantumSavory.tag_records(slot)
+      if record.id == id
+    )
     entry = _register_tag_entry(
       state,
       target.register,
-      id,
-      info,
+      record,
       catalog;
       structured,
       rendered,
@@ -1016,7 +902,7 @@ end
 
 """Delete a tag from a slot/register. Message deletion is intentionally absent."""
 function delete_tag!(state::State, tag_id, payload)
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   target = _resolve_tag_target(state, payload)
   target.kind == "message_buffer" && throw(validation_error(
     "Message-buffer deletion is not supported",
@@ -1024,12 +910,12 @@ function delete_tag!(state::State, tag_id, payload)
   ))
   id = _parse_tag_id(tag_id)
   register = target.register
-  haskey(register.tag_info, id) || throw(not_found_error("Tag", string(tag_id)))
-  info = register.tag_info[id]
-  if target.kind == "slot" && info.slot != target.slot.idx
-    throw(not_found_error("Tag", string(tag_id)))
-  end
-  entry = _register_tag_entry(state, register, id, info, catalog)
+  records = target.kind == "slot" ?
+    QuantumSavory.tag_records(target.slot) :
+    QuantumSavory.tag_records(register)
+  index = findfirst(record -> record.id == id, records)
+  index === nothing && throw(not_found_error("Tag", string(tag_id)))
+  entry = _register_tag_entry(state, register, records[index], catalog)
   try
     QuantumSavory.untag!(register, id)
   catch error
@@ -1134,7 +1020,7 @@ end
 
 """Execute a non-consuming FILO `queryall` for a register or slot target."""
 function query_tags(state::State, payload)
-  catalog = _tag_catalog_snapshot()
+  catalog = _tag_catalog()
   target = _resolve_tag_target(state, payload; for_query=true)
   arguments = _query_arguments(payload, catalog)
   query_target = target.kind == "slot" ? target.object : target.register

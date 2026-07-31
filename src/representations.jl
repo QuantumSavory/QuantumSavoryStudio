@@ -1,42 +1,13 @@
 const DEFAULT_QUBIT_REPRESENTATION = "QuantumOpticsRepr"
 const DEFAULT_QUMODE_REPRESENTATION = "QuantumOpticsRepr"
 
-const _REPRESENTATION_SPECS = Dict(
-  "QuantumOpticsRepr" => (
-    traits = (Qubit, Qumode),
-    construct = () -> QuantumOpticsRepr(),
-    script = (
-      constructor=(source_module=QuantumSavory, binding=QuantumOpticsRepr),
-      arguments=(),
-    ),
-  ),
-  "QuantumMCRepr" => (
-    traits = (Qubit, Qumode),
-    construct = () -> QuantumMCRepr(),
-    script = (
-      constructor=(source_module=QuantumSavory, binding=QuantumMCRepr),
-      arguments=(),
-    ),
-  ),
-  "CliffordRepr" => (
-    traits = (Qubit,),
-    construct = () -> CliffordRepr(),
-    script = (
-      constructor=(source_module=QuantumSavory, binding=CliffordRepr),
-      arguments=(),
-    ),
-  ),
-  "GabsRepr" => (
-    traits = (Qumode,),
-    construct = () -> GabsRepr(QuantumSavory.Gabs.QuadBlockBasis),
-    script = (
-      constructor=(source_module=QuantumSavory, binding=GabsRepr),
-      arguments=((
-        source_module=QuantumSavory.Gabs,
-        binding=QuantumSavory.Gabs.QuadBlockBasis,
-      ),),
-    ),
-  ),
+const _REPRESENTATION_TRAIT_SUPPORT = Dict(
+  QuantumOpticsRepr => (Qubit, Qumode),
+  QuantumMCRepr => (Qubit, Qumode),
+  CliffordRepr => (Qubit,),
+  # GabsRepr needs an explicit basis and is not a member of QuantumSavory's
+  # zero-argument representation catalog. Keep that Web-specific choice local.
+  GabsRepr => (Qumode,),
 )
 
 _representation_object_like(value) =
@@ -45,24 +16,44 @@ _representation_object_like(value) =
 _representation_trait_name(trait) =
   trait === Qubit ? "Qubit" : trait === Qumode ? "Qumode" : string(trait)
 
+function _representation_type(name::AbstractString)
+  id = String(name)
+  schemas = QuantumSavory.representation_schemas()
+  schema = findfirst(
+    candidate -> string(nameof(candidate.constructor)) == id,
+    schemas,
+  )
+  schema === nothing || return schemas[schema].constructor
+  id == "GabsRepr" && return GabsRepr
+  return nothing
+end
+
+_representation_supports(type, trait) =
+  trait in get(_REPRESENTATION_TRAIT_SUPPORT, type, ())
+
+function _representation_names(trait)
+  types = Any[
+    schema.constructor for schema in QuantumSavory.representation_schemas()
+    if _representation_supports(schema.constructor, trait)
+  ]
+  _representation_supports(GabsRepr, trait) && push!(types, GabsRepr)
+  return sort!(string.(nameof.(types)))
+end
+
 function _representation_choice(config, field, default, trait)
   choice = get(config, field, default)
   choice isa AbstractString || throw(validation_error(
     "Simulation configuration field '$field' must be a representation name",
   ))
   name = String(choice)
-  spec = get(_REPRESENTATION_SPECS, name, nothing)
-  spec === nothing && throw(validation_error(
+  type = _representation_type(name)
+  type === nothing && throw(validation_error(
     "Unknown representation '$name' for $field",
     Dict{String,Any}(
-      "allowed" => sort([
-        candidate
-        for (candidate, candidate_spec) in _REPRESENTATION_SPECS
-        if trait in candidate_spec.traits
-      ]),
+      "allowed" => _representation_names(trait),
     ),
   ))
-  trait in spec.traits || throw(validation_error(
+  _representation_supports(type, trait) || throw(validation_error(
     "Representation '$name' does not support $(_representation_trait_name(trait)) slots",
   ))
   return name
@@ -105,22 +96,19 @@ end
 
 function construct_representation(config, trait)
   name = _representation_name(config, trait)
-  return _REPRESENTATION_SPECS[name].construct()
+  type = _representation_type(name)
+  type === GabsRepr && return GabsRepr(QuantumSavory.Gabs.QuadBlockBasis)
+  return type()
 end
 
 function script_representation(config, trait, render_reference::Function)
   name = _representation_name(config, trait)
-  script = _REPRESENTATION_SPECS[name].script
-  constructor = render_reference(
-    script.constructor.source_module,
-    script.constructor.binding,
+  type = _representation_type(name)
+  constructor = render_reference(QuantumSavory, type)
+  type === GabsRepr || return "$constructor()"
+  basis = render_reference(
+    QuantumSavory.Gabs,
+    QuantumSavory.Gabs.QuadBlockBasis,
   )
-  arguments = join(
-    (
-      render_reference(argument.source_module, argument.binding)
-      for argument in script.arguments
-    ),
-    ", ",
-  )
-  return "$constructor($arguments)"
+  return "$constructor($basis)"
 end

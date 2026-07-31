@@ -19,6 +19,18 @@ Base.@kwdef struct MockBrokenProtocol <: QuantumSavory.ProtocolZoo.AbstractProto
   net::QuantumSavory.RegisterNet
 end
 
+const MOCK_BROKEN_PROTOCOL_SCHEMA = QuantumSavory.ProtocolZoo.ProtocolSchema(
+  QuantumSavory.ConstructorSchema(
+    MockBrokenProtocol,
+    "Diagnostic-only floating protocol that intentionally crashes during simulation stepping.",
+  ),
+  QuantumSavory.ProtocolZoo.FloatingProtocolPlacement,
+  (),
+)
+
+QuantumSavory.ProtocolZoo.protocol_schema(::Type{MockBrokenProtocol}) =
+  MOCK_BROKEN_PROTOCOL_SCHEMA
+
 @resumable function (protocol::MockBrokenProtocol)()
   @yield ConcurrentSim.timeout(protocol.sim, 0.0)
   return [1, 2, 3][100]

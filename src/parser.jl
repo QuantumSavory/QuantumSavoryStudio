@@ -4,41 +4,6 @@
 using Dates
 using .Logger: @log_event
 
-# Simple caches to avoid repeated scans/logs during type resolution
-const _PROTOCOL_TYPES_CACHE = Ref(Dict{String, Any}())
-const _NOISE_TYPES_CACHE = Ref(Dict{String, Any}())
-const _SLOT_TYPES_CACHE = Ref(Dict{String, Any}())
-
-function _ensure_protocol_types_cache!()
-  if isempty(_PROTOCOL_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for pt in QuantumSavory.ProtocolZoo.available_protocol_types()
-      mapping[lowercase(string(pt.type))] = pt.type
-    end
-    _PROTOCOL_TYPES_CACHE[] = mapping
-  end
-end
-
-function _ensure_noise_types_cache!()
-  if isempty(_NOISE_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for bt in QuantumSavory.available_background_types()
-      mapping[lowercase(string(bt.type |> nameof))] = bt.type
-    end
-    _NOISE_TYPES_CACHE[] = mapping
-  end
-end
-
-function _ensure_slot_types_cache!()
-  if isempty(_SLOT_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for st in QuantumSavory.available_slot_types()
-      mapping[lowercase(string(st.type |> nameof))] = st.type
-    end
-    _SLOT_TYPES_CACHE[] = mapping
-  end
-end
-
 """Convert a raw parameter value to a target primitive, Wildcard, or simple Union type.
 
 Supported target strings: "Int", "Int64", "Float64", "Float32", "String", "Nothing", "Bool",
@@ -539,7 +504,6 @@ function _validate_variable_references(payload, variables)
       definition=definition,
       location=location,
       kind=:protocol,
-      mappings=PROTOCOL_KEYWORD_MAPPINGS,
     )
     for (definition, location) in _collect_protocol_definitions(payload)
   ]
@@ -549,7 +513,6 @@ function _validate_variable_references(payload, variables)
       definition=definition,
       location=location,
       kind=:background,
-      mappings=Dict{String,String}(),
     )
     for (definition, location) in _collect_background_definitions(payload)
   )
@@ -584,9 +547,7 @@ function _validate_variable_references(payload, variables)
       Dict{String,Any}("location" => location, "constructor_type" => raw_type),
     ))
 
-    declared_parameter_types = kind === :protocol ?
-      _protocol_constructor_parameter_types(constructor_type) :
-      _constructor_parameter_types(constructor_type)
+    declared_parameter_types = _constructor_parameter_types(constructor_type)
     parameters = get(definition, "parameters", Any[])
     parameters isa AbstractVector || throw(validation_error(
       "$location parameters must be an array",
@@ -607,18 +568,7 @@ function _validate_variable_references(payload, variables)
       ))
       push!(supplied_names, parameter_name)
 
-      if kind === :protocol &&
-          Symbol(parameter_name) in (:sim, :net, :node, :nodeA, :nodeB)
-        continue
-      end
-      haskey(parameter, "value") || continue
-      value = parameter["value"]
-      if value === nothing ||
-          (value isa AbstractString && isempty(strip(String(value))))
-        continue
-      end
-      constructor_name = get(constructor.mappings, parameter_name, parameter_name)
-      haskey(declared_parameter_types, constructor_name) || throw(validation_error(
+      haskey(declared_parameter_types, parameter_name) || throw(validation_error(
         "Unknown $(kind === :protocol ? "protocol" : "background noise") parameter '$parameter_name'",
         Dict{String,Any}(
           "parameter_name" => parameter_name,
@@ -626,8 +576,14 @@ function _validate_variable_references(payload, variables)
           "location" => location,
         ),
       ))
+      haskey(parameter, "value") || continue
+      value = parameter["value"]
+      if value === nothing ||
+          (value isa AbstractString && isempty(strip(String(value))))
+        continue
+      end
       context = "$location parameter '$parameter_name'"
-      declared_type = declared_parameter_types[constructor_name]
+      declared_type = declared_parameter_types[parameter_name]
 
       numeric_expression = _parse_numeric_expression(value; context=context)
       if numeric_expression !== nothing
@@ -694,31 +650,29 @@ function _validate_variable_references(payload, variables)
 end
 
 function get_background_constructor_parameters(background_type)
-  QuantumSavory.constructor_metadata(background_type)
+  QuantumSavory.constructor_schema(background_type).fields
 end
 
 function get_background_types()
-  background_types = QuantumSavory.available_background_types()
   [
     Dict(
-      "type" => string(nameof(abt.type)),
-      "doc" => string(abt.doc),
-      "parameters" => get_background_constructor_parameters(abt.type) |> parse_pt_type
-    ) for abt in background_types
+      "type" => string(nameof(schema.constructor)),
+      "doc" => schema.doc,
+      "parameters" => parse_pt_type(schema.fields),
+    ) for schema in QuantumSavory.background_schemas()
   ]
 end
 
 function get_slot_types()
-  slot_types = QuantumSavory.available_slot_types()
-  [Dict("type" => string(nameof(st.type)), "doc" => string(st.doc)) for st in slot_types]
+  [
+    Dict(
+      "type" => string(nameof(schema.constructor)),
+      "doc" => schema.doc,
+    ) for schema in QuantumSavory.slot_schemas()
+  ]
 end
 
 const NAMED_TAG_PARAMETER_KIND = "named_tag_type"
-const PROTOCOL_KEYWORD_MAPPINGS = Dict(
-  "chooseA" => "chooseslotA",
-  "chooseB" => "chooseslotB",
-  "log" => "_log",
-)
 
 """Recognize current and legacy symbolic protocol type identities."""
 function _is_symbolic_parameter_type(type)
@@ -761,49 +715,29 @@ function _named_tag_parameter_semantics(type)
 end
 
 """Return authoritative constructor field types from catalog metadata."""
-function _constructor_parameter_types(constructor_type)
+function _constructor_parameter_types(schema::QuantumSavory.ConstructorSchema)
   return Dict(
-    string(parameter.field) => parameter.type
-    for parameter in QuantumSavory.constructor_metadata(constructor_type)
+    string(field.name) => field.declared_type
+    for field in schema.fields
   )
 end
+_constructor_parameter_types(constructor_type) =
+  _constructor_parameter_types(QuantumSavory.constructor_schema(constructor_type))
 
-"""Return authoritative constructor metadata keyed by its wire field."""
-function _constructor_parameter_metadata(constructor_type)
+"""Return simulator-owned field schemas keyed by their wire name."""
+function _constructor_fields_by_name(schema::QuantumSavory.ConstructorSchema)
   return Dict(
-    string(parameter.field) => parameter
-    for parameter in QuantumSavory.constructor_metadata(constructor_type)
+    string(field.name) => field
+    for field in schema.fields
   )
 end
+_constructor_fields_by_name(constructor_type) =
+  _constructor_fields_by_name(QuantumSavory.constructor_schema(constructor_type))
 
-"""Return protocol constructor fields, including supported private keyword aliases."""
-function _protocol_constructor_parameter_types(protocol_type)
-  declared = _constructor_parameter_types(protocol_type)
-  reflected_fields = Dict(string(name) => type for (name, type) in zip(
-    fieldnames(protocol_type),
-    fieldtypes(protocol_type),
-  ))
-  for keyword in values(PROTOCOL_KEYWORD_MAPPINGS)
-    haskey(reflected_fields, keyword) && (declared[keyword] = reflected_fields[keyword])
-  end
-  return declared
-end
-
-"""Return documented constructor metadata keyed by the accepted wire keyword."""
-function _protocol_constructor_parameter_metadata(protocol_type)
-  metadata = _constructor_parameter_metadata(protocol_type)
-  for (wire_name, constructor_name) in PROTOCOL_KEYWORD_MAPPINGS
-    haskey(metadata, wire_name) &&
-      !haskey(metadata, constructor_name) &&
-      (metadata[constructor_name] = metadata[wire_name])
-  end
-  return metadata
-end
-
-function _constructor_numeric_bound(metadata, field::Symbol)
-  metadata === nothing && return nothing
-  field in propertynames(metadata) || return nothing
-  value = getproperty(metadata, field)
+function _constructor_numeric_bound(field_schema, field::Symbol)
+  field_schema === nothing && return nothing
+  field in propertynames(field_schema) || return nothing
+  value = getproperty(field_schema, field)
   value === nothing && return nothing
   value isa Real && !(value isa Bool) || throw(server_error(
     "Constructor numeric bound is not a real number",
@@ -924,11 +858,18 @@ end
 _protocol_parameter_handling_type(declared_type, client_type, value) =
   _constructor_parameter_handling_type(declared_type, client_type, value)
 
-function parse_pt_type(parameters::AbstractVector)
+function parse_pt_type(parameters)
   result = []
 
-  for p in parameters
-    t = getfield(p, :type)
+  for field in parameters
+    t = field.declared_type
+    wire_field = (
+      field=field.name,
+      type=t,
+      doc=field.doc,
+      min=field.minimum,
+      max=field.maximum,
+    )
 
     named_tag_semantics = _named_tag_parameter_semantics(t)
     if named_tag_semantics !== nothing
@@ -938,7 +879,7 @@ function parse_pt_type(parameters::AbstractVector)
         for member in members
       ]
       wire_type = length(wire_members) == 1 ? only(wire_members) : wire_members
-      push!(result, merge(p, (
+      push!(result, merge(wire_field, (
         type=wire_type,
         kind=NAMED_TAG_PARAMETER_KIND,
         nullable=named_tag_semantics.nullable,
@@ -950,7 +891,7 @@ function parse_pt_type(parameters::AbstractVector)
     # QuantumSavory metadata has used both SymbolicUtils.Symbolic and
     # QuantumSymbolics.SymQObj across releases.
     if _is_symbolic_parameter_type(t)
-      push!(result, merge(p, (type="Symbolic",)))
+      push!(result, merge(wire_field, (type="Symbolic",)))
       continue
     end
 
@@ -962,44 +903,44 @@ function parse_pt_type(parameters::AbstractVector)
       Any[t]
     end
     if length(union_members) > 1
-      push!(result, merge(p, (type=string.(union_members),)))
+      push!(result, merge(wire_field, (type=string.(union_members),)))
       continue
     end
 
     # Non-union or unrecognized type format: pass through
-    push!(result, p)
+    push!(result, wire_field)
   end
 
   result
 end
 
 function get_protocol_types()
-  protocol_types = QuantumSavory.ProtocolZoo.available_protocol_types()
-
   result = []
-  for pt in protocol_types
-    pts = QuantumSavory.constructor_metadata(pt.type)
-
-    nodes_count = pt.nodeargs
-    if nodes_count == 1
-      group = "node"
-    elseif nodes_count == 2
-      group = "edge"
+  for schema in QuantumSavory.ProtocolZoo.protocol_schemas()
+    placement = schema.placement
+    group = if placement === QuantumSavory.ProtocolZoo.NodeProtocolPlacement
+      "node"
+    elseif placement === QuantumSavory.ProtocolZoo.EdgeProtocolPlacement
+      "edge"
     else
-      group = "floating"
+      "floating"
     end
-
-    virtual = group == "edge" ? QuantumSavory.ProtocolZoo.permits_virtual_edge(pt.type) : nothing
-
-    push!(result, Dict("type" => string(pt.type), "doc" => string(pt.doc), "group" => group, "parameters" => pts |> parse_pt_type, "virtual" => virtual))
+    push!(result, Dict(
+      "type" => string(schema.constructor.constructor),
+      "doc" => schema.constructor.doc,
+      "group" => group,
+      "parameters" => parse_pt_type(schema.constructor.fields),
+      "virtual" => group == "edge" ? schema.permits_virtual_edge : nothing,
+    ))
   end
 
   if mock_broken_protocol_enabled()
+    schema = QuantumSavory.ProtocolZoo.protocol_schema(MockBrokenProtocol)
     push!(result, Dict(
       "type" => MOCK_BROKEN_PROTOCOL_TYPE,
-      "doc" => "Diagnostic-only floating protocol that intentionally crashes during simulation stepping.",
+      "doc" => schema.constructor.doc,
       "group" => "floating",
-      "parameters" => Any[],
+      "parameters" => parse_pt_type(schema.constructor.fields),
       "virtual" => nothing,
     ))
   end
@@ -1313,9 +1254,9 @@ function get_network_time_tracker(network)
 end
 
 function _resolve_protocol_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
+  type_id = strip(String(type_str))
 
-  if input_lower == lowercase(MOCK_BROKEN_PROTOCOL_TYPE)
+  if type_id == MOCK_BROKEN_PROTOCOL_TYPE
     if mock_broken_protocol_enabled()
       return MockBrokenProtocol
     end
@@ -1323,8 +1264,12 @@ function _resolve_protocol_type_from_string(type_str::AbstractString)
     return nothing
   end
 
-  _ensure_protocol_types_cache!()
-  T = get(_PROTOCOL_TYPES_CACHE[], input_lower, nothing)
+  schemas = QuantumSavory.ProtocolZoo.protocol_schemas()
+  index = findfirst(
+    schema -> string(schema.constructor.constructor) == type_id,
+    schemas,
+  )
+  T = index === nothing ? nothing : schemas[index].constructor.constructor
   if T === nothing
     @warn "Protocol type not found in whitelist" type_str=type_str
   end
@@ -1395,19 +1340,18 @@ function _instantiate_noise(
 end
 
 function _resolve_noise_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
-  _ensure_noise_types_cache!()
+  type_id = strip(String(type_str))
 
-  if input_lower == "default"
+  if type_id == "default"
     return nothing # this now means no noise
-
-    # Choose first available background type deterministically
-    # for (_, T) in _NOISE_TYPES_CACHE[]
-    #   return T
-    # end
   end
 
-  T = get(_NOISE_TYPES_CACHE[], input_lower, nothing)
+  schemas = QuantumSavory.background_schemas()
+  index = findfirst(
+    schema -> string(nameof(schema.constructor)) == type_id,
+    schemas,
+  )
+  T = index === nothing ? nothing : schemas[index].constructor
   if T === nothing
     @warn "Noise type not found in whitelist" type_str=type_str
   end
@@ -1415,9 +1359,13 @@ function _resolve_noise_type_from_string(type_str::AbstractString)
 end
 
 function _resolve_slot_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
-  _ensure_slot_types_cache!()
-  T = get(_SLOT_TYPES_CACHE[], input_lower, nothing)
+  type_id = strip(String(type_str))
+  schemas = QuantumSavory.slot_schemas()
+  index = findfirst(
+    schema -> string(nameof(schema.constructor)) == type_id,
+    schemas,
+  )
+  T = index === nothing ? nothing : schemas[index].constructor
   if T === nothing
     @warn "Slot type not found in whitelist" type_str=type_str
   end
@@ -1469,7 +1417,7 @@ function _handle_function_lambda_parameter!(
           edge_context=edge_context,
         )
         # Validate the lambda - try calling it with a test value if it's a filter
-        if name == :filter || name == :chooseA || name == :chooseB
+        if name == :filter || name == :chooseslotA || name == :chooseslotB
           msg = "Created lambda for parameter: $name"
           if state !== nothing
             @log_event state Logging.Info msg parameter_name=string(name) lambda_string=value
@@ -1479,7 +1427,7 @@ function _handle_function_lambda_parameter!(
           
           # Warn about common mistakes
           if !occursin("return", value) && !occursin("=>", value)
-            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Functions like chooseA/chooseB must return an integer, filter must return a boolean."
+            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Slot choosers must return an integer; filters must return a boolean."
             if state !== nothing
               @log_event state Logging.Warn warning_msg parameter_name=string(name) lambda_string=value
             else
@@ -1631,7 +1579,7 @@ function _handle_typed_parameter!(
   value,
   ctx,
   state=nothing;
-  constructor_metadata=nothing,
+  field_schema=nothing,
   parameter_context::String="Constructor parameter",
 )
   ptype = p_raw_type === nothing ? "Any" : string(p_raw_type)
@@ -1660,8 +1608,8 @@ function _handle_typed_parameter!(
         target_type,
         numeric_expression,
         ctx;
-        minimum=_constructor_numeric_bound(constructor_metadata, :min),
-        maximum=_constructor_numeric_bound(constructor_metadata, :max),
+        minimum=_constructor_numeric_bound(field_schema, :minimum),
+        maximum=_constructor_numeric_bound(field_schema, :maximum),
       )
     end
 
@@ -1690,8 +1638,8 @@ function _handle_typed_parameter!(
     else
       converted = _handle_regular_parameter!(kwargs, name, ptype, value)
       if converted && kwargs[name] isa Real && !(kwargs[name] isa Bool)
-        minimum = _constructor_numeric_bound(constructor_metadata, :min)
-        maximum = _constructor_numeric_bound(constructor_metadata, :max)
+        minimum = _constructor_numeric_bound(field_schema, :minimum)
+        maximum = _constructor_numeric_bound(field_schema, :maximum)
         minimum !== nothing && kwargs[name] < minimum && throw(validation_error(
           "$parameter_context '$(name)' is below its minimum",
           Dict{String,Any}("parameter_name" => string(name), "minimum" => minimum),
@@ -1728,11 +1676,9 @@ function _constructor_parameter_kwargs(
   ctx::Dict{Symbol,Any},
   state=nothing;
   variables=Dict{String,Variable}(),
-  parameter_mappings=Dict{String,String}(),
-  ignored_parameters=Set{Symbol}(),
   parameter_context::String="Constructor parameter",
   declared_parameter_types=_constructor_parameter_types(constructor_type),
-  constructor_parameter_metadata=_constructor_parameter_metadata(constructor_type),
+  constructor_fields_by_name=_constructor_fields_by_name(constructor_type),
 )
   kwargs = Dict{Symbol,Any}()
   variable_assignments = Dict{String,Any}[]
@@ -1751,24 +1697,22 @@ function _constructor_parameter_kwargs(
       "Duplicate $parameter_context '$original_name'",
     ))
     push!(supplied_names, original_name)
-    Symbol(original_name) in ignored_parameters && continue
-
-    value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(value)))
-      continue
-    end
-
-    constructor_name = get(parameter_mappings, original_name, original_name)
-    haskey(declared_parameter_types, constructor_name) || throw(validation_error(
+    haskey(declared_parameter_types, original_name) || throw(validation_error(
       "Unknown $parameter_context '$original_name'",
       Dict{String,Any}(
         "parameter_name" => original_name,
         "constructor_type" => string(constructor_type),
       ),
     ))
-    name = Symbol(constructor_name)
-    declared_type = declared_parameter_types[constructor_name]
-    metadata = get(constructor_parameter_metadata, constructor_name, nothing)
+
+    value = get(parameter, "value", nothing)
+    if value === nothing || (value isa AbstractString && isempty(strip(value)))
+      continue
+    end
+
+    name = Symbol(original_name)
+    declared_type = declared_parameter_types[original_name]
+    field_schema = get(constructor_fields_by_name, original_name, nothing)
     named_tag_semantics = _named_tag_parameter_semantics(declared_type)
 
     if named_tag_semantics !== nothing
@@ -1837,7 +1781,7 @@ function _constructor_parameter_kwargs(
         variable.value,
         ctx,
         state;
-        constructor_metadata=metadata,
+        field_schema,
         parameter_context,
       )
       converted || throw(validation_error(
@@ -1871,7 +1815,7 @@ function _constructor_parameter_kwargs(
       value,
       ctx,
       state;
-      constructor_metadata=metadata,
+      field_schema,
       parameter_context,
     )
     converted || throw(validation_error(
@@ -1888,6 +1832,39 @@ function _constructor_parameter_kwargs(
   return kwargs, variable_assignments
 end
 
+function _protocol_placement_kwargs(schema, ctx::Dict{Symbol,Any})
+  placement = schema.placement
+  fields = schema.placement_fields
+  has_node = haskey(ctx, :node)
+  has_edge = haskey(ctx, :nodeA) || haskey(ctx, :nodeB)
+
+  if placement === QuantumSavory.ProtocolZoo.FloatingProtocolPlacement
+    (has_node || has_edge) && throw(validation_error(
+      "Protocol '$(schema.constructor.constructor)' requires floating placement",
+    ))
+    return ()
+  elseif placement === QuantumSavory.ProtocolZoo.NodeProtocolPlacement
+    (has_node && !has_edge) || throw(validation_error(
+      "Protocol '$(schema.constructor.constructor)' requires node placement",
+    ))
+    return (only(fields) => ctx[:node],)
+  elseif placement === QuantumSavory.ProtocolZoo.EdgeProtocolPlacement
+    (!has_node && haskey(ctx, :nodeA) && haskey(ctx, :nodeB)) ||
+      throw(validation_error(
+      "Protocol '$(schema.constructor.constructor)' requires edge placement",
+      ))
+    return (fields[1] => ctx[:nodeA], fields[2] => ctx[:nodeB])
+  end
+
+  throw(server_error(
+    "Unsupported simulator protocol placement",
+    Dict{String,Any}(
+      "protocol_type" => string(schema.constructor.constructor),
+      "placement" => string(placement),
+    ),
+  ))
+end
+
 function _instantiate_protocol(
   prot_def,
   ctx::Dict{Symbol,Any},
@@ -1900,8 +1877,10 @@ function _instantiate_protocol(
   T = _resolve_type_from_string(String(tstr), :protocol)
   T === nothing && return nothing
 
-  declared_parameter_types = _protocol_constructor_parameter_types(T)
-  constructor_parameter_metadata = _protocol_constructor_parameter_metadata(T)
+  schema = QuantumSavory.ProtocolZoo.protocol_schema(T)
+  declared_parameter_types = _constructor_parameter_types(schema.constructor)
+  constructor_fields_by_name =
+    _constructor_fields_by_name(schema.constructor)
 
   params = Vector{Any}(get(prot_def, "parameters", Any[]))
 
@@ -1910,12 +1889,8 @@ function _instantiate_protocol(
   # Add sim, net, and node(s) as keyword arguments
   kwargs[:sim] = ctx[:sim]
   kwargs[:net] = ctx[:net]
-
-  if haskey(ctx, :node)
-    kwargs[:node] = ctx[:node]
-  elseif haskey(ctx, :nodeA) && haskey(ctx, :nodeB)
-    kwargs[:nodeA] = ctx[:nodeA]
-    kwargs[:nodeB] = ctx[:nodeB]
+  for (field, value) in _protocol_placement_kwargs(schema, ctx)
+    kwargs[field] = value
   end
 
   parameter_kwargs, variable_assignments = _constructor_parameter_kwargs(
@@ -1924,11 +1899,9 @@ function _instantiate_protocol(
     ctx,
     state;
     variables,
-    parameter_mappings=PROTOCOL_KEYWORD_MAPPINGS,
-    ignored_parameters=Set((:sim, :net, :node, :nodeA, :nodeB)),
     parameter_context="protocol parameter",
     declared_parameter_types,
-    constructor_parameter_metadata,
+    constructor_fields_by_name,
   )
   merge!(kwargs, parameter_kwargs)
 

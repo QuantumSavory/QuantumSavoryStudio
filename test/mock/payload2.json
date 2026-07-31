@@ -538,11 +538,6 @@
                                     "name": "tag",
                                     "type": "Any",
                                     "value": "5"
-                                },
-                                {
-                                    "name": "log",
-                                    "type": "Vector{Tuple{Float64, Float64, Float64}}",
-                                    "value": "[(5, 5, 5)]"
                                 }
                             ]
                         },
@@ -585,12 +580,12 @@
                                     "type": "Int64"
                                 },
                                 {
-                                    "name": "chooseA",
+                                    "name": "chooseslotA",
                                     "type": "Union{Int64, var\"#s40\"} where var\"#s40\"<:Function",
                                     "selectedType": "Function"
                                 },
                                 {
-                                    "name": "chooseB",
+                                    "name": "chooseslotB",
                                     "type": "Union{Int64, var\"#s40\"} where var\"#s40\"<:Function"
                                 },
                                 {
@@ -629,11 +624,6 @@
                                 {
                                     "name": "tag",
                                     "type": "Any",
-                                    "value": "5"
-                                },
-                                {
-                                    "name": "log",
-                                    "type": "Vector{Tuple{Float64, Float64, Float64}}",
                                     "value": "5"
                                 }
                             ]

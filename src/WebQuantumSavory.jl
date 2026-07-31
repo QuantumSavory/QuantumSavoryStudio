@@ -4,8 +4,6 @@ using Genie
 
 using QuantumSavory
 using QuantumSavory.ProtocolZoo
-using InteractiveUtils
-using REPL
 import JSON
 using Graphs
 using ConcurrentSim

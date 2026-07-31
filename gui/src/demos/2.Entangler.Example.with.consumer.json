@@ -89,30 +89,6 @@
               "type": "QuantumSavory.ProtocolZoo.EntanglerProt",
               "parameters": [
                 {
-                  "name": "sim",
-                  "type": "ConcurrentSim.Simulation",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "net",
-                  "type": "QuantumSavory.RegisterNet",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "nodeA",
-                  "type": "Int64",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "nodeB",
-                  "type": "Int64",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
                   "name": "pairstate",
                   "type": "Symbolic",
                   "selectedType": "default",
@@ -164,7 +140,7 @@
                   "value": null
                 },
                 {
-                  "name": "chooseA",
+                  "name": "chooseslotA",
                   "type": [
                     "Int64",
                     "Function"
@@ -173,7 +149,7 @@
                   "value": null
                 },
                 {
-                  "name": "chooseB",
+                  "name": "chooseslotB",
                   "type": [
                     "Int64",
                     "Function"
@@ -220,30 +196,6 @@
               "id": "protocol_ghrFir",
               "type": "QuantumSavory.ProtocolZoo.EntanglementConsumer",
               "parameters": [
-                {
-                  "name": "sim",
-                  "type": "ConcurrentSim.Simulation",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "net",
-                  "type": "QuantumSavory.RegisterNet",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "nodeA",
-                  "type": "Int64",
-                  "selectedType": "default",
-                  "value": null
-                },
-                {
-                  "name": "nodeB",
-                  "type": "Int64",
-                  "selectedType": "default",
-                  "value": null
-                },
                 {
                   "name": "period",
                   "type": [
