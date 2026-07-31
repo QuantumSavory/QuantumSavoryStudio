@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, ref } from 'vue'
 import { useSimulationController } from '../../src/composables/useSimulationController'
+import { createSimulationControllerAdapter } from '../../src/features/mcp/simulationControllerAdapter.js'
 import { ApiClientError } from '../../src/utils/httpClient.js'
+import { validatePayload } from '../../src/utils/projectHelpers.js'
 
 function deferred() {
   let resolve
@@ -9,7 +11,7 @@ function deferred() {
   return { promise, resolve }
 }
 
-function createController(api) {
+function createController(api, overrides = {}) {
   const projectData = ref({
     name: 'A',
     simulationConfig: { time: 1, timeStep: 0.1 },
@@ -18,21 +20,37 @@ function createController(api) {
   const scope = effectScope()
   const addLog = vi.fn()
   const showPanic = vi.fn()
+  const showAlert = vi.fn()
+  const flushEditors = overrides.flushEditors || vi.fn(async () => ({ valid: true }))
+  const runReadinessExclusive = overrides.runReadinessExclusive
+    || vi.fn(async work => work())
   const controller = scope.run(() => useSimulationController({
     projectData,
     getSimulationPayload: () => ({ name: projectData.value.name, net: projectData.value.net }),
-    validatePayload: () => ({ success: true }),
+    validatePayload: overrides.validatePayload || (() => ({ success: true, issues: [] })),
+    flushEditors,
+    runReadinessExclusive,
+    getBrowserRevision: overrides.getBrowserRevision || (() => null),
     addLog,
     applicationLogs: ref([]),
     refreshAllWindows: vi.fn(),
     checkAndHideInvalidEntangledStates: vi.fn(),
     clearAllPlots: vi.fn(),
     hideSlotState: vi.fn(),
-    showAlert: vi.fn(),
+    showAlert,
     showPanic,
     api
   }))
-  return { controller, projectData, addLog, showPanic, stop: () => scope.stop() }
+  return {
+    controller,
+    projectData,
+    addLog,
+    showAlert,
+    showPanic,
+    flushEditors,
+    runReadinessExclusive,
+    stop: () => scope.stop()
+  }
 }
 
 afterEach(() => {
@@ -68,7 +86,8 @@ describe('simulation controller polling ownership', () => {
     const api = {
       prepareSimulation: vi.fn(() => prepareRequest.promise)
     }
-    const { controller, stop } = createController(api)
+    const { controller, projectData, stop } = createController(api)
+    projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
     controller.state.value = {
       ...controller.state.value,
       phase: 'parsed',
@@ -76,11 +95,19 @@ describe('simulation controller polling ownership', () => {
     }
 
     const pending = controller.prepareSimulation()
-    expect(controller.foregroundRequest.value).toMatchObject({ action: 'prepare' })
-    expect(await controller.prepareSimulation()).toBe(false)
+    await vi.waitFor(() => {
+      expect(controller.foregroundRequest.value).toMatchObject({ action: 'prepare' })
+    })
+    expect(await controller.prepareSimulation()).toMatchObject({
+      accepted: false,
+      code: 'SIMULATION_ACTION_UNAVAILABLE'
+    })
 
     prepareRequest.resolve({ success: false, message: 'prepare failed' })
-    expect(await pending).toBe(false)
+    await expect(pending).rejects.toMatchObject({
+      code: 'MALFORMED_SUCCESS_RESPONSE',
+      details: { body: { success: false, message: 'prepare failed' } }
+    })
     expect(controller.foregroundRequest.value).toBeNull()
     expect(controller.phase.value).toBe('error')
     stop()
@@ -103,18 +130,249 @@ describe('simulation controller polling ownership', () => {
     }
 
     const pending = controller.runSimulationWithSteps()
-    expect(controller.foregroundRequest.value).toMatchObject({ action: 'run' })
-    expect(await controller.runSimulationWithSteps()).toBe(false)
+    await vi.waitFor(() => {
+      expect(controller.foregroundRequest.value).toMatchObject({ action: 'run' })
+    })
+    expect(await controller.runSimulationWithSteps()).toMatchObject({
+      accepted: false,
+      code: 'SIMULATION_ACTION_UNAVAILABLE'
+    })
     expect(api.runSimulation).toHaveBeenCalledTimes(1)
 
     runRequest.resolve({
       success: true,
       state: { simulation: { simulation_running: true, simulation_time: 1 } }
     })
-    expect(await pending).toBe(true)
+    expect(await pending).toMatchObject({ accepted: true, action: 'run' })
     expect(controller.pollingActive.value).toBe(true)
     expect(controller.foregroundRequest.value).toBeNull()
     stop()
+  })
+
+  it('rejects unavailable and busy Play requests before simulator dispatch', async () => {
+    const api = {
+      parseNetworkGraph: vi.fn(),
+      prepareSimulation: vi.fn(),
+      runSimulation: vi.fn()
+    }
+    const unavailable = createController(api)
+
+    expect(await unavailable.controller.runSimulationWithSteps()).toMatchObject({
+      accepted: false,
+      code: 'SIMULATION_ACTION_UNAVAILABLE'
+    })
+    expect(unavailable.flushEditors).not.toHaveBeenCalled()
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    unavailable.stop()
+
+    const flushEditors = vi.fn(async () => ({ busy: true }))
+    const busy = createController(api, { flushEditors })
+    busy.projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
+
+    expect(await busy.controller.runSimulationWithSteps()).toEqual({
+      accepted: false,
+      code: 'EDITOR_BUSY',
+      message: 'An editor interaction is still active.',
+      retryable: true,
+      details: { action: 'run' }
+    })
+    expect(flushEditors).toHaveBeenCalledOnce()
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    busy.stop()
+  })
+
+  it('returns one actionable issue list for an incomplete flushed design', async () => {
+    const api = {
+      parseNetworkGraph: vi.fn(),
+      prepareSimulation: vi.fn(),
+      runSimulation: vi.fn()
+    }
+    const fixture = createController(api, { validatePayload })
+    fixture.projectData.value.net = {
+      nodes: [
+        { id: 'alice', name: 'Alice', data: { slots: [] } },
+        { id: 'bob', name: 'Bob', data: { slots: [{ id: 'bob-slot' }] } }
+      ],
+      edges: [{ id: 'edge-1', source: 'alice', target: 'bob' }],
+      protocols: []
+    }
+
+    const guiResult = await fixture.controller.runSimulationWithSteps()
+    const mcpResult = await createSimulationControllerAdapter(
+      fixture.controller
+    ).run(null, { origin: 'mcp' })
+
+    expect(guiResult).toEqual({
+      accepted: false,
+      code: 'SIMULATION_DESIGN_INVALID',
+      message: 'The design is not ready for simulation.',
+      retryable: false,
+      details: {
+        issues: [{
+          code: 'NODE_MISSING_SLOT',
+          message: 'Alice requires at least one slot',
+          details: { node_id: 'alice', node_name: 'Alice' }
+        }]
+      }
+    })
+    expect(mcpResult).toEqual(guiResult)
+    expect(fixture.showAlert).toHaveBeenCalledWith(
+      'Invalid simulation',
+      'Alice requires at least one slot'
+    )
+    expect(fixture.showAlert).toHaveBeenCalledOnce()
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    fixture.stop()
+  })
+
+  it('does not mutate lifecycle state when the post-flush revision guard fails', async () => {
+    const conflict = new Error('The browser revision changed before command execution.')
+    conflict.code = 'REVISION_CONFLICT'
+    const validate = vi.fn(() => ({ success: true, issues: [] }))
+    const api = {
+      parseNetworkGraph: vi.fn(),
+      prepareSimulation: vi.fn(),
+      runSimulation: vi.fn()
+    }
+    const fixture = createController(api, { validatePayload: validate })
+    fixture.projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
+    const before = fixture.controller.state.value
+
+    await expect(fixture.controller.runSimulationWithSteps(null, {
+      beforeDispatch: () => { throw conflict }
+    })).rejects.toBe(conflict)
+
+    expect(fixture.controller.state.value).toBe(before)
+    expect(fixture.controller.foregroundRequest.value).toBeNull()
+    expect(validate).not.toHaveBeenCalled()
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    fixture.stop()
+  })
+
+  it('flushes, validates, parses, prepares, and starts an unprepared design once', async () => {
+    const order = []
+    const api = {
+      parseNetworkGraph: vi.fn(async () => {
+        order.push('parse')
+        return { success: true, state: { status: 'created' } }
+      }),
+      prepareSimulation: vi.fn(async () => {
+        order.push('prepare')
+        return { success: true, state: { status: 'prepared' } }
+      }),
+      runSimulation: vi.fn(async () => {
+        order.push('run')
+        return {
+          success: true,
+          state: { simulation: { simulation_running: true, simulation_time: 1 } }
+        }
+      }),
+      getSimulationStatus: vi.fn(() => new Promise(() => {})),
+      getBackendLogs: vi.fn(async () => ({ success: true, logs: [] }))
+    }
+    const fixture = createController(api, {
+      flushEditors: vi.fn(async () => {
+        order.push('flush')
+        return { valid: true }
+      }),
+      validatePayload: vi.fn(payload => {
+        order.push('validate')
+        return validatePayload(payload)
+      }),
+      runReadinessExclusive: vi.fn(async work => {
+        order.push('serialize')
+        return work()
+      }),
+      getBrowserRevision: () => 7
+    })
+    fixture.projectData.value.net = {
+      nodes: [
+        { id: 'alice', name: 'Alice', data: { slots: [{ id: 'alice-slot' }] } },
+        { id: 'bob', name: 'Bob', data: { slots: [{ id: 'bob-slot' }] } }
+      ],
+      edges: [{ id: 'edge-1', source: 'alice', target: 'bob' }],
+      protocols: []
+    }
+
+    const result = await fixture.controller.runSimulationWithSteps()
+
+    expect(result).toEqual({
+      accepted: true,
+      action: 'run',
+      summary: 'Simulation run accepted.',
+      prepared_revision: 7
+    })
+    expect(order).toEqual(['flush', 'serialize', 'validate', 'parse', 'prepare', 'run'])
+    expect(api.parseNetworkGraph).toHaveBeenCalledOnce()
+    expect(api.prepareSimulation).toHaveBeenCalledOnce()
+    expect(api.runSimulation).toHaveBeenCalledOnce()
+    fixture.stop()
+  })
+
+  it('records the same browser revision for explicit Prepare and later Play', async () => {
+    const api = {
+      parseNetworkGraph: vi.fn(async () => ({ success: true, state: { status: 'created' } })),
+      prepareSimulation: vi.fn(async () => ({ success: true, state: { status: 'prepared' } })),
+      runSimulation: vi.fn(async () => ({
+        success: true,
+        state: { simulation: { simulation_running: true, simulation_time: 1 } }
+      })),
+      getSimulationStatus: vi.fn(() => new Promise(() => {})),
+      getBackendLogs: vi.fn(async () => ({ success: true, logs: [] }))
+    }
+    const fixture = createController(api, { getBrowserRevision: () => 11 })
+    fixture.projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
+
+    const prepared = await fixture.controller.prepareSimulation()
+    const played = await fixture.controller.runSimulationWithSteps()
+
+    expect(prepared.prepared_revision).toBe(11)
+    expect(played.prepared_revision).toBe(11)
+    expect(api.parseNetworkGraph).toHaveBeenCalledOnce()
+    expect(api.prepareSimulation).toHaveBeenCalledOnce()
+    fixture.stop()
+  })
+
+  it('preserves structured API failures after readiness succeeds', async () => {
+    const failure = new ApiClientError('The simulator rejected Play.', {
+      code: 'SIMULATOR_REJECTED',
+      status: 422,
+      details: { phase: 'run', diagnostic_canary: 'play-canary' },
+      method: 'POST',
+      url: 'http://api.test/run_simulation'
+    })
+    const api = {
+      runSimulation: vi.fn(async () => { throw failure })
+    }
+    const fixture = createController(api)
+    fixture.projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
+    fixture.controller.state.value = {
+      ...fixture.controller.state.value,
+      phase: 'prepared',
+      isParsed: true,
+      isPrepared: true
+    }
+
+    await expect(fixture.controller.runSimulationWithSteps()).rejects.toBe(failure)
+    expect(fixture.addLog).toHaveBeenCalledWith(
+      'error',
+      'Simulation failed: The simulator rejected Play.',
+      'Web API',
+      expect.objectContaining({
+        code: 'SIMULATOR_REJECTED',
+        status: 422,
+        details: { phase: 'run', diagnostic_canary: 'play-canary' }
+      })
+    )
+    fixture.stop()
   })
 
   it('sets and clears Pause and Resume pending around their foreground requests', async () => {

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
-const BACKEND_URL = 'http://127.0.0.1:8000'
+const BACKEND_PORT = Number(process.env.WEBQUANTUMSAVORY_CI_SERVER_PORT || 8000)
+const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`
 const MCP_PORT = Number(process.env.WEBQUANTUMSAVORY_MCP_PORT || 8001)
 const MCP_URL = `http://127.0.0.1:${MCP_PORT}/mcp`
 const PROTOCOL_VERSION = '2025-06-18'
@@ -158,6 +159,30 @@ test.describe('Local MCP collaboration', () => {
       await expect(page.locator('.node-list-item')).toContainText(['Agent Left', 'Agent Right'])
       await expect(page.locator('.edge-list-item')).toHaveCount(1)
 
+      const incompleteRun = await callTool('simulation_run', {
+        operation_id: 'browser-e2e-incomplete-run',
+        duration: 0.001,
+      })
+      expect(incompleteRun.isError).toBe(true)
+      expect(incompleteRun.structuredContent).toMatchObject({
+        code: 'SIMULATION_DESIGN_INVALID',
+        message: 'The design is not ready for simulation.',
+        details: {
+          issues: [
+            {
+              code: 'NODE_MISSING_SLOT',
+              message: 'Agent Left requires at least one slot',
+              details: { node_name: 'Agent Left' },
+            },
+            {
+              code: 'NODE_MISSING_SLOT',
+              message: 'Agent Right requires at least one slot',
+              details: { node_name: 'Agent Right' },
+            },
+          ],
+        },
+      })
+
       const slots = await callTool('slots_edit', {
         operation_id: 'browser-e2e-slots',
         expected_revision: 1,
@@ -245,21 +270,52 @@ test.describe('Local MCP collaboration', () => {
       expect(currentDesign.structuredContent.document.description)
         .toBe('GUI revision between MCP reads.')
 
-      const prepared = await callTool('simulation_prepare', {
-        operation_id: 'browser-e2e-prepare',
-      })
-      expect(prepared.isError).toBe(false)
-      await expect(page.locator('#runnerPanel .stop-btn')).toBeEnabled()
-
       const running = await callTool('simulation_run', {
         operation_id: 'browser-e2e-run',
         duration: 0.001,
       })
       expect(running.isError).toBe(false)
+      expect(running.structuredContent.prepared_revision).toBe(4)
       await expect.poll(async () => {
         const status = await callTool('simulation_status')
-        return status.structuredContent.phase
-      }, { timeout: 15_000 }).toMatch(/^(running|completed)$/)
+        return {
+          phase: status.structuredContent.phase,
+          prepared: status.structuredContent.prepared_source_revision,
+        }
+      }, { timeout: 15_000 }).toMatchObject({
+        phase: expect.stringMatching(/^(running|completed)$/),
+        prepared: 4,
+      })
+
+      const resetAfterMcpRun = await callTool('simulation_reset', {
+        operation_id: 'browser-e2e-reset-after-mcp-run',
+      })
+      expect(resetAfterMcpRun.isError).toBe(false)
+      await expect(page.locator('#runnerPanel .stop-btn')).toBeDisabled()
+
+      const guiRunAccepted = page.waitForResponse(
+        response => response.url().endsWith('/run_simulation')
+          && response.status() === 202,
+      )
+      await expect(page.locator('#runnerPanel .run-btn')).toBeEnabled()
+      await page.locator('#runnerPanel .run-btn').click()
+      await guiRunAccepted
+      await expect.poll(async () => {
+        const status = await callTool('simulation_status')
+        return status.structuredContent.prepared_source_revision
+      }, { timeout: 15_000 }).toBe(4)
+
+      const resetAfterGuiRun = await callTool('simulation_reset', {
+        operation_id: 'browser-e2e-reset-after-gui-run',
+      })
+      expect(resetAfterGuiRun.isError).toBe(false)
+
+      const prepared = await callTool('simulation_prepare', {
+        operation_id: 'browser-e2e-prepare',
+      })
+      expect(prepared.isError).toBe(false)
+      expect(prepared.structuredContent.prepared_revision).toBe(4)
+      await expect(page.locator('#runnerPanel .stop-btn')).toBeEnabled()
 
       const reset = await callTool('simulation_reset', {
         operation_id: 'browser-e2e-reset',

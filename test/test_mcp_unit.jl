@@ -374,6 +374,220 @@
     @test conflict.details["retryable"] == true
   end
 
+  @testset "browser simulation readiness records the prepared design revision" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+
+    function acknowledge_simulation(action)
+      waiting = @async WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict(
+          "type" => "simulation_action",
+          "action" => action,
+          "duration" => action == "run" ? 1 : nothing,
+        );
+        timeout_seconds=2,
+      )
+      command = WebQuantumSavory.next_browser_command!(
+        hub,
+        owner;
+        timeout_seconds=1,
+      )
+      WebQuantumSavory.commit_browser_command!(
+        hub,
+        Dict(
+          owner...,
+          "command_id" => command["command_id"],
+          "base_revision" => command["base_revision"],
+          "success" => true,
+          "document_changed" => false,
+          "result" => Dict(
+            "summary" => "Simulation $(action) accepted.",
+            "prepared_revision" => 0,
+          ),
+        ),
+      )
+      return fetch(waiting)
+    end
+
+    prepared = acknowledge_simulation("prepare")
+    played = acknowledge_simulation("run")
+
+    @test prepared["prepared_revision"] == 0
+    @test played["prepared_revision"] == 0
+    @test prepared["revision"] == 0
+    @test played["revision"] == 0
+    @test hub.prepared_revision == 0
+
+    waiting_reset = @async WebQuantumSavory.enqueue_browser_command!(
+      hub,
+      Dict("type" => "simulation_action", "action" => "reset");
+      timeout_seconds=2,
+    )
+    reset_command = WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=1,
+    )
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => reset_command["command_id"],
+        "base_revision" => 0,
+        "success" => true,
+        "document_changed" => false,
+        "result" => Dict("summary" => "Simulation reset accepted."),
+      ),
+    )
+    fetch(waiting_reset)
+    @test hub.prepared_revision === nothing
+
+    for reported_revision in (nothing, 1)
+      mismatch_hub = WebQuantumSavory.CollaborationHub()
+      mismatch_binding = WebQuantumSavory.bind_editor!(
+        mismatch_hub,
+        binding_request(),
+      )
+      mismatch_owner = Dict(
+        "binding_id" => mismatch_binding["binding_id"],
+        "generation" => 1,
+      )
+      waiting = @async try
+        WebQuantumSavory.enqueue_browser_command!(
+          mismatch_hub,
+          Dict("type" => "simulation_action", "action" => "run");
+          timeout_seconds=2,
+        )
+      catch error
+        error
+      end
+      command = WebQuantumSavory.next_browser_command!(
+        mismatch_hub,
+        mismatch_owner;
+        timeout_seconds=1,
+      )
+      result = Dict{String,Any}("summary" => "Simulation run accepted.")
+      reported_revision === nothing ||
+        (result["prepared_revision"] = reported_revision)
+      acknowledgement_error = try
+        WebQuantumSavory.commit_browser_command!(
+          mismatch_hub,
+          Dict(
+            mismatch_owner...,
+            "command_id" => command["command_id"],
+            "base_revision" => 0,
+            "success" => true,
+            "document_changed" => false,
+            "result" => result,
+          ),
+        )
+        nothing
+      catch error
+        error
+      end
+      @test acknowledgement_error isa WebQuantumSavory.APIError
+      @test acknowledgement_error.error_code == "PROJECT_CHANGED"
+      @test fetch(waiting).error_code == "OUTCOME_UNKNOWN"
+      @test WebQuantumSavory.collaboration_status(
+        mismatch_hub,
+      )["binding"]["desynchronized"]
+    end
+  end
+
+  @testset "GUI preparation reports are design-neutral and revision-safe" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    mirror_before = WebQuantumSavory.design_mirror(hub)
+
+    lifecycle = WebQuantumSavory.commit_gui_snapshot!(
+      hub,
+      Dict(
+        owner...,
+        "origin" => "gui",
+        "base_revision" => 0,
+        "success" => true,
+        "document_changed" => false,
+        "result" => Dict(
+          "kind" => "simulation_prepared",
+          "prepared_revision" => 0,
+        ),
+      ),
+    )
+
+    @test lifecycle["revision"] == 0
+    @test hub.prepared_revision == 0
+    @test WebQuantumSavory.design_mirror(hub) == mirror_before
+
+    design_commit = WebQuantumSavory.commit_gui_snapshot!(
+      hub,
+      Dict(
+        owner...,
+        "origin" => "gui",
+        "base_revision" => 0,
+        "snapshot" => Dict(
+          "name" => "Project",
+          "description" => "Revision one",
+        ),
+        "hash" => "revision-one-hash",
+      ),
+    )
+    @test design_commit["revision"] == 1
+
+    stale = try
+      WebQuantumSavory.commit_gui_snapshot!(
+        hub,
+        Dict(
+          owner...,
+          "origin" => "gui",
+          "base_revision" => 0,
+          "document_changed" => false,
+          "result" => Dict(
+            "kind" => "simulation_prepared",
+            "prepared_revision" => 0,
+          ),
+        ),
+      )
+      nothing
+    catch error
+      error
+    end
+    @test stale isa WebQuantumSavory.APIError
+    @test stale.error_code == "REVISION_CONFLICT"
+
+    mismatch = try
+      WebQuantumSavory.commit_gui_snapshot!(
+        hub,
+        Dict(
+          owner...,
+          "origin" => "gui",
+          "base_revision" => 1,
+          "document_changed" => false,
+          "result" => Dict(
+            "kind" => "simulation_prepared",
+            "prepared_revision" => 0,
+          ),
+        ),
+      )
+      nothing
+    catch error
+      error
+    end
+    @test mismatch isa WebQuantumSavory.APIError
+    @test mismatch.error_code == "REVISION_CONFLICT"
+    @test mismatch.details["current_revision"] == 1
+    @test mismatch.details["prepared_revision"] == 0
+    @test WebQuantumSavory.design_mirror(hub)["hash"] == "revision-one-hash"
+  end
+
   @testset "impossible successful acknowledgements require a rebind" begin
     hub = WebQuantumSavory.CollaborationHub()
     binding = WebQuantumSavory.bind_editor!(hub, binding_request())
