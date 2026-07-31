@@ -52,6 +52,10 @@ import {
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
 const RUNTIME_SLOT_FIELDS = new Set(TRANSIENT_SLOT_FIELDS)
+const DESIGN_CODEC_CONTEXT = Object.freeze({
+  minimumTime: 0,
+  minimumTimeStep: 0,
+})
 export const DUPLICATE_PHYSICAL_EDGE_REASON = 'DUPLICATE_PHYSICAL_EDGE'
 
 export class DesignCommandError extends Error {
@@ -66,6 +70,10 @@ export class DesignCommandError extends Error {
 
 function record(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function canonicalDesignCopy(project) {
+  return decodeDesignDocument(encodeDesignDocument(project), DESIGN_CODEC_CONTEXT)
 }
 
 function requireString(value, label) {
@@ -500,11 +508,7 @@ export class DesignCommandService {
     // fails, and generators may destructively rebuild topology. The candidate
     // isolates those partial changes; the second codec pass applies shared
     // structural normalization, and reconciliation is the atomic commit boundary.
-    const candidate = decodeDesignDocument(encodeDesignDocument(live), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const candidate = canonicalDesignCopy(live)
     const context = {
       origin,
       aliases: new Map(),
@@ -530,11 +534,7 @@ export class DesignCommandService {
     } catch (error) {
       throw invalidEdgeGeometry(error)
     }
-    const validatedCandidate = decodeDesignDocument(encodeDesignDocument(candidate), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const validatedCandidate = canonicalDesignCopy(candidate)
     reconcileDesignDocument(live, validatedCandidate)
     this.clearDeletedSelection(context.deletedIds)
     this.markDirty()
