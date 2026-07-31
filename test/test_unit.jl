@@ -2398,6 +2398,38 @@
         @test e.message == "Duplicate node ID: 'node1'"
       end
 
+      duplicate_slot_payload = deepcopy(test_payload)
+      push!(
+        duplicate_slot_payload["net"]["nodes"][2]["data"]["slots"],
+        deepcopy(duplicate_slot_payload["net"]["nodes"][1]["data"]["slots"][1]),
+      )
+      duplicate_slot_error = try
+        WebQuantumSavory.validate_payload(duplicate_slot_payload)
+        nothing
+      catch error
+        error
+      end
+      @test duplicate_slot_error isa WebQuantumSavory.APIError
+      @test duplicate_slot_error.message == "Duplicate slot ID: 'slot1'"
+
+      duplicate_protocol_payload = deepcopy(test_payload)
+      duplicate_protocol = deepcopy(
+        duplicate_protocol_payload["net"]["nodes"][1]["data"]["protocols"][1],
+      )
+      push!(
+        duplicate_protocol_payload["net"]["nodes"][2]["data"]["protocols"],
+        duplicate_protocol,
+      )
+      duplicate_protocol_error = try
+        WebQuantumSavory.validate_payload(duplicate_protocol_payload)
+        nothing
+      catch error
+        error
+      end
+      @test duplicate_protocol_error isa WebQuantumSavory.APIError
+      @test duplicate_protocol_error.message ==
+        "Duplicate protocol ID: 'floatprot_0_1'"
+
       # Test edge referencing non-existent source node
       invalid_payload = deepcopy(test_payload)
       invalid_payload["net"]["edges"][1]["source"] = "nonexistent"

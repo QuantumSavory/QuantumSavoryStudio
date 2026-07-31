@@ -1075,6 +1075,12 @@ function _validate_optional_type_field(object, context::String)
   return _required_nonempty_string(object, "type", context)
 end
 
+function _claim_unique_payload_id!(seen::Set{String}, id::String, kind::String)
+  id in seen && throw(validation_error("Duplicate $kind ID: '$id'"))
+  push!(seen, id)
+  return id
+end
+
 function _validate_protocol_parameter(parameter, context::String)
   _require_exact_object_fields(
     parameter,
@@ -1105,13 +1111,18 @@ function _validate_protocol_parameter(parameter, context::String)
   return parameter
 end
 
-function _validate_protocol_definition(protocol, context::String)
+function _validate_protocol_definition(
+  protocol,
+  context::String,
+  protocol_ids::Set{String},
+)
   _require_exact_object_fields(
     protocol,
     ("id", "type", "parameters");
     context,
   )
-  _required_nonempty_string(protocol, "id", context)
+  protocol_id = _required_nonempty_string(protocol, "id", context)
+  _claim_unique_payload_id!(protocol_ids, protocol_id, "protocol")
   _required_nonempty_string(protocol, "type", context)
   parameters = protocol["parameters"]
   parameters isa AbstractVector || throw(validation_error(
@@ -1123,12 +1134,20 @@ function _validate_protocol_definition(protocol, context::String)
   return protocol
 end
 
-function _validate_protocol_array(protocols, context::String)
+function _validate_protocol_array(
+  protocols,
+  context::String,
+  protocol_ids::Set{String},
+)
   protocols isa AbstractVector || throw(validation_error(
     "$context must be an array",
   ))
   for (index, protocol) in enumerate(protocols)
-    _validate_protocol_definition(protocol, "$context item $index")
+    _validate_protocol_definition(
+      protocol,
+      "$context item $index",
+      protocol_ids,
+    )
   end
   return protocols
 end
@@ -1161,13 +1180,14 @@ function _validate_background_noise(background, context::String)
   return background
 end
 
-function _validate_slot(slot, context::String)
+function _validate_slot(slot, context::String, slot_ids::Set{String})
   _require_exact_object_fields(
     slot,
     ("id", "type", "backgroundNoise");
     context,
   )
-  _required_nonempty_string(slot, "id", context)
+  slot_id = _required_nonempty_string(slot, "id", context)
+  _claim_unique_payload_id!(slot_ids, slot_id, "slot")
   _required_nonempty_string(slot, "type", context)
   _validate_background_noise(slot["backgroundNoise"], "$context background noise")
   return slot
@@ -1203,7 +1223,11 @@ function _validate_request_simulation_config(payload; script_export::Bool)
   return config
 end
 
-function _validate_edge_data(edge, index::Int)
+function _validate_edge_data(
+  edge,
+  index::Int,
+  protocol_ids::Set{String},
+)
   context = _is_virtual_edge(edge) ? "Virtual edge $index" : "Physical edge $index"
   haskey(edge, "data") || throw(validation_error(
     "$context missing required field: 'data'",
@@ -1226,7 +1250,7 @@ function _validate_edge_data(edge, index::Int)
   end
   _validate_optional_type_field(data, "$context data")
   protocols = data["protocols"]
-  _validate_protocol_array(protocols, "$context protocols")
+  _validate_protocol_array(protocols, "$context protocols", protocol_ids)
   return data, protocols
 end
 
@@ -1291,7 +1315,12 @@ function validate_payload(payload; script_export::Bool=false)
       "Field 'protocols' must be an array",
       Dict{String,Any}("protocols_type" => string(typeof(floating_protocols))),
     ))
-    _validate_protocol_array(floating_protocols, "Floating protocols")
+    protocol_ids = Set{String}()
+    _validate_protocol_array(
+      floating_protocols,
+      "Floating protocols",
+      protocol_ids,
+    )
 
     # Normalize to plain Vectors to avoid type cracks downstream
     nodes = _to_vector(nodes)
@@ -1299,6 +1328,7 @@ function validate_payload(payload; script_export::Bool=false)
 
     # Validate each node structure
     node_ids = Set{String}()
+    slot_ids = Set{String}()
     for (i, node) in enumerate(nodes)
       _is_object_like(node) || throw(validation_error("Node $i must be an object"))
       # Check required node fields
@@ -1337,9 +1367,13 @@ function validate_payload(payload; script_export::Bool=false)
         "Node $i slots must be an array",
       ))
       for (slot_index, slot) in enumerate(slots)
-        _validate_slot(slot, "Node $i slot $slot_index")
+        _validate_slot(slot, "Node $i slot $slot_index", slot_ids)
       end
-      _validate_protocol_array(node_data["protocols"], "Node $i protocols")
+      _validate_protocol_array(
+        node_data["protocols"],
+        "Node $i protocols",
+        protocol_ids,
+      )
       position = node["position"]
       position isa AbstractVector && length(position) == 2 &&
         all(value -> value isa Real && !(value isa Bool) && isfinite(value), position) ||
@@ -1394,7 +1428,7 @@ function validate_payload(payload; script_export::Bool=false)
         throw(validation_error("Edge $i references non-existent target node: '$target'"))
       end
 
-      edge_data, protocols = _validate_edge_data(edge, i)
+      edge_data, protocols = _validate_edge_data(edge, i, protocol_ids)
       if _is_virtual_edge(edge)
         for (protocol_index, protocol) in enumerate(protocols)
           _is_object_like(protocol) || throw(validation_error(

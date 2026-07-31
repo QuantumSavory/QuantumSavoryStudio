@@ -20,9 +20,9 @@
 
 ## CMP-017 — Exact simulation-request admission
 
-- **Normative statement:** Frontend projection and backend admission shall implement exact parse/export shapes: parse requires representations, export adds positive timing, Web-owned objects/tags are closed, and only recursively untagged simulator values are extensible.
+- **Normative statement:** Frontend projection and backend admission shall implement exact parse/export shapes: parse requires representations, export adds positive timing, Web-owned objects/tags are closed, slot and protocol IDs are globally unique, and only recursively untagged simulator values are extensible.
 - **Parents:** SUB-002, SUB-004, SUB-008, SUB-009
-- **Acceptance criterion:** Projection is nonmutating and endpoint-only; malformed/defaulted owned fields and unknown/nested tags fail; physical edges require five resolved fields while virtual edges forbid them; exact tags and catalog-backed States Zoo values agree with OpenAPI.
+- **Acceptance criterion:** Projection is nonmutating and endpoint-only; malformed/defaulted owned fields, duplicate result-addressing IDs, and unknown/nested tags fail; physical edges require five resolved fields while virtual edges forbid them; exact tags and catalog-backed States Zoo values agree with OpenAPI.
 - **Verification:** UNITV-022 (test)
 - **Origin / risk:** Release-2.0 current-wire simplification; high data/correctness risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)

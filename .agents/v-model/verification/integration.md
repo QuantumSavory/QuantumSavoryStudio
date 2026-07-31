@@ -37,12 +37,12 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed duplicates, field mutations at every owned level, tagged/opaque constructor values, resolved physical values, and placement-gated protocols through HTTP.
+- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed physical duplicates, globally repeated slot and protocol IDs, field mutations at every owned level, tagged/opaque constructor values, resolved physical values, and placement-gated protocols through HTTP.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five required resolved fields; permitted virtual protocols remain without physical fields; exact tags and untagged simulator values follow their declared branches; every owned malformed fixture fails before construction.
+- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five required resolved fields; permitted virtual protocols remain without physical fields; slot and protocol identity is unambiguous across the full payload; exact tags and untagged simulator values follow their declared branches; every owned malformed fixture fails before construction.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
-- **Nonconformance:** The exact-string identity regression and corrected backend suites
+- **Nonconformance:** The exact-string and global-identity regressions and corrected backend suites
   have not executed; reordered-node discrimination remains the separate planned
   UNITV-010 action.
 

@@ -350,6 +350,11 @@
       extra_slot_field["net"]["nodes"][1]["data"]["slots"][1]["legacy"] = true
       push!(invalid_nested_payloads, extra_slot_field)
 
+      duplicate_slot_id = deepcopy(test_payload)
+      duplicate_slot_id["net"]["nodes"][2]["data"]["slots"][1]["id"] =
+        duplicate_slot_id["net"]["nodes"][1]["data"]["slots"][1]["id"]
+      push!(invalid_nested_payloads, duplicate_slot_id)
+
       missing_background_field = deepcopy(test_payload)
       delete!(
         missing_background_field["net"]["nodes"][1]["data"]["slots"][1][
@@ -368,6 +373,11 @@
       extra_protocol_field = deepcopy(test_payload)
       extra_protocol_field["net"]["edges"][1]["data"]["protocols"][1]["legacy"] = true
       push!(invalid_nested_payloads, extra_protocol_field)
+
+      duplicate_protocol_id = deepcopy(test_payload)
+      duplicate_protocol_id["net"]["edges"][1]["data"]["protocols"][2]["id"] =
+        duplicate_protocol_id["net"]["edges"][1]["data"]["protocols"][1]["id"]
+      push!(invalid_nested_payloads, duplicate_protocol_id)
 
       missing_protocol_parameter_value = deepcopy(test_payload)
       missing_protocol_parameter_value["net"]["edges"][1]["data"]["protocols"][1][
