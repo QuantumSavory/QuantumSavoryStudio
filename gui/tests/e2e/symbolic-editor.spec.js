@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { saveAndReadProject } from './projectBoundary.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   addOneSlotToEachNode,
   mockParseAndDestroy,
@@ -13,11 +14,11 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   doc: 'Protocol used to exercise symbolic parameter editing.',
   group: 'node',
   virtual: null,
-  parameters: [{
+  parameters: [constructorField({
     field: 'observable',
     type: 'Symbolic',
     doc: 'A symbolic observable.',
-  }],
+  })],
 }
 
 const CUSTOM_FUNCTION_PROTOCOL_TYPE = {
@@ -25,11 +26,11 @@ const CUSTOM_FUNCTION_PROTOCOL_TYPE = {
   doc: 'Protocol used to exercise custom-function parameter editing.',
   group: 'node',
   virtual: null,
-  parameters: [{
+  parameters: [constructorField({
     field: 'callback',
     type: 'Function',
     doc: 'A custom callback.',
-  }],
+  })],
 }
 
 const VALID_FUNCTION_SOURCE = `valid_callback = function (value)
@@ -62,7 +63,7 @@ async function mockConfiguration(page) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/simulation_log_groups', route => route.fulfill({
     status: 200,

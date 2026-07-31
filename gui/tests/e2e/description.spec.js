@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 const EMBEDDED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlWlY4AAAAASUVORK5CYII='
 const MARKDOWN_DESCRIPTION = `# Bell network
@@ -32,7 +33,7 @@ async function mockBackend(page) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,

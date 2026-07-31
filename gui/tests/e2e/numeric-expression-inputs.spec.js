@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   canonicalErrorResponse,
   simulationNotFoundResponse,
@@ -11,19 +12,17 @@ const PROTOCOL_DEFINITION = {
   doc: 'Exercise numeric input descriptors.',
   group: 'edge',
   virtual: true,
-  parameters: [{
+  parameters: [constructorField({
     field: 'delay_scale',
     type: 'Float64',
-    defaultValue: 7.5,
     min: 0,
     doc: 'Scale derived from the concrete edge assignment.',
-  }, {
+  }), constructorField({
     field: 'rounds',
     type: 'Int64',
-    defaultValue: 3,
     min: 1,
     doc: 'Integer retry count.',
-  }],
+  })],
 }
 const TEMPLATE_PROTOCOL_DEFINITION = {
   ...PROTOCOL_DEFINITION,
@@ -43,7 +42,7 @@ async function mockBackend(page, {
     json: { background_types: [] },
   }))
   await page.route('**/slot_types', route => route.fulfill({
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/states_zoo_types', route => route.fulfill({
     json: { states_zoo_types: [] },

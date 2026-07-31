@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   replaceStoredProjectAndReload,
   saveAndReadProject,
@@ -35,33 +36,29 @@ const REPEATER_AUTOMATION_PROTOCOL_TYPES = [{
   doc: 'Generate entanglement between two nodes.',
   group: 'edge',
   virtual: false,
-  parameters: [{
+  parameters: [constructorField({
     field: 'success_prob',
     type: 'Float64',
-    defaultValue: 0.25,
     doc: 'Probability that an entanglement attempt succeeds.',
-  }],
+  })],
 }, {
   type: 'QuantumSavory.ProtocolZoo.SwapperProt',
   doc: 'Swap entanglement at a node.',
   group: 'node',
   virtual: null,
-  parameters: [{
+  parameters: [constructorField({
     field: 'nodeL',
     type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-    defaultValue: 'Wildcard',
     doc: 'Remote low node, a predicate, or a wildcard.',
-  }, {
+  }), constructorField({
     field: 'nodeH',
     type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-    defaultValue: 'Wildcard',
     doc: 'Remote high node, a predicate, or a wildcard.',
-  }, {
+  }), constructorField({
     field: 'chooseL',
     type: 'Function',
-    defaultValue: 'minimum',
     doc: 'Choose one candidate from the filtered low-node results.',
-  }],
+  })],
 }, {
   type: 'QuantumSavory.ProtocolZoo.EntanglementTracker',
   doc: 'Track established entanglement at a node.',
@@ -240,7 +237,7 @@ async function mockBackendMetadata(page, {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
@@ -774,13 +771,13 @@ test.describe('Layout Tools repeater chain generator', () => {
       definition.type.endsWith('.EntanglerProt')
         ? {
             ...definition,
-            parameters: [...definition.parameters, {
+            parameters: [...definition.parameters, constructorField({
               field: 'tag',
               type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
               kind: 'named_tag_type',
               nullable: true,
               doc: 'Named tag head.',
-            }],
+            })],
           }
         : definition
     ))

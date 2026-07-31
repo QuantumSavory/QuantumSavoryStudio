@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 const PROJECT_NAME = 'Physical Edge Layout'
 
@@ -11,7 +12,7 @@ async function mockBackendMetadata(page) {
     json: { background_types: [] },
   }))
   await page.route('**/slot_types', route => route.fulfill({
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     json: { protocol_types: [] },

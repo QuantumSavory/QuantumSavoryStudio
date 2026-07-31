@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 
 async function openEntanglerEditor(page, projectName) {
   const protocolTypesLoaded = page.waitForResponse(
@@ -88,7 +89,7 @@ async function setEvaluationCapability(page, enabled) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
@@ -99,11 +100,11 @@ async function setEvaluationCapability(page, enabled) {
         doc: 'Evaluation capability test protocol',
         group: 'edge',
         virtual: false,
-        parameters: [{
+        parameters: [constructorField({
           field: 'chooseslotA',
           type: ['Int64', 'Function'],
           doc: 'Choose a slot by integer, known function, or lambda.',
-        }],
+        })],
       }],
     },
   }))

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -16,7 +17,7 @@ async function mockBackendMetadata(page) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,

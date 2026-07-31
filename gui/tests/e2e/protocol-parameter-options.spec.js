@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { canonicalErrorResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   replaceStoredProjectAndReload,
   saveAndReadProject,
@@ -56,21 +57,21 @@ const SWAPPER_TYPE = {
   group: 'node',
   virtual: null,
   parameters: [
-    {
+    constructorField({
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
       doc: 'Remote low node, a predicate, or a wildcard.',
-    },
-    {
+    }),
+    constructorField({
       field: 'nodeH',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
       doc: 'Remote high node, a predicate, or a wildcard.',
-    },
-    {
+    }),
+    constructorField({
       field: 'chooseL',
       type: 'Function',
       doc: 'Choose one candidate from the filtered low-node results.',
-    },
+    }),
   ],
 }
 
@@ -79,21 +80,21 @@ const ENTANGLER_TYPE = {
   doc: 'Generate entanglement between two nodes.',
   group: 'edge',
   virtual: false,
-  parameters: [{
+  parameters: [constructorField({
     field: 'chooseslotA',
     type: ['Int64', 'Function'],
     doc: 'Select a slot in node A by index or predicate.',
-  }, {
+  }), constructorField({
     field: 'retry_lock_time',
     type: ['Nothing', 'Float64'],
     doc: 'Optional delay before retrying.',
-  }, {
+  }), constructorField({
     field: 'tag',
     type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
     kind: 'named_tag_type',
     nullable: true,
     doc: 'Named tag head for generated entanglement.',
-  }],
+  })],
 }
 
 const CONSUMER_TYPE = {
@@ -101,13 +102,13 @@ const CONSUMER_TYPE = {
   doc: 'Consume entanglement between two nodes.',
   group: 'edge',
   virtual: false,
-  parameters: [{
+  parameters: [constructorField({
     field: 'tag',
     type: 'Type{<:QuantumSavory.AbstractTag}',
     kind: 'named_tag_type',
     nullable: false,
     doc: 'Named tag head to consume.',
-  }],
+  })],
 }
 
 async function mockConfiguration(page) {
@@ -131,7 +132,7 @@ async function mockConfiguration(page) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,

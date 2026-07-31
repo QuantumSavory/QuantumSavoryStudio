@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 async function mockBackend(page, parseRequests, {
   platformHandler,
@@ -9,7 +10,7 @@ async function mockBackend(page, parseRequests, {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
   await page.route('**/background_types', route => route.fulfill({ json: { background_types: [] } }))
   await page.route('**/slot_types', route => route.fulfill({
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({ json: { protocol_types: [] } }))
   await page.route('**/states_zoo_types', route => route.fulfill({ json: { states_zoo_types: [] } }))

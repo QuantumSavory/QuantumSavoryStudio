@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   replaceStoredProjectAndReload,
   saveAndReadProject,
@@ -18,11 +19,11 @@ const EDGE_PROTOCOL_TYPE = {
   doc: 'Generate entanglement between two nodes.',
   group: 'edge',
   virtual: false,
-  parameters: [{
+  parameters: [constructorField({
     field: 'rounds',
     type: 'Int64',
     doc: 'Number of entanglement attempts.',
-  }],
+  })],
 }
 
 async function mockConfiguration(page) {
@@ -44,7 +45,7 @@ async function mockConfiguration(page) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,

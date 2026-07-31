@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const PANEL_SIZE_STORAGE_KEY = 'bottomPanel_size'
@@ -11,7 +12,7 @@ async function mockBackend(page) {
     const responses = {
       '/known_functions': { known_functions: [] },
       '/background_types': { background_types: [] },
-      '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
+      '/slot_types': { slot_types: SLOT_TYPE_CATALOG },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
       '/platform_info': backendPlatformInfo(),

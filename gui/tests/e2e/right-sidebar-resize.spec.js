@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 const SIDEBAR_WIDTH_STORAGE_KEY = 'rightSidebar_width'
 
@@ -9,7 +10,7 @@ async function mockBackend(page) {
     const responses = {
       '/known_functions': { known_functions: [] },
       '/background_types': { background_types: [] },
-      '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
+      '/slot_types': { slot_types: SLOT_TYPE_CATALOG },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
       '/platform_info': backendPlatformInfo(),

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG } from '../catalogFixtures.js'
 
 function sourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -17,7 +18,7 @@ async function mockBackend(page) {
     const responses = {
       '/known_functions': { known_functions: [] },
       '/background_types': { background_types: [] },
-      '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
+      '/slot_types': { slot_types: SLOT_TYPE_CATALOG },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
       '/platform_info': backendPlatformInfo(),

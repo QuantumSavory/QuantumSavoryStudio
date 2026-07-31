@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
+import { SLOT_TYPE_CATALOG, constructorField } from '../catalogFixtures.js'
 import {
   canonicalErrorResponse,
   simulationNotFoundResponse,
@@ -85,11 +86,11 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   doc: 'Protocol used to exercise States Zoo variable assignment.',
   group: 'node',
   virtual: null,
-  parameters: [{
+  parameters: [constructorField({
     field: 'observable',
     type: 'Symbolic',
     doc: 'A symbolic state.',
-  }],
+  })],
 }
 
 const TRACE_PROTOCOL_TYPE = {
@@ -97,11 +98,11 @@ const TRACE_PROTOCOL_TYPE = {
   doc: 'Protocol used to exercise generated trace variable assignment.',
   group: 'node',
   virtual: null,
-  parameters: [{
+  parameters: [constructorField({
     field: 'probability',
     type: 'Float64',
     doc: 'A generated state probability.',
-  }],
+  })],
 }
 
 async function mockConfiguration(page, { previewHandler } = {}) {
@@ -118,7 +119,7 @@ async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/slot_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { slot_types: ['Qubit', 'Qumode'] },
+    json: { slot_types: SLOT_TYPE_CATALOG },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,

@@ -9,6 +9,7 @@ vi.mock('maplibre-gl', () => ({
 import RepeaterChainDialog from '../../src/components/RepeaterChainDialog.vue'
 import ProtocolConstructorForm from '../../src/components/panels/ProtocolConstructorForm.vue'
 import { api } from '../../src/utils/ApiConnector'
+import { constructorField } from '../catalogFixtures.js'
 
 const ENTANGLER_TYPE = 'QuantumSavory.ProtocolZoo.EntanglerProt'
 const SWAPPER_TYPE = 'QuantumSavory.ProtocolZoo.SwapperProt'
@@ -21,20 +22,18 @@ const ENTANGLER_DEFINITION = {
   group: 'edge',
   virtual: false,
   parameters: [
-    { field: 'nodeA', type: 'Int64' },
-    { field: 'nodeB', type: 'Int64' },
-    {
+    constructorField({ field: 'nodeA', type: 'Int64' }),
+    constructorField({ field: 'nodeB', type: 'Int64' }),
+    constructorField({
       field: 'success_prob',
       type: 'Float64',
-      defaultValue: 0.25,
       doc: 'Probability that an attempt succeeds.'
-    },
-    {
+    }),
+    constructorField({
       field: 'attempts',
       type: 'Int64',
-      defaultValue: 5,
       doc: 'Maximum number of attempts.'
-    }
+    })
   ]
 }
 
@@ -43,25 +42,22 @@ const SWAPPER_DEFINITION = {
   group: 'node',
   virtual: null,
   parameters: [
-    { field: 'node', type: 'Int64' },
-    {
+    constructorField({ field: 'node', type: 'Int64' }),
+    constructorField({
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-      defaultValue: 'Wildcard',
       doc: 'Low-side node predicate.'
-    },
-    {
+    }),
+    constructorField({
       field: 'nodeH',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-      defaultValue: 'Wildcard',
       doc: 'High-side node predicate.'
-    },
-    {
+    }),
+    constructorField({
       field: 'rounds',
       type: 'Int64',
-      defaultValue: 2,
       doc: 'Number of swap rounds.'
-    }
+    })
   ]
 }
 
@@ -69,7 +65,7 @@ const TRACKER_DEFINITION = {
   type: TRACKER_TYPE,
   group: 'node',
   virtual: null,
-  parameters: [{ field: 'node', type: 'Int64' }]
+  parameters: [constructorField({ field: 'node', type: 'Int64' })]
 }
 
 const FULL_PROTOCOL_TYPES = {
@@ -407,13 +403,13 @@ describe('RepeaterChainDialog protocol automation', () => {
       ...ENTANGLER_DEFINITION,
       parameters: [
         ...ENTANGLER_DEFINITION.parameters,
-        {
+        constructorField({
           field: 'tag',
           type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
           kind: 'named_tag_type',
           nullable: true,
           doc: 'Named tag head.'
-        }
+        })
       ]
     }
     const protocolTypes = {
