@@ -12,6 +12,11 @@ async function mockBackend(page) {
     contentType: 'application/json',
     json: { background_types: [] },
   }))
+  await page.route('**/slot_types', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    json: { slot_types: ['Qubit', 'Qumode'] },
+  }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',

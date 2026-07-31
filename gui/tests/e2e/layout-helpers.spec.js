@@ -12,6 +12,11 @@ async function mockBackendMetadata(page) {
     contentType: 'application/json',
     json: { background_types: [] },
   }))
+  await page.route('**/slot_types', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    json: { slot_types: ['Qubit', 'Qumode'] },
+  }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -102,24 +107,42 @@ async function configureTemplates(page, templateNodeName = 'Node 1') {
 
     const templateNode = projectData.net.nodes.find(node => node.name === templateNodeName)
 
-    templateNode.data.customConfiguration = { nested: { value: 'node-template' } }
+    templateNode.data.type = 'configured-node'
     templateNode.data.slots.push({
       id: 'slot_template',
       type: 'Qubit',
-      backgroundNoise: { type: 'custom', parameters: [{ value: 0.25 }] },
+      backgroundNoise: {
+        type: 'custom',
+        parameters: [{
+          field: 'rate',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 0.25,
+        }],
+      },
       assignment: false,
       isLocked: false,
     })
     templateNode.data.protocols.push({
       id: 'protocol_node_template',
       type: 'TestNodeProtocol',
-      parameters: [{ name: 'rounds', type: 'Int64', value: 7 }],
+      parameters: [{
+        name: 'rounds',
+        type: 'Int64',
+        selectedType: 'Int64',
+        value: 7,
+      }],
     })
-    edge.data.customConfiguration = { fidelity: 0.91 }
+    edge.data.type = 'configured-edge'
     edge.data.protocols.push({
       id: 'protocol_edge_template',
       type: 'TestEdgeProtocol',
-      parameters: [{ name: 'attempts', type: 'Int64', value: 5 }],
+      parameters: [{
+        name: 'attempts',
+        type: 'Int64',
+        selectedType: 'Int64',
+        value: 5,
+      }],
     })
 
     return {
@@ -205,17 +228,22 @@ test.describe('star and graph layout helpers', () => {
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: edges.map(edge => edge.data.protocols[0].id),
         nodeDataCopied: peripherals.every(node => (
-          node.data.customConfiguration.nested.value === 'node-template'
+          node.data.type === 'configured-node'
           && node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
         )),
         edgeDataCopied: edges.every(edge => (
-          edge.data.customConfiguration.fidelity === 0.91
+          edge.data.type === 'configured-edge'
           && edge.data.protocols[0].parameters[0].value === 5
         )),
         independentNodeData: peripherals[0].data !== peripherals[1].data
-          && peripherals[0].data.customConfiguration !== peripherals[1].data.customConfiguration,
+          && peripherals[0].data.slots !== peripherals[1].data.slots
+          && peripherals[0].data.slots[0].backgroundNoise
+            !== peripherals[1].data.slots[0].backgroundNoise
+          && peripherals[0].data.protocols !== peripherals[1].data.protocols,
         independentEdgeData: edges[0].data !== edges[1].data
-          && edges[0].data.customConfiguration !== edges[1].data.customConfiguration,
+          && edges[0].data.protocols !== edges[1].data.protocols
+          && edges[0].data.protocols[0].parameters
+            !== edges[1].data.protocols[0].parameters,
       }
     }, { templates })
 
@@ -400,8 +428,8 @@ test.describe('star and graph layout helpers', () => {
         nodeProtocolIds: nodes.map(node => node.data.protocols[0].id),
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: edges.map(edge => edge.data.protocols[0].id),
-        copiedNodeData: nodes.every(node => node.data.customConfiguration.nested.value === 'node-template'),
-        copiedEdgeData: edges.every(edge => edge.data.customConfiguration.fidelity === 0.91),
+        copiedNodeData: nodes.every(node => node.data.type === 'configured-node'),
+        copiedEdgeData: edges.every(edge => edge.data.type === 'configured-edge'),
       }
     }, { templates })
 

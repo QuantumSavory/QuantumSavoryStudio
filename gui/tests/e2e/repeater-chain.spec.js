@@ -230,24 +230,42 @@ test.describe('Layout Tools repeater chain generator', () => {
       const templateNode = projectData.net.nodes.find(node => node.name === 'Node 3')
       const templateEdge = projectData.net.edges[0]
 
-      templateNode.data.customConfiguration = { nested: { value: 42 } }
+      templateNode.data.type = 'configured-node'
       templateNode.data.slots.push({
         id: 'slot_template',
         type: 'Qubit',
-        backgroundNoise: { type: 'custom', parameters: [{ value: 0.25 }] },
+        backgroundNoise: {
+          type: 'custom',
+          parameters: [{
+            field: 'rate',
+            type: 'Float64',
+            selectedType: 'Float64',
+            value: 0.25,
+          }],
+        },
         assignment: false,
         isLocked: false,
       })
       templateNode.data.protocols.push({
         id: 'protocol_node_template',
         type: 'TestNodeProtocol',
-        parameters: [{ name: 'rounds', type: 'Int64', value: 7 }],
+        parameters: [{
+          name: 'rounds',
+          type: 'Int64',
+          selectedType: 'Int64',
+          value: 7,
+        }],
       })
-      templateEdge.data.customConfiguration = { fidelity: 0.91 }
+      templateEdge.data.type = 'configured-edge'
       templateEdge.data.protocols.push({
         id: 'protocol_edge_template',
         type: 'TestEdgeProtocol',
-        parameters: [{ name: 'attempts', type: 'Int64', value: 5 }],
+        parameters: [{
+          name: 'attempts',
+          type: 'Int64',
+          selectedType: 'Int64',
+          value: 5,
+        }],
       })
 
       return { nodeId: templateNode.id, edgeId: templateEdge.id }
@@ -295,18 +313,23 @@ test.describe('Layout Tools repeater chain generator', () => {
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: chainEdges.map(edge => edge.data.protocols[0].id),
         nodeConfigurationCopied: repeaters.every(node =>
-          node.data.customConfiguration.nested.value === 42
+          node.data.type === 'configured-node'
           && node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
           && node.data.protocols[0].parameters[0].value === 7
         ),
         edgeConfigurationCopied: chainEdges.every(edge =>
-          edge.data.customConfiguration.fidelity === 0.91
+          edge.data.type === 'configured-edge'
           && edge.data.protocols[0].parameters[0].value === 5
         ),
         independentNodeData: repeaters[0].data !== repeaters[1].data
-          && repeaters[0].data.customConfiguration !== repeaters[1].data.customConfiguration,
+          && repeaters[0].data.slots !== repeaters[1].data.slots
+          && repeaters[0].data.slots[0].backgroundNoise
+            !== repeaters[1].data.slots[0].backgroundNoise
+          && repeaters[0].data.protocols !== repeaters[1].data.protocols,
         independentEdgeData: chainEdges[0].data !== chainEdges[1].data
-          && chainEdges[0].data.customConfiguration !== chainEdges[1].data.customConfiguration,
+          && chainEdges[0].data.protocols !== chainEdges[1].data.protocols
+          && chainEdges[0].data.protocols[0].parameters
+            !== chainEdges[1].data.protocols[0].parameters,
       }
     }, { templateIds })
 

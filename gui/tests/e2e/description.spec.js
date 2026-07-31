@@ -28,6 +28,11 @@ async function mockBackend(page) {
     contentType: 'application/json',
     json: { background_types: [] },
   }))
+  await page.route('**/slot_types', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    json: { slot_types: ['Qubit', 'Qumode'] },
+  }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -206,31 +211,27 @@ test.describe('Project description', () => {
     const exported = JSON.parse(await readFile(await download.path(), 'utf8'))
     expect(exported.description).toBe(MARKDOWN_DESCRIPTION)
 
-    const invalidImport = {
-      name: 'Invalid Description Import',
-      description: ['not', 'a', 'string'],
-      variables: [],
-      net: { nodes: [], edges: [], protocols: [] },
-    }
-    await page.evaluate(project => {
+    await page.evaluate(() => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+      const project = setup.serializeProjectData()
+      project.name = 'Invalid Description Import'
+      project.description = ['not', 'a', 'string']
       setup.validateAndProcessImport(project)
-    }, invalidImport)
+    })
     let appDialog = page.getByRole('dialog', { name: 'Import failed' })
-    await expect(appDialog).toContainText('Invalid project structure: "description" must be a string when present.')
+    await expect(appDialog).toContainText(
+      'Project schema validation failed at /description: expected string',
+    )
     await appDialog.getByRole('button', { name: 'OK' }).click()
     await expect.poll(() => page.evaluate(() => localStorage.getItem('cqn_project_Invalid Description Import'))).toBeNull()
 
     const importedDescription = '# Imported\n\nWith $a+b$.'
     await page.evaluate(({ description }) => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      setup.validateAndProcessImport({
-        name: 'Imported Description Project',
-        description,
-        variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-      })
+      const project = setup.serializeProjectData()
+      project.name = 'Imported Description Project'
+      project.description = description
+      setup.validateAndProcessImport(project)
     }, { description: importedDescription })
     appDialog = page.getByRole('dialog', { name: 'Project imported' })
     await expect(appDialog).toContainText('Project "Imported Description Project" imported successfully!')

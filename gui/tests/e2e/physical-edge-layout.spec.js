@@ -7,6 +7,9 @@ async function mockBackendMetadata(page) {
   await page.route('**/background_types', route => route.fulfill({
     json: { background_types: [] },
   }))
+  await page.route('**/slot_types', route => route.fulfill({
+    json: { slot_types: ['Qubit', 'Qumode'] },
+  }))
   await page.route('**/protocol_types', route => route.fulfill({
     json: { protocol_types: [] },
   }))

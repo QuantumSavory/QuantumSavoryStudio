@@ -4,6 +4,9 @@ import { simulationNotFoundResponse } from './httpResponses.js'
 async function mockBackend(page, parseRequests, { platformHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
   await page.route('**/background_types', route => route.fulfill({ json: { background_types: [] } }))
+  await page.route('**/slot_types', route => route.fulfill({
+    json: { slot_types: ['Qubit', 'Qumode'] },
+  }))
   await page.route('**/protocol_types', route => route.fulfill({ json: { protocol_types: [] } }))
   await page.route('**/states_zoo_types', route => route.fulfill({ json: { states_zoo_types: [] } }))
   await page.route('**/platform_info', route => {

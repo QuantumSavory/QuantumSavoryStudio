@@ -6,6 +6,7 @@ async function mockBackend(page) {
     const responses = {
       '/known_functions': { known_functions: [] },
       '/background_types': { background_types: [] },
+      '/slot_types': { slot_types: ['Qubit', 'Qumode'] },
       '/protocol_types': { protocol_types: [] },
       '/states_zoo_types': { states_zoo_types: [] },
       '/platform_info': {
