@@ -1,1 +1,0 @@
-"/Users/adrian/.julia/juliaup/julia-1.11.6+0.aarch64.apple.darwin14/bin/julia" --color=yes --depwarn=no --project=@. -q -- "%~dp0..\bootstrap.jl" -r %*
