@@ -821,9 +821,9 @@ function _script_regular_expression(
     ))
   end
 
-  # The normal parser's final fallback interprets complex values as Julia. The
-  # exporter preserves that local-script capability but only parses the source;
-  # it never evaluates it in the web-server process.
+  # The exporter preserves the declared local-script source contract for
+  # complex values, but only parses the source; it never evaluates it in the
+  # web-server process.
   if value isa AbstractString || value isa Number || value isa AbstractVector
     return _script_raw_expression(value, context)
   end

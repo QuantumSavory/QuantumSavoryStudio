@@ -11,8 +11,9 @@ numeric vectors, "Wildcard", "QuantumSavory.Wildcard", and Union types that
 include Nothing and one of the supported scalar types. Wildcard targets produce
 a fresh `QuantumSavory.Wildcard()` and do not use the supplied value.
 
-Returns a Pair{Bool,Any} where first indicates success. On failure, returns
-(false, nothing) and callers should skip setting the parameter.
+Returns a `Pair{Bool,Any}` whose first value indicates success. Failure returns
+`false => nothing`; callers must reject the supplied value or handle that
+failure explicitly.
 """
 function _convert_parameter_value(ptype::AbstractString, value)
   # Normalize ptype string
@@ -1834,7 +1835,7 @@ function _handle_function_lambda_parameter!(
       return false
     end
   else
-    msg = "Function/Lambda parameter has unsupported value type; skipping"
+    msg = "Function/Lambda parameter has unsupported value type"
     if state !== nothing
       @log_event state Logging.Warn msg parameter_name=string(name) value_type=string(typeof(value))
     else
@@ -1867,7 +1868,7 @@ function _handle_symbolic_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, val
     kwargs[name] = construct_states_zoo_recipe(value)
     return true
   else
-    @warn "Symbolic parameter has unsupported value type; skipping" parameter_name=name value_type=typeof(value)
+    @warn "Symbolic parameter has unsupported value type" parameter_name=name value_type=typeof(value)
   end
   return false
 end
@@ -1920,8 +1921,8 @@ function _handle_regular_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, ptyp
   end
 
   # Numeric Julia source is accepted only through the explicit tagged
-  # representation. Untagged strings remain numeric literals and never enter
-  # the fallback evaluator.
+  # representation. Untagged strings remain numeric literals and are never
+  # evaluated as source.
   if ptype in NUMERIC_EXPRESSION_TARGETS || (
     startswith(ptype, "Union{") &&
     occursin(r"(^|[,{ ])(Float64|Int64)([}, ]|$)", ptype)
@@ -2035,7 +2036,8 @@ function _handle_typed_parameter!(
     else
       @warn msg parameter_name=name parameter_type=ptype value=value error=e
     end
-    # Don't set the parameter - let the constructor use its default value.
+    # Report conversion failure; catalog-authoritative callers reject an
+    # explicitly supplied invalid value.
     return false
   end
 end
