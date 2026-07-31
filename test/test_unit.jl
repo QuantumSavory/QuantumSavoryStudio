@@ -3022,7 +3022,10 @@
     # Create a test state with slot mapping
     validation_result = WebQuantumSavory.validate_payload(test_payload)
     registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
-    state = WebQuantumSavory.State(name="test", slot_mapping=slot_mapping)
+    state = WebQuantumSavory.State(
+      name="test",
+      slot_mapping=slot_mapping,
+    )
 
     reverse_mapping = WebQuantumSavory.ensure_slot_reverse_mapping!(state)
     @test reverse_mapping === state.slot_reverse_mapping
@@ -3038,11 +3041,17 @@
 
     # Test get_slot_state with existing slot
     if !isempty(slot_mapping)
-      slot_id = first(keys(slot_mapping))
+      slot_id, slot = first(slot_mapping)
+      state.network = QuantumSavory.RegisterNet(
+        SimpleGraph(1),
+        [parent(slot)],
+      )
       result = WebQuantumSavory.get_slot_state(slot_id, state)
       @test result["slot_id"] == slot_id
       @test haskey(result, "is_locked")
       @test haskey(result, "is_assigned")
+      @test result["access_time"] ==
+        QuantumSavory.access_time(slot_mapping[slot_id])
       @test haskey(result, "entangled_slots")
       @test haskey(result, "entangled_slot_details")
     end

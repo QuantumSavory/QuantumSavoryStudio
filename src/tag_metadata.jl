@@ -733,7 +733,7 @@ function _resolve_tag_target(state::State, payload; for_attach::Bool=false, for_
     state,
     _require_tag_value(payload, "node_id"; context="$kind target"),
   )
-  register = state.network.registers[node_index]
+  register = state.network[node_index]
   if kind == "message_buffer"
     return (;
       kind,

@@ -265,20 +265,8 @@ function get_slot_state(slot_id::String, state::State)
     end
   end
 
-  # Get access times if available
-  access_time = nothing
-  if state.network !== nothing
-    # Find the register and slot index for this slot
-    for (reg_idx, reg) in enumerate(state.network.registers)
-      for slot_idx in 1:nsubsystems(reg)
-        reg_slot = reg[slot_idx]
-        if reg_slot === slot
-          access_time = reg.accesstimes[slot_idx]
-          break
-        end
-      end
-    end
-  end
+  access_time = state.network === nothing ?
+    nothing : QuantumSavory.access_time(slot)
 
   Dict(
     "slot_id" => slot_id,
@@ -500,7 +488,7 @@ function cleanup_state!(
 
       # Snapshot the assigned slots before releasing any one of them. Releasing
       # one subsystem can change assignment state elsewhere in the same object.
-      for (reg_idx, reg) in enumerate(network.registers)
+      for (reg_idx, reg) in enumerate(network[:])
         for slot_idx in 1:nsubsystems(reg)
           try
             slot = reg[slot_idx]

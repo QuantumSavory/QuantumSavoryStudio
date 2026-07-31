@@ -281,10 +281,7 @@ function _script_import_candidates()
     push!(candidates, _script_binding_source(QuantumSavory, schema.constructor))
   end
   for schema in QuantumSavory.StatesZoo.state_family_schemas()
-    source_module = isdefined(QuantumSavory.StatesZoo, nameof(schema.family)) &&
-      getfield(QuantumSavory.StatesZoo, nameof(schema.family)) === schema.family ?
-      QuantumSavory.StatesZoo : parentmodule(schema.family)
-    push!(candidates, _script_binding_source(source_module, schema.family))
+    push!(candidates, _script_binding_source(parentmodule(schema.family), schema.family))
   end
   for definition in _tag_catalog().named
     push!(candidates, _script_binding_source(definition.type))
