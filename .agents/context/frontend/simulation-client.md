@@ -64,10 +64,11 @@ Generation and project-name guards prevent stale responses from changing a new s
 Terminal state handling drains final logs before stopping polls. `ApiConnector` admits
 only the exact `/logs` envelope and exact snake_case ordinary/panic event schemas. State
 panic ingestion uses the same event validator. One backend-event converter creates the
-application log view, while application-authored messages use a distinct internal
-constructor and cannot enter transport parsing. There are no transport aliases,
-stringified-`details` parsing, or source guessing. Panic events are deduplicated across
-state and log polling by their stable exact ID.
+application log view without reclassifying its transport source or mutating its input,
+while application-authored messages use a distinct internal constructor and cannot
+enter transport parsing. There are no transport aliases, stringified-`details` parsing,
+or source guessing. Panic events are deduplicated across state and log polling by their
+stable exact ID.
 
 Project-session transitions stop state/log polling and liveness checks. The lower-level
 `resetSimulation()` helper stops state/log polling but currently leaves the liveness

@@ -98,6 +98,10 @@ captured-field suffixes before nesting them under `details`. This is current
 ResumableFunctions integration, not a retired-schema compatibility path. Cleanup
 degradation uses the same ordinary-event shape.
 
+Captured metadata is converted into fresh JSON-safe containers. Canonical capture
+fields remain authoritative; colliding metadata keys receive repeated `logging_`
+prefixes until every value has a distinct key under `details`.
+
 Panic state and structured logs may contain full exception messages and stack traces.
 The required shapes and GUI handoff are specified by
 [CMP-019](../../v-model/04-component-contracts/mcp-http.md#cmp-019--canonical-diagnostic-event-boundaries)
