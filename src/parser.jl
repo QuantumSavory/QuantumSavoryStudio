@@ -1957,11 +1957,19 @@ function _instantiate_protocol(
 end
 
 function simulation_is_running_exception(simulation_name)
-  return APIError("Simulation $simulation_name is running, cannot destroy it", 400)
+  return APIError(
+    "Simulation $simulation_name is running, cannot destroy it",
+    400,
+    "SIMULATION_RUNNING",
+  )
 end
 
 function simulation_blocked_exception(simulation_name)
-  return APIError("Simulation $simulation_name is expired; destroy it to recreate", 400)
+  return APIError(
+    "Simulation $simulation_name is expired; destroy it to recreate",
+    400,
+    "SIMULATION_EXPIRED",
+  )
 end
 
 function action_is_valid(

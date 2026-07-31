@@ -1,6 +1,7 @@
 
 import { ref, readonly } from 'vue'
 import { generateUUid } from './Utils.js'
+import { requestJson } from './httpClient.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -17,13 +18,6 @@ function getDefaultBaseUrl() {
   }
 
   return 'http://localhost:8000'
-}
-
-function apiErrorMessage(body, fallback) {
-  if (typeof body?.error === 'string' && body.error) return body.error
-  if (typeof body?.error?.message === 'string' && body.error.message) return body.error.message
-  if (typeof body?.message === 'string' && body.message) return body.message
-  return fallback
 }
 
 function scopedProjectName(uuid, projectName) {
@@ -63,22 +57,12 @@ function abortError() {
   return error
 }
 
-async function readJsonResponse(response, fallbackMessage) {
-  const body = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(apiErrorMessage(body, `${fallbackMessage}: ${response.status}`))
-  }
-  return body
-}
-
 export class ApiConnector {
   
   constructor(baseUrl = getDefaultBaseUrl()) {
     this.baseUrl = normalizeBaseUrl(baseUrl)
     this._config  = ref({})
     this._platformInfo = ref(null)
-    this._loading = ref(false)
-    this._error   = ref(null)
     this.known_functions = ref([]);
     this._tagTypesRequest = null
     this._tagTypesRequestGeneration = 0
@@ -89,14 +73,16 @@ export class ApiConnector {
   }
 
   get config()  { return readonly(this._config) }
-  get loading() { return readonly(this._loading) }
-  get error()   { return readonly(this._error) }
+
+  request(path, options = {}) {
+    return requestJson(`${this.baseUrl}${path}`, {
+      headers: this.requestHeaders,
+      ...options,
+    })
+  }
 
   async fetchKnownFunctions(){
-    const res = await fetch(`${this.baseUrl}/known_functions`, {
-      headers: this.requestHeaders,
-    })
-    const responseObject = await res.json()
+    const responseObject = await this.request('/known_functions')
     this.known_functions.value = responseObject.known_functions
   }
 
@@ -104,11 +90,7 @@ export class ApiConnector {
     const cachedTypes = this._config.value.statesZooTypes
     if (!force && Array.isArray(cachedTypes)) return cachedTypes
 
-    const res = await fetch(`${this.baseUrl}/states_zoo_types`, {
-      headers: this.requestHeaders,
-      signal,
-    })
-    const responseObject = await readJsonResponse(res, 'States Zoo types fetch failed')
+    const responseObject = await this.request('/states_zoo_types', { signal })
     const types = responseObject?.states_zoo_types
     if (!Array.isArray(types)) {
       throw new Error('States Zoo types response is invalid')
@@ -125,11 +107,7 @@ export class ApiConnector {
     const cachedGroups = this._config.value.simulationLogGroups
     if (!force && Array.isArray(cachedGroups)) return cachedGroups
 
-    const res = await fetch(`${this.baseUrl}/simulation_log_groups`, {
-      headers: this.requestHeaders,
-      signal,
-    })
-    const responseObject = await readJsonResponse(res, 'Simulation log groups fetch failed')
+    const responseObject = await this.request('/simulation_log_groups', { signal })
     const groups = responseObject?.simulation_log_groups
     if (
       !Array.isArray(groups)
@@ -146,26 +124,22 @@ export class ApiConnector {
   }
 
   async fetchStatesZooPreview(stateType, parameters, { signal } = {}) {
-    const res = await fetch(`${this.baseUrl}/states_zoo_preview`, {
-      headers: this.requestHeaders,
+    return this.request('/states_zoo_preview', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         state_type: stateType,
         parameters,
-      }),
+      },
       signal,
     })
-    return readJsonResponse(res, 'States Zoo preview failed')
   }
 
   async exportScript(data, { signal } = {}) {
-    const res = await fetch(`${this.baseUrl}/export_script`, {
-      headers: this.requestHeaders,
+    return this.request('/export_script', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: data,
       signal,
     })
-    return readJsonResponse(res, 'Julia script export failed')
   }
 
   fetchTagTypes({ signal, force = false } = {}) {
@@ -187,11 +161,9 @@ export class ApiConnector {
         promise: null,
       }
       request.promise = (async () => {
-        const res = await fetch(`${this.baseUrl}/tag_types`, {
-          headers: this.requestHeaders,
+        const catalog = await this.request('/tag_types', {
           signal: controller.signal,
         })
-        const catalog = await readJsonResponse(res, 'Tag types fetch failed')
         if (generation === this._tagTypesRequestGeneration) {
           this._config.value = {
             ...this._config.value,
@@ -245,59 +217,44 @@ export class ApiConnector {
   }
 
   async previewTag(tag, { signal } = {}) {
-    const res = await fetch(`${this.baseUrl}/tag_preview`, {
-      headers: this.requestHeaders,
+    return this.request('/tag_preview', {
       method: 'POST',
-      body: JSON.stringify({ tag }),
+      body: { tag },
       signal,
     })
-    return readJsonResponse(res, 'Tag preview failed')
   }
 
   async listTags(projectName, target, { signal } = {}) {
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
     const query = new URLSearchParams(tagTargetPayload(target))
-    const res = await fetch(`${this.baseUrl}/tags/${namespace}?${query}`, {
-      headers: this.requestHeaders,
-      signal,
-    })
-    return readJsonResponse(res, 'Tags fetch failed')
+    return this.request(`/tags/${namespace}?${query}`, { signal })
   }
 
   async attachTag(projectName, target, tag, { signal } = {}) {
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    const res = await fetch(`${this.baseUrl}/tags/${namespace}`, {
-      headers: this.requestHeaders,
+    return this.request(`/tags/${namespace}`, {
       method: 'POST',
-      body: JSON.stringify({ ...tagTargetPayload(target, { includeDestination: true }), tag }),
+      body: { ...tagTargetPayload(target, { includeDestination: true }), tag },
       signal,
     })
-    return readJsonResponse(res, 'Tag attachment failed')
   }
 
   async deleteTag(projectName, target, tagId, { signal } = {}) {
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
     const query = new URLSearchParams(tagTargetPayload(target))
-    const res = await fetch(
-      `${this.baseUrl}/tags/${namespace}/${pathSegment(tagId)}?${query}`,
-      {
-        headers: this.requestHeaders,
-        method: 'DELETE',
-        signal,
-      },
-    )
-    return readJsonResponse(res, 'Tag deletion failed')
+    return this.request(`/tags/${namespace}/${pathSegment(tagId)}?${query}`, {
+      method: 'DELETE',
+      signal,
+    })
   }
 
   async queryTags(projectName, target, querySpec, { signal } = {}) {
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
-    const res = await fetch(`${this.baseUrl}/tag_queries/${namespace}`, {
-      headers: this.requestHeaders,
+    return this.request(`/tag_queries/${namespace}`, {
       method: 'POST',
-      body: JSON.stringify({ ...tagTargetPayload(target), query: querySpec }),
+      body: { ...tagTargetPayload(target), query: querySpec },
       signal,
     })
-    return readJsonResponse(res, 'Tag query failed')
   }
 
   getKnownFunctions(){
@@ -327,65 +284,50 @@ export class ApiConnector {
   }
 
   async init() {
-    try {
-      this._loading.value = true
-      await Promise.all([
-        this.fetchKnownFunctions(),
-        this.fetchStatesZooTypes(),
-      ])
-      // Get background noise types
-      const res = await fetch(`${this.baseUrl}/background_types`, {
-        headers: this.requestHeaders,
-      })
-      if (!res.ok) throw new Error(`Background-noise types fetch failed: ${res.status}`)
-      const responseObject = await res.json()
-      this._config.value.bgNoiseOptions = [ ...responseObject.background_types ];
-      this._config.value.bgNoiseOptions.unshift( this.getDefaultBgNoise() );
+    const [
+      ,
+      ,
+      backgroundCatalog,
+      slotCatalog,
+      protocolCatalog,
+    ] = await Promise.all([
+      this.fetchKnownFunctions(),
+      this.fetchStatesZooTypes(),
+      this.request('/background_types'),
+      this.request('/slot_types'),
+      this.request('/protocol_types'),
+    ])
 
-      const slotResponse = await fetch(`${this.baseUrl}/slot_types`, {
-        headers: this.requestHeaders,
-      })
-      if (!slotResponse.ok) throw new Error(`Slot types fetch failed: ${slotResponse.status}`)
-      const slotCatalog = await slotResponse.json()
-      this._config.value.slotTypes = Array.isArray(slotCatalog.slot_types)
-        ? [ ...slotCatalog.slot_types ]
-        : ['Qubit', 'Qumode']
+    this._config.value.bgNoiseOptions = [
+      this.getDefaultBgNoise(),
+      ...backgroundCatalog.background_types,
+    ]
+    this._config.value.slotTypes = Array.isArray(slotCatalog.slot_types)
+      ? [...slotCatalog.slot_types]
+      : ['Qubit', 'Qumode']
 
-      // Get protocol types
-      const resProtTypes = await fetch(`${this.baseUrl}/protocol_types`, {
-        headers: this.requestHeaders,
-      })
-      if (!resProtTypes.ok) throw new Error(`Protocol types fetch failed: ${resProtTypes.status}`)
-      const responseObjectProtTypes = await resProtTypes.json()
-      let parsedTypes = responseObjectProtTypes.protocol_types;
-      
-      // Remove non-string parameters
-      // To-do: parse these so we don't need to exclude them
-      parsedTypes = parsedTypes.map(type => ({
-        ...type,
-        parameters: type.parameters.filter(param => {
-          return typeof param.type === 'string' || param.type === 'Function' || Array.isArray( param.type )
-        })
-      }));
-      this._config.value.protocolTypes = {
-        floating: [], 
-        node: [], 
-        edge: []
-      }
-
-      parsedTypes.forEach(type => {
-        const groupName = type.group;
-        if( groupName ){
-          this._config.value.protocolTypes[groupName].push(type);
-        }else{
-          this._config.value.protocolTypes.floating.push(type);
-        }
-      });
-    } catch (e) {
-      this._error.value = e
-    } finally {
-      this._loading.value = false
+    const parsedTypes = protocolCatalog.protocol_types.map(type => ({
+      ...type,
+      parameters: type.parameters.filter(param => (
+        typeof param.type === 'string'
+        || param.type === 'Function'
+        || Array.isArray(param.type)
+      )),
+    }))
+    this._config.value.protocolTypes = {
+      floating: [],
+      node: [],
+      edge: [],
     }
+
+    parsedTypes.forEach(type => {
+      const groupName = type.group
+      if (groupName) {
+        this._config.value.protocolTypes[groupName].push(type)
+      } else {
+        this._config.value.protocolTypes.floating.push(type)
+      }
+    })
   }
 
   getPlatformInfo(){
@@ -400,150 +342,73 @@ export class ApiConnector {
   }
 
   async fetchPlatformInfo(){
-    try{
-      const res = await fetch(`${this.baseUrl}/platform_info`, {
-        headers: this.requestHeaders,
-      })
-      if (!res.ok) throw new Error(`Platform info fetch failed: ${res.status}`)
-      const result = await res.json()
-      const versions = result?.versions && typeof result.versions === 'object'
-        ? result.versions
-        : {}
-      const capabilities = result?.capabilities && typeof result.capabilities === 'object'
-        ? result.capabilities
-        : {}
-      this._platformInfo.value = {
-        ...result,
-        versions: {
-          ...versions,
-          quantumSavory: versions.quantumSavory ?? versions.quantumsavory,
-        },
-        capabilities: {
-          ...capabilities,
-          unsafeCodeEvaluation: capabilities.unsafeCodeEvaluation === true
-            || capabilities.unsafe_code_evaluation === true,
-        },
-      }
-      return result
-    } catch (e) {
-      console.error( 'getPlatformInfo error', e );
-    } finally {
+    const result = await this.request('/platform_info')
+    const versions = result?.versions && typeof result.versions === 'object'
+      ? result.versions
+      : {}
+    const capabilities = result?.capabilities && typeof result.capabilities === 'object'
+      ? result.capabilities
+      : {}
+    this._platformInfo.value = {
+      ...result,
+      versions: {
+        ...versions,
+        quantumSavory: versions.quantumSavory ?? versions.quantumsavory,
+      },
+      capabilities: {
+        ...capabilities,
+        unsafeCodeEvaluation: capabilities.unsafeCodeEvaluation === true
+          || capabilities.unsafe_code_evaluation === true,
+      },
     }
+    return result
   }
 
   async destroySimulation(projectName){
-    try{
-      this._loading.value = true
-      const res = await fetch(`${this.baseUrl}/destroy_simulation`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify({ name: this.getScopedSimulationName(projectName) })
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'destroySimulation error', e );
-    } finally {
-      this._loading.value = false
-    }
-    return { success: false, message: 'Failed to destroy simulation' }
+    return this.request('/destroy_simulation', {
+      method: 'POST',
+      body: { name: this.getScopedSimulationName(projectName) },
+    })
   }
 
   async parseNetworkGraph(data){
-    try{
-      this._loading.value = true
-      const modifiedData = {
-        ...data,
-        name: this.getScopedSimulationName(data.name)
-      }
-      const res = await fetch(`${this.baseUrl}/parse_network_graph`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify(modifiedData)
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'parseNetworkGraph error', e );
-    } finally {
-      this._loading.value = false
+    const modifiedData = {
+      ...data,
+      name: this.getScopedSimulationName(data.name),
     }
+    return this.request('/parse_network_graph', {
+      method: 'POST',
+      body: modifiedData,
+    })
   }
 
   async prepareSimulation(data){
-    try{
-      this._loading.value = true
-      const res = await fetch(`${this.baseUrl}/prepare_simulation`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify({ name: this.getScopedSimulationName(data.name) })
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'prepareSimulation error', e );
-    } finally {
-      this._loading.value = false
-    }
+    return this.request('/prepare_simulation', {
+      method: 'POST',
+      body: { name: this.getScopedSimulationName(data.name) },
+    })
   }
 
   async getSimulationStatus(projectNameOrData, { signal } = {}){
     const projectName = typeof projectNameOrData === 'string'
       ? projectNameOrData
       : projectNameOrData?.name
-    try{
-      this._loading.value = true
-      const query = new URLSearchParams({ name: this.getScopedSimulationName(projectName) })
-      const res = await fetch(`${this.baseUrl}/get_state?${query}`, {
-        headers: this.requestHeaders,
-        method: 'GET',
-        signal,
-      })
-      const response = await res.json()
-
-      return response
-    } catch (e) {
-      if (e?.name === 'AbortError') throw e
-      this._error.value = e;
-      console.error( 'getSimulationStatus error', e );
-      return { success: false, message: e.message }
-    } finally {
-      this._loading.value = false
-    }
+    const query = new URLSearchParams({ name: this.getScopedSimulationName(projectName) })
+    return this.request(`/get_state?${query}`, { signal })
   }
 
   async runSimulation( projectName, time_units){
-    try{
-      this._loading.value = true
-      const res = await fetch(`${this.baseUrl}/run_simulation`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify({ name: this.getScopedSimulationName(projectName), time_units })
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'runSimulation error', e );
-    } finally {
-      this._loading.value = false
-    }
+    return this.request('/run_simulation', {
+      method: 'POST',
+      body: { name: this.getScopedSimulationName(projectName), time_units },
+    })
   }
 
   async pauseSimulation( projectName ){
-    try{
-      this._loading.value = true
-      const res = await fetch(`${this.baseUrl}/pause_simulation`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify({ name: this.getScopedSimulationName(projectName) })
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'pauseSimulation error', e );
-    } finally {
-      this._loading.value = false
-    }
+    return this.request('/pause_simulation', {
+      method: 'POST',
+      body: { name: this.getScopedSimulationName(projectName) },
+    })
   }
 
 
@@ -551,27 +416,17 @@ export class ApiConnector {
   async getProtocolResults( projectName, protocolObject, { signal } = {} ){
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
     const protocolId = pathSegment(protocolObject.id)
-    const res = await fetch(`${this.baseUrl}/protocols/${namespace}/${protocolId}`, {
-      headers: this.requestHeaders,
-      method: 'GET',
+    return this.request(`/protocols/${namespace}/${protocolId}`, {
       signal,
     })
-    const responseBody = await res.json()
-    let result = responseBody;
-    return result;
   }
   
   async getSlotResults( projectName, slotObject, { signal } = {} ){
     const namespace = pathSegment(this.getScopedSimulationName(projectName))
     const slotId = pathSegment(slotObject.id)
-    const res = await fetch(`${this.baseUrl}/slots/${namespace}/${slotId}`, {
-      headers: this.requestHeaders,
-      method: 'GET',
+    return this.request(`/slots/${namespace}/${slotId}`, {
       signal,
     })
-    const responseBody = await res.json()
-    let result = responseBody;
-    return result;
   }
 
   updateConfig(patch) {
@@ -608,24 +463,20 @@ export class ApiConnector {
     }
     const body = { code: code || '' }
     if (placement) body.placement = placement
-    const res = await fetch(`${this.baseUrl}/test_code`, {
-      headers: this.requestHeaders,
+    return this.request('/test_code', {
       method: 'POST',
-      body: JSON.stringify(body)
+      body,
     })
-    return res.json()
   }
 
   async validateSymbolicFunction( expr ){
     if( expr == undefined || expr == null || expr == '' ){
       return { success: false, error: 'Expression is empty' }
     }
-    const res = await fetch(`${this.baseUrl}/test_symbolic_expression`, {
-      headers: this.requestHeaders,
+    return this.request('/test_symbolic_expression', {
       method: 'POST',
-      body: JSON.stringify( { expr: expr || '' } )
+      body: { expr: expr || '' },
     })
-    return res.json()
   }
 
   async validateNumericExpression(
@@ -640,34 +491,17 @@ export class ApiConnector {
       placement,
     }
     if (context !== undefined) body.context = context
-    const res = await fetch(`${this.baseUrl}/test_numeric_expression`, {
-      headers: this.requestHeaders,
+    return this.request('/test_numeric_expression', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body,
       signal,
     })
-    return readJsonResponse(res, 'Numeric expression validation failed')
   }
 
   async getBackendLogs( projectName, purge = true, { signal } = {} ){
-    try{
-      this._loading.value = true
-      const namespace = pathSegment(this.getScopedSimulationName(projectName))
-      const query = new URLSearchParams({ purge: String(purge) })
-      const res = await fetch(`${this.baseUrl}/logs/${namespace}?${query}`, {
-        headers: this.requestHeaders,
-        method: 'GET',
-        signal,
-      })
-      return res.json()
-    } catch (e) {
-      if (e?.name === 'AbortError') throw e
-      this._error.value = e;
-      console.error( 'getBackendLogs error', e );
-      return { success: false, logs: [] }
-    } finally {
-      this._loading.value = false
-    }
+    const namespace = pathSegment(this.getScopedSimulationName(projectName))
+    const query = new URLSearchParams({ purge: String(purge) })
+    return this.request(`/logs/${namespace}?${query}`, { signal })
   }
 }
 

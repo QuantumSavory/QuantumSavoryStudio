@@ -1,10 +1,4 @@
-function apiError(body, fallback) {
-  const error = new Error(body?.error || fallback)
-  error.code = body?.error_code || 'INTERNAL_ERROR'
-  error.retryable = body?.details?.retryable === true
-  error.details = body?.details?.details || body?.details || {}
-  return error
-}
+import { requestJson } from '../../utils/httpClient.js'
 
 export class McpControlClient {
   constructor(baseUrl = '') {
@@ -20,17 +14,12 @@ export class McpControlClient {
   }
 
   async request(path, { method = 'GET', body, signal } = {}) {
-    const response = await fetch(this.url(path), {
+    return requestJson(this.url(path), {
       method,
       headers: this.headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      body,
       signal,
     })
-    const result = await response.json().catch(() => null)
-    if (!response.ok || result?.success === false) {
-      throw apiError(result, `MCP control request failed: ${response.status}`)
-    }
-    return result
   }
 
   status(options) {

@@ -105,9 +105,9 @@ function _mcp_error(
   details=Dict{String,Any}(),
 )
   error_details = Dict{String,Any}(
-    "retryable" => retryable,
-    "details" => details,
+    string(key) => value for (key, value) in pairs(details)
   )
+  error_details["retryable"] = retryable
   return APIError(String(message), status, String(code), error_details)
 end
 

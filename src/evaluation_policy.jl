@@ -52,6 +52,3 @@ function evaluation_failure_details(
   details["evaluation_error"] = evaluation_failure_response(error)[:error]
   return details
 end
-
-"""Return details unchanged; sensitive capabilities never enter diagnostics."""
-redact_evaluation_failure_details(details::Dict{String,Any}) = details

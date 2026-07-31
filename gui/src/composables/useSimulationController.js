@@ -22,6 +22,10 @@ function responseError(response, fallback) {
   return error
 }
 
+function errorPayload(error) {
+  return error?.response ?? error
+}
+
 function isAbortError(error) {
   return error?.name === 'AbortError'
 }
@@ -285,7 +289,7 @@ export function useSimulationController({
     } catch (error) {
       if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', 'Failed to parse network graph', 'Web API', JSON.stringify(error.response || {}, null, 2))
+      addLog('error', 'Failed to parse network graph', 'Web API', errorPayload(error))
       return false
     } finally {
       finishForegroundRequest(foreground)
@@ -304,7 +308,7 @@ export function useSimulationController({
     } catch (error) {
       if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', 'Failed to prepare simulation', 'Web API', JSON.stringify(error.response || {}, null, 2))
+      addLog('error', 'Failed to prepare simulation', 'Web API', errorPayload(error))
       return false
     } finally {
       finishForegroundRequest(foreground)
@@ -344,7 +348,7 @@ export function useSimulationController({
       if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
       stopPolling()
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', `Simulation failed: ${error.message}`, 'Web API', error.response ? JSON.stringify(error.response, null, 2) : null)
+      addLog('error', `Simulation failed: ${error.message}`, 'Web API', errorPayload(error))
       return false
     } finally {
       finishForegroundRequest(foreground)
@@ -373,7 +377,7 @@ export function useSimulationController({
     } catch (error) {
       if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', `Failed to pause: ${error.message}`, 'Web API', error.response ? JSON.stringify(error.response, null, 2) : null)
+      addLog('error', `Failed to pause: ${error.message}`, 'Web API', errorPayload(error))
       return false
     } finally {
       finishForegroundRequest(foreground)
@@ -411,7 +415,7 @@ export function useSimulationController({
       if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
       stopPolling()
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', `Failed to resume: ${error.message}`, 'Web API', error.response ? JSON.stringify(error.response, null, 2) : null)
+      addLog('error', `Failed to resume: ${error.message}`, 'Web API', errorPayload(error))
       return false
     } finally {
       finishForegroundRequest(foreground)
@@ -436,7 +440,7 @@ export function useSimulationController({
     } catch (error) {
       if (!contextIsCurrent(context) || isAbortError(error)) return false
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', `Failed to stop simulation: ${error.message}`, 'Web API', error.response ? JSON.stringify(error.response, null, 2) : null)
+      addLog('error', `Failed to stop simulation: ${error.message}`, 'Web API', errorPayload(error))
       return false
     }
   }
@@ -467,7 +471,7 @@ export function useSimulationController({
     } catch (error) {
       if (!contextIsCurrent(context) || isAbortError(error)) return null
       dispatch({ type: 'ERROR', error, message: error.message })
-      if (addLogs) addLog('error', 'Failed to get simulation status', 'Web API', JSON.stringify(error.response || {}, null, 2))
+      if (addLogs) addLog('error', 'Failed to get simulation status', 'Web API', errorPayload(error))
       return error.response || null
     }
   }
@@ -544,7 +548,7 @@ export function useSimulationController({
         if (isAbortError(error) || generation !== pollingGeneration || projectName !== getProjectName()) return
         stopPolling()
         dispatch({ type: 'ERROR', error, message: `Polling error: ${error.message}` })
-        addLog('error', `Polling error: ${error.message}`, 'Web API')
+        addLog('error', `Polling error: ${error.message}`, 'Web API', errorPayload(error))
       }
     }
 

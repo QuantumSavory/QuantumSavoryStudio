@@ -2978,7 +2978,7 @@
     error1 = WebQuantumSavory.APIError("Test error", 400)
     @test error1.message == "Test error"
     @test error1.status_code == 400
-    @test error1.error_code == ""
+    @test error1.error_code == "API_ERROR"
     @test error1.details === nothing
 
     error2 = WebQuantumSavory.APIError("Test error", 404, "NOT_FOUND")
@@ -2989,11 +2989,15 @@
 
     # Test error response creation
     response = WebQuantumSavory.create_error_response(error3)
-    @test response["success"] == false
-    @test response["error"] == "Test error"
-    @test response["status_code"] == 500
-    @test response["error_code"] == "SERVER_ERROR"
-    @test response["details"]["key"] == "value"
+    @test response == Dict(
+      "error" => Dict(
+        "code" => "SERVER_ERROR",
+        "message" => "Test error",
+        "details" => Dict("key" => "value"),
+      ),
+    )
+    @test WebQuantumSavory.create_error_response(error1)["error"]["details"] ==
+      Dict{String,Any}()
 
     # Test convenience error functions
     not_found = WebQuantumSavory.not_found_error("Simulation", "test_sim")
@@ -3500,22 +3504,12 @@
         "evaluation_error" => "sensitive response-boundary details",
       ),
     )
-    production_error_response = WebQuantumSavory.create_error_response(
-      evaluation_error;
-      environment="prod",
-    )
-    @test production_error_response["details"]["parameter_name"] == "timeout"
+    development_error_response = WebQuantumSavory.create_error_response(evaluation_error)
+    @test development_error_response["error"]["details"]["parameter_name"] ==
+      "timeout"
     @test occursin(
       "sensitive response-boundary details",
-      production_error_response["details"]["evaluation_error"],
-    )
-    development_error_response = WebQuantumSavory.create_error_response(
-      evaluation_error;
-      environment="dev",
-    )
-    @test occursin(
-      "sensitive response-boundary details",
-      development_error_response["details"]["evaluation_error"],
+      development_error_response["error"]["details"]["evaluation_error"],
     )
   end
 
@@ -5658,16 +5652,13 @@
       ))
       @test sensitive_error isa WebQuantumSavory.APIError
       @test sensitive_error.error_code == "VALIDATION_ERROR"
-      production_response = WebQuantumSavory.create_error_response(
-        sensitive_error;
-        environment="prod",
-      )
-      @test production_response["details"]["parameter_name"] == "bounded"
+      response = WebQuantumSavory.create_error_response(sensitive_error)
+      @test response["error"]["details"]["parameter_name"] == "bounded"
       @test occursin(
-        "Disallowed identifier 'error'",
-        production_response["details"]["evaluation_error"],
+        "Disallowed identifier",
+        response["error"]["details"]["evaluation_error"],
       )
-      @test !occursin("sensitive runtime expression details", string(production_response))
+      @test !occursin("sensitive runtime expression details", string(response))
     end
 
     bounded_script_expression = WebQuantumSavory._script_value_expression(

@@ -199,7 +199,12 @@ export function serializeLogValue(value) {
         return {
           name: nestedValue.name,
           message: nestedValue.message,
-          stack: nestedValue.stack
+          stack: nestedValue.stack,
+          code: nestedValue.code,
+          status: nestedValue.status,
+          details: nestedValue.details,
+          method: nestedValue.method,
+          url: nestedValue.url,
         }
       }
       if (nestedValue && typeof nestedValue === 'object') {

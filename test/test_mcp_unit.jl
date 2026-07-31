@@ -370,7 +370,8 @@
     end
     @test conflict isa WebQuantumSavory.APIError
     @test conflict.error_code == "REVISION_CONFLICT"
-    @test conflict.details["details"]["current_revision"] == 2
+    @test conflict.details["current_revision"] == 2
+    @test conflict.details["retryable"] == true
   end
 
   @testset "impossible successful acknowledgements require a rebind" begin

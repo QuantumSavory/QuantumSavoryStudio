@@ -63,7 +63,34 @@ describe('ApiConnector project namespaces', () => {
     await connector.init()
 
     expect(connector.config.value.slotTypes).toEqual(['Qubit', 'Qumode'])
-    expect(connector.error.value).toBeNull()
+  })
+
+  it('rejects lifecycle failures instead of fabricating success-shaped fallbacks', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        error: {
+          code: 'SERVER_ERROR',
+          message: 'Simulation failed',
+          details: { phase: 'prepare' },
+        },
+      }),
+    }))
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.prepareSimulation({ name: 'Project' })).rejects.toMatchObject({
+      code: 'SERVER_ERROR',
+      message: 'Simulation failed',
+      status: 500,
+      details: { phase: 'prepare' },
+      method: 'POST',
+      url: 'http://api.test/prepare_simulation',
+    })
+    await expect(connector.getBackendLogs('Project')).rejects.toMatchObject({
+      code: 'SERVER_ERROR',
+      status: 500,
+    })
   })
 
   it('keeps project and item identities inside encoded path segments', async () => {

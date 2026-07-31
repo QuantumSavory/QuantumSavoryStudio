@@ -254,9 +254,8 @@
       invalid_response = make_request("POST", "/export_script"; body=invalid_payload)
       @test invalid_response.status == 400
       invalid_data = parse_response(invalid_response)
-      @test invalid_data["success"] == false
-      @test invalid_data["error_code"] == "VALIDATION_ERROR"
-      @test occursin("positive finite", invalid_data["error"])
+      @test invalid_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("positive finite", invalid_data["error"]["message"])
 
       incompatible_payload = deepcopy(export_payload)
       incompatible_payload["simulationConfig"]["qubitRepresentation"] = "GabsRepr"
@@ -264,8 +263,8 @@
         make_request("POST", "/export_script"; body=incompatible_payload)
       @test incompatible_response.status == 400
       incompatible_data = parse_response(incompatible_response)
-      @test incompatible_data["error_code"] == "VALIDATION_ERROR"
-      @test occursin("does not support Qubit slots", incompatible_data["error"])
+      @test incompatible_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("does not support Qubit slots", incompatible_data["error"]["message"])
   end
 
   @testset "Protocol Types Endpoint" begin
@@ -426,8 +425,7 @@
           )
           @test prepare_response.status == 400
           prepare_data = parse_response(prepare_response)
-          @test prepare_data["success"] == false
-          @test prepare_data["error_code"] == "VALIDATION_ERROR"
+          @test prepare_data["error"]["code"] == "VALIDATION_ERROR"
         finally
           make_request(
             "POST",
@@ -487,8 +485,7 @@
         invalid_response = make_request("POST", "/export_script"; body=invalid_payload)
         @test invalid_response.status == 400
         invalid_data = parse_response(invalid_response)
-        @test invalid_data["success"] == false
-        @test invalid_data["error_code"] == "VALIDATION_ERROR"
+        @test invalid_data["error"]["code"] == "VALIDATION_ERROR"
       end
 
       simulations_after = make_request("GET", "/simulations")
@@ -573,8 +570,8 @@
       )
       @test zero_trace_response.status == 400
       zero_trace_data = parse_response(zero_trace_response)
-      @test zero_trace_data["error_code"] == "VALIDATION_ERROR"
-      @test occursin("finite, positive", zero_trace_data["error"])
+      @test zero_trace_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("finite, positive", zero_trace_data["error"]["message"])
 
       unknown_response = make_request(
         "POST",
@@ -583,8 +580,7 @@
       )
       @test unknown_response.status == 400
       unknown_data = parse_response(unknown_response)
-      @test unknown_data["success"] == false
-      @test unknown_data["error_code"] == "VALIDATION_ERROR"
+      @test unknown_data["error"]["code"] == "VALIDATION_ERROR"
 
       invalid_response = make_request(
         "POST",
@@ -596,8 +592,7 @@
       )
       @test invalid_response.status == 400
       invalid_data = parse_response(invalid_response)
-      @test invalid_data["success"] == false
-      @test invalid_data["error_code"] == "VALIDATION_ERROR"
+      @test invalid_data["error"]["code"] == "VALIDATION_ERROR"
   end
 
   @testset "Parse Network Graph - Success" begin
@@ -671,8 +666,7 @@
       response = make_request("POST", "/parse_network_graph", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Missing required field: 'name' must be present"
+      @test data["error"]["message"] == "Missing required field: 'name' must be present"
 
       # Test missing net field
       invalid_payload = deepcopy(test_payload)
@@ -681,8 +675,7 @@
       response = make_request("POST", "/parse_network_graph", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Missing required field: 'net' must be present"
+      @test data["error"]["message"] == "Missing required field: 'net' must be present"
 
       # Test missing nodes field
       invalid_payload = deepcopy(test_payload)
@@ -691,8 +684,8 @@
       response = make_request("POST", "/parse_network_graph", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Missing required fields in 'net': 'nodes' and 'edges' must be present"
+      @test data["error"]["message"] ==
+        "Missing required fields in 'net': 'nodes' and 'edges' must be present"
 
       # Test missing edges field
       invalid_payload = deepcopy(test_payload)
@@ -701,8 +694,8 @@
       response = make_request("POST", "/parse_network_graph", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Missing required fields in 'net': 'nodes' and 'edges' must be present"
+      @test data["error"]["message"] ==
+        "Missing required fields in 'net': 'nodes' and 'edges' must be present"
   end
 
   @testset "Prepare Simulation - Success" begin
@@ -738,8 +731,7 @@
       response = make_request("POST", "/prepare_simulation", body=Dict("name" => "nonexistent_sim"))
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
+      @test data["error"]["message"] == "Simulation not found"
   end
 
   @testset "Run Simulation - Success" begin
@@ -774,8 +766,7 @@
       response = make_request("POST", "/run_simulation", body=Dict("name" => "nonexistent_sim", "time_units" => 5))
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
+      @test data["error"]["message"] == "Simulation not found"
 
             # Test running unprepared simulation
       payload = deepcopy(test_payload)
@@ -787,8 +778,7 @@
       run_response = make_request("POST", "/run_simulation", body=Dict("name" => "unprepared_sim", "time_units" => 5))
       @test run_response.status == 400
       data = parse_response(run_response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not prepared"
+      @test data["error"]["message"] == "Simulation not prepared"
   end
 
   @testset "Get State - Success" begin
@@ -828,11 +818,11 @@
       response = make_request("GET", "/get_state", query=Dict("name" => "nonexistent_sim"))
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
-      @test haskey(data, "details")
-      @test data["details"]["resource"] == "Simulation"
-      @test data["details"]["identifier"] == "nonexistent_sim"
+      @test Set(keys(data)) == Set(["error"])
+      @test data["error"]["code"] == "NOT_FOUND"
+      @test data["error"]["message"] == "Simulation not found"
+      @test data["error"]["details"]["resource"] == "Simulation"
+      @test data["error"]["details"]["identifier"] == "nonexistent_sim"
   end
 
   @testset "Destroy Simulation - Success" begin
@@ -854,8 +844,7 @@
       state_response = make_request("GET", "/get_state", query=Dict("name" => TEST_SIMULATION_NAME))
       @test state_response.status == 404
       state_data = parse_response(state_response)
-      @test state_data["success"] == false
-      @test state_data["error"] == "Simulation not found"
+      @test state_data["error"]["message"] == "Simulation not found"
   end
 
   @testset "Destroy Simulation - Error Cases" begin
@@ -863,8 +852,7 @@
       response = make_request("POST", "/destroy_simulation", body=Dict("name" => "nonexistent_sim"))
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
+      @test data["error"]["message"] == "Simulation not found"
   end
 
   @testset "Complete Workflow" begin
@@ -1045,9 +1033,8 @@
           @test haskey(data, "results")
         else
           @test response.status == 403
-          @test data["success"] == false
-          @test data["error"] == "Unsafe Julia code evaluation is disabled"
-          @test data["error_code"] == "UNSAFE_EVALUATION_DISABLED"
+          @test data["error"]["message"] == "Unsafe Julia code evaluation is disabled"
+          @test data["error"]["code"] == "UNSAFE_EVALUATION_DISABLED"
         end
       end
 
@@ -1055,9 +1042,8 @@
       response2 = make_request("POST", "/test_code", body=Dict("wrong" => "x=1"))
       @test response2.status == 400
       data2 = parse_response(response2)
-      @test data2["success"] == false
-      @test data2["error_code"] == "VALIDATION_ERROR"
-      @test occursin("missing required field: 'code'", data2["error"])
+      @test data2["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("missing required field: 'code'", data2["error"]["message"])
 
       for invalid_code in (
         nothing,
@@ -1071,11 +1057,16 @@
         )
         @test invalid_code_response.status == 400
         invalid_code_data = parse_response(invalid_code_response)
-        @test invalid_code_data["success"] == false
-        @test invalid_code_data["error_code"] == "VALIDATION_ERROR"
-        @test occursin("field 'code' must be a string", invalid_code_data["error"])
-        @test invalid_code_data["details"]["field"] == "code"
-        @test haskey(invalid_code_data["details"], "received_type")
+        @test invalid_code_data["error"]["code"] == "VALIDATION_ERROR"
+        @test occursin(
+          "field 'code' must be a string",
+          invalid_code_data["error"]["message"],
+        )
+        @test invalid_code_data["error"]["details"]["field"] == "code"
+        @test haskey(
+          invalid_code_data["error"]["details"],
+          "received_type",
+        )
       end
 
       for invalid_payload in (nothing, Any["x -> x"], "x -> x", 1)
@@ -1087,9 +1078,11 @@
         )
         @test invalid_payload_response.status == 400
         invalid_payload_data = parse_response(invalid_payload_response)
-        @test invalid_payload_data["success"] == false
-        @test invalid_payload_data["error_code"] == "VALIDATION_ERROR"
-        @test occursin("must be an object", invalid_payload_data["error"])
+        @test invalid_payload_data["error"]["code"] == "VALIDATION_ERROR"
+        @test occursin(
+          "must be an object",
+          invalid_payload_data["error"]["message"],
+        )
       end
 
       extra_field_response = make_request(
@@ -1099,8 +1092,11 @@
       )
       @test extra_field_response.status == 400
       extra_field_data = parse_response(extra_field_response)
-      @test extra_field_data["success"] == false
-      @test extra_field_data["error_code"] == "VALIDATION_ERROR"
+      @test extra_field_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin(
+        "fields do not match the request schema",
+        extra_field_data["error"]["message"],
+      )
 
       invalid_placement_response = make_request(
         "POST",
@@ -1109,8 +1105,7 @@
       )
       @test invalid_placement_response.status == 400
       invalid_placement_data = parse_response(invalid_placement_response)
-      @test invalid_placement_data["success"] == false
-      @test occursin("Field 'placement'", invalid_placement_data["error"])
+      @test occursin("Field 'placement'", invalid_placement_data["error"]["message"])
 
       if unsafe_evaluation_enabled
         for (source, placement, expected_success) in (
@@ -1265,8 +1260,7 @@
         end
       else
         @test response.status == 403
-        @test data["success"] == false
-        @test data["error_code"] == "UNSAFE_EVALUATION_DISABLED"
+        @test data["error"]["code"] == "UNSAFE_EVALUATION_DISABLED"
       end
 
       for malformed_request in (
@@ -1294,8 +1288,7 @@
         )
         @test malformed_response.status == 400
         malformed_data = parse_response(malformed_response)
-        @test malformed_data["success"] == false
-        @test malformed_data["error_code"] == "VALIDATION_ERROR"
+        @test malformed_data["error"]["code"] == "VALIDATION_ERROR"
       end
   end
 
@@ -1311,18 +1304,16 @@
         @test haskey(data["results"], "value")
       else
         @test response.status == 403
-        @test data["success"] == false
-        @test data["error"] == "Unsafe Julia code evaluation is disabled"
-        @test data["error_code"] == "UNSAFE_EVALUATION_DISABLED"
+        @test data["error"]["message"] == "Unsafe Julia code evaluation is disabled"
+        @test data["error"]["code"] == "UNSAFE_EVALUATION_DISABLED"
       end
 
       # Validation error (missing field)
       response2 = make_request("POST", "/test_symbolic_expression", body=Dict("wrong" => "..."))
       @test response2.status == 400
       data2 = parse_response(response2)
-      @test data2["success"] == false
-      @test data2["error_code"] == "VALIDATION_ERROR"
-      @test occursin("missing required field: 'expr'", data2["error"])
+      @test data2["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("missing required field: 'expr'", data2["error"]["message"])
 
       for invalid_expression in (
         nothing,
@@ -1336,14 +1327,16 @@
         )
         @test invalid_expression_response.status == 400
         invalid_expression_data = parse_response(invalid_expression_response)
-        @test invalid_expression_data["success"] == false
-        @test invalid_expression_data["error_code"] == "VALIDATION_ERROR"
+        @test invalid_expression_data["error"]["code"] == "VALIDATION_ERROR"
         @test occursin(
           "field 'expr' must be a string",
-          invalid_expression_data["error"],
+          invalid_expression_data["error"]["message"],
         )
-        @test invalid_expression_data["details"]["field"] == "expr"
-        @test haskey(invalid_expression_data["details"], "received_type")
+        @test invalid_expression_data["error"]["details"]["field"] == "expr"
+        @test haskey(
+          invalid_expression_data["error"]["details"],
+          "received_type",
+        )
       end
 
       for invalid_payload in (nothing, Any["Z₁"], "Z₁", 1)
@@ -1355,9 +1348,11 @@
         )
         @test invalid_payload_response.status == 400
         invalid_payload_data = parse_response(invalid_payload_response)
-        @test invalid_payload_data["success"] == false
-        @test invalid_payload_data["error_code"] == "VALIDATION_ERROR"
-        @test occursin("must be an object", invalid_payload_data["error"])
+        @test invalid_payload_data["error"]["code"] == "VALIDATION_ERROR"
+        @test occursin(
+          "must be an object",
+          invalid_payload_data["error"]["message"],
+        )
       end
 
       extra_field_response = make_request(
@@ -1367,13 +1362,16 @@
       )
       @test extra_field_response.status == 400
       extra_field_data = parse_response(extra_field_response)
-      @test extra_field_data["success"] == false
-      @test extra_field_data["error_code"] == "VALIDATION_ERROR"
+      @test extra_field_data["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin(
+        "fields do not match the request schema",
+        extra_field_data["error"]["message"],
+      )
 
       if unsafe_evaluation_enabled
         # Execution error (bad expression)
         response3 = make_request("POST", "/test_symbolic_expression", body=Dict("expr" => "(Z₁⊗Z₁+"))
-        @test response3.status == 400 || response3.status == 200  # server wraps as 400 via handler; allow either in case of internal mapping
+        @test response3.status == 200
         data3 = parse_response(response3)
         @test data3["success"] == false
         @test data3["error_code"] == "EVALUATION_FAILED"
@@ -1445,11 +1443,9 @@
       response = make_request("GET", "/logs/nonexistent_sim")
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
-      @test haskey(data, "details")
-      @test data["details"]["resource"] == "Simulation"
-      @test data["details"]["identifier"] == "nonexistent_sim"
+      @test data["error"]["message"] == "Simulation not found"
+      @test data["error"]["details"]["resource"] == "Simulation"
+      @test data["error"]["details"]["identifier"] == "nonexistent_sim"
   end
 
   @testset "Pause Simulation - Success" begin
@@ -1478,7 +1474,10 @@
       # A second run cannot overlap the active task.
       duplicate_response = make_request("POST", "/run_simulation", body=Dict("name" => pause_test_name, "time_units" => target_time))
       @test duplicate_response.status == 400
-      @test occursin("running", parse_response(duplicate_response)["error"])
+      @test occursin(
+        "running",
+        parse_response(duplicate_response)["error"]["message"],
+      )
 
       # Pause the simulation
       pause_response = make_request("POST", "/pause_simulation", body=Dict("name" => pause_test_name))
@@ -1510,8 +1509,7 @@
       response = make_request("POST", "/pause_simulation", body=Dict("name" => "nonexistent_sim"))
       @test response.status == 404
       data = parse_response(response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not found"
+      @test data["error"]["message"] == "Simulation not found"
 
       # Test pausing unprepared simulation
       unprepared_name = "unprepared_pause_test"
@@ -1524,8 +1522,7 @@
       pause_response = make_request("POST", "/pause_simulation", body=Dict("name" => unprepared_name))
       @test pause_response.status == 400
       pause_data = parse_response(pause_response)
-      @test pause_data["success"] == false
-      @test occursin("not running", pause_data["error"])
+      @test occursin("not running", pause_data["error"]["message"])
 
       # Clean up the unprepared state.
       destroy_response = make_request("POST", "/destroy_simulation", body=Dict("name" => unprepared_name))
@@ -1711,8 +1708,7 @@
       )
       @test malformed_preview.status == 400
       malformed_preview_data = parse_response(malformed_preview)
-      @test malformed_preview_data["success"] == false
-      @test malformed_preview_data["error_code"] == "VALIDATION_ERROR"
+      @test malformed_preview_data["error"]["code"] == "VALIDATION_ERROR"
 
       malformed_discriminator_preview = make_request(
         "POST",
@@ -1720,7 +1716,8 @@
         body=Dict("tag" => Dict("kind" => 1)),
       )
       @test malformed_discriminator_preview.status == 400
-      @test parse_response(malformed_discriminator_preview)["error_code"] == "VALIDATION_ERROR"
+      @test parse_response(malformed_discriminator_preview)["error"]["code"] ==
+        "VALIDATION_ERROR"
 
       simulation_name = "tags_queries_integration_$(time_ns())"
       payload = deepcopy(test_payload)
@@ -1811,8 +1808,7 @@
         )
         @test stale_response.status == 404
         stale_data = parse_response(stale_response)
-        @test stale_data["success"] == false
-        @test stale_data["error_code"] == "NOT_FOUND"
+        @test stale_data["error"]["code"] == "NOT_FOUND"
 
         message_add_response = make_request(
           "POST",
@@ -1843,7 +1839,10 @@
           query=message_target,
         )
         @test message_delete_response.status == 400
-        @test occursin("not supported", parse_response(message_delete_response)["error"])
+        @test occursin(
+          "not supported",
+          parse_response(message_delete_response)["error"]["message"],
+        )
 
         query_entry_one_response = make_request(
           "POST",
@@ -1938,7 +1937,7 @@
           ] == [query_entry_two["tag_id"]]
         else
           @test custom_query_response.status == 403
-          @test parse_response(custom_query_response)["error_code"] ==
+          @test parse_response(custom_query_response)["error"]["code"] ==
             WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
         end
 
@@ -1987,7 +1986,8 @@
 
         missing_target_response = make_request("GET", "/tags/$simulation_name")
         @test missing_target_response.status == 400
-        @test parse_response(missing_target_response)["error_code"] == "VALIDATION_ERROR"
+        @test parse_response(missing_target_response)["error"]["code"] ==
+          "VALIDATION_ERROR"
 
         missing_slot_response = make_request(
           "GET",
@@ -2002,7 +2002,8 @@
           body=slot_two,
         )
         @test malformed_attachment.status == 400
-        @test parse_response(malformed_attachment)["error_code"] == "VALIDATION_ERROR"
+        @test parse_response(malformed_attachment)["error"]["code"] ==
+          "VALIDATION_ERROR"
 
         missing_simulation = make_request(
           "GET",
@@ -2025,8 +2026,7 @@
         )
         @test blocked_response.status == 400
         blocked_data = parse_response(blocked_response)
-        @test blocked_data["success"] == false
-        @test occursin("expired", blocked_data["error"])
+        @test occursin("expired", blocked_data["error"]["message"])
       finally
         make_request(
           "POST",

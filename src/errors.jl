@@ -1,24 +1,14 @@
 # Error handling framework for WebQuantumSavory API
 
-# Standard error response format
-function create_error_response(
-  error::APIError;
-  environment::AbstractString=Genie.Configuration.env(),
-)
-  response = Dict(
-    "success" => false,
-    "error" => error.message,
-    "status_code" => error.status_code
+# Canonical error response format. HTTP status remains transport metadata.
+function create_error_response(error::APIError)
+  return Dict(
+    "error" => Dict(
+      "code" => error.error_code,
+      "message" => error.message,
+      "details" => something(error.details, Dict{String,Any}()),
+    ),
   )
-
-  if !isempty(error.error_code)
-    response["error_code"] = error.error_code
-  end
-
-  error.details === nothing ||
-    (response["details"] = redact_evaluation_failure_details(error.details))
-
-  return response
 end
 
 # Convenience functions for common errors
@@ -48,7 +38,14 @@ function safe_route_handler(handler_func::Function, route_name::String)
       return json(create_error_response(e), status=e.status_code)
     else
       @error "Unexpected error in $route_name" error = e stacktrace = stacktrace(catch_backtrace())
-      error_response = server_error("Internal server error", Dict{String,Any}("route" => route_name, "exception_type" => string(typeof(e))))
+      error_response = server_error(
+        "Internal server error",
+        Dict{String,Any}(
+          "route" => route_name,
+          "exception_type" => string(typeof(e)),
+          "exception_message" => sprint(showerror, e),
+        ),
+      )
       return json(create_error_response(error_response), status=500)
     end
   end

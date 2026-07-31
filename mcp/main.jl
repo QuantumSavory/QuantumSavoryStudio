@@ -27,12 +27,12 @@ function startup_configuration()
 end
 
 function backend_error_payload(body)
-  envelope = plain_dictionary(get(body, "details", Dict{String,Any}()))
-  details = plain_dictionary(get(envelope, "details", envelope))
+  envelope = plain_dictionary(get(body, "error", Dict{String,Any}()))
+  details = plain_dictionary(get(envelope, "details", Dict{String,Any}()))
   error_payload = Dict{String,Any}(
-    "code" => string(get(body, "error_code", "INTERNAL_ERROR")),
-    "message" => string(get(body, "error", "Internal backend error")),
-    "retryable" => get(envelope, "retryable", false),
+    "code" => string(get(envelope, "code", "INTERNAL_ERROR")),
+    "message" => string(get(envelope, "message", "Internal backend error")),
+    "retryable" => pop!(details, "retryable", false),
     "details" => details,
   )
   if haskey(details, "current_revision")

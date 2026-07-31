@@ -263,8 +263,8 @@
       export_response = make_request("POST", "/export_script"; body=payload)
       @test export_response.status == 400
       export_error = parse_response(export_response)
-      @test export_error["error_code"] == "VALIDATION_ERROR"
-      @test occursin("diagnostic-only", export_error["error"])
+      @test export_error["error"]["code"] == "VALIDATION_ERROR"
+      @test occursin("diagnostic-only", export_error["error"]["message"])
     finally
       make_request(
         "POST",

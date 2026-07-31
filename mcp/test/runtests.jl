@@ -42,11 +42,11 @@ end
 
 @testset "MCP errors expose revision conflicts in the stable shape" begin
     error_payload = backend_error_payload(Dict{String,Any}(
-        "error_code" => "REVISION_CONFLICT",
-        "error" => "The visible project changed.",
-        "details" => Dict{String,Any}(
-            "retryable" => true,
+        "error" => Dict{String,Any}(
+            "code" => "REVISION_CONFLICT",
+            "message" => "The visible project changed.",
             "details" => Dict{String,Any}(
+                "retryable" => true,
                 "current_revision" => 7,
                 "field" => "expected_revision",
             ),
