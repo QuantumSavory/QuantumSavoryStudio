@@ -1728,11 +1728,8 @@ end
 route("/destroy_simulation", method="POST") do
   simulation_name = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())["name"]
 
-  if WebQuantumSavory.simulation_destroy!(simulation_name)
-    json(Dict(:success => true, :message => "Simulation destroyed and resources cleaned up"))
-  else
-    json(Dict(:success => true, :message => "Simulation destroyed (cleanup had warnings)", :warning => "Some resources may not have been fully cleaned up"))
-  end
+  WebQuantumSavory.simulation_destroy!(simulation_name)
+  json(Dict(:success => true, :message => "Simulation destroyed and resources cleaned up"))
 end
 
 ########################################################

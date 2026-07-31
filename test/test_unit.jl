@@ -3076,8 +3076,10 @@
     )
 
     # Test cleanup
-    cleanup_success = WebQuantumSavory.cleanup_state!(state)
-    @test cleanup_success == true
+    cleanup_report = WebQuantumSavory.cleanup_state!(state)
+    @test WebQuantumSavory.cleanup_succeeded(cleanup_report)
+    @test isempty(cleanup_report.failures)
+    @test cleanup_report.degradation_event === nothing
 
     # Verify cleanup worked
     @test state.network === nothing
@@ -3086,6 +3088,87 @@
     @test state.graph === nothing
     @test state.payload === nothing
     @test all(slot -> !QuantumSavory.isassigned(slot), assigned_slots)
+
+    # Every originally assigned release is attempted even when each one fails.
+    failed_registers, failed_slot_mapping, failed_slot_reverse_mapping =
+      WebQuantumSavory.create_registers_from_nodes(validation_result)
+    failed_network = RegisterNet(g, failed_registers)
+    failed_slots = (failed_registers[1][1], failed_registers[2][1])
+    initialize!(failed_slots, StabilizerState("ZZ XX"); time=0.0)
+    failed_state = WebQuantumSavory.State(
+      name="test_cleanup_failure",
+      payload=validation_result,
+      graph=g,
+      network=failed_network,
+      protocols_launched=Dict("node" => 1),
+      simulation=Simulation(),
+      slot_mapping=failed_slot_mapping,
+      slot_reverse_mapping=failed_slot_reverse_mapping,
+      protocol_mapping=Dict("test" => "protocol"),
+    )
+    failed_service = WebQuantumSavory.SimulationService(
+      Dict(failed_state.name => failed_state),
+    )
+    attempted_slots = Any[]
+    failing_release = function (slot)
+      push!(attempted_slots, slot)
+      error("injected release failure")
+    end
+
+    cleanup_error = try
+      WebQuantumSavory.simulation_destroy!(
+        failed_service,
+        failed_state.name;
+        release_slot! = failing_release,
+      )
+      nothing
+    catch error
+      error
+    end
+
+    @test cleanup_error isa WebQuantumSavory.APIError
+    if cleanup_error isa WebQuantumSavory.APIError
+      @test cleanup_error.status_code == 500
+      @test cleanup_error.error_code == "SIMULATION_CLEANUP_FAILED"
+      @test cleanup_error.details["simulation"] == failed_state.name
+      @test cleanup_error.details["failure_count"] == 2
+      @test length(cleanup_error.details["failures"]) == 2
+      @test all(
+        failure -> failure["stage"] == "release_assigned_slot",
+        cleanup_error.details["failures"],
+      )
+      degradation_event = cleanup_error.details["degradation_event"]
+      @test degradation_event["severity"] == "error"
+      @test degradation_event["error_code"] ==
+        "SIMULATION_CLEANUP_FAILED"
+      @test degradation_event["cleanup_failure_count"] == 2
+    end
+    @test length(attempted_slots) == 2
+    @test all(
+      slot -> any(attempted -> attempted === slot, attempted_slots),
+      failed_slots,
+    )
+    @test !WebQuantumSavory.simulation_exists(
+      failed_service,
+      failed_state.name,
+    )
+    @test isempty(failed_service.lifecycle_locks)
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.simulation_status(
+      failed_service,
+      failed_state.name,
+    )
+    @test failed_state.payload === nothing
+    @test failed_state.graph === nothing
+    @test failed_state.network === nothing
+    @test failed_state.protocols_launched === nothing
+    @test failed_state.simulation === nothing
+    @test failed_state.slot_mapping === nothing
+    @test failed_state.slot_reverse_mapping === nothing
+    @test failed_state.protocol_mapping === nothing
+
+    for slot in failed_slots
+      QuantumSavory.isassigned(slot) && QuantumSavory.traceout!(slot)
+    end
   end
 
   @testset "Slot Serialization" begin
@@ -4057,8 +4140,8 @@
     WebQuantumSavory.STATE[simulation_name] = state1
 
     # Block it explicitly with timeout reason
-    ok = WebQuantumSavory.block_simulation(state1; reason=:timeout, max_minutes=WebQuantumSavory.MAX_SIM_RUNTIME_MINUTES)
-    @test ok == true
+    report = WebQuantumSavory.block_simulation(state1; reason=:timeout, max_minutes=WebQuantumSavory.MAX_SIM_RUNTIME_MINUTES)
+    @test WebQuantumSavory.cleanup_succeeded(report)
     @test state1.execution_time_exceeded == true
     @test state1.auto_purged == false
     @test state1.payload === nothing
@@ -4078,8 +4161,8 @@
     WebQuantumSavory.STATE[simulation_name2] = state2
 
     # Block it explicitly with autopurge reason
-    ok2 = WebQuantumSavory.block_simulation(state2; reason=:autopurge, max_minutes=30, auto_purged=true)
-    @test ok2 == true
+    report2 = WebQuantumSavory.block_simulation(state2; reason=:autopurge, max_minutes=30, auto_purged=true)
+    @test WebQuantumSavory.cleanup_succeeded(report2)
     @test state2.execution_time_exceeded == false
     @test state2.auto_purged == true
     @test state2.payload === nothing

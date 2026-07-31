@@ -182,7 +182,11 @@ function simulation_block!(
     if _simulation_execution_active(state)
       throw(simulation_is_running_exception(String(name)))
     end
-    block_simulation(state; kwargs...)
+    report = block_simulation(state; kwargs...)
+    if !cleanup_succeeded(report)
+      _discard_simulation_record!(service, name, state)
+      throw(_cleanup_failure_error(name, report))
+    end
     return state
   end
 end
@@ -190,10 +194,68 @@ end
 simulation_block!(name::AbstractString; kwargs...) =
   simulation_block!(SIMULATION_SERVICE, name; kwargs...)
 
+function _cleanup_failure_error(
+  simulation_name::AbstractString,
+  report::CleanupReport,
+)
+  APIError(
+    "Simulation was discarded after resource cleanup failed",
+    500,
+    "SIMULATION_CLEANUP_FAILED",
+    Dict{String,Any}(
+      "simulation" => String(simulation_name),
+      "failure_count" => length(report.failures),
+      "failures" => deepcopy(report.failures),
+      "degradation_event" => deepcopy(report.degradation_event),
+    ),
+  )
+end
+
+function _discard_simulation_record!(
+  service::SimulationService,
+  name::AbstractString,
+  state::State,
+)
+  lock(service.lock) do
+    simulation_name = String(name)
+    get(service.states, simulation_name, nothing) === state ||
+      return nothing
+    delete!(service.states, simulation_name)
+    lifecycle = get(service.lifecycle_locks, simulation_name, nothing)
+    if lifecycle !== nothing && lifecycle.users == 0
+      delete!(service.lifecycle_locks, simulation_name)
+    end
+  end
+  return nothing
+end
+
+function _cleanup_and_discard!(
+  service::SimulationService,
+  name::AbstractString,
+  state::State;
+  release_slot!::Function=QuantumSavory.traceout!,
+)
+  report = try
+    cleanup_state!(state; release_slot!)
+  catch error
+    _discard_heavy_state_references!(state)
+    _cleanup_degradation_report(
+      state,
+      Dict{String,Any}[_cleanup_failure("cleanup_boundary", error)],
+    )
+  finally
+    _discard_simulation_record!(service, name, state)
+  end
+  cleanup_succeeded(report) ||
+    throw(_cleanup_failure_error(name, report))
+  return true
+end
+
 function simulation_destroy!(
   service::SimulationService,
   name::AbstractString;
   missing_ok::Bool=false,
+  release_slot!::Function=QuantumSavory.traceout!,
 )
   _with_simulation_lifecycle_lock(service, name) do
     state = lock(service.lock) do
@@ -204,11 +266,12 @@ function simulation_destroy!(
     if _simulation_execution_active(state)
       throw(simulation_is_running_exception(String(name)))
     end
-    result = cleanup_state!(state)
-    lock(service.lock) do
-      delete!(service.states, String(name))
-    end
-    return result
+    return _cleanup_and_discard!(
+      service,
+      name,
+      state;
+      release_slot!,
+    )
   end
 end
 
@@ -235,11 +298,7 @@ function simulation_action_is_valid!(
 
     @warn "Simulation $(String(name)) already exists, destroying it" simulation_name=String(name)
     @log_event state Logging.Warn "Simulation $(String(name)) already exists, destroying it" simulation_name=String(name)
-    cleanup_state!(state)
-    lock(service.lock) do
-      delete!(service.states, String(name))
-    end
-    return true
+    return _cleanup_and_discard!(service, name, state)
   end
   lifecycle_locked && return check()
   return _with_simulation_lifecycle_lock(check, service, name)
@@ -323,12 +382,16 @@ function simulation_update_for_test!(
         validation_error("block_reason must be 'timeout' or 'autopurge'"),
       )
       reason = Symbol(block_reason)
-      block_simulation(
+      report = block_simulation(
         state;
         reason,
         max_minutes=reason == :timeout ? MAX_SIM_RUNTIME_MINUTES : 30,
         auto_purged=reason == :autopurge,
       )
+      if !cleanup_succeeded(report)
+        _discard_simulation_record!(service, name, state)
+        throw(_cleanup_failure_error(name, report))
+      end
     end
     return state
   end

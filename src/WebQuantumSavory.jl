@@ -81,6 +81,15 @@ const MAX_SIM_RUNTIME_MINUTES = 10
   auto_purged::Bool = false
 end
 
+"""Serializable outcome of releasing one simulation's heavy resources."""
+struct CleanupReport
+  failures::Vector{Dict{String,Any}}
+  degradation_event::Union{Nothing,Dict{String,Any}}
+end
+
+CleanupReport() = CleanupReport(Dict{String,Any}[], nothing)
+cleanup_succeeded(report::CleanupReport) = isempty(report.failures)
+
 const STATE = Dict{String, State}()
 
 """Build and retain the slot-object-to-external-ID mapping when it is available."""
@@ -420,74 +429,128 @@ function _get_status_message(state::State)
   return get(STATUS_TO_MESSAGE, status, STATUS_MESSAGE_UNKNOWN)
 end
 
-function cleanup_state!(state::State)
-  """Clean up quantum resources associated with a simulation state"""
+function _cleanup_failure(stage::AbstractString, error; register_index=nothing, slot_index=nothing)
+  failure = Dict{String,Any}(
+    "stage" => String(stage),
+    "exception_type" => string(typeof(error)),
+    "message" => sprint(showerror, error),
+  )
+  register_index === nothing || (failure["register_index"] = register_index)
+  slot_index === nothing || (failure["slot_index"] = slot_index)
+  return failure
+end
+
+function _discard_heavy_state_references!(state::State)
+  state.payload = nothing
+  state.graph = nothing
+  state.network = nothing
+  state.protocols_launched = nothing
+  state.simulation = nothing
+  state.slot_mapping = nothing
+  state.slot_reverse_mapping = nothing
+  state.protocol_mapping = nothing
+  if state.run_task === nothing || istaskdone(state.run_task)
+    state.run_task = nothing
+  end
+  return state
+end
+
+function _cleanup_degradation_report(
+  state::State,
+  failures::Vector{Dict{String,Any}},
+)
+  failure_details = deepcopy(failures)
+  @error "Simulation resource cleanup degraded" state_name=state.name failures=failure_details
+  prior_event_count = length(state.log_events)
+  Logger.log_event(
+    state,
+    Logging.Error,
+    "Simulation resource cleanup degraded";
+    module_name=string(@__MODULE__),
+    error_code="SIMULATION_CLEANUP_FAILED",
+    cleanup_failure_count=length(failures),
+    cleanup_failures=failure_details,
+  )
+  degradation_event = if length(state.log_events) > prior_event_count
+    copy(last(state.log_events))
+  else
+    Dict{String,Any}(
+      "id" => Logger.next_event_id(),
+      "timestamp" => Logger.event_timestamp(),
+      "source" => "Simulator",
+      "severity" => "error",
+      "message" => "Simulation resource cleanup degraded",
+      "error_code" => "SIMULATION_CLEANUP_FAILED",
+      "cleanup_failure_count" => length(failures),
+      "cleanup_failures" => failure_details,
+    )
+  end
+  return CleanupReport(failures, degradation_event)
+end
+
+"""Release every assigned slot and discard all heavy simulation references."""
+function cleanup_state!(
+  state::State;
+  release_slot!::Function=QuantumSavory.traceout!,
+)
+  failures = Dict{String,Any}[]
+  assigned_slots = Tuple{Int,Int,Any}[]
+  network = state.network
+
   try
-    # Clean up quantum objects in the network
-    if state.network !== nothing
+    if network !== nothing
       @info "Cleaning up quantum network" state_name=state.name
 
-      # Clear quantum states in all slots
-      for (reg_idx, reg) in enumerate(state.network.registers)
+      # Snapshot the assigned slots before releasing any one of them. Releasing
+      # one subsystem can change assignment state elsewhere in the same object.
+      for (reg_idx, reg) in enumerate(network.registers)
         for slot_idx in 1:nsubsystems(reg)
-          slot = reg[slot_idx]
           try
-            if QuantumSavory.isassigned(slot)
-              # Trace out the subsystem and remove its register back-reference.
-              QuantumSavory.traceout!(slot)
-            end
+            slot = reg[slot_idx]
+            QuantumSavory.isassigned(slot) &&
+              push!(assigned_slots, (reg_idx, slot_idx, slot))
           catch e
-            @warn "Failed to cleanup slot" reg_idx=reg_idx slot_idx=slot_idx error=e
+            push!(
+              failures,
+              _cleanup_failure(
+                "inspect_assigned_slot",
+                e;
+                register_index=reg_idx,
+                slot_index=slot_idx,
+              ),
+            )
           end
         end
       end
 
-      # Clear the network reference
-      state.network = nothing
+      for (reg_idx, slot_idx, slot) in assigned_slots
+        try
+          release_slot!(slot)
+        catch e
+          push!(
+            failures,
+            _cleanup_failure(
+              "release_assigned_slot",
+              e;
+              register_index=reg_idx,
+              slot_index=slot_idx,
+            ),
+          )
+        end
+      end
     end
-
-    # Clean up simulation
-    if state.simulation !== nothing
-      @info "Cleaning up simulation" state_name=state.name
-      # Note: ConcurrentSim doesn't have explicit cleanup, but we clear the reference
-      state.simulation = nothing
-    end
-
-    # Clear mappings
-    if state.slot_mapping !== nothing
-      @info "Clearing slot mapping" state_name=state.name slot_count=length(state.slot_mapping)
-      state.slot_mapping = nothing
-    end
-
-    if state.slot_reverse_mapping !== nothing
-      @info "Clearing slot reverse mapping" state_name=state.name slot_count=length(state.slot_reverse_mapping)
-      state.slot_reverse_mapping = nothing
-    end
-
-    if state.protocol_mapping !== nothing
-      @info "Clearing protocol mapping" state_name=state.name protocol_count=length(state.protocol_mapping)
-      state.protocol_mapping = nothing
-    end
-
-    # Clear graph
-    if state.graph !== nothing
-      @info "Clearing graph" state_name=state.name
-      state.graph = nothing
-    end
-
-    # Clear payload (it can be large)
-    if state.payload !== nothing
-      @info "Clearing payload" state_name=state.name
-      state.payload = nothing
-    end
-
-    @info "Successfully cleaned up state" state_name=state.name
-    return true
-
   catch e
-    @error "Failed to cleanup state" state_name=state.name error=e
-    return false
+    push!(failures, _cleanup_failure("enumerate_network", e))
+  finally
+    _discard_heavy_state_references!(state)
   end
+
+  if isempty(failures)
+    @info "Successfully cleaned up state" state_name=state.name
+    return CleanupReport()
+  end
+
+  return _cleanup_degradation_report(state, failures)
 end
 
 function launch_protocols(data, net, sim, protocol_mapping = Dict{String, Any}(), state = nothing)
@@ -657,25 +720,13 @@ function block_simulation(state::State; reason::Symbol = :timeout, max_minutes::
   state.simulation_paused = false
   state.pause_requested = false
 
-  # Cleanup heavy resources but keep lightweight status for UI
-  try
-    # Clear network and quantum resources if present
-    if state.network !== nothing || state.simulation !== nothing
-      cleanup_state!(state)
-    end
-  catch e
-    @warn "Error during cleanup while blocking simulation" error=e
+  # Cleanup heavy resources but keep lightweight status for UI.
+  report = if state.network !== nothing || state.simulation !== nothing
+    cleanup_state!(state)
+  else
+    _discard_heavy_state_references!(state)
+    CleanupReport()
   end
-
-  # Ensure all expensive fields are nilled regardless
-  state.payload = nothing
-  state.graph = nothing
-  state.network = nothing
-  state.protocols_launched = nothing
-  state.simulation = nothing
-  state.slot_mapping = nothing
-  state.slot_reverse_mapping = nothing
-  state.protocol_mapping = nothing
 
   # Set flags and timestamps
   # execution_time_exceeded: true for timeout (10 min running), false for auto-purge (30 min idle)
@@ -685,7 +736,7 @@ function block_simulation(state::State; reason::Symbol = :timeout, max_minutes::
   state.simulation_started_at = nothing
   state.simulation_last_active_time = Dates.now()
 
-  return true
+  return report
 end
 
 
@@ -762,6 +813,7 @@ end
 function _run_simulation(
   state::State,
   simulation_logger::Logging.AbstractLogger=Logger.make_logger(state),
+  service=SIMULATION_SERVICE,
 )
   Logging.with_logger(simulation_logger) do
     while state.simulation_progress < state.simulation_time
@@ -777,7 +829,15 @@ function _run_simulation(
 
       # Enforce max wall-clock execution time for this active run segment.
       if state.simulation_started_at !== nothing && (Dates.now() - state.simulation_started_at > Dates.Minute(MAX_SIM_RUNTIME_MINUTES))
-        block_simulation(state; reason=:timeout, max_minutes=MAX_SIM_RUNTIME_MINUTES)
+        report = block_simulation(
+          state;
+          reason=:timeout,
+          max_minutes=MAX_SIM_RUNTIME_MINUTES,
+        )
+        if !cleanup_succeeded(report)
+          _discard_simulation_record!(service, state.name, state)
+          throw(_cleanup_failure_error(state.name, report))
+        end
         return state
       end
 
@@ -858,7 +918,7 @@ function run_simulation(
     try
       # Let the request task hand its accepted response back to the HTTP server.
       sleep(0)
-      _run_simulation(state, simulation_logger)
+      _run_simulation(state, simulation_logger, service)
     catch e
       _record_run_error!(state, e, catch_backtrace())
     finally
