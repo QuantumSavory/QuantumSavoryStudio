@@ -30,20 +30,20 @@
           QuantumSavory.ConstructorFieldSchema(
             :count,
             Int64,
-            "A contextual integer constructor field.",
-            false,
+            "A contextual integer constructor field.";
+            required=false,
           ),
           QuantumSavory.ConstructorFieldSchema(
             :label,
             String,
-            "A nonnumeric constructor field.",
-            false,
+            "A nonnumeric constructor field.";
+            required=false,
           ),
           QuantumSavory.ConstructorFieldSchema(
             :values,
             Vector{Int64},
-            "A numeric vector constructor field.",
-            false,
+            "A numeric vector constructor field.";
+            required=false,
           ),
         ),
       )
@@ -6049,8 +6049,8 @@
     bounded_schema = QuantumSavory.ConstructorFieldSchema(
       :bounded,
       Float64,
-      "A bounded test value.",
-      false;
+      "A bounded test value.";
+      required=false,
       minimum=0.0,
       maximum=1.0,
     )
