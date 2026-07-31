@@ -234,6 +234,81 @@ describe('simulation controller polling ownership', () => {
     fixture.stop()
   })
 
+  it('shares catalog-backed constructor readiness across GUI and MCP runs', async () => {
+    const api = {
+      parseNetworkGraph: vi.fn(),
+      prepareSimulation: vi.fn(),
+      runSimulation: vi.fn()
+    }
+    const catalogs = {
+      protocolTypes: {
+        node: [{
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            field: 'clientnodes',
+            type: 'Vector{Int64}',
+            required: true
+          }, {
+            field: 'success_probs',
+            type: 'Vector{Float64}',
+            required: true
+          }]
+        }],
+        edge: [],
+        floating: []
+      },
+      backgroundTypes: []
+    }
+    const validate = vi.fn(payload => validatePayload(payload, catalogs))
+    const fixture = createController(api, { validatePayload: validate })
+    fixture.projectData.value.net = {
+      nodes: [{
+        id: 'switch',
+        name: 'Switch',
+        data: {
+          slots: [{ id: 'switch-slot' }],
+          protocols: [{ type: 'SimpleSwitchDiscreteProt', parameters: [] }]
+        }
+      }, {
+        id: 'client',
+        name: 'Client',
+        data: { slots: [{ id: 'client-slot' }], protocols: [] }
+      }],
+      edges: [{
+        id: 'edge-1',
+        source: 'switch',
+        target: 'client',
+        data: { protocols: [] }
+      }],
+      protocols: []
+    }
+
+    const guiResult = await fixture.controller.runSimulationWithSteps()
+    const mcpResult = await createSimulationControllerAdapter(
+      fixture.controller
+    ).run(null, { origin: 'mcp' })
+
+    expect(guiResult).toMatchObject({
+      accepted: false,
+      code: 'SIMULATION_DESIGN_INVALID',
+      details: {
+        issues: [{
+          code: 'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING',
+          details: {
+            constructor_type: 'SimpleSwitchDiscreteProt',
+            parameter_name: 'clientnodes'
+          }
+        }]
+      }
+    })
+    expect(mcpResult).toEqual(guiResult)
+    expect(validate).toHaveBeenCalledTimes(2)
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    fixture.stop()
+  })
+
   it('does not mutate lifecycle state when the post-flush revision guard fails', async () => {
     const conflict = new Error('The browser revision changed before command execution.')
     conflict.code = 'REVISION_CONFLICT'

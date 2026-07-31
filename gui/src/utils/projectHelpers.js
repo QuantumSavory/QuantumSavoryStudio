@@ -1,6 +1,7 @@
 import Node from '../models/Node'
 import Edge from '../models/Edge'
 import { setEdgeCorrectNodeOrder } from './Utils'
+import { validateConstructorDraft } from './constructorParameters.js'
 
 /**
  * Project helper functions
@@ -62,7 +63,83 @@ export function generateRandomEdges(nodes, count) {
   return edges
 }
 
-export function validatePayload(data) {
+function findConstructorDefinition(definitions, type) {
+  if (!Array.isArray(definitions)) return null
+  return definitions.find(definition => definition?.type === type) || null
+}
+
+function catalogConstructorIssues(
+  constructor,
+  definition,
+  context,
+  variables,
+) {
+  const issues = []
+  if (!definition) {
+    issues.push({
+      code: 'CONSTRUCTOR_TYPE_UNKNOWN',
+      message: `${context} type ${constructor?.type || '(missing)'} is unavailable`,
+      details: { context, constructor_type: constructor?.type || null },
+    })
+    return issues
+  }
+  try {
+    validateConstructorDraft(definition, constructor, {
+      resolveVariable: id => variables.get(id),
+    })
+    return []
+  } catch (error) {
+    return [{
+      code: error?.code || 'CONSTRUCTOR_INVALID',
+      message: error?.code === 'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING'
+        ? `${context} requires constructor parameter ${error.field}`
+        : `${context}: ${error?.message || 'constructor is invalid'}`,
+      details: {
+        context,
+        constructor_type: definition.type,
+        parameter_name: error?.field || null,
+      },
+    }]
+  }
+}
+
+export function constructorReadinessIssues(
+  data,
+  { protocolTypes, backgroundTypes } = {},
+) {
+  if (protocolTypes == null && backgroundTypes == null) return []
+  const net = data?.net || {}
+  const variables = new Map(
+    (Array.isArray(data?.variables) ? data.variables : [])
+      .map(variable => [variable?.id, variable]),
+  )
+  const issues = []
+  const appendProtocols = (protocols, placement, owner) => {
+    for (const [index, protocol] of (Array.isArray(protocols) ? protocols : []).entries()) {
+      const context = `${placement} protocol ${index + 1}${owner ? ` on ${owner}` : ''}`
+      const definition = findConstructorDefinition(protocolTypes?.[placement], protocol?.type)
+      issues.push(...catalogConstructorIssues(protocol, definition, context, variables))
+    }
+  }
+
+  appendProtocols(net.protocols, 'floating', null)
+  for (const node of Array.isArray(net.nodes) ? net.nodes : []) {
+    appendProtocols(node.data?.protocols, 'node', node.name || node.id)
+    for (const [index, slot] of (node.data?.slots || []).entries()) {
+      const background = slot.backgroundNoise
+      if (!background || background.type === 'default') continue
+      const context = `slot ${index + 1} background on ${node.name || node.id}`
+      const definition = findConstructorDefinition(backgroundTypes, background.type)
+      issues.push(...catalogConstructorIssues(background, definition, context, variables))
+    }
+  }
+  for (const edge of Array.isArray(net.edges) ? net.edges : []) {
+    appendProtocols(edge.data?.protocols, 'edge', edge.id)
+  }
+  return issues
+}
+
+export function validatePayload(data, catalogs = {}) {
   const nodes = Array.isArray(data?.net?.nodes) ? data.net.nodes : []
   const edges = Array.isArray(data?.net?.edges) ? data.net.edges : []
   const issues = []
@@ -92,6 +169,7 @@ export function validatePayload(data) {
       },
     })
   }
+  issues.push(...constructorReadinessIssues(data, catalogs))
 
   return issues.length
     ? {

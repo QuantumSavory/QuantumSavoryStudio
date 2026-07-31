@@ -47,4 +47,77 @@ describe('simulation payload validation', () => {
       },
     })).toEqual({ success: true, error: null, issues: [] })
   })
+
+  it('blocks omitted required catalog inputs before simulation transport', () => {
+    const protocol = {
+      type: 'SimpleSwitchDiscreteProt',
+      parameters: [],
+    }
+    const payload = {
+      variables: [],
+      net: {
+        protocols: [],
+        nodes: [{
+          id: 'alice',
+          data: { slots: [{ id: 'alice-slot' }], protocols: [protocol] },
+        }, {
+          id: 'bob',
+          data: { slots: [{ id: 'bob-slot' }], protocols: [] },
+        }],
+        edges: [{ id: 'edge-1', source: 'alice', target: 'bob', data: { protocols: [] } }],
+      },
+    }
+    const catalogs = {
+      protocolTypes: {
+        node: [{
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            field: 'clientnodes',
+            type: 'Vector{Int64}',
+            required: true,
+          }, {
+            field: 'success_probs',
+            type: 'Vector{Float64}',
+            required: true,
+          }],
+        }],
+        edge: [],
+        floating: [],
+      },
+      backgroundTypes: [],
+    }
+
+    const missing = validatePayload(payload, catalogs)
+    expect(missing.success).toBe(false)
+    expect(missing.issues.map(issue => issue.code)).toEqual([
+      'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING',
+    ])
+
+    protocol.parameters = [{
+      name: 'clientnodes',
+      value: [],
+    }, {
+      name: 'success_probs',
+      value: [],
+    }]
+    expect(validatePayload(payload, catalogs)).toEqual({
+      success: true,
+      error: null,
+      issues: [],
+    })
+
+    payload.variables = [{
+      id: 'constructor-default',
+      type: 'default',
+      value: null,
+    }]
+    protocol.parameters[0].value = {
+      kind: 'variable',
+      id: 'constructor-default',
+    }
+    expect(validatePayload(payload, catalogs).issues[0]).toMatchObject({
+      code: 'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING',
+      details: { parameter_name: 'clientnodes' },
+    })
+  })
 })

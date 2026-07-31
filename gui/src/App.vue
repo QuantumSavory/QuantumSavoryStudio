@@ -218,6 +218,10 @@ function resolveConfirmation(result) {
 
 // Minimized project data - cleans up project data for API calls
 const minimizedProjectData = computed(() => toSimulationPayload(projectData.value))
+const validateSimulationPayload = payload => validatePayload(payload, {
+  protocolTypes: api.config.value.protocolTypes,
+  backgroundTypes: api.config.value.bgNoiseOptions,
+})
 const exportScriptPayload = computed(() => toScriptExportPayloadFromSimulationPayload(
   minimizedProjectData.value,
   projectData.value.simulationConfig
@@ -362,7 +366,7 @@ const {
   projectData,
   getProjectName: () => projectData.value.name,
   getSimulationPayload: () => minimizedProjectData.value,
-  validatePayload,
+  validatePayload: validateSimulationPayload,
   flushEditors: flushBrowserEditors,
   runReadinessExclusive: work => (
     designCommands ? designCommands.runExclusive(work) : work()
@@ -517,7 +521,7 @@ mcpBridge = new McpEditorBridge({
   ),
   designCommands,
   validateDesign: project => {
-    const validation = validatePayload(toSimulationPayload(project))
+    const validation = validateSimulationPayload(toSimulationPayload(project))
     return {
       valid: validation.success,
       issues: validation.issues

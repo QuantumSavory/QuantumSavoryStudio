@@ -1,10 +1,11 @@
 import {
   buildConstructorParameterInputOptions,
-  parameterInputIsComplete,
   resolveParameterInputOption,
 } from './parameterTypes.js'
-import { isVariableReference } from '../models/Variable.js'
-import { createConstructorParameterDraft } from './constructorParameters.js'
+import {
+  createConstructorParameterDraft,
+  validateConstructorDraft,
+} from './constructorParameters.js'
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -78,64 +79,9 @@ function normalizeSeededParameter(parameter, definition) {
   return normalized
 }
 
-function isStrictVariableReference(value) {
-  if (!isVariableReference(value)) return false
-  const keys = Object.keys(value).sort()
-  return value.id.trim()
-    && keys.length === 2 && keys[0] === 'id' && keys[1] === 'kind'
-}
-
 /** Validate a metadata-backed constructor draft before layout generation. */
 export function validateProtocolConstructorDraft(definition, protocol = null) {
-  const definitions = definitionParameters(definition)
-  const parameters = protocol == null ? [] : protocol.parameters
-  if (!Array.isArray(parameters)) {
-    throw new Error(`The ${protocolSimpleName(definition)} constructor has no parameter list.`)
-  }
-
-  const definitionsByName = new Map(definitions.map(parameter => [parameter?.field, parameter]))
-  const supplied = new Set()
-  for (const parameter of parameters) {
-    const field = parameter?.name
-    if (typeof field !== 'string' || !field) throw new Error(
-      'A constructor field is missing its name.',
-    )
-    if (supplied.has(field)) throw new Error(`Constructor field ${field} is duplicated.`)
-    supplied.add(field)
-
-    const parameterDefinition = definitionsByName.get(field)
-    if (!parameterDefinition) throw new Error(`Constructor field ${field} is unknown.`)
-    if (parameter.error) throw new Error(`Constructor field ${field} has a validation error.`)
-
-    const options = buildConstructorParameterInputOptions(
-      parameterDefinition.type,
-      parameterDefinition,
-    )
-    const selection = resolveParameterInputOption(options, parameter)
-    const option = selection.option
-    if (!option || !option.enabled) {
-      const status = option ? 'disabled' : 'unknown'
-      throw new Error(`Constructor field ${field} uses a ${status} input option.`)
-    }
-    if (selection.contradictory) {
-      throw new Error(
-        `Constructor field ${field} selects ${option.id}, which does not match intrinsic value ${parameter.value}.`,
-      )
-    }
-    if (isStrictVariableReference(parameter.value)) continue
-    if (!parameterInputIsComplete(option, parameter)) {
-      throw new Error(`Constructor field ${field} requires a complete ${option.label} value.`)
-    }
-  }
-  for (const definitionParameter of definitions) {
-    if (typeof definitionParameter?.required !== 'boolean') {
-      throw new Error('Runtime constructor metadata requires Boolean required fields.')
-    }
-    if (definitionParameter.required && !supplied.has(definitionParameter.field)) {
-      throw new Error(`Constructor field ${definitionParameter.field} is required.`)
-    }
-  }
-  return true
+  return validateConstructorDraft(definition, protocol)
 }
 
 /**
