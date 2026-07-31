@@ -33,7 +33,7 @@ to browser `localStorage`.
 
 | Area | Current owner | Consequence |
 | --- | --- | --- |
-| HTTP routing and Swagger | `routes.jl` | Root router rules apply even though most logic is in `src/` |
+| HTTP routing and OpenAPI contract | `routes.jl`, `contracts/http/openapi.json` | Operation IDs own supported methods/paths and profile exposure |
 | Payload construction and simulation state | Root package modules | Frontend data must cross an explicit minimized payload boundary |
 | Browser authoring document | Frontend | Julia must not become a second project editor |
 | Simulation lifecycle reads/mutations | `SimulationService` plus state functions | HTTP and MCP reads can share a transport-neutral service |

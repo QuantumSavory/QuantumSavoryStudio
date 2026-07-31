@@ -80,9 +80,9 @@
 
 ## CMP-013 — Frontend error-envelope preservation
 
-- **Normative statement:** Frontend HTTP utilities shall decode the universal `{"error":{"code":string,"message":string,"details":object}}` non-2xx body into one error carrying status, code, message, details, method, URL, and cause through the Tools Log; cancellation remains an `AbortError`.
+- **Normative statement:** Frontend HTTP utilities shall accept only the SYS-008 envelope, classify transport/JSON/schema failures, distinguish cancellation and canonical not-found, and retain all diagnostics through connector, controller, polling, and Log normalization.
 - **Parents:** SUB-007, SUB-009
-- **Acceptance criterion:** Backend, malformed-JSON, and network fixtures preserve every available field; cancellation stays distinct; no failure becomes message-only, duplicates status in the body, returns `undefined`, or silently succeeds.
+- **Acceptance criterion:** Discriminating backend, network, malformed, and cancellation fixtures preserve code, message, status, details, request context, cause, and canaries without legacy guessing, fallback success, or swallowed polls.
 - **Verification:** UNITV-018 (test)
 - **Context:** [Simulation client](../context/frontend/simulation-client.md)
 

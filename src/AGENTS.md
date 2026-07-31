@@ -2,8 +2,9 @@
 
 ## Scope
 
-This file applies to Julia package internals under `src/`. Root HTTP routing and its
-current private API documentation remain governed by `../AGENTS.md`.
+This file applies to Julia package internals under `src/`. Root HTTP routing and
+the OpenAPI route contract remain governed by `../AGENTS.md`, `../contracts/AGENTS.md`,
+and `../routes.jl`.
 
 ## Open selectively
 
@@ -22,6 +23,7 @@ current private API documentation remain governed by `../AGENTS.md`.
 - Focused package checks: `(cd ../test && WQS_DEPLOYMENT_PROFILE=local
   WQS_ENABLE_SOURCE_EVALUATION=true julia --project=. runtests.jl test_unit)`
 - Canonical backend unit entry point: `../ci/backend-unit.sh`
+- HTTP contract and route parity: `../ci/http-contract.sh`
 
 ## Local rules
 

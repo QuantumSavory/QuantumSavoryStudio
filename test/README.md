@@ -85,7 +85,7 @@ julia --project runtests.jl test_integration test_simulation_integration
 - **State Management**: Tests state retrieval and management
 - **Error Handling**: Tests various error conditions
 - **Complete Workflow**: Tests the entire simulation lifecycle
-- **API Documentation**: Tests Swagger docs accessibility
+- **API Documentation**: Tests active OpenAPI JSON and generated Swagger UI accessibility
 
 ## Test Configuration
 

@@ -58,6 +58,11 @@ Operational diagnostics redact recognized capabilities, credentials, session IDs
 binary bodies, and raw transcript fields. This is distinct from ordinary
 simulation/API diagnostics, whose structured details remain observable.
 
+The sidecar's capability-authenticated backend calls are registered by OpenAPI operation
+ID rather than duplicated paths. Exact backend errors, malformed responses, and network
+failures remain structured through tool and resource translation; this does not relax
+the separate operational-secret redaction rules above.
+
 ## Anchors
 
 - **Configuration/supervision:** [`src/mcp_config.jl`](../../../src/mcp_config.jl) and

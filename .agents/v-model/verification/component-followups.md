@@ -75,12 +75,12 @@ encoded by the current component suites.
 
 - **Covers:** CMP-013
 - **Method:** test
-- **Procedure:** Feed exact validation, policy, missing, cleanup, and unexpected envelopes, malformed JSON, network failure, and cancellation through JSON reader, API methods, controllers, and log normalization.
-- **Environment / configuration:** Node Vitest/jsdom frontend utilities and composables
-- **Pass criterion:** Non-2xx bodies decode to one client error retaining HTTP status, code, message, object details, method, URL, and cause; diagnostic values reach a Log unchanged, cancellation remains an `AbortError`, and no failure becomes message-only, `undefined`, or a fallback success.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current shared JSON reader throws a message-only `Error`, and several legacy calls swallow or replace failures.
+- **Procedure:** Feed validation, policy, missing, cleanup, unexpected, network, malformed-success, malformed-error, invalid-JSON, and cancellation fixtures with distinct nested canaries through the JSON reader, API methods, controllers, polling, and log normalization.
+- **Environment / configuration:** Node 24 Vitest/jsdom frontend utilities and composables
+- **Pass criterion:** Code/classification, message, status, details, method, URL, cause, and diagnostic values reach the specified Log record unchanged; cancellation passes through; no legacy envelope is guessed and no failure becomes message-only, `undefined`, a fallback success, or a swallowed polling result.
+- **Status:** implemented
+- **Evidence:** [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/apiConnector.test.js`](../../../gui/tests/unit/apiConnector.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`gui/tests/unit/simulationLifecycle.test.js`](../../../gui/tests/unit/simulationLifecycle.test.js)
+- **Nonconformance:** The component harness covers canonical 400/403/404/500 parsing, network/malformed/cancellation branches, lifecycle not-found, status-log handoff, and log-poll retry/deduplication. Cleanup-specific and real-browser visible-log discrimination remain at INTV-009/SYSV-008.
 
 ## UNITV-019 — Verify strict project-codec admission
 

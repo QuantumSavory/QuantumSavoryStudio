@@ -2,18 +2,17 @@
 
 ## Scope
 
-This file applies to the isolated Julia MCP application under `mcp/`. It is one
-optional component of WebQuantumSavory, not an independently released product.
+Applies to the isolated optional Julia MCP application under `mcp/`.
 
 ## Open selectively
 
-- Open [MCP architecture](../.agents/context/mcp/architecture.md) for process,
+- [MCP architecture](../.agents/context/mcp/architecture.md) for process,
   ownership, trust-boundary, or failure-model changes.
-- Open [the tool contract](../.agents/context/mcp/tool-contract.md) to look up tools,
+- [Tool contract](../.agents/context/mcp/tool-contract.md) for tools,
   resources, schemas, dispatch, sessions, revisions, or stable errors.
-- Open [browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
+- [Browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
   binding, leases, snapshots, commands, or lifecycle relaying.
-- Open [sidecar operations](../.agents/context/mcp/sidecar-operations.md) before
+- [Sidecar operations](../.agents/context/mcp/sidecar-operations.md) before
   enabling, upgrading, testing, recovering, or coordinating a cross-component
   tool/resource rollout.
 
@@ -31,6 +30,10 @@ optional component of WebQuantumSavory, not an independently released product.
 - Load tool metadata and schemas from the active co-shipped registry under
   `../contracts/mcp/`; do not create a second registry. Follow
   [the contract router](../contracts/AGENTS.md) for version changes.
+- Resolve capability-authenticated backend bridge paths from
+  `../contracts/http/openapi.json` operation IDs. Accept only the exact canonical
+  backend success/error shapes and retain structured diagnostics for MCP results and
+  resources.
 - Preserve the single-session transport and safe logger. Before changing the exact
   dependency pin, re-diff the upstream sources named in
   `src/single_session_http_transport.jl`.

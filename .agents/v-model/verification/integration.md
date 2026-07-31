@@ -4,31 +4,31 @@
 
 - **Covers:** SUB-001
 - **Method:** test
-- **Procedure:** Start local, MCP-enabled local, and public profiles; inspect processes and account/project-storage surfaces.
-- **Environment / configuration:** Clean local environments plus a maintained public deployment
-- **Pass criterion:** Normal/public modes serve GUI/API without MCP or account/project stores; local enablement uses the sidecar; sidecar failure leaves the main runtime available.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Local modes have separate artifacts; no maintained public profile exists.
+- **Procedure:** Start local, MCP-enabled, and public profiles; inspect processes and persistence.
+- **Environment / configuration:** Clean local environments and public Podman
+- **Pass criterion:** Normal/public modes omit MCP and server project stores; local MCP uses a sidecar whose failure leaves the backend available.
+- **Status:** implemented
+- **Evidence:** [`ci/public-container.sh`](../../../ci/public-container.sh), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl), [`test/test_sidecar_supervisor.jl`](../../../test/test_sidecar_supervisor.jl)
+- **Nonconformance:** Profile evidence remains split across harnesses.
 
 ## INTV-002 — Verify current-schema projection boundaries
 
 - **Covers:** SUB-002
 - **Method:** test
-- **Procedure:** Round-trip an asymmetric admitted project and derive collaboration, simulation, and script-export projections while comparing source identity/content.
+- **Procedure:** Round-trip an asymmetric project and derive every projection without source mutation.
 - **Environment / configuration:** Vitest/jsdom with real codec and projection helpers
-- **Pass criterion:** Current-schema durable fields round-trip; hydration creates independent references; each projection includes/excludes its declared fields; all inputs remain unchanged.
+- **Pass criterion:** Fields round-trip, hydration is independent, projections select declared fields, and inputs remain unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
-- **Nonconformance:** Current fixtures use schema version 1 and no single discriminating fixture asserts every projection and source-identity clause together.
+- **Nonconformance:** Version-1 fixtures do not cover every projection in one case.
 
 ## INTV-003 — Verify shared atomic authoring
 
 - **Covers:** SUB-003
 - **Method:** test
-- **Procedure:** Invoke every operation through GUI and MCP using valid, invalid, mixed, aliased, and edit-locked transactions.
+- **Procedure:** Invoke each operation through GUI/MCP with valid, invalid, mixed, aliased, and locked transactions.
 - **Environment / configuration:** Real browser command service and MCP bridge
-- **Pass criterion:** Equivalent paths share semantics; invalid work leaves live state unchanged; valid work preserves retained identities and marks unsaved exactly once.
+- **Pass criterion:** Paths share semantics; invalid work is atomic; valid work preserves retained identities and marks unsaved once.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** No artifact drives invalid/mixed/aliased/locked cases through both entries.
@@ -37,9 +37,9 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build asymmetric endpoints, physical/virtual edges, reversed duplicates, invalid values, and placement-gated protocols through basic HTTP parse.
+- **Procedure:** Validate/build asymmetric endpoints, both edge roles, reversed duplicates, invalid values, and placement-gated protocols through HTTP.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Validation/construction preserve roles, build only the physical graph, retain permitted virtual protocols, reject each direct fixture, and reject basic malformed payloads.
+- **Pass criterion:** Roles persist, only physical edges enter the graph, permitted virtual protocols remain, and invalid fixtures fail.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl)
 - **Nonconformance:** UNITV-010 covers reordered nodes; some malformed shapes escape early validation.
@@ -53,15 +53,15 @@
 - **Pass criterion:** Every path derives matching type, placement, nullability, bounds, and safe resolution; advertised values round-trip; unsupported values fail.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** One real-browser catalog crosses the full boundary; others remain separate or mocked.
+- **Nonconformance:** One real-browser background scenario covers its catalog; other catalogs/input kinds remain separate or mocked.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
 - **Covers:** SUB-006
 - **Method:** test
-- **Procedure:** Exercise installation, every transition, same-name races, pause, timeout, successful cleanup, and injected cleanup failure.
+- **Procedure:** Exercise transitions, same-name races, timeout, and successful/failing cleanup.
 - **Environment / configuration:** Real HTTP with controlled concurrency, clock, and releases
-- **Pass criterion:** Operations serialize; invalid work preserves state; one task owns execution; task/progress/pause/error/phase agree; pause stops; timeout and success match documented states; failed cleanup attempts all releases, removes the record, and logs degradation.
+- **Pass criterion:** Operations serialize; invalid work preserves state; task fields agree; pause stops; cleanup failures attempt all releases, remove the record, and log degradation.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Artifacts omit races, malformed bodies, timeout state, and cleanup-failure injection.
@@ -81,9 +81,9 @@
 
 - **Covers:** SUB-008
 - **Method:** test
-- **Procedure:** Using the complete mapping/omission inventory, generate repeatedly with canaries, both link kinds, and structured values; inspect all help.
+- **Procedure:** Generate the complete mapping/omission inventory repeatedly with canaries; inspect help.
 - **Environment / configuration:** Backend unit/HTTP tests plus browser export-help scenario
-- **Pass criterion:** Source/filename are stable and valid; registry/canaries are unchanged; every supported mapping runs; every simplification or omission is disclosed.
+- **Pass criterion:** Output is stable and valid, state/canaries stay unchanged, mappings run, and omissions are disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
 - **Nonconformance:** The panel mocks its route; one real-route scenario covers selected semantics; no exhaustive feature/help inventory exists.
@@ -92,12 +92,12 @@
 
 - **Covers:** SUB-009
 - **Method:** test
-- **Procedure:** Pass distinct validation, policy, missing, cleanup, and unexpected failures through real handlers, connector, controller, and log model.
-- **Environment / configuration:** Real backend/frontend with discriminating envelope canaries
-- **Pass criterion:** Every supported route returns the exact universal non-2xx envelope or names an approved endpoint-specific exception in the canonical contract; frontend Log values equal transmitted code/message/status/details/diagnostics without fallback success, duplicate body status, or message-only collapse.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Missing-body 500s, message-only connector errors, deployment redaction, and swallowed/fallback client paths prevent implementation status.
+- **Procedure:** Check OpenAPI profiles against routes/callers; pass backend, network, malformed, and cleanup failures through client/log models.
+- **Environment / configuration:** Contract, backend integration, and frontend/sidecar harnesses
+- **Pass criterion:** Active schemas match handlers; routes use canonical errors; generated callers resolve operation IDs; Log diagnostics equal transmitted values.
+- **Status:** implemented
+- **Evidence:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl)
+- **Nonconformance:** Separate artifacts omit one real-browser cleanup/failure matrix in the visible Log; SYSV-008 retains it.
 
 ## INTV-010 — Verify local source admission and public denial
 

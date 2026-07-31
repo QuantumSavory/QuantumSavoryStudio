@@ -9,6 +9,10 @@ static assets, and frontend tests. Source edits inherit the closest router under
 
 - Open [frontend architecture](../.agents/context/frontend/architecture.md) for
   package composition, ownership, or cross-feature flow.
+- Open [project documents](../.agents/context/frontend/project-documents.md) for
+  persistence, imports, schemas, and projections.
+- Open [simulation client](../.agents/context/frontend/simulation-client.md) for HTTP,
+  lifecycle, polling, logs, or generated operation IDs.
 - Open [repository workflows](../.agents/context/repository-workflows.md) for setup,
   browser-test profiles, generated artifacts, or CI.
 
@@ -25,6 +29,10 @@ static assets, and frontend tests. Source edits inherit the closest router under
 
 - Edit source inputs under `index.html`, `public/`, and `src/`; never edit generated
   root `../public/` output.
+- Address backend routes through generated operation IDs; never hand-edit
+  `src/generated/httpOperations.js`.
+- Preserve structured `ApiClientError` diagnostics; only `AbortError` is cancellation
+  and only canonical `NOT_FOUND` is lifecycle absence.
 - Commit `package-lock.json` only with dependency changes.
 - Keep build/test configuration explicit and use the repository CI entry points for
   tests that require the backend.

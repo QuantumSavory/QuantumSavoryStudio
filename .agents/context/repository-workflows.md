@@ -35,6 +35,7 @@ Prefer the checked-in wrappers for full component boundaries:
 | Change surface | Canonical command | What it selects |
 | --- | --- | --- |
 | Agent documentation | `./ci/agent-docs.sh` | Strict router, context, V-model, traceability, link, and budget lint |
+| HTTP contract/routes | `./ci/http-contract.sh` | Generated operation-map freshness plus OpenAPI validation/profile/route parity |
 | Backend component | `./ci/backend-unit.sh` | `test/test_unit.jl` |
 | MCP boundary | `./ci/mcp-unit.sh` | Backend hub/supervisor, sidecar unit, and real transport suites |
 | Frontend component/build | `./ci/frontend-build.sh` | Locked install, Vitest, production build, version-drift check |
@@ -53,6 +54,7 @@ Useful focused commands:
   WQS_ENABLE_SOURCE_EVALUATION=true julia --project=. runtests.jl test_unit)
 (cd test && julia --project=. runtests.jl test_mcp_unit test_sidecar_supervisor)
 npm --prefix gui run test:unit -- tests/unit/projectCodec.test.js
+node gui/scripts/generate-http-operations.mjs --check
 ```
 
 Do not run `test/runtests.jl` with no selectors as a standalone unit command: it also
@@ -94,6 +96,11 @@ Do not commit:
 - Genie caches/sessions, SQLite runtime files, logs, or local capability/session data.
 
 Edit `gui/public/` for static frontend source.
+
+`contracts/http/openapi.json` is edited source.
+`gui/src/generated/httpOperations.js` is the one tracked generated contract artifact:
+regenerate it with `npm --prefix gui run generate:http-operations`, review the diff, and
+commit it with its source change. Do not hand-edit it.
 
 ## Finish
 

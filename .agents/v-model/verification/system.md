@@ -1,6 +1,6 @@
 # System Verification Actions
 
-No product suite was run for this documentation-only release-2.0 baseline.
+No durable full-system run record accompanies this profile.
 
 ## SYSV-001 — Verify the supported local launcher end to end
 
@@ -72,12 +72,12 @@ No product suite was run for this documentation-only release-2.0 baseline.
 
 - **Covers:** SYS-008
 - **Method:** test
-- **Procedure:** Trigger discriminating validation, missing-field, policy, not-found, cleanup, and unexpected backend failures through real GUI actions.
+- **Procedure:** Trigger discriminating validation, missing-field, policy, not-found, cleanup, unexpected, network, and malformed-response failures plus cancellation through real GUI actions.
 - **Environment / configuration:** Real backend/frontend with diagnostic canary fields in each envelope
-- **Pass criterion:** Every non-2xx body has exactly one top-level `error` object with string `code`, string `message`, and object `details`, with status only in HTTP unless the endpoint contract names an approved exception; code, message, status, details, and diagnostics retain their values in at least one Tools Log record without profile redaction, opaque replacement, or silent fallback.
+- **Pass criterion:** Every non-2xx body has exactly one top-level `error` object with string `code`, string `message`, and object `details`, with status only in HTTP; classification, request context, cause, and transmitted diagnostics retain their available values in at least one Tools Log record per delivered failure; cancellation remains distinct, and no path redacts by deployment profile or becomes an opaque exception, legacy-shape guess, or silent fallback.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Common backend envelopes and some lifecycle logs exist, but connector paths discard bodies and other callers use alert/inline-only handling.
+- **Nonconformance:** Contract, integration, and component artifacts cover the canonical envelope and representative controller/polling handoff, but no real-browser action covers the complete failure/cancellation matrix or compares local and public profiles.
 
 ## SYSV-018 — Verify strict project-schema admission
 

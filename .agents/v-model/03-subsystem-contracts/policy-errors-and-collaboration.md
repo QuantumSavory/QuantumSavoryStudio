@@ -14,11 +14,11 @@ active-project replacement.
 
 ## SUB-009 — Private HTTP contract and failure handoff
 
-- **Normative statement:** Each GUI-supporting HTTP operation shall keep its request, success, and failure shapes synchronized for maintainers and translate every non-2xx result into `{"error":{"code":string,"message":string,"details":object}}`; a different shape is allowed only as an explicitly approved endpoint-specific contract entry, and frontend callers shall preserve the structured failure into the Tools Log.
+- **Normative statement:** One OpenAPI 3.1 source shall own every supported operation ID, method, path, exposure, request schema, success schema, and canonical default error; route registration and co-shipped callers shall derive from that registry, and every classified or unexpected non-2xx failure shall use the exact SYS-008 envelope that frontend callers preserve into the Tools Log.
 - **Parents:** SYS-008
-- **Acceptance criterion:** Every registered GUI-supporting route appears once in the generated private contract with matching method and required shapes; each non-2xx response has exactly one top-level `error` object with string `code`, string `message`, and object `details`, carries status only in HTTP, or names its approved endpoint exception; representative 400/403/404/500 and cleanup paths retain code, message, status, and details through connector/controller/log records, with no cross-release external compatibility implied.
+- **Acceptance criterion:** Route/profile parity is mechanically checked; active documentation contains only reachable operations/tags/components; body-carrying operations and their one explicit success response use endpoint-specific schemas; representative 400/403/404/500 and cleanup paths retain code, message, status, details, and request diagnostics through connector/controller/log records; no cross-release external compatibility is implied.
 - **Verification:** INTV-009 (test), INTV-018 (inspection)
-- **Origin / risk:** Maintainer-approved generated-contract boundary and known route/connector gaps; high diagnosability risk
+- **Origin / risk:** Maintainer-confirmed internal API role and canonical OpenAPI/error feature mini-V; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)
 
 ## SUB-010 — Restricted-source admission boundary

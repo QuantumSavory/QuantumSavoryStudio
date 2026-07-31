@@ -354,8 +354,9 @@ cast value as a precision-safe string:
 A contextual Variable success is deferred without `value`. A template success
 is also deferred but includes its representative `value`. Omitted `context` is
 accepted only for an explicit template request and Variables. Malformed request
-data returns HTTP 400, disabled evaluation returns HTTP 403, and parse,
-evaluation, or cast failures use `error_code: "EVALUATION_FAILED"`.
+data returns a canonical HTTP 400 error, and disabled evaluation returns a
+canonical HTTP 403 error. After admission, parse, evaluation, or cast failures
+are HTTP 200 operation results with `error_code: "EVALUATION_FAILED"`.
 
 ### Trusted Julia Evaluation
 
@@ -385,7 +386,7 @@ Genie listener is also loopback; a non-loopback local listener denies it. The
 `public` profile always denies source evaluation, even if the opt-in is `true`.
 It also requires `GENIE_ENV=prod` and rejects MCP or diagnostic test features
 before launcher preparation. When disabled, evaluation requests return HTTP
-403 with the stable code `UNSAFE_EVALUATION_DISABLED`.
+403 with `error.code: "UNSAFE_EVALUATION_DISABLED"` in the canonical envelope.
 
 When enabled, use `POST /test_symbolic_expression` to evaluate a symbolic
 expression in a fresh module with QuantumSavory preloaded and get its LaTeX
@@ -405,7 +406,7 @@ Successful response:
 { "success": true, "results": { "latex": "... LaTeX string ...", "value": "..." } }
 ```
 
-On error, you'll receive:
+An admitted evaluation that fails returns this HTTP 200 operation result:
 
 ```json
 { "success": false, "error": "<message>", "error_code": "EVALUATION_FAILED" }

@@ -1,7 +1,8 @@
 # Verification and Acceptance
 
-No action is `passing`: this documentation-only mini-V designed release-2.0 evidence but
-did not execute product suites or create a stable run record.
+No action is `passing`: the baseline mini-V inspected durable artifacts, and later
+feature work added tests and local executions, but no stable execution record proves a
+complete pass criterion in its named environment.
 
 ## Action routes
 

@@ -60,11 +60,11 @@ actions.
 
 ## SYS-008 — Keep the private GUI/API boundary structured and observable
 
-- **Normative statement:** The frontend-support HTTP boundary shall use the universal non-2xx JSON body `{"error":{"code":string,"message":string,"details":object}}` without deployment-dependent redaction of backend-produced diagnostics; no second failure shape is permitted unless an endpoint-specific exception is explicitly approved and named in the canonical private contract, and the GUI shall preserve the structured failure in the Tools Log.
+- **Normative statement:** Every non-2xx response from a supported frontend-support HTTP operation shall contain exactly `{"error":{"code":String,"message":String,"details":Object}}`, with status carried as transport metadata; the GUI shall reject malformed alternatives and preserve the classification, message, status, details, request context, and backend-produced diagnostics in the Tools Log without deployment-dependent redaction.
 - **Parents:** STK-001, STK-002
-- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures have exactly one top-level `error` object containing string `code`, string `message`, and object `details`, with status carried only by HTTP; any approved exception is endpoint-specific in the canonical contract, and delivered or polled failures retain code, message, status, and details in at least one Log record without redaction, opaque replacement, or silent fallback.
+- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, unexpected, network, and malformed-response failures delivered to or polled by the GUI retain their classification, message, status, details, request context, and available diagnostics in at least one Log record; cancellation remains distinct, and no failure becomes redacted by profile, an opaque exception, a legacy-shape guess, or a silent fallback.
 - **Verification:** SYSV-008 (test)
-- **Origin / risk:** Maintainer interview; current route/client behavior is mixed; high diagnosability risk
+- **Origin / risk:** Maintainer interview and exact-envelope feature mini-V; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)
 
 ## SYS-017 — Enforce the current project schema

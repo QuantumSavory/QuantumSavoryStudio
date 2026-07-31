@@ -31,7 +31,9 @@ later nonempty simulation phase. Frontend-only annotations remain editable.
 ## API naming and time semantics
 
 The API client prefixes simulation names with a persistent browser UUID and the trimmed
-project name. Path identifiers are URL encoded.
+project name. `ApiConnector` and `McpControlClient` address routes by OpenAPI operation
+ID through the generated `gui/src/generated/httpOperations.js` registry; path
+identifiers are URL encoded. Literal API paths are not a second caller contract.
 
 The Runner's “Run for” value is an additional duration. The controller adds it to
 current simulated time and submits the backend's absolute cumulative target. Resume
@@ -76,15 +78,22 @@ implicit prepared revision.
 The required structured handoff for failures delivered to or polled by the GUI is in
 [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
 Backend-produced diagnostic details are retained across local/public profiles under
-that contract. The approved client representation retains HTTP `status`, backend `code`,
-`message`, object `details`, request `method` and `url`, and an available transport
-`cause`; native request cancellation remains an `AbortError`.
+that contract. The shared JSON reader accepts the exact canonical backend error
+envelope and raises `ApiClientError` with code, message, status, details, method, URL,
+and serializable cause. It classifies network failures, invalid JSON, malformed
+successes, and malformed error envelopes separately; legacy `error_code`,
+`status_code`, `detail`, and message-guessing paths are not supported.
+Native request cancellation remains an `AbortError`.
 
-Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
-responses through the shared JSON reader. Several legacy lifecycle/result calls parse or
-swallow transport failures and return `undefined` or fallback values. Startup uses
-settled capability requests and clears shell loading without one universal user-facing
-failure policy. These paths are conformance gaps, not conventions to copy.
+Lifecycle absence is recognized only from canonical `NOT_FOUND`. State, log, and
+liveness polling retain other failures in structured Tools Log records; repeated log
+poll failures are recorded once until recovery. `AbortError` is cancellation and does
+not become a failure record. Metadata and slot catalog callers reject malformed success
+payloads instead of inventing compatibility defaults.
+
+The remaining system-evidence gap is not a second error policy: no real-browser action
+currently drives every validation, policy, not-found, cleanup, and unexpected class
+through the backend into the visible Tools Log.
 
 ## Anchors
 
@@ -92,6 +101,8 @@ failure policy. These paths are conformance gaps, not conventions to copy.
 - **Controller:** [`gui/src/composables/useSimulationController.js`](../../../gui/src/composables/useSimulationController.js).
 - **MCP relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js).
 - **API client:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
+- **HTTP reader:** [`gui/src/utils/httpClient.js`](../../../gui/src/utils/httpClient.js).
+- **Generated operations:** [`gui/src/generated/httpOperations.js`](../../../gui/src/generated/httpOperations.js).
 - **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
   and [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js).
 

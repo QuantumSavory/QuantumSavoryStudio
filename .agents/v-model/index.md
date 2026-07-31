@@ -2,20 +2,20 @@
 
 - **Profile status:** baselined
 - **Conformance status:** incomplete
-- **Product boundary:** One GUI-first product comprising a desktop browser frontend,
-  private frontend-support HTTP API/backend, and optional local MCP sidecar
+- **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Approved release-2.0 behavior against source at
-  `8306ca0b1d44e431592ed072cf4cc80b97ecc1a3`
+  `2ae8857d3df62c9a9e0f5014a10460536f88d916`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
 
 This repository-specific map claims no external framework compliance. Approved
 maintainer decisions define intent; code, tests, public prose, and history supply
-context without overriding it. Current source is deliberately nonconformant with the
-new strict-schema, candidate-first transaction, readback-recovery, generated-contract,
-source-policy, cleanup, error-preservation, and support records.
+context without overriding it. Canonical OpenAPI, exact non-2xx errors, public-profile
+source denial, and the release support boundary now conform; strict project admission,
+candidate-first replacement, readback recovery, cleanup, and shared Play/resources
+remain incomplete.
 
 ## Left-side specification
 
@@ -38,9 +38,9 @@ source-policy, cleanup, error-preservation, and support records.
     [current partial suites](verification/component.md);
     [planned follow-ups](verification/component-followups.md)
 
-No product suite was executed for this documentation-only mini-V. Existing committed
-test artifacts remain at most `implemented`; new release-2.0 actions are `planned`, and
-no action is `passing`.
+The baseline came from a documentation-only mini-V. Later feature work added tests and
+local executions, but no stable execution record proves a complete named criterion, so
+actions remain at most `implemented`; none is `passing`.
 
 ## Source basis
 
@@ -49,7 +49,7 @@ no action is `passing`.
   source, a closed co-shipped project schema, the universal non-2xx envelope, generated
   private API documentation, cleanup/error behavior, upstream ownership, and a CI-backed
   Linux/Chromium support boundary.
-- Current behavior: root/`src/`, `gui/`, `mcp/`, and the co-shipped MCP contract at the
+- Current behavior: root/`src/`, `gui/`, `mcp/`, and co-shipped contracts at the
   profile-target commit.
 - Verification design: `test/`, `gui/tests/`, `mcp/test/`, `ci/`, GitHub Actions, and
   Buildkite.

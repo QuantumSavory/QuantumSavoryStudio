@@ -40,6 +40,40 @@ For a contract rollout, change the versioned JSON registry first, then update ba
 browser, and sidecar consumers together. Exercise registry loading, dispatch, resources,
 transport, browser binding, and recovery before removing the old co-shipped version.
 
+Use `./ci/browser.sh` or the focused MCP browser scenario when browser binding,
+authoring, lifecycle relay, or activity presentation changes.
+
+## Backend bridge contract
+
+The sidecar reads the four internal bridge paths from
+`contracts/http/openapi.json` by operation ID:
+
+- `invokeMcpTool`;
+- `readMcpResource`;
+- `recordMcpActivity`; and
+- `reportMcpSidecarReady`.
+
+Each must remain a `local-mcp` operation under `/_mcp/internal/`. Do not reintroduce
+literal endpoint suffixes in sidecar callers.
+
+The sidecar accepts only exact backend success objects or the canonical non-2xx
+`error.code/message/details` envelope. Network failure, invalid JSON, malformed success,
+and malformed error responses retain distinct classifications and diagnostics.
+Resource failures propagate as structured JSON instead of message-only exceptions;
+best-effort activity reporting warns when delivery fails.
+
+## Change tools or resources
+
+1. Update the versioned JSON contract first.
+2. Add or revise the shared browser handler for an authoring operation and migrate its
+   equivalent GUI action.
+3. Update backend dispatch/resource adapters and sidecar registration.
+   If an internal bridge operation changes, update the HTTP OpenAPI contract and run
+   `./ci/http-contract.sh`; paths continue to flow from its operation IDs.
+4. Exercise backend hub/supervisor, sidecar loader/transport, frontend bridge/contract,
+   and browser collaboration evidence in proportion to the change.
+5. Update V-model requirements/actions when observable behavior or evidence changes.
+
 ## Upgrade ModelContextProtocol
 
 The dependency is exactly pinned because the adapter uses source-annotated private
@@ -60,5 +94,7 @@ work. Never preserve capabilities, session IDs, or raw transport logs in documen
 - **Configuration:** [`src/mcp_config.jl`](../../../src/mcp_config.jl).
 - **Supervisor:** [`src/sidecar_supervisor.jl`](../../../src/sidecar_supervisor.jl).
 - **Transport adapter:** [`mcp/src/single_session_http_transport.jl`](../../../mcp/src/single_session_http_transport.jl).
+- **Bridge caller:** [`mcp/main.jl`](../../../mcp/main.jl).
+- **HTTP contract:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json).
 - **Canonical checks:** [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh) and
   [`ci/browser.sh`](../../../ci/browser.sh).

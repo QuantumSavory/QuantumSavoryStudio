@@ -16,6 +16,7 @@ root tests, and CI.
   needed leaf. Never preload `.agents/`.
 - Open [the V-model](.agents/v-model/index.md) for observable behavior, interfaces,
   compatibility, acceptance criteria, or evidence.
+- Treat `_docs_/` and `_tests_/` as historical material, not maintained code roots.
 
 ## Primary commands
 
@@ -28,11 +29,15 @@ root tests, and CI.
 ## Repository rules
 
 - Follow the containing workspace's worktree policy and preserve unrelated work.
+- Compare plausible designs and favor simplicity, maintainability, and clear separation
+  of concerns.
 - Prefer one clear owner for shared behavior; propose reusable simulator capabilities
   upstream rather than maintaining local substitutes.
-- Register HTTP handlers through `route(...)` in `routes.jl`. Until generated private
-  API documentation lands, keep a changed route, adjacent Swagger, errors, tests, and
-  bundled callers synchronized.
+- Register supported HTTP handlers through `operation_route("operationId")` in
+  `routes.jl`; reserve `route(...)` for explicit non-contract routes such as `/`.
+- Keep `contracts/http/openapi.json`, handlers, generated operation paths, sidecar
+  bridge callers, and integration evidence synchronized. Run `./ci/http-contract.sh`
+  for any route or wire change; never hand-edit generated operation maps.
 - Never edit or commit generated Vite output, Julia manifests, runtime databases/logs,
   Playwright output, `node_modules/`, capabilities, or transport transcripts.
 - Keep ModelContextProtocol out of the root Julia environment.

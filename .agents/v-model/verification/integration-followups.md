@@ -69,7 +69,8 @@
   and every shape deviation or backend-only route is an explicit endpoint entry; every
   retained route has a consumer or explicit exception, generation is deterministic,
   and hand-maintained route schemas are absent.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Routes and adjacent Swagger blocks are maintained manually, drift
-  is known, and no durable generated inventory or consumer-completeness check exists.
+- **Status:** implemented
+- **Evidence:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json), [`src/http_contract.jl`](../../../src/http_contract.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`gui/tests/unit/httpOperations.test.js`](../../../gui/tests/unit/httpOperations.test.js)
+- **Nonconformance:** Route/profile/schema parity and generated callers are checked, but
+  no durable inspection proves a co-shipped consumer or explicit exception for every
+  retained operation.
