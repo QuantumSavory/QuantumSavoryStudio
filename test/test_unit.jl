@@ -4076,6 +4076,7 @@
     catch error
       (error, catch_backtrace())
     end
+    metadata_context = Dict(:slot => 3, :active => true)
     logger = WebQuantumSavory.Logger.make_logger(structured_state)
     Logging.handle_message(
       logger,
@@ -4093,9 +4094,12 @@
       nodes=(1, 2),
       pair_id=Int128(9_007_199_254_740_993),
       attempt=2,
-      context=Dict(:slot => 3, :active => true),
+      context=metadata_context,
       exception=(captured_error, captured_backtrace),
+      logging_module=:prefixed_module_metadata,
+      module=:module_metadata,
     )
+    metadata_context[:slot] = 99
     WebQuantumSavory.Logger.log_event(
       structured_state,
       "success",
@@ -4120,6 +4124,9 @@
     @test details["pair_id"] == "9007199254740993"
     @test details["attempt"] == 2
     @test details["context"] == Dict("slot" => 3, "active" => true)
+    @test details["module"] == string(QuantumSavory)
+    @test details["logging_module"] == "prefixed_module_metadata"
+    @test details["logging_logging_module"] == "module_metadata"
     @test details["exception"]["exception_type"] == "ErrorException"
     @test occursin("structured logger failure", details["exception"]["message"])
     @test occursin("Stacktrace", details["exception"]["stacktrace"])

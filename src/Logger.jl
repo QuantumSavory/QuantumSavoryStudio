@@ -207,7 +207,9 @@ function _add_extra_fields!(event::Dict{String,Any}, fields)
   details = event["details"]
   for (raw_key, value) in fields
     key = string(raw_key)
-    haskey(details, key) && (key = "logging_$(key)")
+    while haskey(details, key)
+      key = "logging_$(key)"
+    end
     details[key] = json_safe(value)
   end
   return event
