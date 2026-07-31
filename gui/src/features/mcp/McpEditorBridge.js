@@ -325,7 +325,7 @@ export class McpEditorBridge {
     const identity = this.bindingIdentity()
     if (!identity || typeof navigator === 'undefined' || !navigator.sendBeacon) return false
     return navigator.sendBeacon(
-      this.client.url('/editor/unbind'),
+      this.client.operationUrl('unbindMcpEditor'),
       new Blob([JSON.stringify(identity)], { type: 'application/json' }),
     )
   }

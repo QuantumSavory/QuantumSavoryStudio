@@ -6,6 +6,14 @@ describe('MCP control HTTP client', () => {
     vi.unstubAllGlobals()
   })
 
+  it('derives best-effort beacon URLs from the generated operation registry', () => {
+    const client = new McpControlClient('http://api.test/')
+
+    expect(client.operationUrl('unbindMcpEditor')).toBe(
+      'http://api.test/_mcp/editor/unbind',
+    )
+  })
+
   it('uses the shared structured error contract', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: false,

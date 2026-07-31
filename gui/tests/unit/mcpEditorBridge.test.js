@@ -17,7 +17,7 @@ beforeAll(() => {
 function bridgeFixture(overrides = {}) {
   const project = createEmptyProject('Bridge Project')
   const client = {
-    url: vi.fn(path => `http://localhost/_mcp${path}`),
+    operationUrl: vi.fn(() => 'http://localhost/_mcp/editor/unbind'),
     start: vi.fn(async () => ({ success: true })),
     bind: vi.fn(async () => ({
       binding: {

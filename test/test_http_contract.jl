@@ -58,19 +58,91 @@
     for (method, operation) in pairs(path_item)
     if lowercase(string(method)) in WQS.HTTP_METHODS
   )
+  @test !haskey(document["components"]["responses"], "JsonSuccess")
+  @test Set(keys(document["components"]["responses"])) == Set(["Error"])
+
+  operation_schemas =
+    document["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+  for path_item in values(document["paths"])
+    for (method, operation) in pairs(path_item)
+      lowercase(string(method)) in WQS.HTTP_METHODS || continue
+      operation_id = string(operation["operationId"])
+      if lowercase(string(method)) in ("patch", "post", "put")
+        request_schema =
+          operation["requestBody"]["content"]["application/json"]["schema"]
+        @test request_schema["\$ref"] ==
+          WQS.HTTP_OPERATION_SCHEMA_ROOT * operation_id * "Request"
+        @test haskey(operation_schemas, operation_id * "Request")
+      else
+        @test !haskey(operation, "requestBody")
+      end
+
+      success_statuses = [
+        string(status)
+        for status in keys(operation["responses"])
+        if occursin(r"^2\d\d$", string(status))
+      ]
+      @test length(success_statuses) == 1
+      success = operation["responses"][only(success_statuses)]
+      media_type = operation_id == "serveApiDocs" ? "text/html" : "application/json"
+      @test Set(keys(success["content"])) == Set([media_type])
+      @test success["content"][media_type]["schema"]["\$ref"] ==
+        WQS.HTTP_OPERATION_SCHEMA_ROOT * operation_id * "Response"
+      @test haskey(operation_schemas, operation_id * "Response")
+    end
+  end
+  @test Set(keys(
+    document["paths"]["/_mcp/internal/tool"]["post"]["responses"],
+  )) == Set(["200", "default"])
+  @test Set(keys(
+    document["paths"]["/run_simulation"]["post"]["responses"],
+  )) == Set(["202", "default"])
 
   test_document = WQS.active_http_contract_document(mcp=false, test_support=true)
   test_operations = operations(test_document)
   @test length(test_operations) == 32
   @test haskey(test_operations, "manipulateSimulationState")
   @test !any(startswith(operation.path, "/_mcp") for operation in values(test_operations))
+  test_definitions =
+    test_document["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+  @test haskey(test_definitions, "manipulateSimulationStateResponse")
+  @test !haskey(test_definitions, "getMcpStatusResponse")
+  @test !haskey(test_definitions, "bindingIdentityRequest")
+  @test haskey(test_document["components"]["schemas"], "TestStateMutation")
+  @test "Test support" in getindex.(test_document["tags"], "name")
+  @test !("Local MCP" in getindex.(test_document["tags"], "name"))
+  @test WQS.validate_http_contract!(test_document) === test_document
 
   mcp_document = WQS.active_http_contract_document(mcp=true, test_support=false)
   mcp_operations = operations(mcp_document)
   @test length(mcp_operations) == 45
   @test haskey(mcp_operations, "getMcpStatus")
   @test !haskey(mcp_operations, "manipulateSimulationState")
+  mcp_definitions =
+    mcp_document["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+  @test haskey(mcp_definitions, "getMcpStatusResponse")
+  @test !haskey(mcp_definitions, "manipulateSimulationStateResponse")
+  @test haskey(mcp_definitions, "bindingIdentityRequest")
+  @test !haskey(mcp_document["components"]["schemas"], "TestStateMutation")
+  @test "Local MCP" in getindex.(mcp_document["tags"], "name")
+  @test !("Test support" in getindex.(mcp_document["tags"], "name"))
+  @test WQS.validate_http_contract!(mcp_document) === mcp_document
   @test JSON.parse(JSON.json(mcp_document))["openapi"] == "3.1.0"
+  @test JSON.json(WQS.active_http_contract_document(mcp=true, test_support=false)) ==
+    JSON.json(WQS.active_http_contract_document(mcp=true, test_support=false))
+
+  ordinary_document =
+    WQS.active_http_contract_document(mcp=false, test_support=false)
+  ordinary_definitions =
+    ordinary_document["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+  @test length(operations(ordinary_document)) == 31
+  @test !haskey(ordinary_definitions, "bindingIdentityRequest")
+  @test !haskey(ordinary_document["components"]["schemas"], "TestStateMutation")
+  @test isempty(intersect(
+    Set(getindex.(ordinary_document["tags"], "name")),
+    Set(["Local MCP", "Test support"]),
+  ))
+  @test WQS.validate_http_contract!(ordinary_document) === ordinary_document
 
   registered = WQS.registered_http_operations()
   @test Set(keys(registered)) == WQS.active_http_operation_ids()
@@ -106,4 +178,40 @@
   unresolved_reference["paths"]["/status"]["get"]["responses"]["200"]["\$ref"] =
     "#/components/responses/Missing"
   @test_throws ArgumentError WQS.validate_http_contract!(unresolved_reference)
+
+  generic_success = WQS.http_contract_document()
+  generic_success["paths"]["/status"]["get"]["responses"]["200"]["content"][
+    "application/json"
+  ]["schema"] = Dict("type" => "object", "additionalProperties" => true)
+  @test_throws ArgumentError WQS.validate_http_contract!(generic_success)
+
+  wrong_success_schema = WQS.http_contract_document()
+  wrong_success_schema["paths"]["/status"]["get"]["responses"]["200"]["content"][
+    "application/json"
+  ]["schema"]["\$ref"] =
+    WQS.HTTP_OPERATION_SCHEMA_ROOT * "getPlatformInfoResponse"
+  @test_throws ArgumentError WQS.validate_http_contract!(wrong_success_schema)
+
+  duplicate_success = WQS.http_contract_document()
+  duplicate_success["paths"]["/_mcp/internal/tool"]["post"]["responses"]["202"] =
+    deepcopy(duplicate_success["paths"]["/_mcp/internal/tool"]["post"]["responses"]["200"])
+  @test_throws ArgumentError WQS.validate_http_contract!(duplicate_success)
+
+  missing_request_schema = WQS.http_contract_document()
+  delete!(
+    missing_request_schema["paths"]["/destroy_simulation"]["post"],
+    "requestBody",
+  )
+  @test_throws ArgumentError WQS.validate_http_contract!(missing_request_schema)
+
+  generic_request = WQS.http_contract_document()
+  generic_request["paths"]["/destroy_simulation"]["post"]["requestBody"]["content"][
+    "application/json"
+  ]["schema"] = Dict("type" => "object", "additionalProperties" => true)
+  @test_throws ArgumentError WQS.validate_http_contract!(generic_request)
+
+  noncanonical_error = WQS.http_contract_document()
+  noncanonical_error["components"]["schemas"]["ErrorBody"]["properties"]["details"] =
+    Dict("type" => "object")
+  @test_throws ArgumentError WQS.validate_http_contract!(noncanonical_error)
 end

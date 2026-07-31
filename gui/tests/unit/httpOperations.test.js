@@ -39,11 +39,13 @@ describe('generated HTTP operations', () => {
     for (const relativePath of [
       'src/utils/ApiConnector.js',
       'src/features/mcp/McpControlClient.js',
+      'src/features/mcp/McpEditorBridge.js',
     ]) {
       const source = fs.readFileSync(path.join(guiRoot, relativePath), 'utf8')
       const referenced = [
         ...source.matchAll(/requestOperation\('([^']+)'/g),
         ...source.matchAll(/this\.request\('([^']+)'/g),
+        ...source.matchAll(/operationUrl\('([^']+)'/g),
       ].map(match => match[1])
       expect(referenced.length).toBeGreaterThan(0)
       expect(referenced.every(operationId => HTTP_OPERATIONS[operationId])).toBe(true)

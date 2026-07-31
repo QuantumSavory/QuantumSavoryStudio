@@ -64,6 +64,13 @@ end
 end
 
 @testset "MCP backend response contract is strict" begin
+    @test SIDECAR_BRIDGE_OPERATIONS == Dict(
+        "invokeMcpTool" => "tool",
+        "readMcpResource" => "resource",
+        "recordMcpActivity" => "activity",
+        "reportMcpSidecarReady" => "ready",
+    )
+
     malformed = backend_error_payload(
         Dict{String,Any}("error" => "legacy");
         status=404,
@@ -105,7 +112,7 @@ end
     )
     unreachable = backend_request(
         configuration,
-        "tool",
+        "invokeMcpTool",
         Dict{String,Any}();
         post=(_args...; _kwargs...) -> error("connection refused"),
     )

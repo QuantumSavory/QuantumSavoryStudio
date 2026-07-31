@@ -941,6 +941,20 @@
       @test "serveApiDocs" in operation_ids
       @test "manipulateSimulationState" in operation_ids
       @test !("getMcpStatus" in operation_ids)
+      operation_schemas =
+        contract["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
+      @test haskey(operation_schemas, "parseNetworkGraphRequest")
+      @test haskey(operation_schemas, "manipulateSimulationStateResponse")
+      @test !haskey(operation_schemas, "getMcpStatusResponse")
+      @test contract["paths"]["/parse_network_graph"]["post"]["requestBody"][
+        "content"
+      ]["application/json"]["schema"]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/parseNetworkGraphRequest"
+      @test contract["paths"]["/run_simulation"]["post"]["responses"]["202"][
+        "content"
+      ]["application/json"]["schema"]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/runSimulationResponse"
+      @test Set(keys(contract["components"]["responses"])) == Set(["Error"])
 
       error_envelope = contract["components"]["schemas"]["ErrorEnvelope"]
       error_body = contract["components"]["schemas"]["ErrorBody"]

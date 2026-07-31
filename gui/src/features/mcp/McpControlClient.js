@@ -13,10 +13,13 @@ export class McpControlClient {
     }
   }
 
+  operationUrl(operationId, options = {}) {
+    return `${this.baseUrl}${httpOperationPath(operationId, options)}`
+  }
+
   async request(operationId, { query, body, signal } = {}) {
     const operation = httpOperation(operationId)
-    const path = httpOperationPath(operationId, { query })
-    return requestJson(`${this.baseUrl}${path}`, {
+    return requestJson(this.operationUrl(operationId, { query }), {
       method: operation.method,
       headers: this.headers,
       body,

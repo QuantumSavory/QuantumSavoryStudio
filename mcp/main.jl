@@ -9,6 +9,15 @@ include(joinpath(@__DIR__, "src", "single_session_http_transport.jl"))
 const CONTRACT_FILE = normpath(
   joinpath(@__DIR__, "..", "contracts", "mcp", "v1", "tools.json"),
 )
+const HTTP_CONTRACT_FILE = normpath(
+  joinpath(@__DIR__, "..", "contracts", "http", "openapi.json"),
+)
+const SIDECAR_BRIDGE_OPERATION_IDS = Set([
+  "invokeMcpTool",
+  "readMcpResource",
+  "recordMcpActivity",
+  "reportMcpSidecarReady",
+])
 
 function plain_dictionary(value)
   value isa AbstractDict || return Dict{String,Any}()
@@ -47,6 +56,25 @@ function exact_string_keys(value, expected)
   return length(actual_keys) == length(expected) &&
     Set(actual_keys) == Set(expected)
 end
+
+function load_sidecar_bridge_operations()
+  contract = plain_dictionary(JSON3.read(read(HTTP_CONTRACT_FILE, String)))
+  operations = Dict{String,String}()
+  for (path, path_item) in contract["paths"]
+    startswith(path, "/_mcp/internal/") || continue
+    post = plain_dictionary(get(path_item, "post", Dict{String,Any}()))
+    operation_id = string(get(post, "operationId", ""))
+    operation_id in SIDECAR_BRIDGE_OPERATION_IDS || continue
+    get(post, "x-wqs-exposure", nothing) == "local-mcp" ||
+      error("Sidecar bridge operation must be local-mcp: $operation_id")
+    operations[operation_id] = replace(path, r"^/_mcp/internal/" => "")
+  end
+  Set(keys(operations)) == SIDECAR_BRIDGE_OPERATION_IDS ||
+    error("OpenAPI sidecar bridge operation registry is incomplete")
+  return operations
+end
+
+const SIDECAR_BRIDGE_OPERATIONS = load_sidecar_bridge_operations()
 
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
@@ -154,10 +182,13 @@ end
 
 function backend_request(
   configuration,
-  endpoint,
+  operation_id,
   payload;
   post=HTTP.post,
 )
+  endpoint = get(SIDECAR_BRIDGE_OPERATIONS, string(operation_id), nothing)
+  endpoint === nothing &&
+    throw(ArgumentError("Unknown sidecar bridge operationId: $operation_id"))
   url = "$(configuration["bridge_url"])/$endpoint"
   response = try
     post(
@@ -185,7 +216,7 @@ function tool_result(configuration, tool_name, arguments)
   ok, result = try
     backend_request(
       configuration,
-      "tool",
+      "invokeMcpTool",
       Dict("tool" => tool_name, "arguments" => plain_dictionary(arguments)),
     )
   catch error
@@ -231,7 +262,11 @@ function load_tools(configuration; result_handler=tool_result)
 end
 
 function resource_value(configuration, uri)
-  ok, result = backend_request(configuration, "resource", Dict("uri" => uri))
+  ok, result = backend_request(
+    configuration,
+    "readMcpResource",
+    Dict("uri" => uri),
+  )
   ok || throw(BackendRequestError(plain_dictionary(result)))
   return plain_dictionary(result)
 end
@@ -309,7 +344,7 @@ end
 function report_ready(configuration)
   ok, result = backend_request(
     configuration,
-    "ready",
+    "reportMcpSidecarReady",
     Dict("port" => configuration["port"]),
   )
   ok || throw(BackendRequestError(plain_dictionary(result)))
@@ -320,7 +355,7 @@ function report_session_waiting(configuration)
   try
     ok, result = backend_request(
       configuration,
-      "activity",
+      "recordMcpActivity",
       Dict(
         "category" => "session",
         "phase" => "waiting",
@@ -376,7 +411,7 @@ function main()
       try
         ok, result = backend_request(
           configuration,
-          "activity",
+          "recordMcpActivity",
           Dict(
             "category" => "session",
             "phase" => "initialized",
