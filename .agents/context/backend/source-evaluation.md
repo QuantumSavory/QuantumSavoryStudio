@@ -17,10 +17,9 @@ This reference records the current evaluator and its gaps.
 
 ## Trust boundary
 
-The baseline makes `WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true` the sole operator
-opt-in. Current code parses explicit `true`/`false` strictly, but with the variable absent
-it enables evaluation in `dev` and `test` and disables it elsewhere. The implicit
-development/test enablement is a conformance gap.
+`WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in. The exact strings
+`true` and `false` are accepted; the variable being absent disables evaluation in
+every environment.
 
 The restricted language reduces risk but is not a security sandbox: accepted Julia
 executes natively in the server process without memory, operation, or safely
@@ -52,17 +51,14 @@ hard-denied capability names, and identifiers outside the permitted operations, 
 symbolic names, local bindings, and server context. It does not impose a tree-depth,
 node-count, or source-size bound.
 
-The guarded machinery is distributed rather than a single evaluator. Custom Functions
-parse and guard complete source in `types.jl`; numeric test/runtime paths in
-`Sandbox.jl` and `types.jl` parse and guard separately. Numeric-expression Variables in
-the test path may lower an admitted tree once to detect assignment-context globals.
-Symbolic evaluation creates a fresh module, imports a fixed package set into it, then
-parses, guards, and evaluates the expression.
+`restricted_evaluation.jl` owns admitted source and the single production call into
+Julia evaluation. Custom functions, numeric expressions, symbolic expressions, and
+tag predicates all pass through it. Numeric-expression Variables may lower an admitted
+tree once to detect assignment-context globals. Symbolic evaluation uses a fresh module
+loaded only with fixed server-owned namespaces.
 
-`parser.jl` retains a separate complex-parameter fallback that interpolates a value and
-declared type into source and calls module-global `eval` after the environment gate,
-without the allowlist or a fresh module. This is a critical conformance gap: do not
-extend or copy that path.
+Untagged complex values are rejected; they are never interpolated with declared type
+text and evaluated.
 
 ## Allowlist and contexts
 
@@ -86,30 +82,23 @@ as deferred without executing until an assignment supplies concrete context.
 
 ## Errors and disclosure
 
-Disabled evaluation produces the stable 403 policy error. Validated malformed DTO cases
-use 400, but non-string `code`/`expr` and some other malformed inputs can still become a
-generic 500. The `/test_code`, `/test_numeric_expression`, and
-`/test_symbolic_expression` handlers currently return parse, guard, and execution
-failures as `success:false`, generally with HTTP 200. Other runtime paths may translate
-them into validation errors. SYS-008 requires backend-produced diagnostic fields to
-survive deployment-profile handoff; current production redaction is therefore a
-conformance gap.
+Disabled evaluation produces the stable 403 policy error. Evaluation details are
+constructed uniformly across deployment profiles; capability or secret values are
+never placed in the diagnostic details.
 
 ## Verification gap
 
-Backend unit tests exercise disabled policy and conditional integration tests contain
-both branches, but server-backed CI sets `GENIE_ENV=test`; absent an override, the
-current default therefore enables evaluation. Browser disabled-mode tests mock
-capability responses. A real disabled backend system action remains planned in the
-V-model.
+Backend unit tests exercise the absent, false, true, and malformed policy values.
+Evaluation-dependent maintained suites opt in explicitly. Browser disabled-mode tests
+still mock capability responses; a real disabled backend system action remains planned
+in the V-model.
 
 ## Anchors
 
 - **Policy:** [`src/evaluation_policy.jl`](../../../src/evaluation_policy.jl).
 - **Admission guard:** [`src/source_allowlist.jl`](../../../src/source_allowlist.jl).
-- **Guarded evaluation paths:** [`src/types.jl`](../../../src/types.jl) and
-  [`src/Sandbox.jl`](../../../src/Sandbox.jl).
-- **Unguarded fallback:** [`src/parser.jl`](../../../src/parser.jl).
+- **Guarded evaluation boundary:**
+  [`src/restricted_evaluation.jl`](../../../src/restricted_evaluation.jl).
 - **Unit evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 

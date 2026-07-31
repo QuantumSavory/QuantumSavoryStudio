@@ -49,7 +49,7 @@ test('About describes the project, its support, and ways to participate', async 
     "julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'"
   )
   await expect(localSteps.nth(3).locator('code')).toHaveText(
-    'GENIE_ENV=dev WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true ./bin/server'
+    'WQS_ENABLE_SOURCE_EVALUATION=true ./bin/server'
   )
 
   await expect(dialog.getByRole('link', { name: 'Krastanov Lab' })).toHaveAttribute(

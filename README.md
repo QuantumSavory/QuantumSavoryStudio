@@ -329,34 +329,30 @@ A contextual Variable success is deferred without `value`. A template success
 is also deferred but includes its representative `value`. Omitted `context` is
 accepted only for an explicit template request and Variables. Malformed request
 data returns HTTP 400, disabled evaluation returns HTTP 403, and parse,
-evaluation, or cast failures use `error_code: "EVALUATION_FAILED"` with
-production redaction.
+evaluation, or cast failures use `error_code: "EVALUATION_FAILED"`.
 
 ### Trusted Julia Evaluation
 
 `POST /test_code`, `POST /test_symbolic_expression`,
 `POST /test_numeric_expression`, custom functions, symbolic values, numeric
-expressions, and fallback conversion of complex parameters can execute Julia
-code in the API server process. A fresh module isolates names, but does not
+expressions can execute Julia code in the API server process. A fresh module
+isolates names, but does not
 restrict filesystem, process, network, memory, or CPU access. Treat saved
 expression source as trusted code and do not enable these features for
 untrusted users.
 
-Unsafe evaluation is enabled by default only in Genie's `dev` and `test`
-environments. It is disabled in `prod` and unrecognized environments. Operators
-can override either default with one environment variable:
+Source evaluation is disabled by default in every environment. Operators can
+enable it explicitly with one environment variable:
 
 ```bash
-WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true ./bin/server
+WQS_ENABLE_SOURCE_EVALUATION=true ./bin/server
 ```
 
-The value is parsed strictly: only `true` or `false` are accepted, ignoring case
-and surrounding whitespace. Keep the variable unset or set it to `false` in
-production unless the deployment intentionally trusts every API caller and
-simulation payload. When disabled, evaluation requests return HTTP 403 with
-`error_code: "UNSAFE_EVALUATION_DISABLED"`. Evaluation exceptions are included
-only in `dev` and `test` responses, even when evaluation is explicitly enabled
-in another environment.
+The value is parsed strictly: only the exact strings `true` and `false` are
+accepted. Keep the variable unset or set it to `false` unless the deployment
+intentionally trusts every API caller and simulation payload. When disabled,
+evaluation requests return HTTP 403 with
+`error_code: "UNSAFE_EVALUATION_DISABLED"`.
 
 When enabled, use `POST /test_symbolic_expression` to evaluate a symbolic
 expression in a fresh module with QuantumSavory preloaded and get its LaTeX

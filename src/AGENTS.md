@@ -19,7 +19,7 @@ Swagger remain governed by `../AGENTS.md` and `../routes.jl`.
 
 ## Local checks
 
-- Focused package checks: `(cd ../test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true
+- Focused package checks: `(cd ../test && WQS_ENABLE_SOURCE_EVALUATION=true
   julia --project=. runtests.jl test_unit)`
 - Canonical backend unit entry point: `../ci/backend-unit.sh`
 
