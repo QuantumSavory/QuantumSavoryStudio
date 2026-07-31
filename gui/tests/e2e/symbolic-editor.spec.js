@@ -281,7 +281,7 @@ async function expectCustomFunctionValidationLifecycle(
     expect(bounds.top).toBeGreaterThanOrEqual(0)
     expect(bounds.right).toBeLessThanOrEqual(390)
     expect(bounds.bottom).toBeLessThanOrEqual(420)
-    await expect(contextHelp.locator('.custom-function-context-overlay-content')).toHaveCSS(
+    await expect(contextHelp.locator('.source-context-overlay-content')).toHaveCSS(
       'overflow-y',
       'auto',
     )
@@ -341,7 +341,7 @@ test.describe('Code editor lifecycle', () => {
     const input = valueEditor.locator('textarea')
     await expect(input).toBeVisible()
     await expect(input).toHaveValue('')
-    await expect(valueEditor.getByTestId('custom-function-context-help')).toHaveCount(0)
+    await expect(valueEditor.getByTestId('source-context-help')).toHaveCount(0)
     await input.fill('invalid(')
     await expectEditorLayersAligned(valueEditor)
     await valueEditor.locator('.validate-button').click()
@@ -381,7 +381,7 @@ test.describe('Code editor lifecycle', () => {
     const input = valueEditor.locator('textarea')
 
     await expect(input).toBeVisible()
-    await expect(valueEditor.getByTestId('custom-function-context-help')).toHaveCount(0)
+    await expect(valueEditor.getByTestId('source-context-help')).toHaveCount(0)
     await expect(valueEditor.getByTestId('symbolic-collapsed-view')).toHaveCount(0)
     await input.fill('valid_variable_expression')
     await valueEditor.locator('.validate-button').click()

@@ -16,13 +16,13 @@ describe('source contextual help', () => {
       attachTo: document.body,
       global: { plugins: [PrimeVue] },
     })
-    const trigger = wrapper.get('.custom-function-context-trigger')
+    const trigger = wrapper.get('.source-context-trigger')
     expect(trigger.attributes('aria-expanded')).toBe('false')
-    expect(document.querySelector('[data-testid="custom-function-context-help"]')).toBeNull()
+    expect(document.querySelector('[data-testid="source-context-help"]')).toBeNull()
 
     await trigger.trigger('click')
     await nextTick()
-    const popup = document.querySelector('[data-testid="custom-function-context-help"]')
+    const popup = document.querySelector('[data-testid="source-context-help"]')
     const closeButton = popup.querySelector('[aria-label="Close custom function context"]')
 
     expect(trigger.attributes('aria-expanded')).toBe('true')
@@ -53,7 +53,7 @@ describe('source contextual help', () => {
     await nextTick()
     await vi.waitFor(() => {
       expect(trigger.attributes('aria-expanded')).toBe('false')
-      expect(document.querySelector('[data-testid="custom-function-context-help"]')).toBeNull()
+      expect(document.querySelector('[data-testid="source-context-help"]')).toBeNull()
     })
     expect(document.activeElement).toBe(trigger.element)
 

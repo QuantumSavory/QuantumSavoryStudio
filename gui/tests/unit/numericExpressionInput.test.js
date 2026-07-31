@@ -37,7 +37,7 @@ describe('NumericExpressionInput', () => {
       },
     })
 
-    expect(wrapper.get('.custom-function-context-trigger').text())
+    expect(wrapper.get('.source-context-trigger').text())
       .toContain('Numeric expression context')
     expect(wrapper.find('[data-testid="numeric-expression-summary"]').exists()).toBe(false)
     await wrapper.get('[data-testid="numeric-expression-source"]').setValue('delay / 2')

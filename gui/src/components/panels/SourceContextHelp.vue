@@ -1,9 +1,9 @@
 <template>
-  <div class="custom-function-context-help">
+  <div class="source-context-help">
     <button
       ref="trigger"
       type="button"
-      class="custom-function-context-trigger noborder"
+      class="source-context-trigger noborder"
       aria-haspopup="dialog"
       :aria-controls="popoverId"
       :aria-expanded="popoverVisible"
@@ -19,14 +19,14 @@
       @show="popoverVisible = true"
       @hide="popoverVisible = false"
     >
-      <section class="custom-function-context-popup">
-        <header class="custom-function-context-header">
-          <h2 class="custom-function-context-heading">
+      <section class="source-context-popup">
+        <header class="source-context-header">
+          <h2 class="source-context-heading">
             Context available to {{ subject }}
           </h2>
           <button
             type="button"
-            class="custom-function-context-close noborder"
+            class="source-context-close noborder"
             :aria-label="`Close ${label.toLowerCase()}`"
             autofocus
             @click="closePopover"
@@ -69,18 +69,18 @@ const props = defineProps({
 const popover = ref(null)
 const trigger = ref(null)
 const popoverVisible = ref(false)
-const popoverId = `custom-function-context-${useId()}`
+const popoverId = `source-context-${useId()}`
 const popoverPassThrough = {
   root: {
     id: popoverId,
     'aria-label': props.label,
     'data-testid': props.label === 'Custom function context'
-      ? 'custom-function-context-help'
+      ? 'source-context-help'
       : 'numeric-expression-context-help',
-    class: 'custom-function-context-overlay',
+    class: 'source-context-overlay',
   },
   content: {
-    class: 'custom-function-context-overlay-content',
+    class: 'source-context-overlay-content',
   },
 }
 
@@ -97,13 +97,13 @@ function closePopover() {
 </script>
 
 <style scoped>
-.custom-function-context-help {
+.source-context-help {
   display: flex;
   justify-content: flex-end;
   margin-bottom: var(--app-space-1);
 }
 
-.custom-function-context-trigger {
+.source-context-trigger {
   display: inline-flex;
   align-items: center;
   gap: var(--app-space-1);
@@ -113,25 +113,25 @@ function closePopover() {
   font-size: 0.78rem;
 }
 
-.custom-function-context-trigger:hover,
-.custom-function-context-trigger:focus-visible {
+.source-context-trigger:hover,
+.source-context-trigger:focus-visible {
   background: var(--app-color-surface-hover);
   color: var(--app-color-primary);
 }
 
-.custom-function-context-popup {
+.source-context-popup {
   color: var(--app-color-text-muted);
   font-size: 0.78rem;
 }
 
-.custom-function-context-header {
+.source-context-header {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
   margin-bottom: var(--app-space-1);
 }
 
-.custom-function-context-heading {
+.source-context-heading {
   flex: 1;
   margin: 0;
   color: var(--app-color-text);
@@ -139,7 +139,7 @@ function closePopover() {
   font-weight: 600;
 }
 
-.custom-function-context-close {
+.source-context-close {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -149,8 +149,8 @@ function closePopover() {
   color: var(--app-color-text-muted);
 }
 
-.custom-function-context-close:hover,
-.custom-function-context-close:focus-visible {
+.source-context-close:hover,
+.source-context-close:focus-visible {
   background: var(--app-color-surface-hover);
   color: var(--app-color-primary);
 }
@@ -174,7 +174,7 @@ code {
 </style>
 
 <style>
-.custom-function-context-overlay {
+.source-context-overlay {
   box-sizing: border-box;
   inline-size: min(38rem, calc(100vw - (2 * var(--app-space-4))));
   inline-size: min(38rem, calc(100dvw - (2 * var(--app-space-4))));
@@ -184,7 +184,7 @@ code {
   max-block-size: calc(100dvh - (2 * var(--app-space-4)));
 }
 
-.custom-function-context-overlay-content {
+.source-context-overlay-content {
   box-sizing: border-box;
   max-inline-size: 100%;
   max-block-size: calc(100vh - (2 * var(--app-space-4)) - 2px);
@@ -194,7 +194,7 @@ code {
 }
 
 @media (max-width: 900px), (max-height: 600px) {
-  .p-popover.custom-function-context-overlay {
+  .p-popover.source-context-overlay {
     margin-block-start: 0;
     margin-block-end: 0;
   }
