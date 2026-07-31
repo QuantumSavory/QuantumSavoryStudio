@@ -17,11 +17,15 @@ components. Explanatory prose belongs in `.agents/context/`, not beside a second
 ## Checks
 
 - MCP contract boundary: `../ci/mcp-unit.sh`
+- Project schema boundary: frontend codec/admission tests through `../ci/frontend-build.sh`
 
 ## Contract rules
 
 - `mcp/v1/` remains the active contract until a coordinated replacement is implemented;
   approved v2 requirements alone do not change current runtime behavior.
+- The planned `project/v2.schema.json` is the sole project-version-2 field authority.
+  Close every application-owned object with `additionalProperties: false`; expose an
+  extension point only when the schema names it explicitly.
 - Version breaking wire changes explicitly. Update the frontend, backend, sidecar,
   fixtures, and generated/checking artifacts in one coordinated change.
 - Keep one canonical machine-readable registry per active contract version; consumers

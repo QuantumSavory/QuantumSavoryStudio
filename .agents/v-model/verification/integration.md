@@ -94,7 +94,7 @@
 - **Method:** test
 - **Procedure:** Pass distinct validation, policy, missing, cleanup, and unexpected failures through real handlers, connector, controller, and log model.
 - **Environment / configuration:** Real backend/frontend with discriminating envelope canaries
-- **Pass criterion:** Every supported route translates failures; frontend Log values equal transmitted code/classification/message/status/details/diagnostics without fallback success or message-only collapse.
+- **Pass criterion:** Every supported route returns the exact universal non-2xx envelope or names an approved endpoint-specific exception in the canonical contract; frontend Log values equal transmitted code/message/status/details/diagnostics without fallback success, duplicate body status, or message-only collapse.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Missing-body 500s, message-only connector errors, deployment redaction, and swallowed/fallback client paths prevent implementation status.

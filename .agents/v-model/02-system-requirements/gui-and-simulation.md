@@ -60,18 +60,18 @@ actions.
 
 ## SYS-008 — Keep the private GUI/API boundary structured and observable
 
-- **Normative statement:** The frontend-support HTTP boundary shall return classified structured failures without deployment-dependent redaction of backend-produced diagnostics, and the GUI shall preserve their message and available details in the Tools Log.
+- **Normative statement:** The frontend-support HTTP boundary shall use the universal non-2xx JSON body `{"error":{"code":string,"message":string,"details":object}}` without deployment-dependent redaction of backend-produced diagnostics; no second failure shape is permitted unless an endpoint-specific exception is explicitly approved and named in the canonical private contract, and the GUI shall preserve the structured failure in the Tools Log.
 - **Parents:** STK-001, STK-002
-- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures delivered to or polled by the GUI retain a code/classification, message, and available details in at least one Log record; none becomes redacted by deployment profile, an opaque exception, or a silent fallback.
+- **Acceptance criterion:** Representative validation, missing/invalid input, policy, not-found, cleanup, and unexpected failures have exactly one top-level `error` object containing string `code`, string `message`, and object `details`, with status carried only by HTTP; any approved exception is endpoint-specific in the canonical contract, and delivered or polled failures retain code, message, status, and details in at least one Log record without redaction, opaque replacement, or silent fallback.
 - **Verification:** SYSV-008 (test)
 - **Origin / risk:** Maintainer interview; current route/client behavior is mixed; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)
 
 ## SYS-017 — Enforce the current project schema
 
-- **Normative statement:** The product shall admit only documents carrying the exact current project-schema version and canonical durable shape, and shall refuse all other schema markers before hydration or decode side effects.
+- **Normative statement:** The product shall admit only documents carrying exact integer schema version 2 and satisfying the co-shipped closed JSON Schema at `contracts/project/v2.schema.json`, and shall refuse every other marker or shape before hydration or decode side effects.
 - **Parents:** STK-010
-- **Acceptance criterion:** The current encoder emits schema version 2; exact version-2 canonical documents reach decode; older, newer, negative, missing, non-integer, malformed, or unsupported durable shapes return structured expected/actual/path diagnostics without modifying or deleting the input.
+- **Acceptance criterion:** The current encoder emits documents valid against `contracts/project/v2.schema.json`; that contract sets `additionalProperties: false` at every application-owned object boundary and exposes no extension point unless it names one explicitly; older, newer, negative, missing, non-integer, malformed, or unsupported-field inputs return structured expected/actual/path diagnostics without modifying or deleting the input.
 - **Verification:** SYSV-018 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 breaking schema contract; high compatibility/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

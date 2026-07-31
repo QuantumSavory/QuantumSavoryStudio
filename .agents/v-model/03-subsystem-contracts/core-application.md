@@ -68,9 +68,9 @@ requirements.
 
 ## SUB-015 — Strict nonmutating project-schema admission
 
-- **Normative statement:** Project schema admission shall validate an isolated raw document for exact current version and canonical durable shape before normalization, hydration, storage, or active-session effects.
+- **Normative statement:** Project schema admission shall validate an isolated raw document for exact integer version 2 and the closed contract at `contracts/project/v2.schema.json` before normalization, hydration, storage, or active-session effects.
 - **Parents:** SYS-017
-- **Acceptance criterion:** Exact version-2 canonical documents pass to projection/decode; every other marker class and unsupported durable field fails with stable structured diagnostics; admission neither mutates the source nor writes/deletes browser storage.
+- **Acceptance criterion:** Documents valid against the co-shipped schema pass to projection/decode; every application-owned object rejects undeclared properties unless the schema explicitly names an extension point; every other marker class or shape fails with stable structured diagnostics, and admission neither mutates the source nor writes/deletes browser storage.
 - **Verification:** INTV-015 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 schema boundary; high compatibility/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

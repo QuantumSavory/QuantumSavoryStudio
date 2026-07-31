@@ -34,8 +34,14 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
 Current normalization can preserve unrecognized additive fields, including selected
-preview/error data. Release 2.0 instead targets an explicit durable field set, while
-expressly extensible nested maps remain defined by their owning schema.
+preview/error data.
+
+Release 2.0 instead uses `contracts/project/v2.schema.json` as the sole canonical durable
+field authority. That planned co-shipped JSON Schema is closed: every
+application-owned object boundary uses `additionalProperties: false`, and no nested map
+is extensible unless the schema explicitly names that extension point. Until the contract
+lands, version 2 remains planned; do not infer its field set from the permissive version-1
+normalizer.
 
 ## Current source versus approved schema target
 
@@ -47,6 +53,7 @@ Release 2.0 has no migration or best-effort version path:
 
 - encoding writes version 2;
 - admission requires exact integer version 2 and the canonical durable shape;
+- the canonical shape is exactly the closed co-shipped JSON Schema, not codec accidents;
 - incompatible input fails before normalization, hydration, storage, or session effects;
 - rejection returns structured expected/actual/path diagnostics and never rewrites or
   deletes the source document.
@@ -60,8 +67,9 @@ recent-project pointer. There is no server-side saved-project store. Exact stora
 remain implementation details.
 
 Release-2.0 failure handling preserves incompatible stored documents. An automatic-open
-failure may clear only the recent-project pointer needed to avoid repeated boot failure;
-it must not delete or rewrite the saved document.
+failure during bootstrap may clear only the stale recent-project navigation pointer
+needed to avoid repeated boot failure; no other replacement failure may mutate that
+pointer, and none may delete or rewrite a stored project document.
 
 ## Current transitions versus approved transaction
 
@@ -73,7 +81,8 @@ all replacement entry points.
 The approved target prepares an isolated candidate under a transition generation,
 rechecks ownership, and only then commits teardown, persistence, and installation.
 Failed, cancelled, incompatible, invalid, or stale candidates preserve active work and
-persist nothing.
+stored project documents and persist no candidate. The bootstrap pointer exception above
+is navigation recovery, not permission to mutate a project document.
 
 ## Frontend-only fields
 

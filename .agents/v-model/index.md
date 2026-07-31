@@ -46,8 +46,9 @@ no action is `passing`.
 
 - Approved intent: release-2.0 decisions for current-only schema admission,
   candidate-first replacement, revision/readback MCP recovery, local-only restricted
-  source, generated private API documentation, cleanup/error behavior, upstream
-  ownership, and a CI-backed Linux/Chromium support boundary.
+  source, a closed co-shipped project schema, the universal non-2xx envelope, generated
+  private API documentation, cleanup/error behavior, upstream ownership, and a CI-backed
+  Linux/Chromium support boundary.
 - Current behavior: root/`src/`, `gui/`, `mcp/`, and the co-shipped MCP contract at the
   profile-target commit.
 - Verification design: `test/`, `gui/tests/`, `mcp/test/`, `ci/`, GitHub Actions, and

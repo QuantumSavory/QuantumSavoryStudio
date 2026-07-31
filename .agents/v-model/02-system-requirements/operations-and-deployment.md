@@ -52,7 +52,7 @@ candidate-first replacement, and the release-declared support environment.
 
 - **Normative statement:** Every active-project replacement shall prepare and validate an isolated candidate before atomically tearing down the prior session and installing the latest owning candidate.
 - **Parents:** STK-011
-- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, cancellation, failure, and overlapping replacements leave active graph/name/selection/session state unchanged until an owning candidate is ready; failure or supersession installs and persists nothing; success replaces the active session once.
+- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, cancellation, failure, and overlapping replacements leave active graph/name/selection/session state and stored project documents unchanged until an owning candidate is ready; failure or supersession installs and persists no candidate; only bootstrap may clear a stale recent-project navigation pointer after failed automatic open, and success replaces the active session once.
 - **Verification:** SYSV-019 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first policy; high data-loss/state risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

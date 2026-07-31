@@ -71,7 +71,7 @@ replacement, operation-ledger, and broad-platform outcomes rather than reusing t
 
 - **Normative statement:** A GUI user shall receive a clear refusal when a project document is not written in the current project schema, without a migration or compatibility promise.
 - **Parents:** None
-- **Acceptance criterion:** A current-schema document opens, while older, newer, negative, missing, non-integer, malformed, or structurally unsupported documents fail with a structured visible reason and are not rewritten or deleted.
+- **Acceptance criterion:** A document conforming to the co-shipped closed current schema opens, while older, newer, negative, missing, non-integer, malformed, or undeclared-field documents fail with a structured visible reason and are not rewritten or deleted.
 - **Verification:** ACC-010 (demonstration)
 - **Origin / risk:** Maintainer-approved release-2.0 breaking schema policy; high user-data risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
@@ -80,7 +80,7 @@ replacement, operation-ledger, and broad-platform outcomes rather than reusing t
 
 - **Normative statement:** A GUI user shall retain the active project unless a requested replacement has been prepared successfully and is ready to become the new active project.
 - **Parents:** None
-- **Acceptance criterion:** Failed, cancelled, incompatible, invalid, or superseded opens/imports/demos/new-project requests leave the active project unchanged; a successful owning request replaces it once.
+- **Acceptance criterion:** Failed, cancelled, incompatible, invalid, or superseded opens/imports/demos/new-project requests leave the active project and stored project documents unchanged; bootstrap may clear only a stale recent-project navigation pointer after failed automatic open, and a successful owning request replaces the active project once.
 - **Verification:** ACC-011 (demonstration)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first transition policy; high data-loss/state risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)

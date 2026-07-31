@@ -1,8 +1,5 @@
 # Component Contracts
 
-These records retain only non-obvious invariants needed to implement or verify the
-logical boundaries.
-
 ## CMP-002 — Candidate-based design reconciliation
 
 - **Normative statement:** A design command shall run serially on an isolated candidate, validate before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and preserve retained live object identities during atomic reconciliation.
@@ -83,17 +80,17 @@ logical boundaries.
 
 ## CMP-013 — Frontend error-envelope preservation
 
-- **Normative statement:** Frontend HTTP utilities shall retain a structured backend failure's classification/code, message, status, details, and diagnostic payload through connector, controller, and Tools Log normalization.
+- **Normative statement:** Frontend HTTP utilities shall decode the universal `{"error":{"code":string,"message":string,"details":object}}` non-2xx body into one error carrying status, code, message, details, method, URL, and cause through the Tools Log; cancellation remains an `AbortError`.
 - **Parents:** SUB-007, SUB-009
-- **Acceptance criterion:** Discriminating validation, policy, missing, cleanup, and unexpected envelopes with nested canary fields produce Log records with equal transmitted values and no message-only collapse or silent fallback.
+- **Acceptance criterion:** Backend, malformed-JSON, and network fixtures preserve every available field; cancellation stays distinct; no failure becomes message-only, duplicates status in the body, returns `undefined`, or silently succeeds.
 - **Verification:** UNITV-018 (test)
 - **Context:** [Simulation client](../context/frontend/simulation-client.md)
 
 ## CMP-014 — Strict project-codec admission
 
-- **Normative statement:** The project codec shall require integer schema version 2 and the canonical durable field set before normalization or hydration, then clone and hydrate admitted values without mutating the source.
+- **Normative statement:** Before normalization or hydration, the project codec shall require integer version 2 and validate the closed `contracts/project/v2.schema.json`, then clone and hydrate without source mutation.
 - **Parents:** SUB-015
-- **Acceptance criterion:** Version-2 canonical fixtures decode independently; older, newer, negative, missing, non-integer, malformed, and unsupported-field fixtures return stable structured errors before decode side effects; encoding always emits version 2.
+- **Acceptance criterion:** Schema-valid version 2 decodes independently; each application-owned object sets `additionalProperties: false` with no unnamed extension; invalid-version, malformed, and undeclared-field fixtures fail before side effects, and encoding emits valid version 2.
 - **Verification:** UNITV-019 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 schema invariant; high compatibility/data-loss risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
@@ -102,7 +99,7 @@ logical boundaries.
 
 - **Normative statement:** A project replacement shall prepare a side-effect-free candidate under one transition generation, recheck ownership, and commit teardown, persistence, and installation as one owning transition without restoring prior state.
 - **Parents:** SUB-016
-- **Acceptance criterion:** Delayed fetch/preflight/decode observes the old active session; failure/cancellation preserves it; stale completion has no effect; a successful owning candidate clears old session owners, persists where applicable, and becomes active exactly once.
+- **Acceptance criterion:** Candidate work observes the old active session and stored documents; failed, cancelled, or stale work preserves both and persists no candidate; only failed bootstrap automatic-open may clear its stale recent pointer, and the successful owner commits once.
 - **Verification:** UNITV-020 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first invariant; high data-loss/state risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)

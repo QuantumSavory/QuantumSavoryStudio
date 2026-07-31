@@ -74,7 +74,7 @@ No product suite was run for this documentation-only release-2.0 baseline.
 - **Method:** test
 - **Procedure:** Trigger discriminating validation, missing-field, policy, not-found, cleanup, and unexpected backend failures through real GUI actions.
 - **Environment / configuration:** Real backend/frontend with diagnostic canary fields in each envelope
-- **Pass criterion:** Classification/code, message, status, details, and transmitted diagnostics retain their values in at least one Tools Log record per delivered failure; no path redacts by deployment profile or becomes an opaque exception or silent fallback.
+- **Pass criterion:** Every non-2xx body has exactly one top-level `error` object with string `code`, string `message`, and object `details`, with status only in HTTP unless the endpoint contract names an approved exception; code, message, status, details, and diagnostics retain their values in at least one Tools Log record without profile redaction, opaque replacement, or silent fallback.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Common backend envelopes and some lifecycle logs exist, but connector paths discard bodies and other callers use alert/inline-only handling.
@@ -83,9 +83,9 @@ No product suite was run for this documentation-only release-2.0 baseline.
 
 - **Covers:** SYS-017
 - **Method:** test
-- **Procedure:** Import and reopen current, older, newer, negative, missing, non-integer, malformed, unsupported-field, and structurally invalid documents through the real browser product.
+- **Procedure:** Import and reopen schema-valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents through the real browser product.
 - **Environment / configuration:** Supported browser with real storage, codec, import/session flow, and Tools Log
-- **Pass criterion:** Version-2 canonical documents open; every other class fails before hydration/session/storage effects with structured expected/actual/path diagnostics; source and stored input remain unchanged.
+- **Pass criterion:** Documents valid against `contracts/project/v2.schema.json` open; the co-shipped schema closes every application-owned object and names any extension point explicitly; every other class fails before hydration/session/storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current source emits schema version 1, normalizes several noncurrent markers, and lacks the release-2.0 field-set gate and system fixture.

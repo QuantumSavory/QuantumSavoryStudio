@@ -4,14 +4,15 @@
 
 - **Covers:** SUB-015
 - **Method:** test
-- **Procedure:** Admit current, older, newer, negative, missing, non-integer,
-  malformed, unsupported-field, and structurally invalid documents while observing
-  decode, source identity, and storage calls.
+- **Procedure:** Admit schema-valid version-2, older, newer, negative, missing,
+  non-integer, malformed, undeclared-field-at-each-application-boundary, and
+  structurally invalid documents while observing decode, source identity, and storage.
 - **Environment / configuration:** Vitest/jsdom with real codec, admission boundary,
-  and storage spies
-- **Pass criterion:** Only canonical version-2 input reaches normalization/hydration;
-  every rejection is structured; no source or browser-storage mutation occurs during
-  admission.
+  co-shipped JSON Schema validator, and storage spies
+- **Pass criterion:** Only input valid against `contracts/project/v2.schema.json`
+  reaches normalization/hydration; every application-owned object rejects undeclared
+  fields unless the schema explicitly names an extension point; every rejection is
+  structured, and no source or browser-storage mutation occurs during admission.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current codec emits version 1, coerces several marker classes,
@@ -26,9 +27,11 @@
   and persistence owners.
 - **Environment / configuration:** Browser project-session integration with
   controllable promises and storage
-- **Pass criterion:** Active state persists through candidate work; rejected/stale
-  candidates have no active or storage effect; the latest successful candidate commits
-  teardown, persistence, and installation once.
+- **Pass criterion:** Active state and stored project documents persist through
+  candidate work; rejected/stale candidates have no active or project-document storage
+  effect; failed bootstrap automatic-open may clear only a stale recent-project
+  navigation pointer, and the latest successful candidate commits teardown,
+  persistence, and installation once.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current tests assert preservation after selected rejection, but
@@ -62,9 +65,10 @@
 - **Environment / configuration:** Pinned source with a durable automated contract
   inventory
 - **Pass criterion:** Every supported handler appears once with matching method and
-  required request/success/error shapes; every retained route has a consumer or
-  explicit exception; generation is deterministic and hand-maintained route schemas
-  are absent.
+  required request/success/error shapes; the universal non-2xx envelope is canonical
+  and every shape deviation or backend-only route is an explicit endpoint entry; every
+  retained route has a consumer or explicit exception, generation is deterministic,
+  and hand-maintained route schemas are absent.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Routes and adjacent Swagger blocks are maintained manually, drift

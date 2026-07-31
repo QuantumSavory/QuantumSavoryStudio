@@ -73,9 +73,9 @@ encoded by the current component suites.
 
 - **Covers:** CMP-013
 - **Method:** test
-- **Procedure:** Feed validation, policy, missing, cleanup, and unexpected envelopes with distinct nested canaries through JSON reader, API methods, controllers, and log normalization.
+- **Procedure:** Feed exact validation, policy, missing, cleanup, and unexpected envelopes, malformed JSON, network failure, and cancellation through JSON reader, API methods, controllers, and log normalization.
 - **Environment / configuration:** Node Vitest/jsdom frontend utilities and composables
-- **Pass criterion:** Code/classification, message, status, details, and diagnostic values reach at least one Log record unchanged; no envelope is deployment-redacted or becomes message-only, `undefined`, or a fallback success.
+- **Pass criterion:** Non-2xx bodies decode to one client error retaining HTTP status, code, message, object details, method, URL, and cause; diagnostic values reach a Log unchanged, cancellation remains an `AbortError`, and no failure becomes message-only, `undefined`, or a fallback success.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current shared JSON reader throws a message-only `Error`, and several legacy calls swallow or replace failures.
@@ -84,9 +84,9 @@ encoded by the current component suites.
 
 - **Covers:** CMP-014
 - **Method:** test
-- **Procedure:** Encode/decode version-2 canonical, older, newer, negative, missing, non-integer, malformed, unsupported-field, hydration, cloning, and source-nonmutation fixtures.
-- **Environment / configuration:** Node Vitest/jsdom
-- **Pass criterion:** Encoding emits version 2; only canonical version-2 input reaches normalization/hydration; every other class returns stable expected/actual/path diagnostics before side effects; admitted output is independent.
+- **Procedure:** Validate and encode/decode schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field fixtures at every application-owned object boundary, plus hydration, cloning, and source-nonmutation fixtures.
+- **Environment / configuration:** Node Vitest/jsdom with the co-shipped `contracts/project/v2.schema.json`
+- **Pass criterion:** Encoding emits schema-valid version 2; every application-owned object is closed with no implicit extension point; only schema-valid input reaches normalization/hydration, every other class returns stable expected/actual/path diagnostics before side effects, and admitted output is independent.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current codec emits version 1, coerces several markers, preserves additive fields, and explicitly rejects only future versions.
@@ -95,9 +95,9 @@ encoded by the current component suites.
 
 - **Covers:** CMP-015
 - **Method:** test
-- **Procedure:** From a populated session, delay and fail every candidate phase for each replacement class, inject cancellation and supersession, and observe storage plus active owners.
+- **Procedure:** From a populated session, delay and fail every candidate phase for each replacement class, inject cancellation and supersession, and observe stored documents, the recent-project navigation pointer, and active owners.
 - **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
-- **Pass criterion:** Old active state remains throughout candidate preparation; rejected/stale candidates write nothing; one latest successful candidate performs teardown, persistence, and installation exactly once.
+- **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale candidates persist no candidate; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer, and one latest successful candidate performs teardown, persistence, and installation exactly once.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current tests preserve active state after selected preflight failure but candidate preparation, storage, and commit are not one transaction.

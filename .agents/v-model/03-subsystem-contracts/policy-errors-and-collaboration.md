@@ -14,9 +14,9 @@ active-project replacement.
 
 ## SUB-009 — Private HTTP contract and failure handoff
 
-- **Normative statement:** Each GUI-supporting HTTP operation shall keep its request, success, and failure shapes synchronized for maintainers and translate every classified or unexpected failure into a structured envelope that frontend callers preserve into the Tools Log.
+- **Normative statement:** Each GUI-supporting HTTP operation shall keep its request, success, and failure shapes synchronized for maintainers and translate every non-2xx result into `{"error":{"code":string,"message":string,"details":object}}`; a different shape is allowed only as an explicitly approved endpoint-specific contract entry, and frontend callers shall preserve the structured failure into the Tools Log.
 - **Parents:** SYS-008
-- **Acceptance criterion:** Every registered GUI-supporting route appears once in the generated private contract with matching method and required shapes; representative 400/403/404/500 and cleanup paths retain code/classification, message, status, and details through connector/controller/log records; no cross-release external compatibility is implied.
+- **Acceptance criterion:** Every registered GUI-supporting route appears once in the generated private contract with matching method and required shapes; each non-2xx response has exactly one top-level `error` object with string `code`, string `message`, and object `details`, carries status only in HTTP, or names its approved endpoint exception; representative 400/403/404/500 and cleanup paths retain code, message, status, and details through connector/controller/log records, with no cross-release external compatibility implied.
 - **Verification:** INTV-009 (test), INTV-018 (inspection)
 - **Origin / risk:** Maintainer-approved generated-contract boundary and known route/connector gaps; high diagnosability risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)
@@ -61,7 +61,7 @@ active-project replacement.
 
 - **Normative statement:** Every active-project replacement shall prepare a nonmutating isolated candidate and commit teardown, persistence, and installation only after the latest owning candidate is valid and ready.
 - **Parents:** SYS-018
-- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, and competing transitions preserve active graph/name/selection/polling/results/collaboration until commit; rejected or stale candidates have no active or persistence effect; the owning successful candidate replaces all session owners once.
+- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, and competing transitions preserve active graph/name/selection/polling/results/collaboration and every stored project document until commit; rejected or stale candidates have no active or project-document persistence effect; bootstrap alone may clear a stale recent-project navigation pointer after failed automatic open, and the owning successful candidate replaces all session owners once.
 - **Verification:** INTV-016 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 transition boundary; high state/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

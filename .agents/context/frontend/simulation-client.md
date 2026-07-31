@@ -76,7 +76,9 @@ implicit prepared revision.
 The required structured handoff for failures delivered to or polled by the GUI is in
 [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
 Backend-produced diagnostic details are retained across local/public profiles under
-that contract.
+that contract. The approved client representation retains HTTP `status`, backend `code`,
+`message`, object `details`, request `method` and `url`, and an available transport
+`cause`; native request cancellation remains an `AbortError`.
 
 Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
 responses through the shared JSON reader. Several legacy lifecycle/result calls parse or

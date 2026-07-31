@@ -84,9 +84,9 @@ planned until a durable release-2.0 acceptance record exists.
 
 - **Covers:** STK-010
 - **Method:** demonstration
-- **Procedure:** Open/import current, older, newer, negative, missing, non-integer, malformed, and unsupported-shape documents while preserving copies of every input.
+- **Procedure:** Open/import schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field documents while preserving copies of every input.
 - **Environment / configuration:** Supported desktop browser with warning/error observer and Tools Log
-- **Pass criterion:** The current-schema document opens; every other class fails with a structured visible reason; no rejected document is rewritten or deleted.
+- **Pass criterion:** The schema-valid document opens; every other class fails with a structured visible reason; no rejected document is rewritten or deleted, and no undeclared application-owned field is treated as an implicit extension.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current source uses schema version 1, accepts several noncurrent classes, and has no release-2.0 strict-schema demonstration.
@@ -97,7 +97,7 @@ planned until a durable release-2.0 acceptance record exists.
 - **Method:** demonstration
 - **Procedure:** From a populated active project, attempt delayed, cancelled, invalid, incompatible, failing, superseded, and successful saved/import/demo/new-project replacements.
 - **Environment / configuration:** Supported desktop browser with visible project/session state
-- **Pass criterion:** Every unsuccessful or superseded candidate preserves active work and persists nothing; the successful latest candidate replaces the active project once.
+- **Pass criterion:** Every unsuccessful or superseded candidate preserves active work and stored project documents and persists no candidate; failed bootstrap automatic-open may clear only its stale recent-project navigation pointer, and the successful latest candidate replaces the active project once.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current source preflights many candidates before teardown, but no one acceptance artifact proves all replacement owners and persistence effects.

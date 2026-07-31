@@ -75,7 +75,7 @@ and supported environments. No product suite was run for this documentation base
 - **Method:** test
 - **Procedure:** From a populated project, start saved-project open, import, demo, create/new-project, and overlapping replacements with delayed, cancelled, incompatible, invalid, failing, and successful candidates.
 - **Environment / configuration:** Real desktop browser with transition/persistence instrumentation and Tools Log
-- **Pass criterion:** Active state remains unchanged through unsuccessful or stale candidate work; no unsuccessful candidate persists; the latest successful candidate tears down and replaces active session owners exactly once.
+- **Pass criterion:** Active state and stored project documents remain unchanged through unsuccessful or stale candidate work; no unsuccessful candidate persists; bootstrap failure may clear only a stale recent-project navigation pointer after automatic open, and the latest successful candidate tears down and replaces active session owners exactly once.
 - **Status:** planned
 - **Evidence:** None
 - **Nonconformance:** Current source/tests preserve the active project on selected preflight failures but do not implement or prove one side-effect-free prepare/atomic-commit boundary for every replacement class.

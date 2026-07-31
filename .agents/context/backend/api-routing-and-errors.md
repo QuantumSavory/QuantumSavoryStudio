@@ -46,11 +46,24 @@ Failure responses have this common core:
 The helper adds `error_code` only when it is nonempty and adds `details` only when it is
 not `nothing`; neither field is part of the required common core.
 
-The baselined contract linked above is stronger than this current implementation. It
-does not impose one universal HTTP status/success-envelope convention, but it does
-require preservation of backend-produced diagnostic fields across deployment profiles.
-Credential, session, and capability redaction in MCP operational transcripts remains a
-separate secret-handling boundary.
+The approved release-2.0 non-2xx body is instead exact and universal:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "human-readable summary",
+    "details": {}
+  }
+}
+```
+
+`code` and `message` are strings, `details` is always an object, and the HTTP status is
+not duplicated in the body. There is no implicit legacy or alternative failure shape.
+Any future exception requires an explicitly approved endpoint-specific entry in the
+canonical generated private contract and synchronized bundled callers. Backend-produced
+diagnostic fields remain available across deployment profiles. Credential, session, and
+capability redaction in MCP operational transcripts is a separate secret boundary.
 
 Do not infer one universal success envelope. Representative current shapes are:
 

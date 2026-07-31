@@ -54,10 +54,12 @@ a security sandbox.
 ## Persistence and compatibility
 
 Named projects are stored only in browser `localStorage`; live simulations are
-process-local. Release 2.0 targets exact schema-version-2 admission with no migration or
-best-effort compatibility path. Rejected documents remain untouched, and active-project
-replacement commits only after a valid candidate is ready. Current source still writes
-schema version 1 and does not implement the complete approved transaction.
+process-local. Release 2.0 targets the closed co-shipped
+`contracts/project/v2.schema.json` with no migration or best-effort compatibility path.
+Rejected documents remain untouched; failed bootstrap automatic-open may clear only its
+stale recent-project navigation pointer, and active-project replacement commits only
+after a valid candidate is ready. Current source still writes schema version 1 and does
+not implement the complete approved transaction.
 
 MCP contract compatibility is likewise not promised across releases. The approved
 contract-v2 readback recovery is planned and differs from the current v1 operation-ID
