@@ -110,7 +110,7 @@
               <div class="states-zoo-parameter-label">
                 <span>{{ parameter.name }}</span>
                 <span class="states-zoo-parameter-range-text">
-                  {{ parameter.min }}–{{ parameter.max }}
+                  {{ formatStateParameterRange(parameter) }}
                 </span>
               </div>
               <div class="states-zoo-parameter-inputs">
@@ -217,6 +217,11 @@ import {
 } from '../../models/Variable'
 import { api } from '../../utils/ApiConnector'
 import { watermarkGeneratedPng } from '../../utils/pngWatermark'
+import {
+  formatStateParameterRange,
+  normalizeStateParameter,
+  stateParameterValueIsValid,
+} from '../../utils/stateParameterBounds'
 import { generateUUid } from '../../utils/Utils'
 
 const PREVIEW_DEBOUNCE_MS = 500
@@ -254,22 +259,13 @@ let isUnmounted = false
 
 const zooVariables = computed(() => props.variables.filter(isStatesZooVariable))
 
-function normalizeParameter(parameter) {
-  return {
-    name: String(parameter.name),
-    min: Number(parameter.min),
-    max: Number(parameter.max),
-    good: Number(parameter.good)
-  }
-}
-
 function normalizeStateType(type) {
   return {
     id: String(type.id),
     displayName: type.display_name || type.id,
     weighted: type.weighted === true,
     parameters: Array.isArray(type.parameters)
-      ? type.parameters.map(normalizeParameter)
+      ? type.parameters.map(normalizeStateParameter)
       : []
   }
 }
@@ -448,11 +444,7 @@ function markStateDraftDirty(variableId) {
 
 function parameterValueInvalid(variable, parameter) {
   const rawValue = stateDraft(variable).value.parameters[parameter.name]
-  if (rawValue == null || rawValue === '') return true
-  const value = Number(rawValue)
-  return !Number.isFinite(value)
-    || value < Number(parameter.min)
-    || value > Number(parameter.max)
+  return !stateParameterValueIsValid(rawValue, parameter)
 }
 
 function stateDraft(variable) {

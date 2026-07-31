@@ -49,6 +49,10 @@ import {
   QUBIT_REPRESENTATION_OPTIONS,
   QUMODE_REPRESENTATION_OPTIONS,
 } from '../../utils/representations.js'
+import {
+  formatStateParameterRange,
+  stateParameterValueIsValid,
+} from '../../utils/stateParameterBounds.js'
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
 const RUNTIME_SLOT_FIELDS = new Set(TRANSIENT_SLOT_FIELDS)
@@ -1728,20 +1732,14 @@ export class DesignCommandService {
     }
     return Object.fromEntries(parameterDefinitions.map(parameter => {
       const name = String(parameter.name)
-      const value = Number(values[name])
-      const minimum = Number(parameter.min)
-      const maximum = Number(parameter.max)
-      if (
-        !Number.isFinite(value)
-        || (Number.isFinite(minimum) && value < minimum)
-        || (Number.isFinite(maximum) && value > maximum)
-      ) {
+      const rawValue = values[name]
+      if (!stateParameterValueIsValid(rawValue, parameter)) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
-          `${name} must be a finite number in [${minimum}, ${maximum}].`,
+          `${name} must be a finite number in ${formatStateParameterRange(parameter)}.`,
         )
       }
-      return [name, value]
+      return [name, Number(rawValue)]
     }))
   }
 

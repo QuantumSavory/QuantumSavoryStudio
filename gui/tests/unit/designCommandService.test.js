@@ -1399,6 +1399,30 @@ describe('DesignCommandService', () => {
     )
   })
 
+  it('enforces open States Zoo schema bounds in design commands', () => {
+    const project = createEmptyProject('States')
+    const definition = {
+      id: 'GenqoMultiplexedCascadedBellPairW',
+      weighted: true,
+      parameters: [{
+        name: 'η',
+        min: 0,
+        max: 1,
+        min_inclusive: false,
+        max_inclusive: true,
+        good: 0.5,
+      }],
+    }
+    const service = serviceFor(project, {
+      statesCatalog: () => [definition],
+    })
+
+    expect(() => service.stateParameters(definition, { η: 0 }))
+      .toThrowError(/\(0, 1\]/)
+    expect(service.stateParameters(definition, { η: Number.MIN_VALUE }))
+      .toEqual({ η: Number.MIN_VALUE })
+  })
+
   it('synchronizes weighted States Zoo trace companions atomically', async () => {
     const project = createEmptyProject('States')
     const previewState = vi.fn(async () => ({ trace: -0.25 }))

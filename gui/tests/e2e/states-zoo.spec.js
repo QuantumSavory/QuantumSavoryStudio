@@ -8,17 +8,34 @@ const TRANSPARENT_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrJ0AAAAASUVORK5CYII='
 const BLUE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 
+function stateParameter(
+  name,
+  min,
+  max,
+  good,
+  { minInclusive = true, maxInclusive = true } = {},
+) {
+  return {
+    name,
+    min,
+    max,
+    good,
+    min_inclusive: minInclusive,
+    max_inclusive: maxInclusive,
+  }
+}
+
 const STATES_ZOO_TYPES = [
   {
     id: 'BarrettKokBellPair',
     display_name: 'Barrett-Kok Bell Pair',
     weighted: false,
     parameters: [
-      { name: 'ηᴬ', min: 0, max: 1, good: 1 },
-      { name: 'ηᴮ', min: 0, max: 1, good: 1 },
-      { name: 'Pᵈ', min: 0, max: 1, good: 0 },
-      { name: 'ηᵈ', min: 0, max: 1, good: 1 },
-      { name: '𝒱', min: 0, max: 1, good: 1 },
+      stateParameter('ηᴬ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('ηᴮ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('Pᵈ', 0, 1, 0, { maxInclusive: false }),
+      stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('𝒱', 0, 1, 1),
     ],
   },
   {
@@ -26,29 +43,28 @@ const STATES_ZOO_TYPES = [
     display_name: 'Barrett-Kok Bell Pair (weighted)',
     weighted: true,
     parameters: [
-      { name: 'ηᴬ', min: 0, max: 1, good: 1 },
-      { name: 'ηᴮ', min: 0, max: 1, good: 1 },
-      { name: 'Pᵈ', min: 0, max: 1, good: 0 },
-      { name: 'ηᵈ', min: 0, max: 1, good: 1 },
-      { name: '𝒱', min: 0, max: 1, good: 1 },
+      stateParameter('ηᴬ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('ηᴮ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('Pᵈ', 0, 1, 0, { maxInclusive: false }),
+      stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('𝒱', 0, 1, 1),
     ],
   },
   {
     id: 'DepolarizedBellPair',
     display_name: 'Depolarized Bell Pair',
     weighted: false,
-    parameters: [{ name: 'p', min: 0, max: 1, good: 1 }],
+    parameters: [stateParameter('p', 0, 1, 1)],
   },
   {
     id: 'GenqoMultiplexedCascadedBellPairW',
     display_name: 'Genqo Multiplexed Cascaded Bell Pair (weighted)',
     weighted: true,
     parameters: [
-      { name: 'ηᵇ', min: 0, max: 1, good: 1 },
-      { name: 'ηᵈ', min: 0, max: 1, good: 1 },
-      { name: 'ηᵗ', min: 0, max: 1, good: 1 },
-      { name: 'N', min: 0, max: 10, good: 0.1 },
-      { name: 'Pᵈ', min: 0, max: 0.1, good: 1e-8 },
+      stateParameter('ηᵇ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('ηᵗ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('N', 0, 10, 0.1, { minInclusive: false }),
     ],
   },
   {
@@ -56,10 +72,9 @@ const STATES_ZOO_TYPES = [
     display_name: 'Genqo Unheralded SPDC Bell Pair (weighted)',
     weighted: true,
     parameters: [
-      { name: 'ηᵈ', min: 0, max: 1, good: 1 },
-      { name: 'ηᵗ', min: 0, max: 1, good: 1 },
-      { name: 'N', min: 0, max: 10, good: 0.1 },
-      { name: 'Pᵈ', min: 0, max: 0.1, good: 1e-6 },
+      stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('ηᵗ', 0, 1, 1, { minInclusive: false }),
+      stateParameter('N', 0, 10, 0.1, { minInclusive: false }),
     ],
   },
 ]
