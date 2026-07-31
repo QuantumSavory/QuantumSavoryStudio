@@ -227,9 +227,42 @@ end
         @test "wqs://design/current" in resource_uris
         @test "wqs://simulation/state" in resource_uris
 
-        tool_response, tool_body = session_request(
+        templates_response, templates_body = session_request(
             first_session,
             4,
+            "resources/templates/list",
+        )
+        @test templates_response.status == 200
+        result_templates = Set(
+            (
+                template["uriTemplate"],
+                template["mimeType"],
+            )
+            for template in templates_body["result"]["resourceTemplates"]
+            if startswith(template["uriTemplate"], "wqs://simulation/")
+        )
+        @test result_templates == Set([
+            ("wqs://simulation/slots/{slot_id}/html", "text/html"),
+            ("wqs://simulation/slots/{slot_id}/png", "image/png"),
+            ("wqs://simulation/protocols/{protocol_id}/html", "text/html"),
+            ("wqs://simulation/protocols/{protocol_id}/png", "image/png"),
+        ])
+
+        missing_resource_response, missing_resource_body = session_request(
+            first_session,
+            5,
+            "resources/read",
+            Dict("uri" => "wqs://simulation/slots/missing/html"),
+        )
+        @test missing_resource_response.status == 200
+        @test occursin(
+            "\"code\":\"NO_EDITOR_BOUND\"",
+            missing_resource_body["error"]["message"],
+        )
+
+        tool_response, tool_body = session_request(
+            first_session,
+            6,
             "tools/call",
             Dict(
                 "name" => "design_get",
@@ -242,7 +275,7 @@ end
             "NO_EDITOR_BOUND"
         @test tool_body["result"]["structuredContent"]["retryable"] === true
 
-        rejected, rejected_body, rejected_session = initialize_session(5)
+        rejected, rejected_body, rejected_session = initialize_session(7)
         @test rejected.status == 409
         @test isempty(rejected_session)
         @test rejected_body["error"]["code"] == -32000
@@ -263,7 +296,7 @@ end
         @test parse_body(restarted)["server"]["state"] == "running"
         assert_running_control_status()
 
-        fresh_initialize, fresh_body, fresh_session = initialize_session(6)
+        fresh_initialize, fresh_body, fresh_session = initialize_session(8)
         @test fresh_initialize.status == 200
         @test !isempty(fresh_session)
         @test fresh_session != first_session

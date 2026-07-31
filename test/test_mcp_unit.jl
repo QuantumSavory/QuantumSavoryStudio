@@ -2,7 +2,20 @@
   using Dates
   using Genie
   using Main.WebQuantumSavory
+  import QuantumSavory
   using Test
+
+  struct MCPTestRepresentation end
+  struct MCPTestSlot end
+
+  Base.show(io::IO, ::MIME"text/html", ::MCPTestRepresentation) =
+    print(io, "<p>rendered result</p>")
+  Base.show(io::IO, ::MIME"image/png", ::MCPTestRepresentation) =
+    write(io, WebQuantumSavory.MCP_RESOURCE_PNG_SIGNATURE, UInt8[0x01])
+  QuantumSavory.stateof(::MCPTestSlot) = MCPTestRepresentation()
+  QuantumSavory.slots(::MCPTestRepresentation) = Any[]
+  QuantumSavory.islocked(::MCPTestSlot) = false
+  QuantumSavory.isassigned(::MCPTestSlot) = true
 
   function binding_request(; editor_id="editor-1", generation=1, hash="initial-hash")
     Dict{String,Any}(
@@ -1071,6 +1084,169 @@
     @test changed isa WebQuantumSavory.APIError
     @test changed.error_code == "PROJECT_CHANGED"
     @test changed.details["retryable"]
+  end
+
+  @testset "result resources round-trip opaque identifiers" begin
+    identifiers = (
+      "simple",
+      "x/y",
+      "x%2Fy",
+      "percent%",
+      "query?",
+      "fragment#",
+      "plus+",
+      "unicode-λ",
+    )
+    for identifier in identifiers
+      encoded = WebQuantumSavory._encode_mcp_resource_segment(identifier)
+      parsed = WebQuantumSavory._parse_mcp_result_resource_uri(
+        "wqs://simulation/slots/$encoded/html",
+      )
+      @test parsed == (
+        kind="slots",
+        identifier,
+        format="html",
+      )
+    end
+    @test WebQuantumSavory._encode_mcp_resource_segment("x/y") == "x%2Fy"
+    @test WebQuantumSavory._encode_mcp_resource_segment("x%2Fy") == "x%252Fy"
+
+    malformed_uris = (
+      "wqs://simulation/slots//html",
+      "wqs://simulation/slots/%/html",
+      "wqs://simulation/slots/%2/html",
+      "wqs://simulation/slots/%GG/html",
+      "wqs://simulation/slots/%FF/html",
+      "wqs://simulation/slots/raw+plus/html",
+      "wqs://simulation/slots/raw?query/html",
+      "wqs://simulation/slots/raw#fragment/html",
+      "wqs://simulation/slots/extra/path/html",
+      "wqs://simulation/slots/id/jpeg",
+      "wqs://simulation/slots/id/html/extra",
+    )
+    for uri in malformed_uris
+      error = try
+        WebQuantumSavory._parse_mcp_result_resource_uri(uri)
+        nothing
+      catch caught
+        caught
+      end
+      @test error isa WebQuantumSavory.APIError
+      @test error.error_code == "VALIDATION_FAILED"
+    end
+
+    png_bytes = vcat(
+      WebQuantumSavory.MCP_RESOURCE_PNG_SIGNATURE,
+      UInt8[0x01],
+    )
+    valid = Dict{String,Any}(
+      "html_base64" => WebQuantumSavory.base64encode("<p>ok</p>"),
+      "png_base64" => WebQuantumSavory.base64encode(png_bytes),
+    )
+    summary = WebQuantumSavory._result_with_resource_links(
+      valid,
+      "slots",
+      "x/y",
+    )
+    @test summary["resources"] == Dict(
+      "html" => "wqs://simulation/slots/x%2Fy/html",
+      "png" => "wqs://simulation/slots/x%2Fy/png",
+    )
+    for (key, value, expected_code) in (
+      ("html_base64", nothing, "RESULT_NOT_FOUND"),
+      ("html_base64", "", "RESULT_NOT_FOUND"),
+      ("html_base64", "%%%", "VALIDATION_FAILED"),
+      (
+        "html_base64",
+        WebQuantumSavory.base64encode(UInt8[0xff]),
+        "VALIDATION_FAILED",
+      ),
+      (
+        "png_base64",
+        WebQuantumSavory.base64encode("not a png"),
+        "VALIDATION_FAILED",
+      ),
+    )
+      invalid = copy(valid)
+      invalid[key] = value
+      error = try
+        WebQuantumSavory._result_with_resource_links(
+          invalid,
+          "slots",
+          "slot",
+        )
+        nothing
+      catch caught
+        caught
+      end
+      @test error isa WebQuantumSavory.APIError
+      @test error.error_code == expected_code
+    end
+
+    opaque_id = "result /?#%+λ%2F"
+    state = WebQuantumSavory.State(
+      name="user_Project",
+      slot_mapping=Dict{String,Any}(opaque_id => MCPTestSlot()),
+      protocol_mapping=Dict{String,Any}(
+        opaque_id => MCPTestRepresentation(),
+      ),
+    )
+    service = WebQuantumSavory.SimulationService(
+      Dict("user_Project" => state),
+    )
+    hub = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(hub, binding_request())
+    for (tool, argument, kind) in (
+      ("simulation_slot_result", "slot_id", "slots"),
+      ("simulation_protocol_result", "protocol_id", "protocols"),
+    )
+      result = WebQuantumSavory.dispatch_mcp_tool!(
+        tool,
+        Dict{String,Any}(argument => opaque_id);
+        hub,
+        simulation_service=service,
+      )
+      @test !haskey(result, "html_base64")
+      @test !haskey(result, "png_base64")
+      encoded_id = WebQuantumSavory._encode_mcp_resource_segment(opaque_id)
+      @test result["resources"]["html"] ==
+        "wqs://simulation/$kind/$encoded_id/html"
+      @test result["resources"]["png"] ==
+        "wqs://simulation/$kind/$encoded_id/png"
+
+      html = WebQuantumSavory.read_mcp_resource(
+        result["resources"]["html"];
+        hub,
+        simulation_service=service,
+      )
+      @test html["mime_type"] == "text/html"
+      @test !isempty(String(WebQuantumSavory.base64decode(html["base64"])))
+      png = WebQuantumSavory.read_mcp_resource(
+        result["resources"]["png"];
+        hub,
+        simulation_service=service,
+      )
+      @test png["mime_type"] == "image/png"
+      decoded_png = WebQuantumSavory.base64decode(png["base64"])
+      @test decoded_png[1:length(WebQuantumSavory.MCP_RESOURCE_PNG_SIGNATURE)] ==
+        WebQuantumSavory.MCP_RESOURCE_PNG_SIGNATURE
+    end
+
+    delete!(state.protocol_mapping, opaque_id)
+    missing = try
+      WebQuantumSavory.read_mcp_resource(
+        "wqs://simulation/protocols/" *
+          WebQuantumSavory._encode_mcp_resource_segment(opaque_id) *
+          "/html";
+        hub,
+        simulation_service=service,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test missing isa WebQuantumSavory.APIError
+    @test missing.error_code == "RESULT_NOT_FOUND"
   end
 
   @testset "authoring revision metadata stops at the hub boundary" begin

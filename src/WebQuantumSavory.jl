@@ -939,6 +939,7 @@ get_logs(simulation_name::String, purge::Bool=true) =
 include("simulation_service.jl")
 include("collaboration_hub.jl")
 include("sidecar_supervisor.jl")
+include("mcp_resources.jl")
 include("mcp_adapters.jl")
 include("services.jl")
 include("startup_warmup.jl")

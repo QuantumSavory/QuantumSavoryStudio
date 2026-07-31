@@ -226,3 +226,123 @@ end
     @test !isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v1", "tools.json"))
     @test isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v2", "tools.json"))
 end
+
+@testset "MCP result links and exact resource templates" begin
+    structured = Dict{String,Any}(
+        "protocol_id" => "protocol /?#%+λ%2F",
+        "resources" => Dict(
+            "html" => "wqs://simulation/protocols/protocol%20%2F%3F%23%25%2B%CE%BB%252F/html",
+            "png" => "wqs://simulation/protocols/protocol%20%2F%3F%23%25%2B%CE%BB%252F/png",
+        ),
+    )
+    result = call_tool_result(true, structured, "simulation_protocol_result")
+    @test !result.is_error
+    @test result.structured_content == structured
+    @test getindex.(result.content, "type") ==
+        ["text", "resource_link", "resource_link"]
+    @test result.content[2]["uri"] == structured["resources"]["html"]
+    @test result.content[2]["mimeType"] == "text/html"
+    @test result.content[3]["uri"] == structured["resources"]["png"]
+    @test result.content[3]["mimeType"] == "image/png"
+
+    incomplete = call_tool_result(
+        true,
+        Dict{String,Any}(
+            "resources" => Dict("html" => structured["resources"]["html"]),
+        ),
+        "simulation_protocol_result",
+    )
+    @test incomplete.is_error
+    @test incomplete.structured_content["code"] == "MALFORMED_SUCCESS_RESPONSE"
+    @test getindex.(incomplete.content, "type") == ["text"]
+
+    _, templates = resources(Dict{String,Any}())
+    result_templates = templates[2:end]
+    @test [
+        (template.uri_template, template.mime_type)
+        for template in result_templates
+    ] == [
+        ("wqs://simulation/slots/{slot_id}/html", "text/html"),
+        ("wqs://simulation/slots/{slot_id}/png", "image/png"),
+        ("wqs://simulation/protocols/{protocol_id}/html", "text/html"),
+        ("wqs://simulation/protocols/{protocol_id}/png", "image/png"),
+    ]
+end
+
+@testset "MCP rendered resources validate both trust boundaries" begin
+    png_bytes = vcat(RESOURCE_PNG_SIGNATURE, UInt8[0x01])
+    html_uri = "wqs://simulation/slots/slot/html"
+    png_uri = "wqs://simulation/slots/slot/png"
+    html = rendered_resource_contents(
+        html_uri,
+        Dict(
+            "mime_type" => "text/html",
+            "base64" => base64encode("<p>rendered</p>"),
+        ),
+        "text/html",
+    )
+    @test html isa TextResourceContents
+    @test string(html.uri) == html_uri
+    @test html.mime_type == "text/html"
+    @test html.text == "<p>rendered</p>"
+
+    png = rendered_resource_contents(
+        png_uri,
+        Dict(
+            "mime_type" => "image/png",
+            "base64" => base64encode(png_bytes),
+        ),
+        "image/png",
+    )
+    @test png isa BlobResourceContents
+    @test string(png.uri) == png_uri
+    @test png.mime_type == "image/png"
+    @test png.blob == png_bytes
+
+    invalid_cases = (
+        (
+            Dict("mime_type" => "image/png", "base64" => base64encode("<p>x</p>")),
+            "text/html",
+            "VALIDATION_FAILED",
+        ),
+        (
+            Dict("mime_type" => "text/html"),
+            "text/html",
+            "RESULT_NOT_FOUND",
+        ),
+        (
+            Dict("mime_type" => "text/html", "base64" => ""),
+            "text/html",
+            "RESULT_NOT_FOUND",
+        ),
+        (
+            Dict("mime_type" => "text/html", "base64" => "%%%"),
+            "text/html",
+            "VALIDATION_FAILED",
+        ),
+        (
+            Dict("mime_type" => "text/html", "base64" => base64encode(UInt8[0xff])),
+            "text/html",
+            "VALIDATION_FAILED",
+        ),
+        (
+            Dict("mime_type" => "image/png", "base64" => base64encode("not png")),
+            "image/png",
+            "VALIDATION_FAILED",
+        ),
+    )
+    for (payload, expected_mime_type, expected_code) in invalid_cases
+        error = try
+            rendered_resource_contents(
+                "wqs://simulation/slots/slot/html",
+                payload,
+                expected_mime_type,
+            )
+            nothing
+        catch caught
+            caught
+        end
+        @test error isa BackendRequestError
+        @test error.payload["code"] == expected_code
+    end
+end

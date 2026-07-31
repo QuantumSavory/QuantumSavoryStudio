@@ -169,6 +169,22 @@ const AMBIGUOUS_BRIDGE_ERROR_CODES = Set([
   "MALFORMED_SUCCESS_RESPONSE",
   "NETWORK_ERROR",
 ])
+const RESULT_RESOURCE_TOOLS = Set([
+  "simulation_protocol_result",
+  "simulation_slot_result",
+])
+const RESOURCE_PNG_SIGNATURE = UInt8[
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
+]
+const RESOURCE_BASE64_PATTERN =
+  r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
 
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
@@ -332,6 +348,70 @@ function normalize_tool_error(tool_name, error_payload)
   return structured
 end
 
+function tool_resource_links(tool_name, structured)
+  string(tool_name) in RESULT_RESOURCE_TOOLS || return ResourceLink[]
+  resources = get(structured, "resources", nothing)
+  exact_string_keys(resources, ("html", "png")) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "MALFORMED_SUCCESS_RESPONSE",
+      "The backend did not return both result resource links.";
+      details=Dict("tool" => string(tool_name)),
+    )),
+  )
+  links = ResourceLink[]
+  for (format, mime_type) in (("html", "text/html"), ("png", "image/png"))
+    uri = get(resources, format, nothing)
+    uri isa AbstractString && !isempty(uri) || throw(
+      BackendRequestError(sidecar_error_payload(
+        "MALFORMED_SUCCESS_RESPONSE",
+        "The backend returned an invalid result resource link.";
+        details=Dict("tool" => string(tool_name), "format" => format),
+      )),
+    )
+    push!(
+      links,
+      ResourceLink(
+        uri=String(uri),
+        name="$(string(tool_name)) $format result",
+        description="Rendered $format representation for this simulation result.",
+        mime_type=mime_type,
+      ),
+    )
+  end
+  return links
+end
+
+function call_tool_result(ok::Bool, result, tool_name)
+  structured = result isa AbstractDict ?
+    plain_dictionary(result) :
+    Dict{String,Any}("result" => plain_value(result))
+  links = ResourceLink[]
+  if ok
+    try
+      links = tool_resource_links(tool_name, structured)
+    catch error
+      if error isa BackendRequestError
+        ok = false
+        structured = error.payload
+      else
+        rethrow()
+      end
+    end
+  else
+    structured = normalize_tool_error(tool_name, structured)
+  end
+  content = Dict{String,Any}[Dict{String,Any}(
+    "type" => "text",
+    "text" => JSON3.write(structured),
+  )]
+  append!(content, convert.(Dict{String,Any}, links))
+  return CallToolResult(
+    content=content,
+    is_error=!ok,
+    structured_content=structured,
+  )
+end
+
 function tool_result(configuration, tool_name, arguments)
   ok, result = try
     backend_request(
@@ -350,18 +430,7 @@ function tool_result(configuration, tool_name, arguments)
       ),
     )
   end
-  structured = result isa AbstractDict ?
-    plain_dictionary(result) :
-    Dict{String,Any}("result" => plain_value(result))
-  ok || (structured = normalize_tool_error(tool_name, structured))
-  return CallToolResult(
-    content=[Dict{String,Any}(
-      "type" => "text",
-      "text" => JSON3.write(structured),
-    )],
-    is_error=!ok,
-    structured_content=structured,
-  )
+  return call_tool_result(ok, result, tool_name)
 end
 
 function load_tools(configuration; result_handler=tool_result)
@@ -402,23 +471,89 @@ function text_resource(configuration, uri)
   )
 end
 
-function template_resource(configuration, uri)
-  result = resource_value(configuration, uri)
+function rendered_resource_contents(uri, result, expected_mime_type)
   mime_type = string(get(result, "mime_type", "application/octet-stream"))
   encoded = get(result, "base64", nothing)
-  encoded === nothing && error("The requested rendered result is unavailable")
+  mime_type == expected_mime_type || throw(
+    BackendRequestError(sidecar_error_payload(
+      "VALIDATION_FAILED",
+      "The backend returned the wrong resource MIME type.";
+      details=Dict(
+        "uri" => uri,
+        "expected_mime_type" => expected_mime_type,
+        "actual_mime_type" => mime_type,
+      ),
+    )),
+  )
+  encoded isa AbstractString && !isempty(encoded) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "RESULT_NOT_FOUND",
+      "The requested rendered result is unavailable.";
+      status=404,
+      details=Dict("uri" => uri),
+    )),
+  )
+  occursin(RESOURCE_BASE64_PATTERN, String(encoded)) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "VALIDATION_FAILED",
+      "The backend returned invalid base64 resource content.";
+      details=Dict("uri" => uri),
+    )),
+  )
+  bytes = try
+    base64decode(String(encoded))
+  catch
+    throw(
+      BackendRequestError(sidecar_error_payload(
+        "VALIDATION_FAILED",
+        "The backend returned invalid base64 resource content.";
+        details=Dict("uri" => uri),
+      )),
+    )
+  end
+  isempty(bytes) && throw(
+    BackendRequestError(sidecar_error_payload(
+      "RESULT_NOT_FOUND",
+      "The requested rendered result is empty.";
+      status=404,
+      details=Dict("uri" => uri),
+    )),
+  )
   if mime_type == "text/html"
+    text = String(copy(bytes))
+    isvalid(text) && !isempty(strip(text)) || throw(
+      BackendRequestError(sidecar_error_payload(
+        "VALIDATION_FAILED",
+        "The backend returned invalid HTML resource content.";
+        details=Dict("uri" => uri),
+      )),
+    )
     return TextResourceContents(
       uri=uri,
       mime_type=mime_type,
-      text=String(base64decode(String(encoded))),
+      text=text,
+    )
+  end
+  if length(bytes) < length(RESOURCE_PNG_SIGNATURE) ||
+    bytes[1:length(RESOURCE_PNG_SIGNATURE)] != RESOURCE_PNG_SIGNATURE
+    throw(
+      BackendRequestError(sidecar_error_payload(
+        "VALIDATION_FAILED",
+        "The backend returned invalid PNG resource content.";
+        details=Dict("uri" => uri),
+      )),
     )
   end
   return BlobResourceContents(
     uri=uri,
     mime_type=mime_type,
-    blob=base64decode(String(encoded)),
+    blob=bytes,
   )
+end
+
+function template_resource(configuration, uri, expected_mime_type)
+  result = resource_value(configuration, uri)
+  return rendered_resource_contents(uri, result, expected_mime_type)
 end
 
 function resources(configuration)
@@ -447,16 +582,36 @@ function resources(configuration)
       data_provider=(uri, _variables) -> text_resource(configuration, uri),
     ),
     ResourceTemplate(
-      name="Slot representation",
-      uri_template="wqs://simulation/slots/{slot_id}/{format}",
-      description="Rendered HTML or PNG for a bound simulation slot.",
-      data_provider=(uri, _variables) -> template_resource(configuration, uri),
+      name="Slot HTML representation",
+      uri_template="wqs://simulation/slots/{slot_id}/html",
+      mime_type="text/html",
+      description="Rendered HTML for a bound simulation slot.",
+      data_provider=(uri, _variables) ->
+        template_resource(configuration, uri, "text/html"),
     ),
     ResourceTemplate(
-      name="Protocol representation",
-      uri_template="wqs://simulation/protocols/{protocol_id}/{format}",
-      description="Rendered HTML or PNG for a bound simulation protocol.",
-      data_provider=(uri, _variables) -> template_resource(configuration, uri),
+      name="Slot PNG representation",
+      uri_template="wqs://simulation/slots/{slot_id}/png",
+      mime_type="image/png",
+      description="Rendered PNG for a bound simulation slot.",
+      data_provider=(uri, _variables) ->
+        template_resource(configuration, uri, "image/png"),
+    ),
+    ResourceTemplate(
+      name="Protocol HTML representation",
+      uri_template="wqs://simulation/protocols/{protocol_id}/html",
+      mime_type="text/html",
+      description="Rendered HTML for a bound simulation protocol.",
+      data_provider=(uri, _variables) ->
+        template_resource(configuration, uri, "text/html"),
+    ),
+    ResourceTemplate(
+      name="Protocol PNG representation",
+      uri_template="wqs://simulation/protocols/{protocol_id}/png",
+      mime_type="image/png",
+      description="Rendered PNG for a bound simulation protocol.",
+      data_provider=(uri, _variables) ->
+        template_resource(configuration, uri, "image/png"),
     ),
   ]
   return static_resources, templates

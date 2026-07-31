@@ -118,6 +118,16 @@ test.describe('Local MCP collaboration', () => {
         expect(result.response.status).toBe(200)
         return result.body.result
       }
+      const readResource = async uri => {
+        const result = await rpc({
+          jsonrpc: '2.0',
+          id: requestId++,
+          method: 'resources/read',
+          params: { uri },
+        }, sessionId)
+        expect(result.response.status).toBe(200)
+        return result.body.result.contents[0]
+      }
 
       const initialDesign = await callTool('design_get')
       expect(initialDesign.isError).toBe(false)
@@ -280,6 +290,33 @@ test.describe('Local MCP collaboration', () => {
         phase: expect.stringMatching(/^(running|completed)$/),
         prepared: 4,
       })
+
+      const protocolResult = await callTool('simulation_protocol_result', {
+        protocol_id: protocol.structuredContent.created_ids.entangler,
+      })
+      expect(protocolResult.isError).toBe(false)
+      expect(protocolResult.content.map(item => item.type)).toEqual([
+        'text',
+        'resource_link',
+        'resource_link',
+      ])
+      const protocolHtml = await readResource(
+        protocolResult.structuredContent.resources.html,
+      )
+      expect(protocolHtml).toMatchObject({
+        mimeType: 'text/html',
+        uri: protocolResult.structuredContent.resources.html,
+      })
+      expect(protocolHtml.text.length).toBeGreaterThan(0)
+      const protocolPng = await readResource(
+        protocolResult.structuredContent.resources.png,
+      )
+      expect(protocolPng).toMatchObject({
+        mimeType: 'image/png',
+        uri: protocolResult.structuredContent.resources.png,
+      })
+      expect(Buffer.from(protocolPng.blob, 'base64').subarray(0, 8))
+        .toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
 
       const resetAfterMcpRun = await callTool('simulation_reset')
       expect(resetAfterMcpRun.isError).toBe(false)

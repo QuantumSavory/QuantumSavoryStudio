@@ -136,19 +136,6 @@ function _simulation_revision_status(hub::CollaborationHub, status)
   )
 end
 
-function _result_with_resource_links(result, kind::String, identifier::String)
-  summary = Dict{String,Any}(
-    string(key) => value
-    for (key, value) in result
-    if string(key) ∉ ("html_base64", "png_base64")
-  )
-  summary["resources"] = Dict(
-    "html" => "wqs://simulation/$kind/$identifier/html",
-    "png" => "wqs://simulation/$kind/$identifier/png",
-  )
-  return summary
-end
-
 function _catalog_snapshot()
   return Dict{String,Any}(
     "background_noise" => get_background_types(),
@@ -424,38 +411,32 @@ function _resolve_mcp_resource(
     )
   end
 
-  slot_match = match(r"^wqs://simulation/slots/([^/]+)/(html|png)$", resource_uri)
-  if slot_match !== nothing
-    slot_result, _ = _with_bound_simulation_read(hub) do simulation_name
-      simulation_slot_result(
-        simulation_service,
-        simulation_name,
-        slot_match.captures[1],
-      )
+  result_resource = _parse_mcp_result_resource_uri(resource_uri)
+  if result_resource !== nothing
+    rendered_result, _ = _with_bound_simulation_read(hub) do simulation_name
+      if result_resource.kind == "slots"
+        simulation_slot_result(
+          simulation_service,
+          simulation_name,
+          result_resource.identifier,
+        )
+      else
+        simulation_protocol_result(
+          simulation_service,
+          simulation_name,
+          result_resource.identifier,
+        )
+      end
     end
-    format = slot_match.captures[2]
-    return Dict(
-      "mime_type" => format == "html" ? "text/html" : "image/png",
-      "base64" => get(slot_result, "$(format)_base64", nothing),
+    bytes = _decode_mcp_representation(
+      rendered_result,
+      result_resource.kind,
+      result_resource.identifier,
+      result_resource.format,
     )
-  end
-
-  protocol_match = match(
-    r"^wqs://simulation/protocols/([^/]+)/(html|png)$",
-    resource_uri,
-  )
-  if protocol_match !== nothing
-    protocol_result, _ = _with_bound_simulation_read(hub) do simulation_name
-      simulation_protocol_result(
-        simulation_service,
-        simulation_name,
-        protocol_match.captures[1],
-      )
-    end
-    format = protocol_match.captures[2]
     return Dict(
-      "mime_type" => format == "html" ? "text/html" : "image/png",
-      "base64" => get(protocol_result, "$(format)_base64", nothing),
+      "mime_type" => result_resource.format == "html" ? "text/html" : "image/png",
+      "base64" => base64encode(bytes),
     )
   end
   throw(_mcp_error("RESULT_NOT_FOUND", "Resource not found.", status=404))
