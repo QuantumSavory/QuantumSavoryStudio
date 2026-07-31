@@ -32,11 +32,35 @@ function isAbortError(error) {
   return error?.name === 'AbortError'
 }
 
+function readinessFailure(code, message, details = {}, { retryable = false } = {}) {
+  return {
+    accepted: false,
+    code,
+    message,
+    retryable,
+    details
+  }
+}
+
+function readinessSuccess(action, preparedRevision) {
+  return {
+    accepted: true,
+    action,
+    summary: action === 'run'
+      ? 'Simulation run accepted.'
+      : 'Simulation prepare accepted.',
+    prepared_revision: preparedRevision
+  }
+}
+
 export function useSimulationController({
   projectData,
   getProjectName = () => projectData.value?.name || '',
   getSimulationPayload,
   validatePayload,
+  flushEditors = async () => ({ valid: true }),
+  runReadinessExclusive = work => work(),
+  getBrowserRevision = () => null,
   addLog,
   applicationLogs,
   refreshAllWindows,
@@ -48,6 +72,7 @@ export function useSimulationController({
   api = sharedApi
 }) {
   const state = ref(createSimulationState())
+  const readinessRequest = ref(null)
   let lifecycleGeneration = 0
   let foregroundRequestId = 0
   let pollingGeneration = 0
@@ -81,12 +106,23 @@ export function useSimulationController({
       && simulation.simulation_auto_purged !== true
       && simulation.simulation_execution_time_exceeded !== true
   })
-  const capabilities = computed(() => simulationCapabilities(
+  const baseCapabilities = computed(() => simulationCapabilities(
     state.value.phase,
     graphEmpty.value,
     liveNetwork.value,
     state.value.foregroundRequest
   ))
+  const capabilities = computed(() => readinessRequest.value
+    ? {
+        ...baseCapabilities.value,
+        canRun: false,
+        canPause: false,
+        canResume: false,
+        canStop: false,
+        canPrepare: false
+      }
+    : baseCapabilities.value
+  )
   const isSimulationRunning = computed(() => state.value.phase === SimulationPhase.RUNNING)
   const isSimulationPaused = computed(() => state.value.phase === SimulationPhase.PAUSED)
   const isSimulationComplete = computed(() => state.value.phase === SimulationPhase.COMPLETED)
@@ -170,14 +206,29 @@ export function useSimulationController({
     else window.alert(message)
   }
 
-  function validatedPayload() {
+  function validatedPayload({ reportError = true } = {}) {
     const payload = getSimulationPayload()
     const validation = validatePayload(payload)
     if (!validation.success) {
-      reportValidationError(validation.error)
-      return null
+      if (reportError) reportValidationError(validation.error)
+      return {
+        payload: null,
+        failure: readinessFailure(
+          'SIMULATION_DESIGN_INVALID',
+          'The design is not ready for simulation.',
+          {
+            issues: Array.isArray(validation.issues)
+              ? validation.issues
+              : [{
+                  code: 'VALIDATION_FAILED',
+                  message: validation.error || 'The design is invalid.',
+                  details: {}
+                }]
+          }
+        )
+      }
     }
-    return payload
+    return { payload, failure: null }
   }
 
   function panicDetails(record = {}) {
@@ -272,8 +323,8 @@ export function useSimulationController({
     if (!foreground) return false
     let context = null
     try {
-      const payload = validatedPayload()
-      if (!payload) return false
+      const { payload, failure } = validatedPayload()
+      if (failure) return false
       stopPolling()
       context = currentContext()
       resetSlotStates()
@@ -294,46 +345,101 @@ export function useSimulationController({
     }
   }
 
-  async function prepareSimulation() {
-    const foreground = startForegroundRequest('prepare', 'Preparing simulation...')
-    if (!foreground) return false
-    let context = null
-    try {
-      const payload = validatedPayload()
-      if (!payload) return false
-      context = currentContext()
-      return await ensurePrepared(payload, context)
-    } catch (error) {
-      if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
-      dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', 'Failed to prepare simulation', 'Web API', errorPayload(error))
-      return false
-    } finally {
-      finishForegroundRequest(foreground)
-    }
+  function unavailableReadinessAction(action) {
+    return readinessFailure(
+      'SIMULATION_ACTION_UNAVAILABLE',
+      `Simulation ${action} is not available in the current browser state.`,
+      {
+        action,
+        phase: state.value.phase,
+        foreground_action: state.value.foregroundRequest?.action || null,
+        readiness_action: readinessRequest.value?.action || null
+      },
+      { retryable: Boolean(state.value.foregroundRequest || readinessRequest.value) }
+    )
   }
 
-  async function runSimulationWithSteps(duration = null) {
-    const foreground = startForegroundRequest('run', 'Initializing simulation...')
-    if (!foreground) return false
-    let context = null
-    try {
-      const payload = validatedPayload()
-      if (!payload) return false
-      context = currentContext()
-      const additionalTime = Number(
+  function editorReadinessFailure(action, flushResult) {
+    if (flushResult?.busy) {
+      return readinessFailure(
+        'EDITOR_BUSY',
+        'An editor interaction is still active.',
+        { action, ...(flushResult.details || {}) },
+        { retryable: true }
+      )
+    }
+    if (flushResult?.valid === false) {
+      return readinessFailure(
+        'EDITOR_HAS_INVALID_DRAFT',
+        'An editor contains an invalid draft.',
+        { action, ...(flushResult.details || {}) }
+      )
+    }
+    return null
+  }
+
+  function cancelledReadinessAction(action) {
+    return readinessFailure(
+      'SIMULATION_ACTION_CANCELLED',
+      `Simulation ${action} was cancelled because the browser context changed.`,
+      { action },
+      { retryable: true }
+    )
+  }
+
+  async function executeReadinessAction(action, duration, {
+    beforeDispatch = async () => {},
+    origin = 'gui'
+  } = {}) {
+    const capability = action === 'run' ? 'canRun' : 'canPrepare'
+    if (!baseCapabilities.value[capability]) return unavailableReadinessAction(action)
+
+    await beforeDispatch()
+    if (!baseCapabilities.value[capability]) return unavailableReadinessAction(action)
+
+    const { payload, failure } = validatedPayload({ reportError: origin === 'gui' })
+    if (failure) return failure
+
+    let additionalTime = null
+    if (action === 'run') {
+      additionalTime = Number(
         duration ?? projectData.value?.simulationConfig?.time ?? 1
       )
       if (!Number.isFinite(additionalTime) || additionalTime <= 0) {
-        throw new Error('Simulation duration must be a finite positive number')
+        return readinessFailure(
+          'INVALID_SIMULATION_DURATION',
+          'Simulation duration must be a finite positive number.',
+          { action, duration }
+        )
       }
+    }
+
+    const preparedRevision = getBrowserRevision()
+    const foreground = startForegroundRequest(
+      action,
+      action === 'run' ? 'Initializing simulation...' : 'Preparing simulation...'
+    )
+    if (!foreground) return unavailableReadinessAction(action)
+
+    let context = null
+    try {
+      context = currentContext()
+      if (action === 'prepare') {
+        if (!(await ensurePrepared(payload, context))) {
+          return cancelledReadinessAction(action)
+        }
+        return readinessSuccess(action, preparedRevision)
+      }
+
       const target = state.value.cumulativeTargetTime + additionalTime
       dispatch({ type: 'REQUEST', message: 'Initializing simulation...' })
       addLog('info', `Starting simulation: adding ${additionalTime}s (total target: ${target}s)`, 'Web API')
 
-      if (!(await ensurePrepared(payload, context)) || !contextIsCurrent(context)) return false
+      if (!(await ensurePrepared(payload, context)) || !contextIsCurrent(context)) {
+        return cancelledReadinessAction(action)
+      }
       const response = await api.runSimulation(context.projectName, target)
-      if (!contextIsCurrent(context)) return false
+      if (!contextIsCurrent(context)) return cancelledReadinessAction(action)
       if (!response || response.success === false) throw responseError(response, 'Failed to start simulation')
       dispatch({ type: 'RUN_TARGET', target })
       if (response.state) {
@@ -341,16 +447,52 @@ export function useSimulationController({
       }
       startAlivePolling()
       startPolling()
-      return true
+      return readinessSuccess(action, preparedRevision)
     } catch (error) {
-      if ((context && !contextIsCurrent(context)) || isAbortError(error)) return false
-      stopPolling()
+      if ((context && !contextIsCurrent(context)) || isAbortError(error)) {
+        return cancelledReadinessAction(action)
+      }
+      if (action === 'run') stopPolling()
       dispatch({ type: 'ERROR', error, message: error.message })
-      addLog('error', `Simulation failed: ${error.message}`, 'Web API', errorPayload(error))
-      return false
+      addLog(
+        'error',
+        action === 'run'
+          ? `Simulation failed: ${error.message}`
+          : 'Failed to prepare simulation',
+        'Web API',
+        errorPayload(error)
+      )
+      throw error
     } finally {
       finishForegroundRequest(foreground)
     }
+  }
+
+  async function requestReadinessAction(action, duration, options = {}) {
+    const capability = action === 'run' ? 'canRun' : 'canPrepare'
+    if (readinessRequest.value || !baseCapabilities.value[capability]) {
+      return unavailableReadinessAction(action)
+    }
+
+    readinessRequest.value = { action }
+    try {
+      const flushResult = await flushEditors()
+      const flushFailure = editorReadinessFailure(action, flushResult)
+      if (flushFailure) return flushFailure
+      return await runReadinessExclusive(() => (
+        executeReadinessAction(action, duration, options)
+      ))
+    } finally {
+      readinessRequest.value = null
+    }
+  }
+
+  function prepareSimulation(options = {}) {
+    return requestReadinessAction('prepare', null, options)
+  }
+
+  function runSimulationWithSteps(duration = null, options = {}) {
+    return requestReadinessAction('run', duration, options)
   }
 
   async function pauseSimulation() {

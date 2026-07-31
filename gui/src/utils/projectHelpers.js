@@ -63,32 +63,43 @@ export function generateRandomEdges(nodes, count) {
 }
 
 export function validatePayload(data) {
-  // Ensure at least 2 nodes and 1 edge are present
-  if (data.net.nodes.length < 2) {
-    return { success: false, error: 'At least 2 nodes are required' }
-  }
-  if (data.net.edges.length < 1) {
-    return { success: false, error: 'At least 1 edge is required' }
-  }
-  
-  // Ensure all nodes have at least one slot
-  const nodesWithoutSlots = []
-  data.net.nodes.forEach(node => {
-    if (node.data.slots.length < 1) {
-      const nodeRef = data.net.nodes.find(n => n.id === node.id)
-      nodesWithoutSlots.push(nodeRef)
-    }
-  })
-  
-  if (nodesWithoutSlots.length > 0) {
-    let message = 'All nodes must have at least one slot. \nPlease add a slot to the following nodes: '
-    nodesWithoutSlots.forEach(node => {
-      message += `\n- ${node.name}`
+  const nodes = Array.isArray(data?.net?.nodes) ? data.net.nodes : []
+  const edges = Array.isArray(data?.net?.edges) ? data.net.edges : []
+  const issues = []
+
+  if (nodes.length < 2) {
+    issues.push({
+      code: 'NETWORK_MINIMUM_NODES',
+      message: 'At least 2 nodes are required',
+      details: { minimum: 2, actual: nodes.length },
     })
-    return { success: false, error: message }
   }
-  
-  return { success: true, error: null }
+  if (edges.length < 1) {
+    issues.push({
+      code: 'NETWORK_MINIMUM_EDGES',
+      message: 'At least 1 edge is required',
+      details: { minimum: 1, actual: edges.length },
+    })
+  }
+  for (const node of nodes) {
+    if ((node.data?.slots?.length || 0) > 0) continue
+    issues.push({
+      code: 'NODE_MISSING_SLOT',
+      message: `${node.name || node.id || 'Unnamed node'} requires at least one slot`,
+      details: {
+        node_id: node.id || null,
+        node_name: node.name || null,
+      },
+    })
+  }
+
+  return issues.length
+    ? {
+        success: false,
+        error: issues.map(issue => issue.message).join('\n'),
+        issues,
+      }
+    : { success: true, error: null, issues: [] }
 }
 
 export function getNodeById(projectData, id) {
@@ -100,4 +111,3 @@ export function getNodeBySlotId(projectData, slotId) {
     node.data.slots.find(slot => slot.id === slotId)
   )
 }
-
