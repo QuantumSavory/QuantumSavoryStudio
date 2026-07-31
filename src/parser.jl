@@ -1601,18 +1601,8 @@ function _handle_regular_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, ptyp
     return false
   end
   
-  # For complex types, try eval with value::type pattern
-  eval_expr = "$(value)::$(ptype)"
-  require_unsafe_code_evaluation()
-  try
-    @info "Attempting eval" parameter_name=name eval_expr=eval_expr
-    kwargs[name] = eval(Meta.parse(eval_expr))
-    @info "Eval successful" parameter_name=name
-    return true
-  catch eval_error
-    @warn "Eval failed, skipping parameter" parameter_name=name eval_expr=eval_expr eval_error=eval_error
-    # If eval fails, skip the parameter entirely - let constructor use default
-  end
+  # Complex values require an explicit tagged representation with a dedicated
+  # decoder. Never interpolate untagged data or declared type text into Julia.
   return false
 end
 

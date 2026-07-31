@@ -8,16 +8,17 @@ using ResumableFunctions
 using ConcurrentSim
 using ..WebQuantumSavory: NUMERIC_EXPRESSION_PLACEMENTS,
                           NUMERIC_EXPRESSION_TARGETS,
-                          _assert_source_allowlisted,
                           _cast_numeric_expression_result,
                           _evaluate_function_source,
                           _lowered_numeric_context_bindings,
                           _node_name_to_index,
                           _nodeid_resolver,
                           _numeric_expression_result_string,
-                          _parse_complete_source,
                           _representative_source_context,
                           _source_context_expression,
+                          admit_source,
+                          evaluate_admitted_source,
+                          prepare_symbolic_evaluation_module,
                           require_unsafe_code_evaluation
 
 import Base: Meta
@@ -185,19 +186,22 @@ function test_numeric_expression(
         ))
 
         evaluation_module = Module()
-        parsed = _parse_complete_source(expression)
-        _assert_source_allowlisted(parsed)
+        admitted = admit_source(expression)
         results = Dict{Symbol,Any}(:target_type => target_type)
 
         value = if placement == "variable"
-            lowered = Meta.lower(evaluation_module, parsed)
+            lowered = Meta.lower(evaluation_module, admitted.expression)
             references = _lowered_numeric_context_bindings(lowered, evaluation_module)
             if !isempty(references)
                 results[:deferred] = true
                 return true, results, nothing
             end
             results[:deferred] = false
-            Base.eval(evaluation_module, lowered)
+            evaluate_admitted_source(
+                admitted;
+                evaluation_module,
+                transform=_ -> lowered,
+            )
         else
             source_context = if context === nothing
                 _representative_source_context(placement)
@@ -210,12 +214,16 @@ function test_numeric_expression(
                 )
             end
             results[:deferred] = context === nothing
-            Base.eval(evaluation_module, _source_context_expression(
-                parsed,
-                source_context.nodeid,
-                source_context.self_node_index,
-                source_context.edge_context,
-            ))
+            evaluate_admitted_source(
+                admitted;
+                evaluation_module,
+                transform=parsed -> _source_context_expression(
+                    parsed,
+                    source_context.nodeid,
+                    source_context.self_node_index,
+                    source_context.edge_context,
+                ),
+            )
         end
         cast_value = _cast_numeric_expression_result(value, target_type)
         results[:value] = _numeric_expression_result_string(cast_value)
@@ -236,26 +244,10 @@ If successful, `value` is the actual evaluated symbolic object.
 function evaluate_symbolic_expression(expr::String)
     require_unsafe_code_evaluation()
 
-    # Create isolated module and load required namespaces
-    tempmod = Module()
-
     try
-        # Load the required packages into the temp module's scope
-        Base.eval(tempmod, :(using QuantumSavory))
-        Base.eval(tempmod, :(using QuantumSavory.ProtocolZoo))
-        Base.eval(tempmod, :(using ResumableFunctions))
-        Base.eval(tempmod, :(using ConcurrentSim))
-        Base.eval(tempmod, :(using Latexify))
-
-        # Parse incoming expression
-        parsed = Meta.parse(expr)
-        _assert_source_allowlisted(parsed; symbolic=true)
-
-        # Evaluate within the temporary module to resolve symbols like Z₁, Z₂, ⊗, √, etc
-        value = Base.eval(tempmod, parsed)
-
-
-
+        admitted = admit_source(expr; symbolic=true)
+        tempmod = prepare_symbolic_evaluation_module()
+        value = evaluate_admitted_source(admitted; evaluation_module=tempmod)
         return true, value, nothing
     catch e
         return false, nothing, e

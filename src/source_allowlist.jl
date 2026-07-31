@@ -6,7 +6,7 @@ names plus a short denylist of dangerous `Expr` heads, immediately before the
 existing pipeline evaluates it. It is deliberately **not** a security boundary:
 accepted source still runs native Julia with no CPU, memory, or time limits. It
 is one slice of a swiss-cheese defense, layered on top of the default-deny
-`WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION` gate. It reuses Julia's own parser
+`WQS_ENABLE_SOURCE_EVALUATION` gate. It reuses Julia's own parser
 and evaluator and performs no lowering or macro expansion.
 """
 

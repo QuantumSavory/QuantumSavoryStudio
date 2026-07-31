@@ -49,9 +49,11 @@ function _evaluate_complete_source(
     evaluation_module::Module=Module(),
     transform::Function=identity,
 )
-    parsed = _parse_complete_source(source)
-    _assert_source_allowlisted(parsed)
-    return Base.eval(evaluation_module, transform(parsed))
+    return evaluate_restricted_source(
+        source;
+        evaluation_module,
+        transform,
+    )
 end
 
 """
@@ -441,9 +443,6 @@ function _evaluate_numeric_expression_source(
     minimum=nothing,
     maximum=nothing,
 )
-    require_unsafe_code_evaluation()
-    parsed = _parse_complete_source(source)
-    _assert_source_allowlisted(parsed)
     transform = if node_name_to_index === nothing
         identity
     else
@@ -454,7 +453,7 @@ function _evaluate_numeric_expression_source(
             edge_context,
         )
     end
-    value = Base.eval(Module(), transform(parsed))
+    value = evaluate_restricted_source(source; transform)
     return _cast_numeric_expression_result(
         value,
         target_type;

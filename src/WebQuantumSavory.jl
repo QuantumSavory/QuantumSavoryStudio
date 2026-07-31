@@ -40,6 +40,7 @@ include("types.jl")
 # authoritative EDGE_CONTEXT_DESCRIPTORS-based binding catalog. types.jl only
 # calls the guard from function bodies, which resolve at runtime.
 include("source_allowlist.jl")
+include("restricted_evaluation.jl")
 include("Sandbox.jl")
 include("Logger.jl")
 include("states_zoo.jl")
@@ -106,9 +107,7 @@ include("tag_metadata.jl")
 function main()
   # Validate an explicit override before Genie starts and handles route-loading
   # errors internally. Environment-specific defaults are resolved at use time.
-  unsafe_code_evaluation_enabled(
-    environment=get(ENV, "GENIE_ENV", Genie.Configuration.env()),
-  )
+  unsafe_code_evaluation_enabled()
   # Fail before Genie starts if the diagnostic-protocol flag is malformed.
   mock_broken_protocol_enabled()
   mcp_settings = _read_mcp_environment_settings(ENV)

@@ -77,7 +77,8 @@ trap 'exit 143' TERM
 rm -rf "$artifact_dir"
 : > "$server_log"
 cd "$app_root"
-GENIE_ENV=test julia --color=yes --project="$app_root" \
+GENIE_ENV=test WQS_ENABLE_SOURCE_EVALUATION=true \
+  julia --color=yes --project="$app_root" \
   -e '
     using WebQuantumSavory
     server_port = parse(Int, ENV["WEBQUANTUMSAVORY_CI_SERVER_PORT"])

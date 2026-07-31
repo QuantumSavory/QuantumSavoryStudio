@@ -15,12 +15,8 @@ function create_error_response(
     response["error_code"] = error.error_code
   end
 
-  if error.details !== nothing
-    response["details"] = redact_evaluation_failure_details(
-      error.details;
-      environment,
-    )
-  end
+  error.details === nothing ||
+    (response["details"] = redact_evaluation_failure_details(error.details))
 
   return response
 end

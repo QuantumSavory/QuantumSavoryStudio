@@ -1339,21 +1339,11 @@
       @test results === nothing
       @test parse_error isa Base.Meta.ParseError
 
-      development_response = WebQuantumSavory.evaluation_failure_response(
-        parse_error;
-        environment="dev",
-      )
-      @test startswith(development_response[:error], "ParseError:")
-      @test occursin("Expected `)` or `,`", development_response[:error])
-      @test !occursin("Base.Meta.ParseError(", development_response[:error])
-      @test development_response[:error_type] == "Base.Meta.ParseError"
-
-      production_response = WebQuantumSavory.evaluation_failure_response(
-        parse_error;
-        environment="prod",
-      )
-      @test production_response[:error] == "Evaluation failed"
-      @test !occursin("invalid(", string(production_response))
+      failure_response = WebQuantumSavory.evaluation_failure_response(parse_error)
+      @test startswith(failure_response[:error], "ParseError:")
+      @test occursin("Expected `)` or `,`", failure_response[:error])
+      @test !occursin("Base.Meta.ParseError(", failure_response[:error])
+      @test failure_response[:error_type] == "Base.Meta.ParseError"
     end
   end
 
@@ -3219,37 +3209,21 @@
   end
 
   @testset "Unsafe Evaluation Policy" begin
-    @test WebQuantumSavory.unsafe_code_evaluation_enabled(environment="dev", override=nothing)
-    @test WebQuantumSavory.unsafe_code_evaluation_enabled(environment="test", override=nothing)
-    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override=nothing)
-    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(environment="staging", override=nothing)
-    @test WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override=" TRUE ")
-    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(environment="test", override="False")
-    @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override="1")
-    @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override="yes")
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(override=nothing)
+    @test WebQuantumSavory.unsafe_code_evaluation_enabled(override="true")
+    @test !WebQuantumSavory.unsafe_code_evaluation_enabled(override="false")
+    for malformed in (" TRUE ", "False", "1", "yes", "")
+      @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(
+        override=malformed,
+      )
+    end
 
-    production_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("sensitive evaluation details");
-      environment="prod",
+    failure = WebQuantumSavory.evaluation_failure_response(
+      ErrorException("useful evaluation details"),
     )
-    @test production_failure[:error] == "Evaluation failed"
-    @test production_failure[:error_code] == WebQuantumSavory.EVALUATION_FAILED_CODE
-    @test !haskey(production_failure, :error_type)
-    @test !occursin("sensitive", string(production_failure))
-
-    staging_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("staging details are also private");
-      environment="staging",
-    )
-    @test staging_failure[:error] == "Evaluation failed"
-    @test !haskey(staging_failure, :error_type)
-
-    development_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("useful development details");
-      environment="dev",
-    )
-    @test occursin("useful development details", development_failure[:error])
-    @test haskey(development_failure, :error_type)
+    @test occursin("useful evaluation details", failure[:error])
+    @test failure[:error_code] == WebQuantumSavory.EVALUATION_FAILED_CODE
+    @test haskey(failure, :error_type)
 
     evaluation_error = WebQuantumSavory.validation_error(
       "A runtime expression failed",
@@ -3263,8 +3237,10 @@
       environment="prod",
     )
     @test production_error_response["details"]["parameter_name"] == "timeout"
-    @test production_error_response["details"]["evaluation_error"] == "Evaluation failed"
-    @test !occursin("sensitive", string(production_error_response))
+    @test occursin(
+      "sensitive response-boundary details",
+      production_error_response["details"]["evaluation_error"],
+    )
     development_error_response = WebQuantumSavory.create_error_response(
       evaluation_error;
       environment="dev",
@@ -3327,8 +3303,7 @@
       ))
       @test safe_noise isa QuantumSavory.AmplitudeDamping
 
-      # Each payload fallback propagates denial instead of silently dropping a
-      # parameter or using a constructor default.
+      # Explicit source-bearing values propagate denial.
       test_disabled(() -> WebQuantumSavory._handle_function_lambda_parameter!(
         Dict{Symbol,Any}(),
         :filter,
@@ -3340,12 +3315,14 @@
         :pairstate,
         "Z₁",
       ))
-      test_disabled(() -> WebQuantumSavory._handle_regular_parameter!(
-        Dict{Symbol,Any}(),
+      complex_kwargs = Dict{Symbol,Any}()
+      @test !WebQuantumSavory._handle_regular_parameter!(
+        complex_kwargs,
         :values,
         "Vector{Int64}",
         "[1, 2]",
-      ))
+      )
+      @test isempty(complex_kwargs)
       test_disabled(() -> WebQuantumSavory._instantiate_noise(Dict(
         "type" => "AmplitudeDamping",
         "parameters" => [Dict(
@@ -5364,7 +5341,10 @@
         environment="prod",
       )
       @test production_response["details"]["parameter_name"] == "bounded"
-      @test production_response["details"]["evaluation_error"] == "Evaluation failed"
+      @test occursin(
+        "Disallowed identifier 'error'",
+        production_response["details"]["evaluation_error"],
+      )
       @test !occursin("sensitive runtime expression details", string(production_response))
     end
 
