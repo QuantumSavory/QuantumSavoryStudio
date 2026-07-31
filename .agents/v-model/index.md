@@ -5,8 +5,8 @@
 - **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Approved release-2.0 behavior across the reviewed operational/HTTP,
-  strict project-schema, candidate-first replacement, shared Play, MCP v2
-  readback/result-resource, and exact simulation-request slices
+  strict project-schema, candidate-first replacement, catalog-backed authoring, shared
+  Play, MCP v2 readback/result-resource, and exact simulation-request slices
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -80,8 +80,8 @@ SYSV-004.
   source, a closed co-shipped project schema, the universal non-2xx envelope, generated
   private API documentation, cleanup/error behavior, upstream ownership, and a CI-backed
   Linux/Chromium support boundary.
-- Current behavior: root/`src/`, `gui/`, `mcp/`, and co-shipped contracts at the
-  profile-target commit.
+- Current behavior: root/`src/`, `gui/`, `mcp/`, and co-shipped contracts in the current
+  reviewed repository state.
 - Verification design: `test/`, `gui/tests/`, `mcp/test/`, `ci/`, GitHub Actions, and
   Buildkite.
 - Historical decisions remain available in Git history; they do not define current
