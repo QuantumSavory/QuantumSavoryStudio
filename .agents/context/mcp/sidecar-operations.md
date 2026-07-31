@@ -19,7 +19,7 @@ Prerequisites:
 Start the integrated application:
 
 ```sh
-WEBQUANTUMSAVORY_ENABLE_MCP=true ./bin/server
+WQS_DEPLOYMENT_PROFILE=local WEBQUANTUMSAVORY_ENABLE_MCP=true ./bin/server
 ```
 
 The feature flag accepts lowercase `true` or `false`. The browser flow explicitly

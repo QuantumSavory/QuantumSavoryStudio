@@ -44,8 +44,10 @@ encoded by the current component suites.
 - **Environment / configuration:** Pinned source with a durable evaluator inventory
 - **Pass criterion:** Every executing source path reaches the gate and allowlist before evaluation or lowering; no path bypasses admission or injects caller-owned context; public mode cannot enable evaluation.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** No durable inventory covers the guarded paths in `types.jl` and `Sandbox.jl`; the complex-parameter fallback in `parser.jl` is gated but unguarded; public denial is absent.
+- **Evidence:** [Executing-source inventory](../../context/backend/source-evaluation.md#executing-source-inventory), [`test/test_unit.jl`](../../../test/test_unit.jl)
+- **Nonconformance:** The inventory and lexical direct-call scan do not yet constitute
+  an independent semantic trace of every caller, alias, lowering path, and
+  source-bearing field through admission.
 
 ## UNITV-016 — Verify shared GUI/MCP Play readiness
 

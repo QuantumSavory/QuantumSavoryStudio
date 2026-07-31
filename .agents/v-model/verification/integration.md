@@ -103,12 +103,13 @@
 
 - **Covers:** SUB-010
 - **Method:** test
-- **Procedure:** Inventory source entries, exercise parser/allowlist/gate/evaluator with missing/false/true local opt-in, and repeat canaries in public mode.
-- **Environment / configuration:** Pinned source plus dynamic unit/HTTP fixtures in local and public profiles
-- **Pass criterion:** Every executing source reaches the gate and allowlist before evaluation; forbidden canaries fail; pure export works disabled; missing/false local and all public execution deny; true local execution admits only the restricted subset.
+- **Procedure:** Trace source entries; test local missing/false/true gates and public canaries.
+- **Environment / configuration:** Source inventory, unit/HTTP fixtures, and local/public processes
+- **Pass criterion:** Source reaches the gate and guard; forbidden canaries fail; export works disabled; local missing/false and public deny; local true admits the restricted subset.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** No durable entry inventory, disabled-server mode, or public-deny artifact exists; `dev`/`test` defaults bypass explicit opt-in, and the complex-parameter fallback bypasses the allowlist.
+- **Evidence:** [Executing-source inventory](../../context/backend/source-evaluation.md#executing-source-inventory), [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** Public-process denial is covered; real-server missing/false local
+  checks and the independent semantic site trace remain absent.
 
 ## INTV-011 — Verify sidecar configuration/supervision
 

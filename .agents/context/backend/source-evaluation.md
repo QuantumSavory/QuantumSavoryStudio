@@ -18,18 +18,21 @@ This reference records the current evaluator and its gaps.
 ## Trust boundary
 
 `WQS_DEPLOYMENT_PROFILE` is the product-wide startup profile and accepts only the exact
-values `local` and `public`. Missing or malformed values fail startup. In the `local` profile,
-`WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in; the exact strings
-`true` and `false` are accepted, a missing value disables evaluation, and a malformed
-value fails startup. The `public` profile denies evaluation regardless of the opt-in.
+values `local` and `public`. Missing or malformed values fail startup. In the `local`
+profile, `WQS_ENABLE_SOURCE_EVALUATION=true` is the sole operator opt-in; the exact
+strings `true` and `false` are accepted, a missing value disables evaluation, and a
+malformed value fails startup. The `public` profile denies evaluation regardless of the
+opt-in.
 
 The restricted language reduces risk but is not a security sandbox: accepted Julia
 executes natively in the server process without memory, operation, or safely
 interruptible in-process time metering.
 
-Only local loopback operation may honor the opt-in in the approved target. Public
-operation denies native evaluation rather than treating the allowlist or a deployment
-container as a sufficient sandbox.
+Only trusted local loopback operation may honor the opt-in. The profile is an operator
+declaration; source policy does not independently inspect the server bind address.
+Public launch artifacts must therefore declare `WQS_DEPLOYMENT_PROFILE=public`, which
+denies native evaluation rather than treating the allowlist or deployment container as
+a sufficient sandbox.
 
 Safe non-source paths include ordinary numeric/intrinsic conversion, known predefined
 functions, structured States Zoo recipes, pure script-source validation/emission, and
@@ -54,13 +57,31 @@ symbolic names, local bindings, and server context. It does not impose a tree-de
 node-count, or source-size bound.
 
 `restricted_evaluation.jl` owns admitted source and the single production call into
-Julia evaluation. Custom functions, numeric expressions, symbolic expressions, and
-tag predicates all pass through it. Numeric-expression Variables may lower an admitted
-tree once to detect assignment-context globals. Symbolic evaluation uses a fresh module
-loaded only with fixed server-owned namespaces.
+Julia evaluation. Its setup evaluates only fixed server-owned namespace imports. Custom
+functions, numeric expressions, symbolic expressions, and tag predicates all pass
+through this boundary. Numeric-expression Variables may lower an admitted tree once to
+detect assignment-context globals. Symbolic evaluation uses a fresh module loaded only
+with fixed server-owned namespaces.
 
 Untagged complex values are rejected; they are never interpolated with declared type
 text and evaluated.
+
+## Executing-source inventory
+
+| User-controlled surface | Admission path | Runtime owner |
+| --- | --- | --- |
+| Custom Function/Lambda project parameters | `parser.jl` → `create_lambda` / `_evaluate_function_source` | `types.jl` supplies server-owned node/edge bindings, then `restricted_evaluation.jl` admits and evaluates |
+| Numeric-expression project values and `/test_numeric_expression` | `_evaluate_numeric_expression_source` or `Sandbox.test_numeric_expression` | `restricted_evaluation.jl` admits before optional lowering/evaluation; `types.jl` casts and range-checks |
+| Symbolic project values and `/test_symbolic_expression` | `Sandbox.evaluate_symbolic_expression` | `restricted_evaluation.jl` admits with the symbolic allowlist and evaluates in a fixed fresh module |
+| `/test_code` Custom Function validation | `Sandbox.test_code` → `_evaluate_function_source` | The runtime placement bindings and restricted evaluator |
+| Custom tag-query predicates | `tag_metadata.jl` → `_evaluate_function_source` | The restricted evaluator, without protocol placement bindings |
+
+`test/test_unit.jl` scans production Julia source and pins the direct native evaluator
+to `Base.eval(evaluation_module, expression)` in `restricted_evaluation.jl`. It also
+requires every direct `_evaluate_in_module` call to remain in that file. This lexical
+guard catches an accidental direct evaluator addition, but does not replace the planned
+semantic trace of every source-bearing entry point in UNITV-013. Update the table, scan,
+and inspection together when adding an executing source surface.
 
 ## Allowlist and contexts
 
@@ -86,14 +107,18 @@ as deferred without executing until an assignment supplies concrete context.
 
 Disabled evaluation produces the stable 403 policy error. Evaluation details are
 constructed uniformly across deployment profiles; capability or secret values are
-never placed in the diagnostic details.
+never placed in the diagnostic details. Missing, null, object, or array `code`/`expr`
+fields at the `/test_code` and `/test_symbolic_expression` boundaries produce a
+structured 400 `VALIDATION_ERROR`.
 
-## Verification gap
+## Verification
 
-Backend unit tests exercise the absent, false, true, and malformed policy values.
-Evaluation-dependent maintained suites opt in explicitly. Browser disabled-mode tests
-still mock capability responses; a real disabled backend system action remains planned
-in the V-model.
+Backend unit tests exercise missing, false, true, and malformed local values, malformed
+or missing profiles, public denial despite a true opt-in, every source family, safe
+non-source values, and the lexical native-evaluator inventory. Maintained server-backed
+suites declare the local profile and opt in explicitly. The startup smoke runs a real
+production server with the public profile and a true opt-in, then verifies that the
+capability remains disabled and `/test_code` returns the stable 403 policy error.
 
 ## Anchors
 
@@ -103,9 +128,13 @@ in the V-model.
   [`src/restricted_evaluation.jl`](../../../src/restricted_evaluation.jl).
 - **Unit evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
+- **Public-profile process evidence:** [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl).
 
 ## Verification gaps
 
 - Status-code uniformity is not required, but every failure still needs a structured
   result recorded in the GUI Log tab.
-- Maintained CI lacks both a real disabled-server action and a public-mode denial action.
+- Maintained real-server coverage does not yet exercise missing/false local opt-in
+  states.
+- The direct-call scan is intentionally not considered a complete semantic
+  source-to-evaluator proof; UNITV-013 remains planned.

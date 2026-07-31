@@ -11,8 +11,10 @@ and supported environments. No product suite was run for this documentation base
 - **Environment / configuration:** Real local backend plus public-profile process
 - **Pass criterion:** Missing/false local mode executes no canary; true local mode admits only restricted source; safe/pure paths work in both local gate states; public mode executes no source canary.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Component tests cover gate values, but absent `dev`/`test` overrides enable evaluation, the complex-parameter fallback is unguarded, server-backed CI sets `GENIE_ENV=test`, and no public-profile system artifact exists.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** The production public-profile smoke verifies a disabled
+  capability and rejected source request with the opt-in true. Maintained real-server
+  missing/false local and representative safe-path actions remain absent.
 
 ## SYSV-010 — Verify execution, retention, and failed cleanup
 
@@ -33,8 +35,11 @@ and supported environments. No product suite was run for this documentation base
 - **Environment / configuration:** Real application and sidecar transport under each profile
 - **Pass criterion:** Invalid enablement fails closed; disabled/public modes spawn nothing; valid local initialization creates one session; Stop/restart revokes stale authority.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Configuration, supervisor, and transport fixtures cover portions separately; no public-profile/system artifact exists.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`test/test_sidecar_supervisor.jl`](../../../test/test_sidecar_supervisor.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** Component fixtures cover configuration, supervision, and
+  transport separately, and the public process proves local-only routes are absent; no
+  one-action system run covers disabled, invalid, local initialize/stop/restart, and
+  public profiles together.
 
 ## SYSV-012 — Verify browser-authoritative MCP editing and lifecycle
 

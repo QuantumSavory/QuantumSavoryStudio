@@ -53,7 +53,9 @@
 - **Pass criterion:** Permitted local forms and placement bindings work only when enabled; every forbidden/capability fixture is denied before evaluation; public mode always denies; target-type/range checks match each fixture.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl)
-- **Nonconformance:** Fixtures lack direct import/using and discriminating command/macro-head cases; public denial is not implemented; the complex-parameter fallback bypasses the allowlist. Complete site coverage requires UNITV-013.
+- **Nonconformance:** Adversarial fixtures cover direct import/using, command and macro
+  heads, public denial, and rejection of untagged complex parameters. Complete semantic
+  site coverage remains the planned UNITV-013 inspection.
 
 ## UNITV-007 — Verify deterministic export bindings
 

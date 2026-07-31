@@ -123,8 +123,9 @@ implemented at the profile-target commit.
   handler.
 - The three restricted-source test handlers generally return parse, allowlist, and
   evaluation failures with HTTP 200 and `success:false`; validated malformed DTO cases
-  use 400 and policy denial uses 403. Non-string source fields and some missing
-  lifecycle inputs can still become generic 500s. `/test_symbolic_expression` Swagger
+  use 400 and policy denial uses 403. Missing and non-string `code`/`expr` fields now
+  return structured 400 errors, while some missing lifecycle inputs can still become
+  generic 500s. `/test_symbolic_expression` Swagger
   advertises 400 for an evaluation failure although its handler returns the ordinary
   200 JSON response. Status-code uniformity is not required as long as the result
   remains structured.

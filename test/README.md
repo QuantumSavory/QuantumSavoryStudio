@@ -48,7 +48,9 @@ julia --project runtests.jl test_unit
 
 ```bash
 # First start the server in another terminal
-GENIE_ENV=test julia --project=. -e 'using WebQuantumSavory; WebQuantumSavory.main(); WebQuantumSavory.up(async=false)'
+GENIE_ENV=test WQS_DEPLOYMENT_PROFILE=local \
+  WQS_ENABLE_SOURCE_EVALUATION=true julia --project=. \
+  -e 'using WebQuantumSavory; WebQuantumSavory.main(); WebQuantumSavory.up(async=false)'
 
 # Then run integration tests
 julia --project runtests.jl test_integration test_simulation_integration

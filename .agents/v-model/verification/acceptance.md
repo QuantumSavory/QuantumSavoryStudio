@@ -55,8 +55,11 @@ planned until a durable release-2.0 acceptance record exists.
 - **Environment / configuration:** Local loopback and public deployment profiles
 - **Pass criterion:** Missing/false local mode executes no source canary and retains safe paths; true local mode admits only the restricted subset; public mode executes no source canary regardless of the local opt-in.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Component tests cover gate/guard portions, but absent `dev`/`test` overrides currently enable evaluation, the complex-parameter fallback is unguarded, and no public-profile demonstration exists.
+- **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`ci/startup-smoke.jl`](../../../ci/startup-smoke.jl)
+- **Nonconformance:** Component evidence covers all gate values and the public-process
+  smoke demonstrates denial with a true opt-in. A single maintained operator
+  demonstration spanning missing/false/true local source and safe paths plus public
+  canaries remains absent.
 
 ## ACC-007 — Validate bounded and failure-aware service operation
 

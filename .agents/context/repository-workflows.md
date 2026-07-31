@@ -49,8 +49,8 @@ checks the repository in strict mode.
 Useful focused commands:
 
 ```sh
-(cd test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true \
-  julia --project=. runtests.jl test_unit)
+(cd test && WQS_DEPLOYMENT_PROFILE=local \
+  WQS_ENABLE_SOURCE_EVALUATION=true julia --project=. runtests.jl test_unit)
 (cd test && julia --project=. runtests.jl test_mcp_unit test_sidecar_supervisor)
 npm --prefix gui run test:unit -- tests/unit/projectCodec.test.js
 ```

@@ -19,7 +19,7 @@ root tests, and CI.
 
 ## Primary commands
 
-- Integrated application: `./bin/server`
+- Integrated local application: `WQS_DEPLOYMENT_PROFILE=local ./bin/server`
 - Backend unit/integration: `./ci/backend-unit.sh`,
   `./ci/backend-integration.sh`
 - Public Podman profile: `./ci/public-container.sh`

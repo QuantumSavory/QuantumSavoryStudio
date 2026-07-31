@@ -19,8 +19,8 @@ current private API documentation remain governed by `../AGENTS.md`.
 
 ## Local checks
 
-- Focused package checks: `(cd ../test && WQS_ENABLE_SOURCE_EVALUATION=true
-  julia --project=. runtests.jl test_unit)`
+- Focused package checks: `(cd ../test && WQS_DEPLOYMENT_PROFILE=local
+  WQS_ENABLE_SOURCE_EVALUATION=true julia --project=. runtests.jl test_unit)`
 - Canonical backend unit entry point: `../ci/backend-unit.sh`
 
 ## Local rules

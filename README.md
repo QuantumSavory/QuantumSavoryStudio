@@ -21,7 +21,7 @@ Prerequisites are Julia 1.12, Node.js 24, and npm.
 
 ### Option 1: Using the provided script
 ```bash
-./bin/server
+WQS_DEPLOYMENT_PROFILE=local ./bin/server
 ```
 
 The server will start on `http://localhost:8000` by default.
@@ -77,13 +77,16 @@ clicks **Initialize MCP**.
 Enable the capability before launching the loopback Genie server:
 
 ```bash
-WEBQUANTUMSAVORY_ENABLE_MCP=true ./bin/server
+WQS_DEPLOYMENT_PROFILE=local \
+WEBQUANTUMSAVORY_ENABLE_MCP=true \
+./bin/server
 ```
 
 The MCP endpoint is then shown in the Tools tab and defaults to
 `http://127.0.0.1:8001/mcp`. Override that port with an unused local port:
 
 ```bash
+WQS_DEPLOYMENT_PROFILE=local \
 WEBQUANTUMSAVORY_ENABLE_MCP=true \
 WEBQUANTUMSAVORY_MCP_PORT=8123 \
 ./bin/server
@@ -442,7 +445,7 @@ Notes:
 
 1. Start the server (in a separate terminal):
    ```bash
-   ./bin/server
+   WQS_DEPLOYMENT_PROFILE=local ./bin/server
    ```
 
 2. In another terminal, run:
