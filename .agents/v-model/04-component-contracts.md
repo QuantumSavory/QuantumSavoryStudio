@@ -2,11 +2,11 @@
 
 ## CMP-002 — Candidate-based design reconciliation
 
-- **Normative statement:** A design command shall serialize on an isolated candidate, validate before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and atomically preserve retained live identities.
-- **Parents:** SUB-003
-- **Acceptance criterion:** Invalid single/mixed commands preserve source, selection, and identities; valid create/update/delete commands allocate distinct IDs, resolve aliases, and update each retained reference exactly once.
+- **Normative statement:** A design command shall serialize on an isolated candidate, validate exact live-catalog inputs before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and atomically preserve retained live identities.
+- **Parents:** SUB-003, SUB-005
+- **Acceptance criterion:** Invalid single/mixed commands—including missing/unknown background metadata and explicit intrinsic contradictions—leave source, selection, identities, and hooks unchanged in direct, template-copy, and generated paths; valid or inferred commands allocate distinct IDs, resolve aliases, and update references once.
 - **Verification:** UNITV-002 (test)
-- **Origin / risk:** High graph-integrity risk
+- **Origin / risk:** Design-command evidence; high graph-integrity risk
 - **Context:** [Authoring and inputs](../context/frontend/authoring-and-inputs.md)
 
 ## CMP-003 — Ordered topology mapping

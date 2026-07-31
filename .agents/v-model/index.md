@@ -18,12 +18,14 @@ source denial, the release support boundary, and strict project admission now co
 Strict project admission and candidate-first replacement have passing component and
 integration evidence. Candidate-first browser-system evidence is implemented but does
 not cover the full named matrix. Shared Play readiness has passing component evidence
-and implemented browser-system evidence. MCP metadata/result resources have passing
-component evidence; readback recovery has implemented component/integration artifacts.
-Exact frontend projection remains passing; backend admission and OpenAPI parity have
-durable artifacts pending execution after the exact-identifier correction.
-The dependency-owned structured resource-error boundary and consolidated MCP
-integration/system fault/resource matrices remain incomplete, as does cleanup.
+not cover the full named matrix. Catalog-backed constructor admission has implemented
+component evidence; shared Play readiness has passing component evidence and implemented
+browser-system evidence. MCP metadata/result resources have passing component evidence;
+readback recovery has implemented component/integration artifacts. Exact frontend
+projection remains passing; backend admission and OpenAPI parity have durable artifacts
+pending execution after the exact-identifier correction. The dependency-owned structured
+resource-error boundary and consolidated MCP integration/system fault/resource matrices
+remain incomplete, as does cleanup.
 
 ## Left-side specification
 
@@ -65,6 +67,10 @@ QuantumSavory revision. INTV-002 remains `passing`; UNITV-022 and INTV-004 are
 `implemented` until the backend suites execute the exact-identifier correction and its
 regression fixture. Broader script-help and visible browser-error matrices remain
 tracked by INTV-008 and INTV-009.
+
+The catalog-admission mini-V extends UNITV-002 with component fixtures. Real-catalog
+missing/unknown and descriptor-contradiction integration/system matrices remain planned
+under INTV-005 and SYSV-004.
 
 ## Source basis
 

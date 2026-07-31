@@ -2,12 +2,12 @@
 
 ## Scope
 
-This applies to source under `gui/src/`. Components inherit `components/AGENTS.md`.
+Applies under `gui/src/`. Components inherit `components/AGENTS.md`.
 
 ## Open selectively
 
 - [Project documents](../../.agents/context/frontend/project-documents.md) for codecs,
-  persistence, import/export, projections, and replacement transitions
+  persistence, projections, and replacement transitions
 - [Authoring and inputs](../../.agents/context/frontend/authoring-and-inputs.md) for
   commands, drafts, variables, protocols, tags, and typed values
 - [Simulation client](../../.agents/context/frontend/simulation-client.md) for
@@ -25,9 +25,10 @@ This applies to source under `gui/src/`. Components inherit `components/AGENTS.m
 - Admit raw project documents against `contracts/project/v2.schema.json` before
   normalization, hydration, conflict lookup, storage, platform fetches, or session
   effects. Do not add old-schema coercion or migration.
-- Keep durable encoders as explicit declared-field projections; simulator payloads and
-  collaboration snapshots remain separate projections of the admitted model.
-- Route authoring through the shared design-command service and gate lifecycle work on
+- Keep encoders as declared-field projections; simulator and collaboration projections
+  remain separate.
+- Route authoring through the shared design-command service; reject missing, unknown, or
+  contradictory constructor metadata before reconciliation, and gate lifecycle work on
   the capability model.
 - Preserve durable IDs and retained object identity across graph reconciliation.
 - Keep browser globals private to their resource owner. Share presentation actions through

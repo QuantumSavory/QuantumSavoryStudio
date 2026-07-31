@@ -4,7 +4,7 @@
 - **Open when:** Changing protocol/background/slot catalogs, typed constructor inputs,
   named tags, live tag/query codecs, or placement metadata.
 - **Do not open when:** Editing frontend layout or changing States Zoo rendering.
-- **Related specification IDs:** SYS-004, SUB-004, SUB-005, CMP-017
+- **Related specification IDs:** SYS-004, SUB-004, SUB-005, CMP-002, CMP-017
 - **Review when:** QuantumSavory metadata APIs, parameter descriptors, tag signatures,
   placement rules, or tag wire values change.
 
@@ -37,6 +37,13 @@ recipes. Untagged JSON values may be recursively shaped for simulator-owned
 constructors, but no nested object may introduce `kind`; unknown discriminators are
 validation errors rather than forward-compatible fallbacks. States Zoo recipe parameter
 names and numeric ranges come from the selected simulator catalog entry.
+
+The browser admits background-noise assignments only while a nonempty live catalog is
+available and only for exact catalog type IDs. Its Web `default` no-noise entry joins
+the catalog after the backend catalog request succeeds; it is not an empty-catalog
+fallback. Ordinary slot edits, template cloning, and layout generation share the same
+catalog-backed parameter validator, so missing or unknown metadata cannot commit a
+candidate.
 
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.

@@ -52,10 +52,19 @@ catalog.
 `ConstructorForm` is the shared descriptor/validation/Variable-assignment core for
 protocols and background noise. Its thin wrappers differ in parameter identity
 (`name` versus `field`), metadata lookup, and injected protocol fields; do not fork
-background input rules. An installed background expression receives concrete node
-context. A layout template receives representative/deferred validation, and
-`DesignCommandService` must revalidate every cloned background against its destination
-node after candidate positions stabilize, aborting the whole generation if one fails.
+background input rules. Every background assignment, including the Web `default`
+sentinel, must resolve an exact entry in the nonempty live background catalog before
+shared parameter validation. Missing catalogs and unknown types fail without committing
+the candidate; template-to-node copies and layout-generated copies have no literal
+fallback. An installed background expression receives concrete node context. A layout
+template receives representative/deferred validation, and `DesignCommandService`
+revalidates every cloned background against its destination node after candidate
+positions stabilize, aborting the whole generation if one fails.
+
+Schema-v2 durable parameters carry `selectedType`. An explicit current branch is
+authoritative and must agree with intrinsic `nothing` or `Wildcard` wire values.
+Transport authoring may omit `selectedType`; only that omission permits value-based
+inference, and the committed parameter records the inferred descriptor ID.
 
 ## Draft and validation state
 

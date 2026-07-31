@@ -4,12 +4,12 @@
 
 - **Covers:** CMP-002
 - **Method:** test
-- **Procedure:** Run valid/invalid create-update-delete, mixed transactions, ID collisions, aliases, async validation, and retained-reference fixtures.
+- **Procedure:** Run valid/invalid create-update-delete, mixed transactions, IDs, aliases, async validation, retained references, known/missing/unknown backgrounds through GUI/MCP direct, template, and generated paths, and matching/contradictory/omitted intrinsic branches.
 - **Environment / configuration:** Node Vitest/jsdom
-- **Pass criterion:** Invalid candidates leave no mutation; valid candidates allocate fresh IDs, resolve aliases, and preserve asserted live identities/references.
+- **Pass criterion:** Invalid catalog, descriptor, and mixed candidates leave source and commit hooks unchanged; valid candidates and omitted-branch inference allocate fresh IDs, resolve aliases, persist matching descriptors, and preserve asserted identities/references.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js)
-- **Nonconformance:** No current execution record exists, and no fixture starts with an existing generated ID that collides with the allocator's next candidate.
+- **Nonconformance:** No current supported-environment execution record exists, and no fixture starts with an existing generated ID that collides with the allocator's next candidate.
 
 ## UNITV-003 — Verify asymmetric topology and edge-role mapping
 

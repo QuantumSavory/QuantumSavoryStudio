@@ -50,12 +50,12 @@
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Enumerate every GUI input path, feed it real catalogs/allowlists, and submit advertised boundaries/nulls, unadvertised IDs, and incompatible Variables.
+- **Procedure:** Enumerate every GUI input path, feed it real, missing, and incomplete catalogs/allowlists, and submit advertised boundaries/nulls, unadvertised IDs, contradictory explicit descriptors, and incompatible Variables.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** Every path derives matching type, placement, nullability, bounds, and safe resolution; advertised values round-trip; unsupported values fail.
+- **Pass criterion:** Every path derives matching type, placement, nullability, bounds, and safe resolution; advertised values round-trip; missing metadata, unsupported values, and explicit descriptor contradictions fail without changing the design.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** One real-browser background scenario covers its catalog; other catalogs/input kinds remain separate or mocked.
+- **Nonconformance:** One real-browser background scenario covers its available catalog; missing/unknown metadata and other catalogs/input kinds remain component-only, separate, or mocked.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
