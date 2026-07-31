@@ -107,7 +107,7 @@ parse_status=$(curl --silent --show-error \
   --output "$temporary_dir/parse.json" \
   --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \
-  --data-binary "@$app_root/test/mock/payload3.json" \
+  --data-binary "@$app_root/assets/startup-warmup.json" \
   "http://127.0.0.1:$host_port/parse_network_graph")
 [ "$parse_status" = 200 ]
 curl --fail --silent --show-error \

@@ -1675,23 +1675,256 @@
       }
     },
     "schemas": {
-      "EdgeProtocol": {
+      "SimulationProtocol": {
         "type": "object",
-        "additionalProperties": true,
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "parameters"
+        ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "type": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "parameters": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/JsonObject"
+              "$ref": "#/components/schemas/ProtocolParameter"
             }
           }
         }
+      },
+      "ProtocolParameter": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "type": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              }
+            ]
+          },
+          "value": {
+            "$ref": "#/components/schemas/ConstructorParameterValue"
+          }
+        }
+      },
+      "SimulationSlot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "backgroundNoise"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "backgroundNoise": {
+            "$ref": "#/components/schemas/SimulationBackgroundNoise"
+          }
+        }
+      },
+      "SimulationBackgroundNoise": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "parameters"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackgroundNoiseParameter"
+            }
+          }
+        }
+      },
+      "BackgroundNoiseParameter": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ConstructorParameterValue"
+          }
+        }
+      },
+      "VariableReferenceValue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "const": "variable"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "NumericExpressionValue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "const": "numeric_expression"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "StatesZooValue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "state_type",
+          "parameters"
+        ],
+        "properties": {
+          "kind": {
+            "const": "states_zoo"
+          },
+          "state_type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "OpaqueSimulatorValue": {
+        "description": "Recursive untagged JSON interpreted by the simulator-owned constructor schema.",
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpaqueSimulatorValue"
+            }
+          },
+          {
+            "type": "object",
+            "not": {
+              "required": [
+                "kind"
+              ]
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OpaqueSimulatorValue"
+            }
+          }
+        ]
+      },
+      "ConstructorParameterValue": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/VariableReferenceValue"
+          },
+          {
+            "$ref": "#/components/schemas/NumericExpressionValue"
+          },
+          {
+            "$ref": "#/components/schemas/StatesZooValue"
+          },
+          {
+            "$ref": "#/components/schemas/OpaqueSimulatorValue"
+          }
+        ]
+      },
+      "VariableDefinitionValue": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NumericExpressionValue"
+          },
+          {
+            "$ref": "#/components/schemas/StatesZooValue"
+          },
+          {
+            "$ref": "#/components/schemas/OpaqueSimulatorValue"
+          }
+        ]
       },
       "ErrorBody": {
         "type": "object",
@@ -1730,71 +1963,61 @@
         "type": "object",
         "additionalProperties": true
       },
-      "NetworkGraphRequest": {
+      "ParseNetworkGraphRequest": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "name",
+          "variables",
+          "simulationConfig",
           "net"
         ],
         "properties": {
           "name": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "variables": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/JsonObject"
+              "$ref": "#/components/schemas/SimulationVariable"
             }
           },
           "simulationConfig": {
-            "$ref": "#/components/schemas/JsonObject"
+            "$ref": "#/components/schemas/SimulationRepresentationConfig"
           },
           "net": {
-            "type": "object",
-            "required": [
-              "nodes",
-              "edges"
-            ],
-            "properties": {
-              "nodes": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/JsonObject"
-                }
-              },
-              "edges": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "source",
-                    "target"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "source": {
-                      "type": "string"
-                    },
-                    "target": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/PhysicalEdgeData"
-                    }
-                  }
-                }
-              },
-              "protocols": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/EdgeProtocol"
-                }
-              }
+            "$ref": "#/components/schemas/SimulationNetwork"
+          }
+        }
+      },
+      "ExportSimulationScriptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "variables",
+          "simulationConfig",
+          "net"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationVariable"
             }
+          },
+          "simulationConfig": {
+            "$ref": "#/components/schemas/ScriptExportSimulationConfig"
+          },
+          "net": {
+            "$ref": "#/components/schemas/SimulationNetwork"
           }
         }
       },
@@ -1938,10 +2161,20 @@
       },
       "PhysicalEdgeData": {
         "type": "object",
-        "additionalProperties": true,
+        "additionalProperties": false,
+        "required": [
+          "protocols",
+          "distanceMeters",
+          "propagationDelaySeconds",
+          "refractiveIndex",
+          "lossDbPerKm",
+          "transmissivity"
+        ],
         "properties": {
           "type": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "distanceMeters": {
             "type": [
@@ -1979,8 +2212,292 @@
           "protocols": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/EdgeProtocol"
+              "$ref": "#/components/schemas/SimulationProtocol"
             }
+          }
+        }
+      },
+      "VirtualEdgeData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocols"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "protocols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationProtocol"
+            }
+          }
+        }
+      },
+      "PhysicalSimulationEdge": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source",
+          "target",
+          "isLogic",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "isLogic": {
+            "const": false
+          },
+          "data": {
+            "$ref": "#/components/schemas/PhysicalEdgeData"
+          }
+        }
+      },
+      "VirtualSimulationEdge": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source",
+          "target",
+          "isLogic",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "isLogic": {
+            "const": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/VirtualEdgeData"
+          }
+        }
+      },
+      "SimulationEdge": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PhysicalSimulationEdge"
+          },
+          {
+            "$ref": "#/components/schemas/VirtualSimulationEdge"
+          }
+        ]
+      },
+      "SimulationNetwork": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nodes",
+          "edges",
+          "protocols"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationNode"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationEdge"
+            }
+          },
+          "protocols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationProtocol"
+            }
+          }
+        }
+      },
+      "SimulationVariable": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "type",
+          "value"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "value": {
+            "$ref": "#/components/schemas/VariableDefinitionValue"
+          },
+          "statesZooTraceSourceId": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "SimulationNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "position",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "position": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "data": {
+            "$ref": "#/components/schemas/SimulationNodeData"
+          }
+        }
+      },
+      "SimulationNodeData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slots",
+          "protocols"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationSlot"
+            }
+          },
+          "protocols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulationProtocol"
+            }
+          }
+        }
+      },
+      "SimulationRepresentationConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "qubitRepresentation",
+          "qumodeRepresentation"
+        ],
+        "properties": {
+          "qubitRepresentation": {
+            "type": "string",
+            "enum": [
+              "QuantumOpticsRepr",
+              "QuantumMCRepr",
+              "CliffordRepr"
+            ]
+          },
+          "qumodeRepresentation": {
+            "type": "string",
+            "enum": [
+              "QuantumOpticsRepr",
+              "QuantumMCRepr",
+              "GabsRepr"
+            ]
+          }
+        }
+      },
+      "ScriptExportSimulationConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "time",
+          "timeStep",
+          "qubitRepresentation",
+          "qumodeRepresentation"
+        ],
+        "properties": {
+          "time": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "timeStep": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "qubitRepresentation": {
+            "type": "string",
+            "enum": [
+              "QuantumOpticsRepr",
+              "QuantumMCRepr",
+              "CliffordRepr"
+            ]
+          },
+          "qumodeRepresentation": {
+            "type": "string",
+            "enum": [
+              "QuantumOpticsRepr",
+              "QuantumMCRepr",
+              "GabsRepr"
+            ]
           }
         }
       },
@@ -2338,10 +2855,10 @@
             "$ref": "#/components/schemas/TestStateMutation"
           },
           "exportSimulationScriptRequest": {
-            "$ref": "#/components/schemas/NetworkGraphRequest"
+            "$ref": "#/components/schemas/ExportSimulationScriptRequest"
           },
           "parseNetworkGraphRequest": {
-            "$ref": "#/components/schemas/NetworkGraphRequest"
+            "$ref": "#/components/schemas/ParseNetworkGraphRequest"
           },
           "pauseSimulationRequest": {
             "$ref": "#/components/schemas/HttpOperationSchemas/$defs/simulationNameRequest"

@@ -1,0 +1,101 @@
+{
+  "name": "2. Entangler Example with consumer",
+  "simulationConfig": {
+    "qubitRepresentation": "QuantumOpticsRepr",
+    "qumodeRepresentation": "QuantumOpticsRepr"
+  },
+  "net": {
+    "nodes": [
+      {
+        "id": "node_FVAmt8",
+        "name": "Amherst",
+        "position": [
+          -72.52670903278263,
+          42.39364498878811
+        ],
+        "data": {
+          "type": "City",
+          "slots": [
+            {
+              "id": "slot_MglsMO",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "default",
+                "parameters": []
+              }
+            },
+            {
+              "id": "slot_VSOCk6",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "default",
+                "parameters": []
+              }
+            }
+          ],
+          "protocols": []
+        }
+      },
+      {
+        "id": "node_ZowYQo",
+        "name": "Cambridge",
+        "position": [
+          -71.09167275879082,
+          42.361375446502194
+        ],
+        "data": {
+          "type": "City",
+          "slots": [
+            {
+              "id": "slot_PTmL6T",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "default",
+                "parameters": []
+              }
+            },
+            {
+              "id": "slot_8m2toj",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "default",
+                "parameters": []
+              }
+            }
+          ],
+          "protocols": []
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge_tTyZnA",
+        "source": "node_FVAmt8",
+        "target": "node_ZowYQo",
+        "isLogic": false,
+        "data": {
+          "type": "connection",
+          "protocols": [
+            {
+              "id": "protocol_lR7xcK",
+              "type": "QuantumSavory.ProtocolZoo.EntanglerProt",
+              "parameters": []
+            },
+            {
+              "id": "protocol_ghrFir",
+              "type": "QuantumSavory.ProtocolZoo.EntanglementConsumer",
+              "parameters": []
+            }
+          ],
+          "distanceMeters": 117000,
+          "propagationDelaySeconds": 0.0005729,
+          "refractiveIndex": 1.468,
+          "lossDbPerKm": 0.2,
+          "transmissivity": 0.00457088
+        }
+      }
+    ],
+    "protocols": []
+  },
+  "variables": []
+}

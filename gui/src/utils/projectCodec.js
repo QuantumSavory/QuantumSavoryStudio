@@ -27,7 +27,10 @@ import {
   findParameterInputOption,
   inferParameterInputOption,
 } from './parameterTypes'
-import { normalizeRepresentationConfig } from './representations'
+import {
+  normalizeRepresentationConfig,
+  requireRepresentationConfig,
+} from './representations'
 
 const projectDocumentValidator = new Ajv2020({
   allErrors: true,
@@ -934,7 +937,7 @@ export function toSimulationPayload(project) {
 
   return {
     name: normalizeProjectName(source.name),
-    simulationConfig: normalizeRepresentationConfig(source.simulationConfig),
+    simulationConfig: requireRepresentationConfig(source.simulationConfig),
     variables: Array.isArray(source.variables)
       ? source.variables.map((variable, index) => {
           const normalized = normalizeVariableRecord(variable, `Variable ${index + 1}`)
@@ -1012,16 +1015,25 @@ export function toSimulationPayload(project) {
  * Add the run configuration required by the script-export endpoint.
  */
 export function toScriptExportPayloadFromSimulationPayload(payload, simulationConfig) {
-  const sourceConfig = isRecord(simulationConfig) ? simulationConfig : {}
-  const representationConfig = normalizeRepresentationConfig({
-    ...(isRecord(payload?.simulationConfig) ? payload.simulationConfig : {}),
-    ...sourceConfig,
-  })
+  if (!isRecord(payload)) throw new Error('Simulation payload must be an object')
+  if (!isRecord(simulationConfig)) {
+    throw new Error('Script-export simulation configuration must be an object')
+  }
+  const representationConfig = requireRepresentationConfig(payload.simulationConfig)
+  const requirePositiveNumber = (field) => {
+    const value = simulationConfig[field]
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw new Error(`Script-export simulation configuration requires a positive ${field}`)
+    }
+    return value
+  }
   return {
-    ...payload,
+    name: cloneValue(payload.name),
+    variables: cloneValue(payload.variables),
+    net: cloneValue(payload.net),
     simulationConfig: {
-      time: finiteNumber(sourceConfig.time, DEFAULT_SIMULATION_TIME),
-      timeStep: finiteNumber(sourceConfig.timeStep, DEFAULT_SIMULATION_TIME_STEP),
+      time: requirePositiveNumber('time'),
+      timeStep: requirePositiveNumber('timeStep'),
       ...representationConfig,
     },
   }

@@ -57,11 +57,41 @@ function normalizedChoice(value, allowedOptions, fallback) {
   return allowedOptions.some(option => option.value === value) ? value : fallback
 }
 
+function requiredChoice(config, field, allowedOptions) {
+  const value = config?.[field]
+  if (!allowedOptions.some(option => option.value === value)) {
+    throw new Error(`Simulation configuration requires a supported ${field}`)
+  }
+  return value
+}
+
 /**
- * Return the canonical representation defaults accepted by the backend.
+ * Read the explicit representation selections required by API payloads.
+ */
+export function requireRepresentationConfig(config) {
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error('Simulation configuration must be an object')
+  }
+  return {
+    qubitRepresentation: requiredChoice(
+      config,
+      'qubitRepresentation',
+      QUBIT_REPRESENTATION_OPTIONS,
+    ),
+    qumodeRepresentation: requiredChoice(
+      config,
+      'qumodeRepresentation',
+      QUMODE_REPRESENTATION_OPTIONS,
+    ),
+  }
+}
+
+/**
+ * Return canonical representation selections for editable project state.
  *
  * Incomplete live editor state falls back to the general QuantumOptics
- * representation before crossing a codec boundary.
+ * representation while it remains inside the project codec. API projection
+ * uses `requireRepresentationConfig` and never supplies backend defaults.
  */
 export function normalizeRepresentationConfig(config = {}) {
   return {

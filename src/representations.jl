@@ -1,6 +1,3 @@
-const DEFAULT_QUBIT_REPRESENTATION = "QuantumOpticsRepr"
-const DEFAULT_QUMODE_REPRESENTATION = "QuantumOpticsRepr"
-
 const _REPRESENTATION_TRAIT_SUPPORT = Dict(
   QuantumOpticsRepr => (Qubit, Qumode),
   QuantumMCRepr => (Qubit, Qumode),
@@ -40,8 +37,11 @@ function _representation_names(trait)
   return sort!(string.(nameof.(types)))
 end
 
-function _representation_choice(config, field, default, trait)
-  choice = get(config, field, default)
+function _representation_choice(config, field, trait)
+  haskey(config, field) || throw(validation_error(
+    "Simulation configuration missing required field '$field'",
+  ))
+  choice = config[field]
   choice isa AbstractString || throw(validation_error(
     "Simulation configuration field '$field' must be a representation name",
   ))
@@ -60,15 +60,14 @@ function _representation_choice(config, field, default, trait)
 end
 
 """
-Return validated global representation defaults for a project payload.
-
-Projects created before these fields existed retain the QuantumOptics default.
+Return the explicit validated representation selections from a simulation payload.
 """
 function representation_config(payload)
-  config = get(payload, "simulationConfig", nothing)
-  if config === nothing
-    config = Dict{String,Any}()
-  elseif !_representation_object_like(config)
+  haskey(payload, "simulationConfig") || throw(validation_error(
+    "Missing required field: 'simulationConfig' must be present",
+  ))
+  config = payload["simulationConfig"]
+  if !_representation_object_like(config)
     throw(validation_error("Field 'simulationConfig' must be an object"))
   end
 
@@ -76,13 +75,11 @@ function representation_config(payload)
     qubit = _representation_choice(
       config,
       "qubitRepresentation",
-      DEFAULT_QUBIT_REPRESENTATION,
       Qubit,
     ),
     qumode = _representation_choice(
       config,
       "qumodeRepresentation",
-      DEFAULT_QUMODE_REPRESENTATION,
       Qumode,
     ),
   )
@@ -91,7 +88,7 @@ end
 function _representation_name(config, trait)
   trait === Qubit && return config.qubit
   trait === Qumode && return config.qumode
-  return DEFAULT_QUBIT_REPRESENTATION
+  throw(ArgumentError("Unsupported slot trait: $trait"))
 end
 
 function construct_representation(config, trait)

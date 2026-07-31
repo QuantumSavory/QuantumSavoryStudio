@@ -980,14 +980,22 @@ function _script_filename(project_name)
 end
 
 function _script_simulation_config(payload)
-  config = get(payload, "simulationConfig", Dict{String,Any}())
+  haskey(payload, "simulationConfig") || throw(validation_error(
+    "Missing required field: 'simulationConfig' must be present",
+  ))
+  config = payload["simulationConfig"]
   _is_object_like(config) || throw(validation_error(
     "Field 'simulationConfig' must be an object",
     Dict{String,Any}("received_type" => string(typeof(config))),
   ))
 
-  duration = get(config, "time", 1.0)
-  time_step = get(config, "timeStep", 0.1)
+  for field in ("time", "timeStep")
+    haskey(config, field) || throw(validation_error(
+      "Script-export simulation configuration missing required field '$field'",
+    ))
+  end
+  duration = config["time"]
+  time_step = config["timeStep"]
   for (name, value) in (("time", duration), ("timeStep", time_step))
     (value isa Real && !(value isa Bool) && isfinite(value) && value > 0) ||
       throw(validation_error(
@@ -1435,7 +1443,7 @@ evaluates them and never creates or mutates a server-side simulation.
 function generate_julia_script(payload)
   _is_object_like(payload) || throw(validation_error("Export payload must be an object"))
   reject_mock_broken_protocol_export(payload)
-  validation = validate_payload(payload)
+  validation = validate_payload(payload; script_export=true)
   data = validation["data"]
   nodes = validation["graph_info"]["nodes"]
   edges = validation["graph_info"]["edges"]

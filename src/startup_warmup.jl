@@ -7,26 +7,10 @@ const STARTUP_WARMUP_SIMULATION_TARGET = 0.2
 const STARTUP_WARMUP_LOCK = ReentrantLock()
 const STARTUP_WARMUP_COMPLETE = Ref(false)
 
-_startup_warmup_demos_dir() = normpath(joinpath(@__DIR__, "..", "gui", "src", "demos"))
+const STARTUP_WARMUP_PAYLOAD_FILE =
+  normpath(joinpath(@__DIR__, "..", "assets", "startup-warmup.json"))
 
-function _startup_warmup_demo_order(path::AbstractString)
-  matched = match(r"^(\d+)\.", basename(path))
-  matched === nothing && error("Bundled demo must begin with a numeric prefix: $(basename(path))")
-  return (parse(Int, only(matched.captures)), lowercase(basename(path)))
-end
-
-"""Return the last bundled demo according to its leading numeric prefix."""
-function _latest_startup_warmup_demo(demos_dir::AbstractString=_startup_warmup_demos_dir())
-  demos = filter(
-    path -> isfile(path) && endswith(lowercase(path), ".json"),
-    readdir(demos_dir; join=true),
-  )
-  isempty(demos) && error("No bundled JSON demos found in $demos_dir")
-  sort!(demos; by=_startup_warmup_demo_order)
-  return last(demos)
-end
-
-"""Collect node, edge, and floating protocol definitions from a project payload."""
+"""Collect node, edge, and floating protocol definitions from a simulation payload."""
 function _startup_warmup_protocols(payload)
   net = payload["net"]
   protocols = Any[]
@@ -43,13 +27,13 @@ function _startup_warmup_protocols(payload)
 end
 
 """
-Give the latest demo a private name and make its entangler deterministic.
+Give the warmup payload a private name and make its entangler deterministic.
 
-The last bundled demo includes an entangler and a consumer. A guaranteed first-attempt
+The bundled payload includes an entangler and a consumer. A guaranteed first-attempt
 success lets the short workload exercise both protocols and retain generated slot states
-for the MIME renderers without changing the checked-in demo.
+for the MIME renderers without changing the checked-in fixture.
 """
-function _configure_startup_warmup_demo!(payload)
+function _configure_startup_warmup_payload!(payload)
   payload["name"] = STARTUP_WARMUP_STATE_NAME
 
   configured_entanglers = 0
@@ -57,16 +41,25 @@ function _configure_startup_warmup_demo!(payload)
     protocol_type = String(get(protocol, "type", ""))
     endswith(protocol_type, ".EntanglerProt") || continue
 
+    parameters = protocol["parameters"]
     parameter = findfirst(
       candidate -> get(candidate, "name", nothing) == "success_prob",
-      get(protocol, "parameters", Any[]),
+      parameters,
     )
-    parameter === nothing && error("Bundled EntanglerProt has no success_prob parameter")
-    protocol["parameters"][parameter]["value"] = 1.0
+    if parameter === nothing
+      push!(parameters, Dict(
+        "name" => "success_prob",
+        "type" => "Float64",
+        "value" => 1.0,
+      ))
+    else
+      parameters[parameter]["value"] = 1.0
+    end
     configured_entanglers += 1
   end
 
-  configured_entanglers > 0 || error("Latest bundled demo has no EntanglerProt to warm up")
+  configured_entanglers > 0 ||
+    error("Bundled warmup payload has no EntanglerProt to warm up")
   return payload
 end
 
@@ -133,12 +126,11 @@ normal requests. It throws when a path was not exercised so unit tests detect de
 drift; `start_startup_warmup!` logs such failures without preventing startup.
 """
 function _run_startup_warmup!(;
-  demos_dir::AbstractString=_startup_warmup_demos_dir(),
+  payload_file::AbstractString=STARTUP_WARMUP_PAYLOAD_FILE,
   simulation_target::Real=STARTUP_WARMUP_SIMULATION_TARGET,
 )
   return Logging.with_logger(Logging.NullLogger()) do
-    demo_path = _latest_startup_warmup_demo(demos_dir)
-    payload = _configure_startup_warmup_demo!(JSON.parsefile(demo_path))
+    payload = _configure_startup_warmup_payload!(JSON.parsefile(payload_file))
     warmup_state = nothing
 
     try
@@ -168,7 +160,7 @@ function _run_startup_warmup!(;
       states_zoo_type = _warmup_default_states_zoo_visualization!()
 
       return (
-        demo = basename(demo_path),
+        fixture = basename(payload_file),
         protocol_count,
         generated_state_count,
         states_zoo_type,

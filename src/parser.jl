@@ -108,18 +108,20 @@ _is_object_like(x) = x isa AbstractDict || startswith(string(typeof(x)), "JSON3.
 """Return whether an edge represents a virtual (logic-only) connection."""
 _is_virtual_edge(edge) = get(edge, "isLogic", false) === true
 
-"""Read one optional, finite physical-edge number from minimized payload data."""
+"""Read one required, finite physical-edge number from minimized payload data."""
 function _physical_edge_number(
   edge_data,
   key::String,
   label::String,
   context::String;
-  default=nothing,
   positive::Bool=false,
   nullable::Bool=true,
   maximum=nothing,
 )
-  value = get(edge_data, key, default)
+  haskey(edge_data, key) || throw(validation_error(
+    "$context missing required field: '$key'",
+  ))
+  value = edge_data[key]
   if value === nothing
     nullable && return nothing
     throw(validation_error("$context $label must be a number"))
@@ -143,14 +145,15 @@ end
 
 """Return the validated physical properties carried by a minimized edge.
 
-Legacy payloads predate distance, refractive-index, loss, and transmissivity
-metadata, so those values remain unknown while propagation delay retains the
-established zero default. Route geometry and manual overrides remain frontend
-storage concerns; the backend validates resolved values without recomputing or
+Route geometry and manual overrides remain frontend storage concerns; the
+backend requires and validates every resolved value without recomputing or
 cross-checking frontend formulas.
 """
 function _physical_edge_properties(edge, context::String="Physical edge")
-  edge_data = get(edge, "data", Dict{String,Any}())
+  haskey(edge, "data") || throw(validation_error(
+    "$context missing required field: 'data'",
+  ))
+  edge_data = edge["data"]
   _is_object_like(edge_data) || throw(validation_error("$context data must be an object"))
   names = Tuple(descriptor.field for descriptor in EDGE_CONTEXT_DESCRIPTORS)
   values = map(EDGE_CONTEXT_DESCRIPTORS) do descriptor
@@ -159,7 +162,6 @@ function _physical_edge_properties(edge, context::String="Physical edge")
       descriptor.payload_key,
       descriptor.payload_label,
       context;
-      default=descriptor.payload_default,
       positive=descriptor.positive,
       nullable=descriptor.payload_nullable,
       maximum=descriptor.maximum,
@@ -358,12 +360,15 @@ end
 """
 Parse and validate top-level simulation variable definitions.
 
-The field is optional for backward compatibility. Values remain unconverted;
-conversion happens for each protocol assignment so context-sensitive function
-references and fresh wildcard values keep their existing behavior.
+Values remain unconverted; conversion happens for each protocol assignment so
+context-sensitive function references and fresh wildcard values keep their
+existing behavior.
 """
 function _parse_variables(payload)
-  raw_variables = haskey(payload, "variables") ? payload["variables"] : Any[]
+  haskey(payload, "variables") || throw(validation_error(
+    "Missing required field: 'variables' must be present",
+  ))
+  raw_variables = payload["variables"]
   raw_variables isa AbstractVector || throw(validation_error(
     "Field 'variables' must be an array",
     Dict{String,Any}("variables_type" => string(typeof(raw_variables))),
@@ -378,12 +383,24 @@ function _parse_variables(payload)
       "$context must be an object",
       Dict{String,Any}("received_type" => string(typeof(raw_variable))),
     ))
-
     id = _required_nonempty_string(raw_variable, "id", context)
     name = _required_nonempty_string(raw_variable, "name", context)
     variable_type = _required_nonempty_string(raw_variable, "type", context)
     haskey(raw_variable, "value") || throw(validation_error("$context missing required field: 'value'"))
     value = raw_variable["value"]
+    _require_exact_object_fields(
+      raw_variable,
+      ("id", "name", "type", "value"),
+      ("statesZooTraceSourceId",);
+      context,
+    )
+    haskey(raw_variable, "statesZooTraceSourceId") &&
+      _required_nonempty_string(raw_variable, "statesZooTraceSourceId", context)
+    _validate_wire_value(
+      value;
+      allow_variable_reference=false,
+      context="$context value",
+    )
 
     haskey(variables, id) && throw(validation_error(
       "Duplicate variable ID: '$id'",
@@ -426,6 +443,11 @@ function _parse_variable_reference(value; context::String="Protocol parameter")
   _is_object_like(value) || return nothing
   get(value, "kind", nothing) == "variable" || return nothing
   id = _required_nonempty_string(value, "id", "$context variable reference")
+  _require_exact_object_fields(
+    value,
+    ("kind", "id");
+    context="$context variable reference",
+  )
   return VariableReference(id)
 end
 
@@ -981,8 +1003,239 @@ function extract_payload(payload = nothing, raw_payload = nothing)
   throw(validation_error("No valid JSON payload found", Dict{String, Any}("raw_payload_type" => string(typeof(raw_payload)))))
 end
 
-function validate_payload(payload)
+const _SIMULATION_CONFIG_REPRESENTATION_FIELDS = (
+  "qubitRepresentation",
+  "qumodeRepresentation",
+)
+const _SCRIPT_EXPORT_CONFIG_FIELDS = (
+  "time",
+  "timeStep",
+  _SIMULATION_CONFIG_REPRESENTATION_FIELDS...,
+)
+const _PHYSICAL_EDGE_PAYLOAD_FIELDS = Tuple(
+  descriptor.payload_key for descriptor in EDGE_CONTEXT_DESCRIPTORS
+)
+
+function _validate_wire_value(
+  value;
+  allow_variable_reference::Bool,
+  context::String,
+)
+  if _is_object_like(value) && haskey(value, "kind")
+    kind = value["kind"]
+    if kind == "variable"
+      allow_variable_reference || throw(validation_error(
+        "$context must not reference another simulation variable",
+      ))
+      _parse_variable_reference(value; context)
+    elseif kind == NUMERIC_EXPRESSION_KIND
+      _parse_numeric_expression(value; context)
+    elseif kind == "states_zoo"
+      construct_states_zoo_recipe(value)
+    else
+      throw(validation_error(
+        "$context field 'kind' must be 'variable', 'numeric_expression', or 'states_zoo'",
+      ))
+    end
+    return value
+  end
+
+  _validate_opaque_wire_value(value, context)
+  return value
+end
+
+function _validate_opaque_wire_value(value, context::String)
+  if _is_object_like(value)
+    haskey(value, "kind") && throw(validation_error(
+      "$context opaque simulator value must not contain a 'kind' discriminator",
+    ))
+    for (key, nested_value) in pairs(value)
+      _validate_opaque_wire_value(nested_value, "$context field '$(string(key))'")
+    end
+  elseif value isa AbstractVector
+    for (index, nested_value) in enumerate(value)
+      _validate_opaque_wire_value(nested_value, "$context item $index")
+    end
+  elseif value === nothing || value isa AbstractString || value isa Bool
+    return value
+  elseif value isa Real
+    isfinite(value) || throw(validation_error(
+      "$context numeric value must be finite",
+    ))
+  else
+    throw(validation_error(
+      "$context must be a JSON null, string, finite number, boolean, array, or object",
+    ))
+  end
+  return value
+end
+
+function _validate_optional_type_field(object, context::String)
+  haskey(object, "type") || return nothing
+  return _required_nonempty_string(object, "type", context)
+end
+
+function _validate_protocol_parameter(parameter, context::String)
+  _require_exact_object_fields(
+    parameter,
+    ("name", "type", "value");
+    context,
+  )
+  _required_nonempty_string(parameter, "name", context)
+
+  parameter_type = parameter["type"]
+  valid_type = if parameter_type isa AbstractString
+    !isempty(strip(String(parameter_type)))
+  elseif parameter_type isa AbstractVector
+    !isempty(parameter_type) && all(
+      value -> value isa AbstractString && !isempty(strip(String(value))),
+      parameter_type,
+    )
+  else
+    false
+  end
+  valid_type || throw(validation_error(
+    "$context field 'type' must be a nonblank string or a nonempty array of nonblank strings",
+  ))
+  _validate_wire_value(
+    parameter["value"];
+    allow_variable_reference=true,
+    context="$context value",
+  )
+  return parameter
+end
+
+function _validate_protocol_definition(protocol, context::String)
+  _require_exact_object_fields(
+    protocol,
+    ("id", "type", "parameters");
+    context,
+  )
+  _required_nonempty_string(protocol, "id", context)
+  _required_nonempty_string(protocol, "type", context)
+  parameters = protocol["parameters"]
+  parameters isa AbstractVector || throw(validation_error(
+    "$context parameters must be an array",
+  ))
+  for (index, parameter) in enumerate(parameters)
+    _validate_protocol_parameter(parameter, "$context parameter $index")
+  end
+  return protocol
+end
+
+function _validate_protocol_array(protocols, context::String)
+  protocols isa AbstractVector || throw(validation_error(
+    "$context must be an array",
+  ))
+  for (index, protocol) in enumerate(protocols)
+    _validate_protocol_definition(protocol, "$context item $index")
+  end
+  return protocols
+end
+
+function _validate_background_noise(background, context::String)
+  _require_exact_object_fields(
+    background,
+    ("type", "parameters");
+    context,
+  )
+  _required_nonempty_string(background, "type", context)
+  parameters = background["parameters"]
+  parameters isa AbstractVector || throw(validation_error(
+    "$context parameters must be an array",
+  ))
+  for (index, parameter) in enumerate(parameters)
+    parameter_context = "$context parameter $index"
+    _require_exact_object_fields(
+      parameter,
+      ("name", "value");
+      context=parameter_context,
+    )
+    _required_nonempty_string(parameter, "name", parameter_context)
+    _validate_wire_value(
+      parameter["value"];
+      allow_variable_reference=true,
+      context="$parameter_context value",
+    )
+  end
+  return background
+end
+
+function _validate_slot(slot, context::String)
+  _require_exact_object_fields(
+    slot,
+    ("id", "type", "backgroundNoise");
+    context,
+  )
+  _required_nonempty_string(slot, "id", context)
+  _required_nonempty_string(slot, "type", context)
+  _validate_background_noise(slot["backgroundNoise"], "$context background noise")
+  return slot
+end
+
+function _validate_request_simulation_config(payload; script_export::Bool)
+  haskey(payload, "simulationConfig") || throw(validation_error(
+    "Missing required field: 'simulationConfig' must be present",
+  ))
+  config = payload["simulationConfig"]
+  fields = script_export ?
+    _SCRIPT_EXPORT_CONFIG_FIELDS :
+    _SIMULATION_CONFIG_REPRESENTATION_FIELDS
+  _require_exact_object_fields(
+    config,
+    fields;
+    context=script_export ?
+      "Script-export simulation configuration" :
+      "Simulation configuration",
+  )
+  representation_config(payload)
+
+  if script_export
+    for field in ("time", "timeStep")
+      value = config[field]
+      (value isa Real && !(value isa Bool) && isfinite(value) && value > 0) ||
+        throw(validation_error(
+          "simulationConfig.$field must be a positive finite number",
+          Dict{String,Any}("value" => value),
+        ))
+    end
+  end
+  return config
+end
+
+function _validate_edge_data(edge, index::Int)
+  context = _is_virtual_edge(edge) ? "Virtual edge $index" : "Physical edge $index"
+  haskey(edge, "data") || throw(validation_error(
+    "$context missing required field: 'data'",
+  ))
+  data = edge["data"]
+  if _is_virtual_edge(edge)
+    _require_exact_object_fields(
+      data,
+      ("protocols",),
+      ("type",);
+      context="$context data",
+    )
+  else
+    _require_exact_object_fields(
+      data,
+      ("protocols", _PHYSICAL_EDGE_PAYLOAD_FIELDS...),
+      ("type",);
+      context="$context data",
+    )
+  end
+  _validate_optional_type_field(data, "$context data")
+  protocols = data["protocols"]
+  _validate_protocol_array(protocols, "$context protocols")
+  return data, protocols
+end
+
+function validate_payload(payload; script_export::Bool=false)
   try
+    _is_object_like(payload) || throw(validation_error(
+      "Simulation payload must be an object",
+    ))
+
     # Validate top-level structure
     if !haskey(payload, "name")
       throw(validation_error("Missing required field: 'name' must be present"))
@@ -992,17 +1245,39 @@ function validate_payload(payload)
       throw(validation_error("Missing required field: 'net' must be present"))
     end
 
-    representation_config(payload)
+    haskey(payload, "variables") || throw(validation_error(
+      "Missing required field: 'variables' must be present",
+    ))
+    haskey(payload, "simulationConfig") || throw(validation_error(
+      "Missing required field: 'simulationConfig' must be present",
+    ))
+    _require_exact_object_fields(
+      payload,
+      ("name", "variables", "simulationConfig", "net");
+      context=script_export ? "Script-export payload" : "Simulation payload",
+    )
+    _required_nonempty_string(payload, "name", "Simulation payload")
+    _validate_request_simulation_config(payload; script_export)
 
     net = payload["net"]
+    _is_object_like(net) || throw(validation_error("Field 'net' must be an object"))
 
     # Validate net structure
     if !haskey(net, "nodes") || !haskey(net, "edges")
       throw(validation_error("Missing required fields in 'net': 'nodes' and 'edges' must be present"))
     end
+    haskey(net, "protocols") || throw(validation_error(
+      "Missing required field in 'net': 'protocols' must be present",
+    ))
+    _require_exact_object_fields(
+      net,
+      ("nodes", "edges", "protocols");
+      context="Simulation network",
+    )
 
     nodes = net["nodes"]
     edges = net["edges"]
+    floating_protocols = net["protocols"]
 
     # Validate that nodes and edges are arrays, accepting any AbstractVector
     if !isa(nodes, AbstractVector)
@@ -1012,6 +1287,11 @@ function validate_payload(payload)
     if !isa(edges, AbstractVector)
       throw(validation_error("Field 'edges' must be an array", Dict{String, Any}("edges_type" => string(typeof(edges)))))
     end
+    floating_protocols isa AbstractVector || throw(validation_error(
+      "Field 'protocols' must be an array",
+      Dict{String,Any}("protocols_type" => string(typeof(floating_protocols))),
+    ))
+    _validate_protocol_array(floating_protocols, "Floating protocols")
 
     # Normalize to plain Vectors to avoid type cracks downstream
     nodes = _to_vector(nodes)
@@ -1020,6 +1300,7 @@ function validate_payload(payload)
     # Validate each node structure
     node_ids = Set{String}()
     for (i, node) in enumerate(nodes)
+      _is_object_like(node) || throw(validation_error("Node $i must be an object"))
       # Check required node fields
       if !haskey(node, "id")
         throw(validation_error("Node $i missing required field: 'id'"))
@@ -1036,9 +1317,35 @@ function validate_payload(payload)
       if !haskey(node, "data")
         throw(validation_error("Node $i missing required field: 'data'"))
       end
+      _require_exact_object_fields(
+        node,
+        ("id", "name", "position", "data");
+        context="Node $i",
+      )
+      node_id = _required_nonempty_string(node, "id", "Node $i")
+      _required_nonempty_string(node, "name", "Node $i")
+      node_data = node["data"]
+      _require_exact_object_fields(
+        node_data,
+        ("slots", "protocols"),
+        ("type",);
+        context="Node $i data",
+      )
+      _validate_optional_type_field(node_data, "Node $i data")
+      slots = node_data["slots"]
+      slots isa AbstractVector || throw(validation_error(
+        "Node $i slots must be an array",
+      ))
+      for (slot_index, slot) in enumerate(slots)
+        _validate_slot(slot, "Node $i slot $slot_index")
+      end
+      _validate_protocol_array(node_data["protocols"], "Node $i protocols")
+      position = node["position"]
+      position isa AbstractVector && length(position) == 2 &&
+        all(value -> value isa Real && !(value isa Bool) && isfinite(value), position) ||
+        throw(validation_error("Node $i position must contain two finite numbers"))
 
       # Check for duplicate node IDs
-      node_id = string(node["id"])
       if node_id in node_ids
         throw(validation_error("Duplicate node ID: '$node_id'"))
       end
@@ -1049,6 +1356,7 @@ function validate_payload(payload)
     edge_connections = []
     physical_endpoint_pairs = Set{Tuple{String,String}}()
     for (i, edge) in enumerate(edges)
+      _is_object_like(edge) || throw(validation_error("Edge $i must be an object"))
       # Check required edge fields
       if !haskey(edge, "id")
         throw(validation_error("Edge $i missing required field: 'id'"))
@@ -1062,13 +1370,21 @@ function validate_payload(payload)
         throw(validation_error("Edge $i missing required field: 'target'"))
       end
 
-      if haskey(edge, "isLogic") && !(edge["isLogic"] isa Bool)
+      if !haskey(edge, "isLogic")
+        throw(validation_error("Edge $i missing required field: 'isLogic'"))
+      elseif !(edge["isLogic"] isa Bool)
         throw(validation_error("Edge $i field 'isLogic' must be a boolean"))
       end
+      _require_exact_object_fields(
+        edge,
+        ("id", "source", "target", "isLogic", "data");
+        context="Edge $i",
+      )
 
       # Validate source and target reference existing nodes
-      source = string(edge["source"])
-      target = string(edge["target"])
+      _required_nonempty_string(edge, "id", "Edge $i")
+      source = _required_nonempty_string(edge, "source", "Edge $i")
+      target = _required_nonempty_string(edge, "target", "Edge $i")
 
       if !(source in node_ids)
         throw(validation_error("Edge $i references non-existent source node: '$source'"))
@@ -1078,15 +1394,8 @@ function validate_payload(payload)
         throw(validation_error("Edge $i references non-existent target node: '$target'"))
       end
 
+      edge_data, protocols = _validate_edge_data(edge, i)
       if _is_virtual_edge(edge)
-        edge_data = get(edge, "data", Dict{String,Any}())
-        _is_object_like(edge_data) || throw(validation_error(
-          "Virtual edge $i data must be an object",
-        ))
-        protocols = get(edge_data, "protocols", Any[])
-        protocols isa AbstractVector || throw(validation_error(
-          "Virtual edge $i protocols must be an array",
-        ))
         for (protocol_index, protocol) in enumerate(protocols)
           _is_object_like(protocol) || throw(validation_error(
             "Virtual edge $i protocol $protocol_index must be an object",
@@ -1118,8 +1427,7 @@ function validate_payload(payload)
       push!(edge_connections, Dict("source" => source, "target" => target))
     end
 
-    # Variables are optional for legacy projects. When present, validate both
-    # their definitions and every tagged protocol-parameter reference before
+    # Validate definitions and tagged protocol-parameter references before
     # creating backend state.
     variables = _parse_variables(payload)
     _validate_variable_references(payload, variables)
