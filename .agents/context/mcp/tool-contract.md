@@ -41,9 +41,10 @@ The current recovery rules are:
   resource links;
 - the sidecar accepts result links only from the registry-associated tool and only when
   every URI exactly matches the returned identifier, kind, and format;
-- resource identifiers use strict RFC 3986 unreserved-segment encoding and decode
-  exactly once, so reserved characters, `%`, `+`, and Unicode round-trip without
-  collisions;
+- resource identifiers use one canonical RFC 3986 segment encoding: unreserved bytes
+  remain literal, every other byte uses an uppercase percent triplet, and decoding
+  occurs exactly once, so reserved characters, `%`, `+`, and Unicode round-trip
+  without collisions or URI aliases;
 - backend and sidecar trust boundaries independently validate MIME type, base64,
   nonempty UTF-8 HTML, and the PNG signature.
 

@@ -432,6 +432,8 @@ function mcp_decode_resource_identifier(segment::AbstractString)
   identifier = String(take!(decoded))
   isvalid(identifier) ||
     throw(ArgumentError("resource identifiers must contain valid UTF-8"))
+  mcp_encode_resource_identifier(identifier) == String(segment) ||
+    throw(ArgumentError("resource identifiers must use canonical percent encoding"))
   return identifier
 end
 

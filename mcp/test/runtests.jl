@@ -330,6 +330,12 @@ end
     @test result.content[2]["mimeType"] == "text/html"
     @test result.content[3]["uri"] == structured["resources"]["png"]
     @test result.content[3]["mimeType"] == "image/png"
+    @test mcp_decode_resource_identifier(
+        "protocol%20%2F%3F%23%25%2B%CE%BB%252F",
+    ) == structured["protocol_id"]
+    for alias in ("%70rotocol", "x%2fy", "%7E")
+        @test_throws ArgumentError mcp_decode_resource_identifier(alias)
+    end
 
     invalid_results = [
         (
