@@ -47,4 +47,10 @@ describe('States Zoo parameter bounds', () => {
     expect(stateParameterValueIsValid(1, upperOpen)).toBe(false)
     expect(stateParameterValueIsValid(0.5, upperOpen)).toBe(true)
   })
+
+  it('rejects coercible non-number JSON values', () => {
+    for (const value of ['0.5', true, [0.5], null]) {
+      expect(stateParameterValueIsValid(value, genqoEta)).toBe(false)
+    }
+  })
 })

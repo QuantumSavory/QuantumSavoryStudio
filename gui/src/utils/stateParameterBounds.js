@@ -14,28 +14,20 @@ export function normalizeStateParameter(parameter) {
 }
 
 export function stateParameterValueIsValid(rawValue, parameter) {
-  if (
-    rawValue == null
-    || (typeof rawValue === 'string' && rawValue.trim() === '')
-  ) {
-    return false
-  }
-
-  const value = Number(rawValue)
-  if (!Number.isFinite(value)) return false
+  if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) return false
 
   const normalized = normalizeStateParameter(parameter)
   const minimumValid = !Number.isFinite(normalized.min)
     || (
       normalized.minInclusive
-        ? value >= normalized.min
-        : value > normalized.min
+        ? rawValue >= normalized.min
+        : rawValue > normalized.min
     )
   const maximumValid = !Number.isFinite(normalized.max)
     || (
       normalized.maxInclusive
-        ? value <= normalized.max
-        : value < normalized.max
+        ? rawValue <= normalized.max
+        : rawValue < normalized.max
     )
   return minimumValid && maximumValid
 }

@@ -1709,10 +1709,11 @@ export class DesignCommandService {
     const parameterDefinitions = Array.isArray(definition.parameters)
       ? definition.parameters
       : []
-    if (parameterDefinitions.length === 0) return deepClone(supplied || {})
-    const values = supplied || Object.fromEntries(
-      parameterDefinitions.map(parameter => [parameter.name, Number(parameter.good)]),
-    )
+    const values = supplied === undefined
+      ? Object.fromEntries(
+        parameterDefinitions.map(parameter => [parameter.name, parameter.good]),
+      )
+      : supplied
     if (!record(values)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1739,7 +1740,7 @@ export class DesignCommandService {
           `${name} must be a finite number in ${formatStateParameterRange(parameter)}.`,
         )
       }
-      return [name, Number(rawValue)]
+      return [name, rawValue]
     }))
   }
 

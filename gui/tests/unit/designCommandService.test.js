@@ -1421,13 +1421,36 @@ describe('DesignCommandService', () => {
       .toThrowError(/\(0, 1\]/)
     expect(service.stateParameters(definition, { η: Number.MIN_VALUE }))
       .toEqual({ η: Number.MIN_VALUE })
+    expect(service.stateParameters(definition)).toEqual({ η: 0.5 })
+    for (const invalid of ['0.5', true, [0.5], null]) {
+      expect(() => service.stateParameters(definition, { η: invalid }))
+        .toThrowError(/finite number/)
+    }
+    expect(() => service.stateParameters(definition, { η: 0.5, extra: 1 }))
+      .toThrowError(/must be exactly/)
+
+    const noParameters = { id: 'NoParameters', parameters: [] }
+    expect(service.stateParameters(noParameters)).toEqual({})
+    expect(() => service.stateParameters(noParameters, { extra: 1 }))
+      .toThrowError(/must be exactly/)
   })
 
   it('synchronizes weighted States Zoo trace companions atomically', async () => {
     const project = createEmptyProject('States')
     const previewState = vi.fn(async () => ({ trace: -0.25 }))
     const service = serviceFor(project, {
-      statesCatalog: () => [{ id: 'WeightedBell', weighted: true }],
+      statesCatalog: () => [{
+        id: 'WeightedBell',
+        weighted: true,
+        parameters: [{
+          name: 'visibility',
+          min: 0,
+          max: 1,
+          min_inclusive: true,
+          max_inclusive: true,
+          good: 1,
+        }],
+      }],
       previewState,
     })
 
