@@ -52,7 +52,8 @@ Contract v2 and the hub use no public operation IDs, replay cache, or operation 
 1. stale or pre-delivery-failed work does not mutate;
 2. accepted design work advances the collaboration revision exactly once;
 3. the transport never automatically replays an uncertain mutation;
-4. after reply loss, the caller reads canonical design revision/hash or lifecycle state;
+4. after design reply loss, the caller reads canonical revision/hash; after lifecycle
+   reply loss, it polls status until the pending barrier settles;
 5. rebind/restart begins from visible current state and accepts only fresh work.
 
 Revision allocation is monotonic for the lifetime of a hub, including rebinds, so a
@@ -62,6 +63,11 @@ component fixtures cover pre-delivery timeout, delivery uncertainty, late
 acknowledgement, lifecycle uncertainty, rebind, fresh-process state, and the absence of
 ledger fields. A deterministic full-stack bridge-reply-loss/sidecar-restart action
 remains an evidence gap.
+
+One hub-locked predicate identifies unresolved lifecycle commands. It rejects another
+lifecycle action and both status entry points with retryable `OPERATION_PENDING` and
+`simulation_status` readback details. Late acknowledgement/rejection or
+unbind/lease/stop teardown removes the pending command and releases the barrier.
 
 ## Anchors
 

@@ -106,9 +106,9 @@
 
 ## CMP-016 — Revision-guarded mutation and readback recovery
 
-- **Normative statement:** The collaboration path shall serialize design mutations against the caller's expected revision, acknowledge one resulting revision/hash, never automatically replay an uncertain mutation, and require state readback before fresh work.
+- **Normative statement:** Collaboration shall serialize design mutations against expected revision, acknowledge one revision/hash, never replay uncertain work, and hold unresolved lifecycle delivery behind one quiescence barrier.
 - **Parents:** SUB-012
-- **Acceptance criterion:** Stale or pre-delivery-failed work does not mutate; accepted work advances revision once; lost acknowledgement is distinguishable by later design or lifecycle readback; rebind/restart starts from current visible state without replay-cache or operation-ledger dependence.
+- **Acceptance criterion:** Stale/pre-delivery-failed work does not mutate; accepted work advances once; delivered lifecycle timeout blocks status/duplicates with retryable pending/readback details until acknowledgement, rejection, or teardown; rebind/restart uses visible state without replay state.
 - **Verification:** UNITV-021 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 simplified recovery invariant; high duplicate-mutation risk
 - **Context:** [Browser collaboration](../context/mcp/browser-collaboration.md)

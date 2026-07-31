@@ -108,12 +108,12 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 
 - **Covers:** CMP-016
 - **Method:** test
-- **Procedure:** Exercise stale revision, accepted mutation, pre-delivery failure, post-commit reply loss, lifecycle reply loss, rebind, restart, and absence of replay-cache state.
+- **Procedure:** Exercise stale/accepted/pre-delivery design work, reply loss, delivered lifecycle timeout, blocked status/duplicates, late acknowledgement/rejection, teardown, restart, and no replay state.
 - **Environment / configuration:** Collaboration hub/browser acknowledgement fixture with deterministic faults
-- **Pass criterion:** Stale/pre-delivery work does not mutate; accepted design work advances once; no uncertain work replays automatically; readback exposes current design/lifecycle state; rebind/restart accepts only fresh work without an operation ledger.
+- **Pass criterion:** Stale/pre-delivery work does not mutate; accepted work advances once; no uncertain work replays; lifecycle uncertainty blocks status/duplicates until settlement; rebind/restart accepts fresh work without a ledger.
 - **Status:** implemented
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js)
-- **Nonconformance:** Fixtures cover stale/pre-delivery failures, delivered uncertainty
-  with late acknowledgement, lifecycle uncertainty, monotonic rebind, fresh-hub
-  readback, and no ledger/cache. They do not make the browser bridge commit then lose
-  its acknowledgement, or restart a genuine sidecar around that fault.
+- **Nonconformance:** Fixtures cover design/lifecycle uncertainty, quiescence through
+  late acknowledgement/rejection and teardown, monotonic rebind, fresh-hub readback,
+  and no ledger/cache. They do not lose a real bridge acknowledgement or restart a
+  sidecar around that fault.

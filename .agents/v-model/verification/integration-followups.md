@@ -71,20 +71,19 @@
 - **Covers:** SUB-012
 - **Method:** test
 - **Procedure:** Inject pre-delivery failure, post-commit reply loss, lifecycle reply
-  loss, browser rebind, and transport restart, then read authoritative state before
-  fresh work.
+  loss with pending status/duplicate probes, browser rebind, and transport restart,
+  then read authoritative state before fresh work.
 - **Environment / configuration:** Real hub/browser bridge with deterministic delivery
   and acknowledgement faults
 - **Pass criterion:** Pre-delivery work does not mutate; committed design work advances
-  once; uncertain work is never replayed automatically; design/lifecycle readback
-  exposes current state; rebind/restart accepts only fresh requests.
+  once; uncertain work is not replayed; unresolved lifecycle delivery blocks status and
+  duplicates until acknowledgement or teardown; rebind/restart accepts fresh requests.
 - **Status:** implemented
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** Contract v2 and the hub have no public operation IDs, replay
-  cache, or ledger, and component faults cover pre/post-delivery uncertainty and
-  readback. The real hub/browser/sidecar integration does not yet inject bridge
-  commit-response loss, lifecycle reply loss, and sidecar restart in one deterministic
-  action.
+- **Nonconformance:** V2/hub component faults cover no-ledger readback and lifecycle
+  quiescence through late acknowledgement/rejection and teardown. Real
+  hub/browser/sidecar integration does not inject commit-response loss, lifecycle reply
+  loss, and sidecar restart in one deterministic action.
 
 ## INTV-018 — Inspect generated private API completeness
 

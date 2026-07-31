@@ -87,11 +87,12 @@ rejection, close/wait signaling, safe log-level behavior, and transcript suppres
 
 ## Recover
 
-Current v2 recovery is state readback, not automatic replay: after an uncertain design
-write call `design_get`; after uncertain lifecycle work call `simulation_status`.
-Create a fresh binding after restart when needed, read current state, then issue fresh
-work. Consult [the contract reference](tool-contract.md) before modifying this boundary.
-Never preserve capabilities, session IDs, or raw transport logs in documentation.
+Current v2 recovery is readback, not replay: after an uncertain design write call
+`design_get`; after uncertain lifecycle work poll `simulation_status` until it succeeds.
+`OPERATION_PENDING` means the delivered action still owns the lifecycle barrier, so do
+not issue another lifecycle action. Rebind after restart when needed, read current state,
+then issue fresh work. Consult [the contract reference](tool-contract.md) before changing
+this boundary. Never preserve capabilities, session IDs, or raw transport logs.
 
 ## Anchors
 

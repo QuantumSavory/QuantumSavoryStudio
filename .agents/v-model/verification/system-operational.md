@@ -105,14 +105,14 @@ their status.
 
 - **Covers:** SYS-012
 - **Method:** test
-- **Procedure:** Inject stale revision, pre-delivery failure, post-commit reply loss, lifecycle reply loss, browser rebind, and sidecar restart under the release-2.0 contract.
+- **Procedure:** Inject stale revision, pre-delivery failure, post-commit reply loss, lifecycle reply loss with status/duplicate probes, browser rebind, and sidecar restart under the release-2.0 contract.
 - **Environment / configuration:** Real local MCP stack with controllable delivery/acknowledgement loss
-- **Pass criterion:** Stale/pre-delivery work does not mutate; committed design work advances revision once; no uncertain mutation is replayed automatically; design/lifecycle readback exposes current state before fresh work; rebind/restart starts from visible state.
+- **Pass criterion:** Stale/pre-delivery work does not mutate; committed design work advances once; no uncertain work replays; unresolved lifecycle delivery reports pending and blocks duplicates until settlement; readback/rebind/restart start from visible state.
 - **Status:** planned
 - **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** V2/component fixtures implement no-cache readback, and the browser
-  artifact covers ordinary restart. No real-stack action controls delivery,
-  acknowledgement, and restart faults, so this remains planned.
+- **Nonconformance:** Component fixtures implement no-cache readback/lifecycle
+  quiescence; browser evidence covers ordinary restart. No real-stack action controls
+  delivery, acknowledgement, and restart faults, so this remains planned.
 
 ## SYSV-021 — Verify the supported release environment
 

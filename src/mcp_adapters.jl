@@ -18,9 +18,13 @@ const MCP_SIMULATION_LIFECYCLE_TOOLS = Dict(
   "simulation_reset" => "reset",
 )
 
-function _bound_simulation_context(hub::CollaborationHub)
+function _bound_simulation_context(
+  hub::CollaborationHub;
+  require_quiescent::Bool=false,
+)
   lock(hub.lock) do
     binding = _require_binding_locked!(hub)
+    require_quiescent && _require_simulation_quiescent_locked!(hub)
     return (
       binding_id=binding.id,
       generation=binding.generation,
@@ -34,9 +38,12 @@ end
 function _verify_bound_simulation_context!(
   hub::CollaborationHub,
   context,
+  ;
+  require_quiescent::Bool=false,
 )
   lock(hub.lock) do
     binding = _require_binding_locked!(hub)
+    require_quiescent && _require_simulation_quiescent_locked!(hub)
     if binding.id != context.binding_id ||
       binding.generation != context.generation ||
       binding.simulation_name != context.simulation_name ||
@@ -78,15 +85,17 @@ end
 function _with_bound_simulation_read(
   operation::Function,
   hub::CollaborationHub,
+  ;
+  require_quiescent::Bool=false,
 )
-  context = _bound_simulation_context(hub)
+  context = _bound_simulation_context(hub; require_quiescent)
   result = try
     operation(context.simulation_name)
   catch error
     adapted = _adapt_simulation_mcp_error(error)
     adapted === error ? rethrow() : throw(adapted)
   end
-  _verify_bound_simulation_context!(hub, context)
+  _verify_bound_simulation_context!(hub, context; require_quiescent)
   return result, context
 end
 
@@ -283,7 +292,10 @@ function dispatch_mcp_tool!(
         timeout_seconds=30,
       )
     elseif tool == "simulation_status"
-      status, context = _with_bound_simulation_read(hub) do simulation_name
+      status, context = _with_bound_simulation_read(
+        hub;
+        require_quiescent=true,
+      ) do simulation_name
         simulation_status(simulation_service, simulation_name)
       end
       _simulation_revision_status(
@@ -385,7 +397,10 @@ function _resolve_mcp_resource(
     )
   end
   if resource_uri == "wqs://simulation/state"
-    status, context = _with_bound_simulation_read(hub) do simulation_name
+    status, context = _with_bound_simulation_read(
+      hub;
+      require_quiescent=true,
+    ) do simulation_name
       simulation_status(simulation_service, simulation_name)
     end
     return Dict(

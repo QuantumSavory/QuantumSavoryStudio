@@ -67,8 +67,10 @@ describe('shared MCP contract registry', () => {
     }
     for (const tool of lifecycleMutations) {
       expect(tool.input_schema.properties || {}).not.toHaveProperty('expected_revision')
-      expect(tool.description).toContain('simulation_status')
+      expect(tool.description).toContain('poll simulation_status until it succeeds')
     }
+    expect(MCP_TOOLS.find(tool => tool.name === 'simulation_status').description)
+      .toContain('retry this read until it succeeds')
     expect(reads.length).toBeGreaterThan(0)
   })
 

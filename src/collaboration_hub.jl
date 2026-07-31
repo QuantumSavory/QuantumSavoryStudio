@@ -276,6 +276,29 @@ function _pending_readback_tool(pending::PendingBrowserCommand)
   return nothing
 end
 
+function _has_unresolved_simulation_action_locked(hub::CollaborationHub)
+  return any(values(hub.pending)) do pending
+    payload = get(pending.command, "payload", Dict{String,Any}())
+    get(payload, "type", "") == "simulation_action"
+  end
+end
+
+function _require_simulation_quiescent_locked!(hub::CollaborationHub)
+  _has_unresolved_simulation_action_locked(hub) || return nothing
+  throw(
+    _mcp_error(
+      "OPERATION_PENDING",
+      "A previous simulation lifecycle action is still settling. Poll simulation_status until it succeeds.";
+      retryable=true,
+      status=409,
+      details=Dict(
+        "readback_required" => true,
+        "readback_tool" => "simulation_status",
+      ),
+    ),
+  )
+end
+
 function _cancelled_pending_error(
   pending::PendingBrowserCommand,
   code::String,
@@ -609,11 +632,16 @@ function enqueue_browser_command!(
   mutates_design::Bool=false,
   timeout_seconds::Real=30,
 )
+  normalized_payload = Dict{String,Any}(
+    string(key) => value for (key, value) in payload
+  )
   enqueue_result = lock(hub.lock) do
     binding = _require_binding_locked!(hub)
     hub.accepting || throw(
       _mcp_error("SERVER_STOPPED", "The MCP listener is stopping.", retryable=true, status=409),
     )
+    get(normalized_payload, "type", "") == "simulation_action" &&
+      _require_simulation_quiescent_locked!(hub)
     if expected_revision !== nothing
       validated_revision = _validated_expected_revision(expected_revision)
       if validated_revision != hub.revision
@@ -638,7 +666,7 @@ function enqueue_browser_command!(
       "binding_id" => binding.id,
       "generation" => binding.generation,
       "base_revision" => hub.revision,
-      "payload" => Dict{String,Any}(string(k) => v for (k, v) in payload),
+      "payload" => normalized_payload,
     )
     entry = PendingBrowserCommand(
       command,

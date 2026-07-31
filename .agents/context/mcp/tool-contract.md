@@ -29,7 +29,10 @@ The current recovery rules are:
 - design mutations retain `expected_revision` and remove public operation IDs;
 - stale work cannot mutate, accepted work advances revision once, and uncertain
   mutation is never replayed automatically;
-- callers read authoritative design or lifecycle state before issuing fresh work;
+- callers read authoritative design state; after lifecycle uncertainty they poll
+  `simulation_status` until it succeeds before issuing fresh lifecycle work;
+- unresolved lifecycle delivery rejects status and duplicate lifecycle actions with
+  retryable `OPERATION_PENDING` plus `simulation_status` readback details;
 - mutation/lifecycle tools do not claim intrinsic idempotence;
 - Run shares GUI readiness and records the prepared revision;
 - only a successful slot/protocol result with valid nonempty HTML and PNG advertises

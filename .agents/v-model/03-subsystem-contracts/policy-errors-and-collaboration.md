@@ -41,9 +41,9 @@ active-project replacement.
 
 ## SUB-012 — Browser lease, revision, and readback-recovery boundary
 
-- **Normative statement:** Collaboration shall coordinate one renewable browser binding, canonical revision/hash, serialized mutation delivery, and authoritative readback recovery without automatically replaying uncertain mutations.
+- **Normative statement:** Collaboration shall coordinate one renewable browser binding, canonical revision/hash, serialized mutation delivery, lifecycle quiescence, and authoritative readback recovery without automatically replaying uncertain mutations.
 - **Parents:** SYS-011, SYS-012
-- **Acceptance criterion:** Binding ownership/expiry and stale revision prevent mutation; accepted design mutation advances revision once; pre-delivery failure does not mutate; post-delivery reply loss requires design or lifecycle readback; rebind/restart begins from visible current state with fresh work.
+- **Acceptance criterion:** Binding ownership/expiry and stale revision prevent mutation; accepted design mutation advances revision once; pre-delivery failure does not mutate; delivered lifecycle uncertainty rejects status and duplicate lifecycle work as retryable pending until late acknowledgement, rejection, or teardown; rebind/restart begins from visible current state with fresh work.
 - **Verification:** INTV-012 (test), INTV-017 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 simplified recovery contract; high duplicate-mutation risk
 - **Context:** [Browser collaboration](../../context/mcp/browser-collaboration.md)

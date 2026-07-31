@@ -1061,7 +1061,7 @@
     },
     {
       "name": "simulation_prepare",
-      "description": "Flush, validate, parse, and prepare through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "description": "Flush, validate, parse, and prepare through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, poll simulation_status until it succeeds before fresh lifecycle work.",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1076,7 +1076,7 @@
     },
     {
       "name": "simulation_run",
-      "description": "Run one additional duration through the browser controller; poll simulation_status for progress. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "description": "Run one additional duration through the browser controller; poll simulation_status for progress. This action is not replay-safe; after an uncertain response, poll simulation_status until it succeeds before fresh lifecycle work.",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1096,7 +1096,7 @@
     },
     {
       "name": "simulation_pause",
-      "description": "Pause through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "description": "Pause through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, poll simulation_status until it succeeds before fresh lifecycle work.",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1111,7 +1111,7 @@
     },
     {
       "name": "simulation_resume",
-      "description": "Resume toward the existing cumulative target through the browser controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "description": "Resume toward the existing cumulative target through the browser controller. This action is not replay-safe; after an uncertain response, poll simulation_status until it succeeds before fresh lifecycle work.",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
@@ -1126,7 +1126,7 @@
     },
     {
       "name": "simulation_reset",
-      "description": "Destroy/reset the bound simulation and restore design editability without changing the design. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "description": "Destroy/reset the bound simulation and restore design editability without changing the design. This action is not replay-safe; after an uncertain response, poll simulation_status until it succeeds before fresh lifecycle work.",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
@@ -1141,7 +1141,7 @@
     },
     {
       "name": "simulation_status",
-      "description": "Return lifecycle phase, progress, target, and serialized bound simulation state.",
+      "description": "Return lifecycle phase, progress, target, and serialized bound simulation state. While an earlier lifecycle action is settling, retry this read until it succeeds.",
       "annotations": {
         "readOnlyHint": true,
         "destructiveHint": false,

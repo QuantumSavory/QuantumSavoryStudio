@@ -53,7 +53,9 @@ Current contract v2 has no public operation ID, mutation ledger, or successful-r
 cache. Design mutations serialize against `expected_revision`. A write known to have
 failed before browser delivery is retryable; once delivery may have occurred, the
 response is non-retryable and names authoritative `design_get` or `simulation_status`
-readback. Neither the hub nor the sidecar automatically replays uncertain work.
+readback. Unresolved lifecycle delivery makes status and fresh lifecycle calls
+retryable-pending until acknowledgement or teardown. Neither process replays uncertain
+work.
 
 Operational diagnostics redact recognized capabilities, credentials, session IDs,
 binary bodies, and raw transcript fields. This is distinct from ordinary

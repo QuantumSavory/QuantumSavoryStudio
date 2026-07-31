@@ -516,6 +516,225 @@
     @test restart_readback["hash"] == "restart-hash"
   end
 
+  @testset "lifecycle uncertainty blocks stale status and duplicate actions" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    service = WebQuantumSavory.SimulationService(
+      Dict("user_Project" => WebQuantumSavory.State(name="user_Project")),
+    )
+
+    function delivered_timeout(action)
+      waiting = @async try
+        WebQuantumSavory.enqueue_browser_command!(
+          hub,
+          Dict("type" => "simulation_action", "action" => action);
+          timeout_seconds=0.03,
+        )
+      catch error
+        error
+      end
+      command = WebQuantumSavory.next_browser_command!(
+        hub,
+        owner;
+        timeout_seconds=1,
+      )
+      outcome = fetch(waiting)
+      @test outcome isa WebQuantumSavory.APIError
+      @test outcome.error_code == "OUTCOME_UNKNOWN"
+      @test outcome.details["retryable"] == false
+      @test outcome.details["readback_required"] == true
+      @test outcome.details["readback_tool"] == "simulation_status"
+      return command
+    end
+
+    command = delivered_timeout("pause")
+    @test length(hub.pending) == 1
+
+    duplicate = try
+      WebQuantumSavory.dispatch_mcp_tool!(
+        "simulation_resume",
+        Dict{String,Any}();
+        hub,
+        simulation_service=service,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test duplicate isa WebQuantumSavory.APIError
+    @test duplicate.error_code == "OPERATION_PENDING"
+    @test duplicate.details["retryable"] == true
+    @test duplicate.details["readback_required"] == true
+    @test duplicate.details["readback_tool"] == "simulation_status"
+    @test length(hub.pending) == 1
+    @test WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=0.03,
+    ) === nothing
+
+    for read_status in (
+      () -> WebQuantumSavory.dispatch_mcp_tool!(
+        "simulation_status",
+        Dict{String,Any}();
+        hub,
+        simulation_service=service,
+      ),
+      () -> WebQuantumSavory.read_mcp_resource(
+        "wqs://simulation/state";
+        hub,
+        simulation_service=service,
+      ),
+    )
+      pending_status = try
+        read_status()
+        nothing
+      catch error
+        error
+      end
+      @test pending_status isa WebQuantumSavory.APIError
+      @test pending_status.error_code == "OPERATION_PENDING"
+      @test pending_status.details["retryable"] == true
+      @test pending_status.details["readback_required"] == true
+      @test pending_status.details["readback_tool"] == "simulation_status"
+    end
+
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => command["command_id"],
+        "base_revision" => command["base_revision"],
+        "success" => true,
+        "document_changed" => false,
+        "result" => Dict("summary" => "Late pause acknowledgement"),
+      ),
+    )
+    @test isempty(hub.pending)
+    status = WebQuantumSavory.dispatch_mcp_tool!(
+      "simulation_status",
+      Dict{String,Any}();
+      hub,
+      simulation_service=service,
+    )
+    @test status["phase"] == "unknown"
+
+    rejected_command = delivered_timeout("reset")
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => rejected_command["command_id"],
+        "base_revision" => rejected_command["base_revision"],
+        "success" => false,
+        "error" => Dict(
+          "code" => "VALIDATION_FAILED",
+          "message" => "Late lifecycle rejection",
+        ),
+      ),
+    )
+    @test isempty(hub.pending)
+    @test WebQuantumSavory.dispatch_mcp_tool!(
+      "simulation_status",
+      Dict{String,Any}();
+      hub,
+      simulation_service=service,
+    )["phase"] == "unknown"
+
+    fresh = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict("type" => "simulation_action", "action" => "resume");
+        timeout_seconds=2,
+      )
+    catch error
+      error
+    end
+    fresh_command = WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=1,
+    )
+    @test fresh_command["payload"]["action"] == "resume"
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => fresh_command["command_id"],
+        "base_revision" => fresh_command["base_revision"],
+        "success" => false,
+        "error" => Dict(
+          "code" => "VALIDATION_FAILED",
+          "message" => "Expected fresh rejection",
+        ),
+      ),
+    )
+    @test fetch(fresh).error_code == "VALIDATION_FAILED"
+  end
+
+  @testset "lifecycle teardown clears the quiescence barrier" begin
+    for teardown in (:unbind, :lease_expiry)
+      now = Ref(DateTime(2026, 7, 18))
+      hub = WebQuantumSavory.CollaborationHub(clock=() -> now[])
+      binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+      owner = Dict(
+        "binding_id" => binding["binding_id"],
+        "generation" => 1,
+      )
+      waiting = @async try
+        WebQuantumSavory.enqueue_browser_command!(
+          hub,
+          Dict("type" => "simulation_action", "action" => "pause");
+          timeout_seconds=0.03,
+        )
+      catch error
+        error
+      end
+      WebQuantumSavory.next_browser_command!(
+        hub,
+        owner;
+        timeout_seconds=1,
+      )
+      @test fetch(waiting).error_code == "OUTCOME_UNKNOWN"
+      @test length(hub.pending) == 1
+
+      if teardown == :unbind
+        @test WebQuantumSavory.unbind_editor!(hub, owner)["success"]
+      else
+        now[] += Second(WebQuantumSavory.MCP_EDITOR_LEASE_SECONDS + 1)
+        @test WebQuantumSavory.expire_editor_lease!(hub)
+      end
+      @test isempty(hub.pending)
+
+      rebound = WebQuantumSavory.bind_editor!(
+        hub,
+        binding_request(generation=2, hash=string(teardown)),
+      )
+      rebound_owner = Dict(
+        "binding_id" => rebound["binding_id"],
+        "generation" => 2,
+      )
+      service = WebQuantumSavory.SimulationService(
+        Dict("user_Project" => WebQuantumSavory.State(name="user_Project")),
+      )
+      @test WebQuantumSavory.dispatch_mcp_tool!(
+        "simulation_status",
+        Dict{String,Any}();
+        hub,
+        simulation_service=service,
+      )["phase"] == "unknown"
+      @test WebQuantumSavory.next_browser_command!(
+        hub,
+        rebound_owner;
+        timeout_seconds=0.03,
+      ) === nothing
+    end
+  end
+
   @testset "browser simulation readiness records the prepared design revision" begin
     hub = WebQuantumSavory.CollaborationHub()
     binding = WebQuantumSavory.bind_editor!(hub, binding_request())
