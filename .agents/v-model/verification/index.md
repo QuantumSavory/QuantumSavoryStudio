@@ -13,7 +13,7 @@ release-2.0 actions retain their recorded status; no acceptance demonstration is
   [current boundaries](integration.md);
   [release-2.0 follow-ups](integration-followups.md)
 - Component evidence: [current partial suites](component.md);
-  [planned follow-ups](component-followups.md)
+  [release-2.0 follow-ups](component-followups.md)
 
 ## Status policy
 

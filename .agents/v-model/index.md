@@ -42,7 +42,7 @@ resources remain incomplete.
     [release-2.0 follow-ups](verification/integration-followups.md)
   - Component verification:
     [current partial suites](verification/component.md);
-    [planned follow-ups](verification/component-followups.md)
+    [release-2.0 follow-ups](verification/component-followups.md)
 
 The strict-schema mini-V executed the frontend unit/build path and focused serial
 Chromium flows. UNITV-019 and INTV-015 are `passing`; SYSV-018 is `implemented` with an
