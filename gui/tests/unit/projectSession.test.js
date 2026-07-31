@@ -817,6 +817,37 @@ describe('project session', () => {
     expect(harness.calls.reset).toHaveBeenCalledOnce()
   })
 
+  it('releases queued work without rolling back an acquired commit exception', async () => {
+    const cleanup = deferred()
+    const importedProject = createEmptyProject('Imported B')
+    importedProject.description = 'installed before the late exception'
+    const document = encodeStoredProject(importedProject, { name: 'Imported B' })
+    const harness = createHarness({
+      destroySimulation: vi.fn(() => cleanup.promise)
+    })
+    harness.calls.markSaved.mockImplementationOnce(() => {
+      throw new Error('post-install callback failed')
+    })
+
+    const pendingImport = harness.session.importProject(document, 'B')
+    await vi.waitFor(() => {
+      expect(harness.session.transitionPhase.value).toBe('committing')
+    })
+    const pendingSaveAs = harness.session.saveAs('C')
+
+    cleanup.resolve({ success: true })
+    expect(await pendingImport).toBe(false)
+    expect(await pendingSaveAs).toBe(true)
+
+    expect(harness.showError).toHaveBeenCalledWith('post-install callback failed')
+    expect(harness.records.get('B').description).toBe('installed before the late exception')
+    expect(harness.records.get('C').description).toBe('installed before the late exception')
+    expect(harness.currentProjectName.value).toBe('C')
+    expect(harness.store.openProject).toHaveBeenCalledOnce()
+    expect(harness.store.saveProject).toHaveBeenCalledOnce()
+    expect(harness.session.transitionPhase.value).toBe('idle')
+  })
+
   it('logs simulation cleanup only when the backend reports success', async () => {
     const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
     const success = createHarness({ projects: { B: stored } })
