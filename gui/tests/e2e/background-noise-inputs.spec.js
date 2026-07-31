@@ -63,7 +63,8 @@ test.describe('Background-noise constructor inputs', () => {
     await page.goto('/')
     await backgroundsLoaded
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
-    await createProject(page, 'Contextual Background E2E')
+    const projectName = 'Contextual Background E2E'
+    await createProject(page, projectName)
 
     await addNode(page, { x: 390, y: 235 })
     await page.locator('.node-marker').first().click()
@@ -157,33 +158,28 @@ test.describe('Background-noise constructor inputs', () => {
     await firstNode.hover()
     await firstNode.locator('.connector.output')
       .dragTo(page.locator('.node-marker').nth(1))
-    await expect(page.locator('.edge-list-item')).toHaveCount(1)
-    await page.evaluate(() => {
-      const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const edge = setup?.projectData?.net?.edges?.[0]
-      if (!edge) throw new Error('Reactive project edge is unavailable')
-      edge.data.protocols.push({
-        id: 'protocol_background_e2e_edge',
-        type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-        parameters: [{
-          name: 'rounds',
-          type: 'Int64',
-          value: null,
-        }],
-      })
-    })
-    await expect.poll(() => page.evaluate(() => {
-      const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      return setup?.projectData?.net?.edges?.[0]?.data?.protocols?.length
-    })).toBe(1)
+    const edge = page.locator('.edge-list-item').first()
+    await expect(edge).toBeVisible()
+    await edge.click()
+    const edgePanel = page.locator('#edgePanel')
+    await edgePanel.locator('.add-protocol-btn').click()
+    await page.locator('.p-menu-item-link', { hasText: 'EntanglerProt' }).click()
+    await expect(edgePanel.locator('.protocol-editor', { hasText: 'EntanglerProt' }))
+      .toBeVisible()
     const concreteTemplateRequests = numericRequests.slice(templateRequestsStart)
       .filter(request => request.expression === 'self + 11' && request.context)
     expect(concreteTemplateRequests.map(request => request.context.self)).toEqual([2, 3])
 
-    const clonedBackgrounds = await page.evaluate(() => {
-      const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      return setup.projectData.net.nodes.slice(1).map(node => node.data.slots[0].backgroundNoise)
-    })
+    await page.locator('.hamburger-btn').click()
+    await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
+    const storedProject = await page.evaluate(name => {
+      const stored = localStorage.getItem(`cqn_project_${name}`)
+      if (stored === null) throw new Error(`Saved project is unavailable: ${name}`)
+      return JSON.parse(stored)
+    }, projectName)
+    const clonedBackgrounds = storedProject.net.nodes
+      .slice(1)
+      .map(node => node.data.slots[0].backgroundNoise)
     // Catalog documentation remains editor metadata. Generated project values use
     // only the closed strict-v2 background-noise fields.
     expect(clonedBackgrounds).toEqual(Array(2).fill({
@@ -199,8 +195,6 @@ test.describe('Background-noise constructor inputs', () => {
       }],
     }))
 
-    await page.locator('.hamburger-btn').click()
-    await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
     await page.reload()
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('.node-marker')).toHaveCount(3)
