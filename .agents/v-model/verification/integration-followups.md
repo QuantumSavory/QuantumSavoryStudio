@@ -1,5 +1,27 @@
 # Integration Verification Follow-ups
 
+## INTV-012 — Verify editor binding and revision protocol
+
+- **Covers:** SUB-012
+- **Method:** test
+- **Procedure:** Exercise binding ownership/expiry, browser/GUI revisions, stale mutation, serial delivery, acknowledgement revision/hash, rebind, and restart.
+- **Environment / configuration:** Real backend hub/browser bridge with controllable lease and delivery
+- **Pass criterion:** One binding owns current state; stale work does not mutate; accepted design work advances revision once; acknowledgement matches canonical revision/hash; rebind/restart begins from visible current state.
+- **Status:** planned
+- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js)
+- **Nonconformance:** Prepared lifecycle reports reject stale/mismatched revisions without changing design state. Split hub/bridge evidence, v1 operation IDs, and the success cache still prevent the readback-recovery criterion.
+
+## INTV-013 — Verify MCP contract, Play, resources, and transport
+
+- **Covers:** SUB-013
+- **Method:** test
+- **Procedure:** Load the registry, inspect annotations/version scope, dispatch each group, run incomplete/valid designs, read every resource format, and exercise malformed/missing URIs.
+- **Environment / configuration:** Sidecar unit, real local transport, backend adapter, and bound browser
+- **Pass criterion:** One registry drives metadata; dispatch owners are correct; Play semantics/errors/revision match GUI; HTML/PNG are readable; errors are structured; only intrinsically safe tools advertise idempotence.
+- **Status:** implemented
+- **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl)
+- **Nonconformance:** Direct Run now shares readiness, preserves actionable issues, and records the prepared revision under v1. Idempotence annotations and complete URI-safe resource/error coverage remain nonconforming.
+
 ## INTV-015 — Verify strict nonmutating schema admission
 
 - **Covers:** SUB-015

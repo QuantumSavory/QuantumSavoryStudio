@@ -11,7 +11,7 @@ This applies to source under `gui/src/`. Components inherit `components/AGENTS.m
 - [Authoring and inputs](../../.agents/context/frontend/authoring-and-inputs.md) for
   commands, drafts, variables, protocols, tags, and typed values
 - [Simulation client](../../.agents/context/frontend/simulation-client.md) for
-  capabilities, phases, polling, logs, and API namespacing
+  capabilities, shared GUI/MCP Play readiness, polling, logs, and API namespacing
 - [Map geometry](../../.agents/context/frontend/map-geometry-and-layout.md) for map
   ownership, topology, generators, annotations, and identity
 - [Frontend architecture](../../.agents/context/frontend/architecture.md) for

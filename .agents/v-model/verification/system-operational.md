@@ -54,7 +54,7 @@ and supported environments. The strict-schema slice did not change their status.
 - **Pass criterion:** Tools are visible; edits update the unsaved browser design once; stale work does not mutate; explicit lifecycle updates the GUI.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** Current evidence targets contract v1; direct-Run parity, resource reads, and release-2.0 reply-loss recovery require SYSV-013/SYSV-020.
+- **Nonconformance:** Current v1 evidence covers direct and explicit lifecycle revision reporting; result-resource reads and release-2.0 reply-loss recovery remain in SYSV-013/SYSV-020.
 
 ## SYSV-013 — Verify MCP Play parity and result resources
 
@@ -63,9 +63,9 @@ and supported environments. The strict-schema slice did not change their status.
 - **Procedure:** Call `simulation_run` on incomplete and valid unprepared designs, then read HTML and PNG for discriminating slot/protocol IDs including URI-significant characters.
 - **Environment / configuration:** Real browser/backend/sidecar with bound collaboration
 - **Pass criterion:** Missing-definition errors match GUI readiness and are actionable; valid Run prepares/starts and records prepared revision; both MIME resources are nonempty; malformed/missing requests are structured.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current Run bypasses the GUI capability gate, collapses failures, omits implicit prepared revision, and advertises representations that can be absent or URI-unsafe.
+- **Status:** implemented
+- **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
+- **Nonconformance:** The browser action now covers actionable incomplete Run, valid unprepared MCP Run, GUI Play, and matching prepared revisions. It does not compare an incomplete GUI action in the same system run or read discriminating URI-safe HTML/PNG resources and their malformed/not-found failures.
 
 ## SYSV-014 — Verify stateless local/public deployment
 

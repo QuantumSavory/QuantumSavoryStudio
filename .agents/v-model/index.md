@@ -5,9 +5,10 @@
 - **Product boundary:** One GUI-first browser/backend product with optional local MCP
 - **Acceptance authority:** Repository maintainers
 - **Profile target:** Approved release-2.0 behavior; operational/HTTP slice reviewed at
-  `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56` and strict project-schema slice reviewed
-  at `91d620084c08ee836b08120aa9bc3d9e4bea845a`; candidate-first
-  replacement slice at `3f2de0ae916fd0faa81177d293caf714b8e73e69`
+  `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56`, strict project-schema slice reviewed at
+  `91d620084c08ee836b08120aa9bc3d9e4bea845a`, candidate-first replacement slice reviewed
+  at `3f2de0ae916fd0faa81177d293caf714b8e73e69`, and shared Play implementation/evidence
+  reviewed at `e712077195009351558b7b1941b236a019b72b3b`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -18,8 +19,9 @@ context without overriding it. Canonical OpenAPI, exact non-2xx errors, public-p
 source denial, the release support boundary, and strict project admission now conform.
 Strict project admission and candidate-first replacement have passing component and
 integration evidence. Candidate-first browser-system evidence is implemented but does
-not cover the full named matrix. Readback recovery, cleanup, and shared Play/resources
-remain incomplete.
+not cover the full named matrix. Shared Play readiness has passing component evidence
+and implemented browser-system evidence. Readback recovery, cleanup, and MCP result
+resources remain incomplete.
 
 ## Left-side specification
 
@@ -48,6 +50,11 @@ exhaustive browser-matrix gap. The candidate-first mini-V executed the full fron
 unit suite plus focused Chromium flows; UNITV-020 and INTV-016 are `passing`, while
 SYSV-019 is `implemented` with the same class-matrix gap. Acceptance remains `planned`.
 Actions outside these slices retain their recorded status.
+
+The shared-Play mini-V executed frontend unit/build, focused hub, and HTTP-contract
+checks. UNITV-016 is `passing`; the Play portions of INTV-012/INTV-013 and
+SYSV-012/SYSV-013 have durable artifacts, while readback recovery and result-resource
+clauses retain their recorded gaps.
 
 ## Source basis
 

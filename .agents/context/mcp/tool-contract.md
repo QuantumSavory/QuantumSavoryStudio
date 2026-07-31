@@ -25,9 +25,10 @@ lifecycle, and simulation reads.
 
 Current design mutations require `operation_id` and `expected_revision`. The backend
 retains at most 256 successful ID-only results per binding and clears them on
-bind/unbind. Mutation/lifecycle tools currently advertise idempotence. Current resource
-adapters can advertise unavailable HTML/PNG content and interpolate opaque IDs without
-safe encoding.
+bind/unbind. Within v1, `simulation_prepare` and `simulation_run` now share the
+browser-owned GUI readiness path and report the prepared design revision. Mutation and
+lifecycle tools still advertise idempotence. Current resource adapters can advertise
+unavailable HTML/PNG content and interpolate opaque IDs without safe encoding.
 
 Those facts describe source at the profile target; they are not the release-2.0 contract.
 

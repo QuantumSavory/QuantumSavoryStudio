@@ -55,9 +55,9 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** Call GUI Play and MCP Run through one adapter using incomplete, busy/disabled, valid unprepared, and prepared designs.
 - **Environment / configuration:** Vitest/jsdom simulation controller, capability model, and MCP bridge
 - **Pass criterion:** Both entries return equal actionable issues; busy/disabled prevents dispatch; valid input prepares/starts once; explicit/implicit prepare record the same browser revision.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current MCP adapter reaches the controller but bypasses `canRun`, collapses `false` to a generic error, and omits implicit prepared revision.
+- **Status:** passing
+- **Evidence:** [`gui/tests/unit/projectHelpers.test.js`](../../../gui/tests/unit/projectHelpers.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Nonconformance:** None at this component boundary.
 
 ## UNITV-017 — Verify MCP annotations and representations
 

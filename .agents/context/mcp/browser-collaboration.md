@@ -21,11 +21,26 @@ One browser editor owns a renewable lease and binds canonical design content, a 
 SHA-256 synchronization fingerprint, simulation namespace, revision, and generation.
 The fingerprint detects synchronization change; it is not authentication.
 
-Before a design read or lifecycle action, the browser flushes active editor drafts.
-Authoring commands currently enter the backend queue with an expected collaboration
-revision, execute serially through the browser command service, reconcile into the
-visible project, mark it dirty, and acknowledge snapshot/hash/revision. GUI-originated
-changes publish into the same revision stream.
+Before a design read or mutation, the bridge flushes active editor drafts. Authoring
+commands enter the backend queue with an expected collaboration revision, execute
+serially through the browser command service, reconcile into the visible project, mark
+it dirty, and acknowledge snapshot/hash/revision. GUI-originated changes publish into
+the same revision stream.
+
+Prepare and Run use the controller-owned readiness path instead of the bridge's generic
+pre-flush/queue wrapper. The controller performs the single editor flush and serializes
+the revision guard, validation, parse, prepare, and start against browser design
+commands. Its success result includes the revision captured inside that queue.
+
+An MCP prepare/Run acknowledgement must report that captured revision and must not
+change the canonical document. The hub rejects and desynchronizes a successful
+acknowledgement whose prepared revision is absent, stale, or paired with a design
+change. Both explicit Prepare and implicit Run set `prepared_revision`; reset clears it.
+
+A GUI-originated prepared report uses the existing closed commit operation with
+`document_changed=false` and `result.kind="simulation_prepared"`. The hub requires both
+the base and reported prepared revision to equal the bound revision, then changes only
+lifecycle state: canonical snapshot, hash, and design revision remain untouched.
 
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
 unclassified deep-watch synchronization fallback.
@@ -49,5 +64,6 @@ hub, browser bridge, sidecar, and fault-injection evidence land together.
 - **Browser bridge:** [`gui/src/features/mcp/McpEditorBridge.js`](../../../gui/src/features/mcp/McpEditorBridge.js).
 - **Canonical snapshot:** [`gui/src/features/mcp/canonicalDesign.js`](../../../gui/src/features/mcp/canonicalDesign.js).
 - **Hub:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
+- **Controller:** [`gui/src/composables/useSimulationController.js`](../../../gui/src/composables/useSimulationController.js).
 - **Current unit evidence:** [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js).
 - **Current system evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js).

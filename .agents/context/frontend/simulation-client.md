@@ -67,11 +67,26 @@ accessible progress.
 Live tag/query tooling is available only while the backend retains a usable parsed
 network. It is cleared for empty, blocked, purged, or execution-timeout states.
 
-The target GUI/MCP equivalence is in
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-Current MCP dispatch reaches `runSimulationWithSteps` but bypasses
-`capabilities.canRun`, collapses `false` to a generic error, and does not record the
-implicit prepared revision.
+## Shared Play readiness
+
+`useSimulationController` owns both GUI and MCP prepare/Run readiness. The path checks
+the base capability before doing work, reserves one readiness request, flushes browser
+editor drafts, enters the design-command serialization queue, rechecks the caller's
+revision guard, validates once, and then parses, prepares, and starts only as needed.
+While the draft flush is pending, lifecycle controls are disabled but editing is not
+locked prematurely.
+
+`App.vue` supplies the one browser-editor flush implementation. The MCP bridge does not
+pre-flush or wrap prepare/Run in a second command queue; its adapter forwards origin and
+revision guard into the controller. Pause, resume, and reset retain their smaller
+lifecycle path.
+
+Validation returns every deterministic issue as `{code, message, details}` inside a
+structured readiness failure. GUI Play presents the same issues in its alert; MCP
+returns them without replacing them with a generic rejection. Success includes the
+browser revision captured after flush/serialization. A bound GUI reports that prepared
+revision best-effort after simulator acceptance; reporting failure is logged and never
+replays the simulator action.
 
 ## Error boundary
 
@@ -84,6 +99,10 @@ and serializable cause. It classifies network failures, invalid JSON, malformed
 successes, and malformed error envelopes separately; legacy `error_code`,
 `status_code`, `detail`, and message-guessing paths are not supported.
 Native request cancellation remains an `AbortError`.
+
+Prepare/Run log canonical API failures and rethrow the original `ApiClientError`; the
+MCP bridge therefore retains its code, message, status, details, method, URL, and cause
+instead of reducing it to a boolean.
 
 Lifecycle absence is recognized only from canonical `NOT_FOUND`. State, log, and
 liveness polling retain other failures in structured Tools Log records; repeated log
@@ -100,11 +119,14 @@ through the backend into the visible Tools Log.
 - **Reducer:** [`gui/src/composables/simulationLifecycle.js`](../../../gui/src/composables/simulationLifecycle.js).
 - **Controller:** [`gui/src/composables/useSimulationController.js`](../../../gui/src/composables/useSimulationController.js).
 - **MCP relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js).
+- **Readiness validation:** [`gui/src/utils/projectHelpers.js`](../../../gui/src/utils/projectHelpers.js).
+- **Browser revision relay:** [`gui/src/features/mcp/McpEditorBridge.js`](../../../gui/src/features/mcp/McpEditorBridge.js).
 - **API client:** [`gui/src/utils/ApiConnector.js`](../../../gui/src/utils/ApiConnector.js).
 - **HTTP reader:** [`gui/src/utils/httpClient.js`](../../../gui/src/utils/httpClient.js).
 - **Generated operations:** [`gui/src/generated/httpOperations.js`](../../../gui/src/generated/httpOperations.js).
-- **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
-  and [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js).
+- **Evidence:** [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js),
+  [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js),
+  and [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js).
 
 ## Unresolved questions
 
