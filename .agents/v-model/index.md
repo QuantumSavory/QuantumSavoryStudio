@@ -8,7 +8,8 @@
   `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56`, strict project-schema slice reviewed at
   `91d620084c08ee836b08120aa9bc3d9e4bea845a`, candidate-first replacement slice reviewed
   at `3f2de0ae916fd0faa81177d293caf714b8e73e69`, and shared Play implementation/evidence
-  reviewed at `e712077195009351558b7b1941b236a019b72b3b`
+  reviewed at `e712077195009351558b7b1941b236a019b72b3b`; MCP v2 readback/result-resource
+  component slice reviewed at `ca28713`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -20,8 +21,10 @@ source denial, the release support boundary, and strict project admission now co
 Strict project admission and candidate-first replacement have passing component and
 integration evidence. Candidate-first browser-system evidence is implemented but does
 not cover the full named matrix. Shared Play readiness has passing component evidence
-and implemented browser-system evidence. Readback recovery, cleanup, and MCP result
-resources remain incomplete.
+and implemented browser-system evidence. MCP metadata/result resources have passing
+component evidence; readback recovery has implemented component/integration artifacts.
+The dependency-owned structured resource-error boundary and consolidated MCP
+integration/system fault/resource matrices remain incomplete, as does cleanup.
 
 ## Left-side specification
 
@@ -51,10 +54,10 @@ unit suite plus focused Chromium flows; UNITV-020 and INTV-016 are `passing`, wh
 SYSV-019 is `implemented` with the same class-matrix gap. Acceptance remains `planned`.
 Actions outside these slices retain their recorded status.
 
-The shared-Play mini-V executed frontend unit/build, focused hub, and HTTP-contract
-checks. UNITV-016 is `passing`; the Play portions of INTV-012/INTV-013 and
-SYSV-012/SYSV-013 have durable artifacts, while readback recovery and result-resource
-clauses retain their recorded gaps.
+The MCP mini-V executed frontend contract/bridge checks, focused hub/resource checks,
+and isolated sidecar checks. UNITV-016 and UNITV-017 are `passing`; UNITV-021,
+INTV-012, INTV-013, INTV-017, SYSV-012, and SYSV-013 have durable but incomplete
+artifacts. SYSV-020 and acceptance remain `planned`.
 
 ## Source basis
 

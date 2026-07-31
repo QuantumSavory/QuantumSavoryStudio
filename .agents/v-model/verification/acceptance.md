@@ -45,7 +45,11 @@ planned until a durable release-2.0 acceptance record exists.
 - **Pass criterion:** Browser state remains authoritative; valid edits are visible/unsaved; stale work does not mutate; uncertain work is resolved by readback without automatic replay; Run follows GUI readiness; HTML/PNG read; Stop saves nothing automatically.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Existing E2E covers a successful subset but not the release-2.0 readback recovery, direct-Run parity, or complete representation cases.
+- **Nonconformance:** Existing E2E covers browser authority, direct Run/GUI Play,
+  unsaved edits, stale rejection, and live protocol HTML/PNG. It does not demonstrate a
+  lost reply followed by readback/fresh work, complete slot/protocol representation
+  cases, external structured resource failures, and Stop in one maintainer-observed
+  acceptance run.
 
 ## ACC-005 — Validate operator control of source execution
 

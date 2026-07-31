@@ -1,8 +1,10 @@
 # Verification and Acceptance
 
 The strict project-schema and candidate-first replacement slices have passing component
-and integration evidence plus implemented but incomplete browser-system evidence. Other
-release-2.0 actions retain their recorded status; no acceptance demonstration is passing.
+and integration evidence plus implemented but incomplete browser-system evidence. MCP
+metadata/result resources have passing component evidence; MCP recovery and transport
+have implemented but incomplete integration/system artifacts. Other release-2.0 actions
+retain their recorded status; no acceptance demonstration is passing.
 
 ## Action routes
 

@@ -66,9 +66,10 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** Inspect every registry annotation; render discriminating slot/protocol results in HTML/PNG; round-trip opaque URI-significant IDs; exercise unavailable/malformed resources.
 - **Environment / configuration:** Contract loader plus backend resource adapter and sidecar resource provider
 - **Pass criterion:** Only intrinsically repeat-safe tools claim idempotence; every successful result has nonempty correct-MIME HTML/PNG; IDs round-trip; failures are structured validation/not-found.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** All current tools claim idempotence, representations may be `nothing`, and identifiers are interpolated without encoding.
+- **Status:** passing
+- **Evidence:** [`contracts/mcp/v2/tools.json`](../../../contracts/mcp/v2/tools.json), [`gui/tests/unit/mcpContract.test.js`](../../../gui/tests/unit/mcpContract.test.js), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl), [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh)
+- **Nonconformance:** None at this component boundary. The dependency-owned JSON-RPC
+  resource-provider error envelope remains tracked at INTV-013.
 
 ## UNITV-018 — Verify frontend error-envelope preservation
 
@@ -110,6 +111,9 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 - **Procedure:** Exercise stale revision, accepted mutation, pre-delivery failure, post-commit reply loss, lifecycle reply loss, rebind, restart, and absence of replay-cache state.
 - **Environment / configuration:** Collaboration hub/browser acknowledgement fixture with deterministic faults
 - **Pass criterion:** Stale/pre-delivery work does not mutate; accepted design work advances once; no uncertain work replays automatically; readback exposes current design/lifecycle state; rebind/restart accepts only fresh work without an operation ledger.
-- **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current contract/hub require operation IDs and maintain a bounded binding-scoped successful-result cache.
+- **Status:** implemented
+- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/unit/mcpEditorBridge.test.js`](../../../gui/tests/unit/mcpEditorBridge.test.js)
+- **Nonconformance:** Fixtures cover stale/pre-delivery failures, delivered uncertainty
+  with late acknowledgement, lifecycle uncertainty, monotonic rebind, fresh-hub
+  readback, and no ledger/cache. They do not make the browser bridge commit then lose
+  its acknowledgement, or restart a genuine sidecar around that fault.

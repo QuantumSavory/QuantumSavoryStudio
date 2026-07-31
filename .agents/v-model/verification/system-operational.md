@@ -1,7 +1,7 @@
 # Operational System Verification Actions
 
-These actions cover source risk, retention, MCP, deployment, candidate-first replacement,
-and supported environments. The strict-schema slice did not change their status.
+These actions cover operational system behavior. The strict-schema slice did not change
+their status.
 
 ## SYSV-009 — Verify local source gate and public denial
 
@@ -54,7 +54,9 @@ and supported environments. The strict-schema slice did not change their status.
 - **Pass criterion:** Tools are visible; edits update the unsaved browser design once; stale work does not mutate; explicit lifecycle updates the GUI.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** Current v1 evidence covers direct and explicit lifecycle revision reporting; result-resource reads and release-2.0 reply-loss recovery remain in SYSV-013/SYSV-020.
+- **Nonconformance:** The v2 browser action covers design reads, stale rejection,
+  MCP/GUI edits, lifecycle changes, and sidecar restart. Complete results and
+  deterministic reply-loss remain in SYSV-013/SYSV-020.
 
 ## SYSV-013 — Verify MCP Play parity and result resources
 
@@ -65,7 +67,10 @@ and supported environments. The strict-schema slice did not change their status.
 - **Pass criterion:** Missing-definition errors match GUI readiness and are actionable; valid Run prepares/starts and records prepared revision; both MIME resources are nonempty; malformed/missing requests are structured.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
-- **Nonconformance:** The browser action now covers actionable incomplete Run, valid unprepared MCP Run, GUI Play, and matching prepared revisions. It does not compare an incomplete GUI action in the same system run or read discriminating URI-safe HTML/PNG resources and their malformed/not-found failures.
+- **Nonconformance:** The browser action covers incomplete/valid Run, GUI Play,
+  revisions, and live protocol HTML/PNG. It omits an incomplete-GUI comparison,
+  URI-significant slot resources, and malformed/missing reads. Dependency-owned errors
+  also lack JSON-RPC `error.data`.
 
 ## SYSV-014 — Verify stateless local/public deployment
 
@@ -104,8 +109,10 @@ and supported environments. The strict-schema slice did not change their status.
 - **Environment / configuration:** Real local MCP stack with controllable delivery/acknowledgement loss
 - **Pass criterion:** Stale/pre-delivery work does not mutate; committed design work advances revision once; no uncertain mutation is replayed automatically; design/lifecycle readback exposes current state before fresh work; rebind/restart starts from visible state.
 - **Status:** planned
-- **Evidence:** None
-- **Nonconformance:** Current contract requires operation IDs, the hub maintains a bounded binding-scoped result cache, and no contract-v2/readback system artifact exists.
+- **Evidence:** [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`gui/tests/e2e/mcp-collaboration.spec.js`](../../../gui/tests/e2e/mcp-collaboration.spec.js)
+- **Nonconformance:** V2/component fixtures implement no-cache readback, and the browser
+  artifact covers ordinary restart. No real-stack action controls delivery,
+  acknowledgement, and restart faults, so this remains planned.
 
 ## SYSV-021 — Verify the supported release environment
 
