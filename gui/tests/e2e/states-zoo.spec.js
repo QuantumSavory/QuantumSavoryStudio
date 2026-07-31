@@ -614,6 +614,7 @@ test.describe('States Zoo variables', () => {
       id: traceId,
       name: 'unrelated',
       type: 'String',
+      selectedType: 'String',
       value: 'keep me',
     })
     await importProject(page, idCollisionProject, 'states-zoo-id-collision.json')
@@ -652,6 +653,7 @@ test.describe('States Zoo variables', () => {
       id: 'unrelated_name',
       name: 'id_collision_rename_tr',
       type: 'String',
+      selectedType: 'String',
       value: 'keep me too',
     })
     await importProject(page, nameCollisionProject, 'states-zoo-name-collision.json')
