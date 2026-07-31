@@ -349,6 +349,36 @@ function showSimulationPanic(panic) {
   activePanic.value = panic ? { ...panic } : null
 }
 
+let designCommands = null
+let mcpBridge = null
+
+async function flushBrowserEditors() {
+  if (designInteractionCount.value > 0) return { busy: true }
+  const registeredDrafts = await editorDraftRegistry.flushAll()
+  if (registeredDrafts.busy || registeredDrafts.valid === false) {
+    return registeredDrafts
+  }
+  const activeElement = document.activeElement
+  if (
+    activeElement
+    && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeElement.tagName)
+    && typeof activeElement.blur === 'function'
+  ) {
+    activeElement.blur()
+    await nextTick()
+  }
+  const invalidDraft = document.querySelector('[aria-invalid="true"]')
+  return invalidDraft
+    ? {
+        valid: false,
+        details: {
+          element_id: invalidDraft.id || null,
+          label: invalidDraft.getAttribute('aria-label') || null
+        }
+      }
+    : { valid: true }
+}
+
 const {
   phase: simulationPhase,
   foregroundRequest,
@@ -360,8 +390,8 @@ const {
   pollingActive,
   resetSimulation,
   prepareNetworkGraph,
-  prepareSimulation,
-  runSimulationWithSteps,
+  prepareSimulation: prepareSimulationAction,
+  runSimulationWithSteps: runSimulationAction,
   pauseSimulation,
   resumeSimulation,
   stopSimulation,
@@ -375,6 +405,13 @@ const {
   getProjectName: () => projectData.value.name,
   getSimulationPayload: () => minimizedProjectData.value,
   validatePayload,
+  flushEditors: flushBrowserEditors,
+  runReadinessExclusive: work => (
+    designCommands ? designCommands.runExclusive(work) : work()
+  ),
+  getBrowserRevision: () => (
+    mcpBridge?.binding ? mcpBridge.revision : null
+  ),
   addLog,
   applicationLogs,
   refreshAllWindows,
@@ -386,8 +423,6 @@ const {
 })
 
 const isNetworkEditingDisabled = computed(() => simulationCapabilities.value.editingDisabled)
-let designCommands = null
-let mcpBridge = null
 
 const {
   isRightSidebarVisible,
@@ -530,48 +565,68 @@ mcpBridge = new McpEditorBridge({
     const validation = validatePayload(toSimulationPayload(project))
     return {
       valid: validation.success,
-      issues: validation.success
-        ? []
-        : [{ code: 'VALIDATION_FAILED', message: validation.error }]
+      issues: validation.issues
     }
   },
   simulationController: createSimulationControllerAdapter({
-    prepareSimulation,
-    runSimulationWithSteps,
+    prepareSimulation: prepareSimulationAction,
+    runSimulationWithSteps: runSimulationAction,
     pauseSimulation,
     resumeSimulation,
     stopSimulation
   }),
-  flushEditors: async () => {
-    if (designInteractionCount.value > 0) return { busy: true }
-    const registeredDrafts = await editorDraftRegistry.flushAll()
-    if (registeredDrafts.busy || registeredDrafts.valid === false) {
-      return registeredDrafts
-    }
-    const activeElement = document.activeElement
-    if (
-      activeElement
-      && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeElement.tagName)
-      && typeof activeElement.blur === 'function'
-    ) {
-      activeElement.blur()
-      await nextTick()
-    }
-    const invalidDraft = document.querySelector('[aria-invalid="true"]')
-    return invalidDraft
-      ? {
-          valid: false,
-          details: {
-            element_id: invalidDraft.id || null,
-            label: invalidDraft.getAttribute('aria-label') || null
-          }
-        }
-      : { valid: true }
-  },
+  flushEditors: flushBrowserEditors,
   onState: state => {
     mcpState.value = state
   }
 })
+
+function serializedSimulationError(error) {
+  return typeof error?.toJSON === 'function'
+    ? error.toJSON()
+    : {
+        code: error?.code || 'INTERNAL_ERROR',
+        message: error?.message || 'The simulation request failed.',
+        details: error?.details || {}
+      }
+}
+
+async function publishGuiPreparedRevision(result) {
+  if (!result?.accepted || !Number.isInteger(result.prepared_revision) || !mcpBridge?.binding) {
+    return result
+  }
+  try {
+    await mcpBridge.publishPreparedRevision(result.prepared_revision)
+  } catch (error) {
+    console.warn('Failed to publish GUI simulation revision:', error)
+    addLog(
+      'warning',
+      'Simulation started, but its prepared design revision was not published to MCP.',
+      'MCP',
+      serializedSimulationError(error)
+    )
+  }
+  return result
+}
+
+async function prepareSimulation() {
+  try {
+    return await publishGuiPreparedRevision(await prepareSimulationAction())
+  } catch (error) {
+    showAlert('Simulation request failed', error.message)
+    return { accepted: false, ...serializedSimulationError(error) }
+  }
+}
+
+async function runSimulationWithSteps(duration = null) {
+  try {
+    return await publishGuiPreparedRevision(await runSimulationAction(duration))
+  } catch (error) {
+    showAlert('Simulation request failed', error.message)
+    return { accepted: false, ...serializedSimulationError(error) }
+  }
+}
+
 let mcpSnapshotTimer = null
 function scheduleMcpSnapshotSafetyNet() {
   clearTimeout(mcpSnapshotTimer)

@@ -26,6 +26,22 @@ function bridgeError(error, fallbackCode = 'INTERNAL_ERROR') {
   }
 }
 
+function simulationActionError(result) {
+  const error = new Error(
+    result?.message || 'The browser rejected the simulation action.'
+  )
+  error.code = result?.code || 'SIMULATION_ACTION_REJECTED'
+  error.status = result?.status ?? 400
+  error.retryable = result?.retryable === true
+  error.details = result?.details || {}
+  return error
+}
+
+function isReadinessCommand(payload) {
+  return payload?.type === 'simulation_action'
+    && ['prepare', 'run'].includes(payload.action)
+}
+
 export class McpEditorBridge {
   constructor({
     client,
@@ -199,17 +215,19 @@ export class McpEditorBridge {
   async handleCommand(command) {
     let durableActionApplied = false
     try {
-      await this.flushForCommand()
-      await this.designCommands.runExclusive(async () => {
+      const payload = command.payload || {}
+      const readinessCommand = isReadinessCommand(payload)
+      if (!readinessCommand) await this.flushForCommand()
+
+      const execute = async () => {
         let result
         let documentChanged = false
-        if (command.base_revision !== this.revision) {
+        if (!readinessCommand && command.base_revision !== this.revision) {
           const error = new Error('The browser revision changed before command execution.')
           error.code = 'REVISION_CONFLICT'
           error.retryable = true
           throw error
         }
-        const payload = command.payload || {}
         if (payload.type === 'flush') {
           result = { summary: 'Editor drafts flushed.' }
         } else if (payload.type === 'design_get') {
@@ -234,16 +252,40 @@ export class McpEditorBridge {
           if (typeof action !== 'function') {
             throw new Error(`Unknown simulation action: ${payload.action}`)
           }
-          const accepted = await action(payload.duration)
-          if (!accepted) {
-            throw new Error(`Simulation action was not accepted: ${payload.action}`)
+          if (readinessCommand) {
+            result = await action(payload.duration, {
+              origin: 'mcp',
+              beforeDispatch: () => {
+                if (command.base_revision === this.revision) return
+                const error = new Error(
+                  'The browser revision changed before command execution.'
+                )
+                error.code = 'REVISION_CONFLICT'
+                error.retryable = true
+                throw error
+              },
+            })
+            if (!result?.accepted) throw simulationActionError(result)
+          } else {
+            const accepted = await action(payload.duration)
+            if (!accepted) {
+              throw new Error(`Simulation action was not accepted: ${payload.action}`)
+            }
+            result = { summary: `Simulation ${payload.action} accepted.` }
           }
-          result = { summary: `Simulation ${payload.action} accepted.` }
           durableActionApplied = true
         } else {
           throw new Error(`Unknown browser command type: ${payload.type}`)
         }
         const encoded = await encodeCanonicalDesign(this.getProject())
+        if (readinessCommand && encoded.hash !== this.hash) {
+          const error = new Error(
+            'The design changed while the simulation action was executing.'
+          )
+          error.code = 'REVISION_CONFLICT'
+          error.retryable = true
+          throw error
+        }
         const canonicalChanged = encoded.hash !== this.hash
         documentChanged ||= canonicalChanged
         const response = await this.client.commit({
@@ -260,7 +302,10 @@ export class McpEditorBridge {
         this.revision = response.revision
         this.hash = encoded.hash
         this.state({ synchronized: true, lastCommand: command.command_id })
-      })
+      }
+
+      if (readinessCommand) await execute()
+      else await this.designCommands.runExclusive(execute)
     } catch (error) {
       if (durableActionApplied) {
         const identity = this.bindingIdentity()
@@ -306,6 +351,36 @@ export class McpEditorBridge {
     })
     this.revision = response.revision
     this.hash = encoded.hash
+    this.state({ synchronized: true })
+  }
+
+  async publishPreparedRevision(preparedRevision) {
+    if (!this.binding) return
+    if (!Number.isInteger(preparedRevision) || preparedRevision !== this.revision) {
+      const error = new Error(
+        'The prepared simulation revision does not match the bound browser revision.'
+      )
+      error.code = 'REVISION_CONFLICT'
+      error.details = {
+        current_revision: this.revision,
+        prepared_revision: preparedRevision,
+      }
+      throw error
+    }
+    const response = await this.client.commit({
+      ...this.bindingIdentity(),
+      origin: 'gui',
+      base_revision: this.revision,
+      success: true,
+      document_changed: false,
+      summary: 'GUI prepared the current design for simulation.',
+      result: {
+        kind: 'simulation_prepared',
+        summary: 'GUI prepared the current design for simulation.',
+        prepared_revision: preparedRevision,
+      },
+    })
+    this.revision = response.revision
     this.state({ synchronized: true })
   }
 

@@ -801,6 +801,37 @@ function commit_browser_command!(
       end
       revision_before = hub.revision
       changed = pending.mutates_design || get(request, "document_changed", false)
+      result = Dict{String,Any}(
+        string(k) => v
+        for (k, v) in get(request, "result", Dict{String,Any}())
+      )
+      command_payload = get(pending.command, "payload", Dict{String,Any}())
+      if get(command_payload, "type", "") == "simulation_action"
+        action = string(get(command_payload, "action", ""))
+        if action in ("prepare", "run")
+          prepared_revision = get(result, "prepared_revision", nothing)
+          valid_revision = prepared_revision isa Integer &&
+            Int(prepared_revision) == hub.revision
+          if changed || !valid_revision
+            _desynchronize_binding_locked!(
+              hub,
+              binding,
+              "The prepared simulation revision does not match the bound design.",
+            )
+            throw(
+              _mcp_error(
+                "PROJECT_CHANGED",
+                "The prepared simulation revision does not match the bound design.",
+                status=409,
+                details=Dict(
+                  "current_revision" => hub.revision,
+                  "prepared_revision" => prepared_revision,
+                ),
+              ),
+            )
+          end
+        end
+      end
       if changed
         snapshot = get(request, "snapshot", nothing)
         snapshot isa AbstractDict || throw(
@@ -814,19 +845,14 @@ function commit_browser_command!(
         hub.snapshot_hash = snapshot_hash
         hub.revision += 1
       end
-      command_payload = get(pending.command, "payload", Dict{String,Any}())
       if get(command_payload, "type", "") == "simulation_action"
         action = get(command_payload, "action", "")
-        action == "prepare" && (hub.prepared_revision = hub.revision)
+        action in ("prepare", "run") && (hub.prepared_revision = hub.revision)
         action == "reset" && (hub.prepared_revision = nothing)
       end
       delete!(hub.pending, command_id)
       pending.operation_id === nothing ||
         delete!(hub.operation_commands, pending.operation_id)
-      result = Dict{String,Any}(
-        string(k) => v
-        for (k, v) in get(request, "result", Dict{String,Any}())
-      )
       result["revision"] = hub.revision
       pending.operation_id === nothing || begin
         result["operation_id"] = pending.operation_id
@@ -874,7 +900,7 @@ function commit_gui_snapshot!(
   hub::CollaborationHub,
   request::AbstractDict,
 )
-  revision_before, revision_after = lock(hub.lock) do
+  revision_before, revision_after, phase = lock(hub.lock) do
     binding = _require_binding_locked!(hub)
     _verify_binding_owner!(binding, request)
     Int(get(request, "base_revision", -1)) == hub.revision || throw(
@@ -886,6 +912,36 @@ function commit_gui_snapshot!(
         details=Dict("current_revision" => hub.revision),
       ),
     )
+    result = get(request, "result", Dict{String,Any}())
+    if get(result, "kind", "") == "simulation_prepared"
+      get(request, "document_changed", false) === false || throw(
+        _mcp_error(
+          "VALIDATION_FAILED",
+          "A simulation lifecycle report cannot change the design.",
+        ),
+      )
+      prepared_revision = get(result, "prepared_revision", nothing)
+      prepared_revision isa Integer || throw(
+        _mcp_error(
+          "VALIDATION_FAILED",
+          "A simulation lifecycle report requires an integer prepared revision.",
+        ),
+      )
+      Int(prepared_revision) == hub.revision || throw(
+        _mcp_error(
+          "REVISION_CONFLICT",
+          "The prepared simulation revision does not match the current design.",
+          retryable=true,
+          status=409,
+          details=Dict(
+            "current_revision" => hub.revision,
+            "prepared_revision" => prepared_revision,
+          ),
+        ),
+      )
+      hub.prepared_revision = Int(prepared_revision)
+      return (hub.revision, hub.revision, "gui_lifecycle")
+    end
     snapshot = get(request, "snapshot", nothing)
     snapshot isa AbstractDict || throw(
       _mcp_error("VALIDATION_FAILED", "A canonical design snapshot is required"),
@@ -896,13 +952,21 @@ function commit_gui_snapshot!(
     hub.snapshot = Dict{String,Any}(string(k) => v for (k, v) in snapshot)
     hub.snapshot_hash = snapshot_hash
     hub.revision += 1
-    (before, hub.revision)
+    (before, hub.revision, "gui_commit")
   end
   record_mcp_activity!(
     hub,
     "browser_command",
-    "gui_commit";
-    summary=string(get(request, "summary", "GUI design change")),
+    phase;
+    summary=string(
+      get(
+        request,
+        "summary",
+        phase == "gui_lifecycle" ?
+          "GUI prepared the current design for simulation" :
+          "GUI design change",
+      ),
+    ),
     status="success",
     revision_before,
     revision_after,
