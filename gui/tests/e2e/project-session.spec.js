@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 
-async function mockBackend(page, parseRequests, { platformHandler, destroyRequests } = {}) {
+async function mockBackend(page, parseRequests, {
+  platformHandler,
+  destroyRequests = []
+} = {}) {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
   await page.route('**/background_types', route => route.fulfill({ json: { background_types: [] } }))
   await page.route('**/slot_types', route => route.fulfill({
@@ -18,9 +21,9 @@ async function mockBackend(page, parseRequests, { platformHandler, destroyReques
       }
     })
   })
-  await page.route('**/destroy_simulation', route => {
-    destroyRequests?.push(route.request().method())
-    return route.fulfill({ json: { success: true } })
+  await page.route('**/destroy_simulation', async route => {
+    destroyRequests.push(route.request().postDataJSON())
+    await route.fulfill({ json: { success: true } })
   })
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),
@@ -32,35 +35,56 @@ async function mockBackend(page, parseRequests, { platformHandler, destroyReques
   })
 }
 
+function projectDocument(name, {
+  schemaVersion = 2,
+  description = '',
+  platformInfo
+} = {}) {
+  return {
+    schemaVersion,
+    name,
+    description,
+    annotations: [],
+    variables: [],
+    simulationConfig: {
+      time: 1,
+      timeStep: 0.1,
+      qubitRepresentation: 'QuantumOpticsRepr',
+      qumodeRepresentation: 'QuantumOpticsRepr'
+    },
+    ...(platformInfo ? { platformInfo } : {}),
+    net: {
+      nodes: [],
+      edges: [],
+      protocols: [],
+      physicalConfig: {
+        refractiveIndex: 1.468,
+        lossDbPerKm: 0.2,
+        nodeTemplate: { slots: [] }
+      }
+    },
+    uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
+  }
+}
+
 async function seedProjects(page, names) {
-  await page.addInitScript(projectNames => {
-    for (const name of projectNames) {
-      localStorage.setItem(`cqn_project_${name}`, JSON.stringify({
-        schemaVersion: 2,
-        name,
-        description: '',
-        annotations: [],
-        variables: [],
-        simulationConfig: {
-          time: 1,
-          timeStep: 0.1,
-          qubitRepresentation: 'QuantumOpticsRepr',
-          qumodeRepresentation: 'QuantumOpticsRepr'
-        },
-        net: {
-          nodes: [],
-          edges: [],
-          protocols: [],
-          physicalConfig: {
-            refractiveIndex: 1.468,
-            lossDbPerKm: 0.2,
-            nodeTemplate: { slots: [] }
-          }
-        },
-        uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
-      }))
+  const documents = names.map(name => projectDocument(name))
+  await page.addInitScript(projects => {
+    for (const project of projects) {
+      localStorage.setItem(`cqn_project_${project.name}`, JSON.stringify(project))
     }
-  }, names)
+  }, documents)
+}
+
+async function startSetupCall(page, method, args = []) {
+  await page.evaluate(({ methodName, callArgs }) => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    globalThis.__pendingProjectSessionCall = setup[methodName](...callArgs)
+  }, { methodName: method, callArgs: args })
+}
+
+async function finishSetupCall(page) {
+  return page.evaluate(() => globalThis.__pendingProjectSessionCall)
 }
 
 test('confirmed deletion immediately refreshes the open-project list', async ({ page }) => {
@@ -250,40 +274,154 @@ test('invalid browser imports preserve their source, active work, and storage', 
   expect(destroyRequests).toEqual([])
 })
 
+test('invalid replacement classes preserve the populated active session', async ({ page }) => {
+  const destroyRequests = []
+  const invalidDocument = projectDocument('Invalid Candidate', { schemaVersion: 1 })
+  const invalidRaw = JSON.stringify(invalidDocument)
+  await page.addInitScript(({ raw }) => {
+    localStorage.setItem('cqn_project_Invalid Saved', raw)
+  }, { raw: invalidRaw })
+  await mockBackend(page, [], { destroyRequests })
+  await page.goto('/')
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+
+  expect(await page.evaluate(async () => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    const created = await setup.createNewProject('Active Project')
+    setup.projectData.description = 'unsaved active work'
+    return created
+  })).toBe(true)
+
+  const attempts = [
+    ['openProject', ['Invalid Saved'], /schema validation.*schemaVersion/i],
+    ['importProjectIntoSession', [invalidDocument, 'Imported Candidate'], /schema validation.*schemaVersion/i],
+    ['loadDemoProject', [invalidDocument], /schema validation.*schemaVersion/i],
+    ['createNewProject', ['   '], /Project name cannot be empty/i]
+  ]
+  for (const [method, args, expectedError] of attempts) {
+    await startSetupCall(page, method, args)
+    const errorDialog = page.getByRole('dialog', { name: 'Project Error' })
+    await expect(errorDialog).toContainText(expectedError)
+    expect(await finishSetupCall(page)).toBe(false)
+    await errorDialog.getByRole('button', { name: 'OK' }).click()
+  }
+
+  const state = await page.evaluate(() => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    return {
+      activeName: setup.currentProjectName,
+      activeDescription: setup.projectData.description,
+      recent: localStorage.getItem('recentProjectName'),
+      invalidSaved: localStorage.getItem('cqn_project_Invalid Saved'),
+      imported: localStorage.getItem('cqn_project_Imported Candidate'),
+      demo: localStorage.getItem('cqn_project_Invalid Candidate')
+    }
+  })
+  expect(state).toEqual({
+    activeName: 'Active Project',
+    activeDescription: 'unsaved active work',
+    recent: 'Active Project',
+    invalidSaved: invalidRaw,
+    imported: null,
+    demo: null
+  })
+  expect(destroyRequests).toEqual([])
+})
+
+test('failed bootstrap restore clears only its stale recent pointer', async ({ page }) => {
+  const destroyRequests = []
+  const invalidDocument = projectDocument('Broken Recent', {
+    schemaVersion: 1,
+    description: 'stored bytes must survive'
+  })
+  const invalidRaw = JSON.stringify(invalidDocument)
+  await page.addInitScript(({ raw }) => {
+    localStorage.setItem('cqn_project_Broken Recent', raw)
+    localStorage.setItem('recentProjectName', 'Broken Recent')
+  }, { raw: invalidRaw })
+  await mockBackend(page, [], { destroyRequests })
+
+  await page.goto('/')
+  const errorDialog = page.getByRole('dialog', { name: 'Project Error' })
+  await expect(errorDialog).toContainText(/schema validation.*schemaVersion/i)
+
+  const state = await page.evaluate(() => ({
+    recent: localStorage.getItem('recentProjectName'),
+    stored: localStorage.getItem('cqn_project_Broken Recent'),
+    activeName: document.querySelector('#app')?.__vue_app__?._instance?.setupState
+      ?.currentProjectName
+  }))
+  expect(state.recent).toBeNull()
+  expect(state.stored).toBe(invalidRaw)
+  expect(state.activeName).not.toBe('Broken Recent')
+  expect(destroyRequests).toEqual([])
+})
+
+test('a superseded delayed open cannot affect a newer created project', async ({ page }) => {
+  const destroyRequests = []
+  const delayedDocument = projectDocument('Delayed Project', {
+    description: 'stored candidate',
+    platformInfo: {
+      versions: { julia: '2.0', genie: '5.0', quantumSavory: '0.7', app: '1.6' }
+    }
+  })
+  const delayedRaw = JSON.stringify(delayedDocument)
+  await page.addInitScript(({ raw }) => {
+    localStorage.setItem('cqn_project_Delayed Project', raw)
+  }, { raw: delayedRaw })
+  await mockBackend(page, [], { destroyRequests })
+  await page.goto('/')
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+
+  await page.evaluate(() => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    globalThis.__pendingDelayedOpen = setup.openProject('Delayed Project')
+  })
+  const mismatchDialog = page.getByRole('dialog', { name: 'Project version mismatch' })
+  await expect(mismatchDialog).toBeVisible()
+
+  expect(await page.evaluate(async () => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    const created = await setup.createNewProject('User Project')
+    setup.projectData.description = 'unsaved work in the winning session'
+    return created
+  })).toBe(true)
+  await expect(page.locator('.project-name-label')).toHaveText('User Project')
+
+  await mismatchDialog.getByRole('button', { name: 'Open project' }).click()
+  expect(await page.evaluate(() => globalThis.__pendingDelayedOpen)).toBe(false)
+
+  const state = await page.evaluate(() => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    return {
+      activeName: setup.currentProjectName,
+      activeDescription: setup.projectData.description,
+      recent: localStorage.getItem('recentProjectName'),
+      delayed: localStorage.getItem('cqn_project_Delayed Project'),
+      created: JSON.parse(localStorage.getItem('cqn_project_User Project'))
+    }
+  })
+  expect(state).toMatchObject({
+    activeName: 'User Project',
+    activeDescription: 'unsaved work in the winning session',
+    recent: 'User Project',
+    delayed: delayedRaw,
+    created: { schemaVersion: 2, name: 'User Project' }
+  })
+  expect(destroyRequests).toEqual([])
+})
+
 test('a late startup restore cannot replace a user-created session', async ({ page }) => {
   let releasePlatform
   let markPlatformRequested
   const platformReleased = new Promise(resolve => { releasePlatform = resolve })
   const platformRequested = new Promise(resolve => { markPlatformRequested = resolve })
 
-  await page.addInitScript(() => {
-    const oldProject = {
-      schemaVersion: 2,
-      name: 'Old Project',
-      description: 'old snapshot',
-      annotations: [],
-      variables: [],
-      simulationConfig: {
-        time: 1,
-        timeStep: 0.1,
-        qubitRepresentation: 'QuantumOpticsRepr',
-        qumodeRepresentation: 'QuantumOpticsRepr'
-      },
-      net: {
-        nodes: [],
-        edges: [],
-        protocols: [],
-        physicalConfig: {
-          refractiveIndex: 1.468,
-          lossDbPerKm: 0.2,
-          nodeTemplate: { slots: [] }
-        }
-      },
-      uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
-    }
-    localStorage.setItem('cqn_project_Old Project', JSON.stringify(oldProject))
+  const oldProject = projectDocument('Old Project', { description: 'old snapshot' })
+  await page.addInitScript(project => {
+    localStorage.setItem('cqn_project_Old Project', JSON.stringify(project))
     localStorage.setItem('recentProjectName', 'Old Project')
-  })
+  }, oldProject)
 
   await mockBackend(page, [], {
     platformHandler: async route => {
@@ -304,9 +442,9 @@ test('a late startup restore cannot replace a user-created session', async ({ pa
   const loadingIndicator = page.locator('.topbar-loading-indicator')
   await expect(loadingIndicator).toBeVisible()
   await expect(loadingIndicator).toContainText('Loading application metadata')
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    setup.createNewProject('New Session')
+    await setup.createNewProject('New Session')
     setup.projectData.description = 'unsaved edit made during startup'
   })
 
