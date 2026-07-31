@@ -309,6 +309,46 @@ describe('simulation controller polling ownership', () => {
     fixture.stop()
   })
 
+  it('blocks GUI and MCP transport while injected constructor catalogs are unavailable', async () => {
+    const api = {
+      parseNetworkGraph: vi.fn(),
+      prepareSimulation: vi.fn(),
+      runSimulation: vi.fn()
+    }
+    const validate = vi.fn(payload => validatePayload(payload, {
+      protocolTypes: null,
+      backgroundTypes: null
+    }))
+    const fixture = createController(api, { validatePayload: validate })
+    fixture.projectData.value.net = {
+      nodes: [
+        { id: 'alice', data: { slots: [{ id: 'alice-slot' }] } },
+        { id: 'bob', data: { slots: [{ id: 'bob-slot' }] } }
+      ],
+      edges: [{ id: 'edge-1', source: 'alice', target: 'bob' }],
+      protocols: []
+    }
+
+    const guiResult = await fixture.controller.runSimulationWithSteps()
+    const mcpResult = await createSimulationControllerAdapter(
+      fixture.controller
+    ).run(null, { origin: 'mcp' })
+
+    expect(guiResult).toMatchObject({
+      accepted: false,
+      code: 'SIMULATION_DESIGN_INVALID',
+      details: {
+        issues: [{ code: 'CONSTRUCTOR_CATALOG_UNAVAILABLE' }]
+      }
+    })
+    expect(mcpResult).toEqual(guiResult)
+    expect(validate).toHaveBeenCalledTimes(2)
+    expect(api.parseNetworkGraph).not.toHaveBeenCalled()
+    expect(api.prepareSimulation).not.toHaveBeenCalled()
+    expect(api.runSimulation).not.toHaveBeenCalled()
+    fixture.stop()
+  })
+
   it('does not mutate lifecycle state when the post-flush revision guard fails', async () => {
     const conflict = new Error('The browser revision changed before command execution.')
     conflict.code = 'REVISION_CONFLICT'

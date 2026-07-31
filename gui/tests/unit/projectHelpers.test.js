@@ -37,7 +37,7 @@ describe('simulation payload validation', () => {
   })
 
   it('accepts a connected design whose nodes each own a slot', () => {
-    expect(validatePayload({
+    const payload = {
       net: {
         nodes: [
           { id: 'alice', data: { slots: [{ id: 'alice-slot' }] } },
@@ -45,7 +45,20 @@ describe('simulation payload validation', () => {
         ],
         edges: [{ id: 'edge-1', source: 'alice', target: 'bob' }],
       },
-    })).toEqual({ success: true, error: null, issues: [] })
+    }
+    expect(validatePayload(payload)).toEqual({ success: true, error: null, issues: [] })
+    expect(validatePayload(payload, {
+      protocolTypes: null,
+      backgroundTypes: undefined,
+    })).toEqual({
+      success: false,
+      error: 'Constructor metadata is unavailable',
+      issues: [{
+        code: 'CONSTRUCTOR_CATALOG_UNAVAILABLE',
+        message: 'Constructor metadata is unavailable',
+        details: { unavailable_catalogs: ['protocolTypes', 'backgroundTypes'] },
+      }],
+    })
   })
 
   it('blocks omitted required catalog inputs before simulation transport', () => {

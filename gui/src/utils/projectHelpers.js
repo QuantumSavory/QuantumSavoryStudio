@@ -105,9 +105,31 @@ function catalogConstructorIssues(
 
 export function constructorReadinessIssues(
   data,
-  { protocolTypes, backgroundTypes } = {},
+  catalogs,
 ) {
-  if (protocolTypes == null && backgroundTypes == null) return []
+  // Callers that do not opt into constructor validation retain the small,
+  // topology-only helper contract. Application transports always inject both
+  // live catalogs and must fail closed while either catalog is unavailable.
+  if (catalogs === undefined) return []
+  const protocolTypes = catalogs?.protocolTypes
+  const backgroundTypes = catalogs?.backgroundTypes
+  const unavailableCatalogs = []
+  if (
+    protocolTypes == null
+    || typeof protocolTypes !== 'object'
+    || Array.isArray(protocolTypes)
+    || !['floating', 'node', 'edge'].every(placement => (
+      Array.isArray(protocolTypes[placement])
+    ))
+  ) unavailableCatalogs.push('protocolTypes')
+  if (!Array.isArray(backgroundTypes)) unavailableCatalogs.push('backgroundTypes')
+  if (unavailableCatalogs.length) {
+    return [{
+      code: 'CONSTRUCTOR_CATALOG_UNAVAILABLE',
+      message: 'Constructor metadata is unavailable',
+      details: { unavailable_catalogs: unavailableCatalogs },
+    }]
+  }
   const net = data?.net || {}
   const variables = new Map(
     (Array.isArray(data?.variables) ? data.variables : [])
@@ -139,7 +161,7 @@ export function constructorReadinessIssues(
   return issues
 }
 
-export function validatePayload(data, catalogs = {}) {
+export function validatePayload(data, catalogs) {
   const nodes = Array.isArray(data?.net?.nodes) ? data.net.nodes : []
   const edges = Array.isArray(data?.net?.edges) ? data.net.edges : []
   const issues = []
