@@ -696,7 +696,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         ),
         isLocked: false,
@@ -1203,7 +1202,6 @@ export class DesignCommandService {
       project = this.getProject(),
       ownerId = null,
       template = false,
-      allowLegacyLiteral = false,
     } = {},
   ) {
     if (!record(noise)) {
@@ -1214,33 +1212,24 @@ export class DesignCommandService {
     }
     const type = requireString(noise.type, 'Background noise type')
     const catalog = this.backgroundCatalog()
+    if (!Array.isArray(catalog) || catalog.length === 0) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'Background noise catalog is unavailable.',
+      )
+    }
     const definition = catalog.find(entry => entry?.type === type)
+    if (!definition) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Unknown background noise type: ${type}`,
+      )
+    }
     if (!Array.isArray(noise.parameters)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
         'Background noise parameters must be an array.',
       )
-    }
-    if (!definition && noise.parameters.some(parameter => (
-      (
-        record(parameter?.value)
-        && parameter.value.kind === NUMERIC_EXPRESSION_VALUE_KIND
-      )
-      || isVariableReference(parameter?.value)
-    ))) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Background noise ${type} requires catalog metadata for Variables or numeric expressions.`,
-      )
-    }
-    if (!definition) {
-      if (catalog.length > 0 && !allowLegacyLiteral) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Unknown background noise type: ${type}`,
-        )
-      }
-      return deepClone(noise)
     }
 
     const parameters = await this.constructorParameters(
@@ -1911,7 +1900,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         )
       }

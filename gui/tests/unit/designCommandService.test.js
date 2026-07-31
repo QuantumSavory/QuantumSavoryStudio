@@ -17,12 +17,18 @@ import {
   toSimulationPayload,
 } from '../../src/utils/projectCodec'
 
+const DEFAULT_BACKGROUND_CATALOG = Object.freeze([{
+  type: 'NoNoise',
+  parameters: [],
+}])
+
 function serviceFor(project, options = {}) {
   let nextId = 0
   return new DesignCommandService({
     getProject: () => project,
     idGenerator: prefix => `${prefix}_${++nextId}`,
     defaultBackgroundNoise: () => ({ type: 'NoNoise', parameters: [] }),
+    backgroundCatalog: () => DEFAULT_BACKGROUND_CATALOG,
     ...options,
   })
 }
@@ -154,7 +160,13 @@ describe('DesignCommandService', () => {
 
   it('edits a slot-only node template and gives new nodes independent slot copies', async () => {
     const project = createEmptyProject('Template defaults')
-    const service = serviceFor(project)
+    const service = serviceFor(project, {
+      backgroundCatalog: () => [
+        ...DEFAULT_BACKGROUND_CATALOG,
+        { type: 'ThermalNoise', parameters: [] },
+        { type: 'UpdatedNoise', parameters: [] },
+      ],
+    })
 
     await service.execute({
       operations: [
@@ -382,6 +394,124 @@ describe('DesignCommandService', () => {
       message: 'Generated assignment is invalid.',
     })
     expect(project.net.nodes.map(node => node.id)).toEqual(['node_a'])
+  })
+
+  it('fails closed when shared GUI/MCP slot commands lack authoritative background metadata', async () => {
+    const project = createEmptyProject('Catalog admission')
+    project.net.nodes.push(new Node({
+      id: 'node_a',
+      name: 'A',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const before = encodeDesignDocument(project)
+    const markDirty = vi.fn()
+    const onCommitted = vi.fn()
+    const missingCatalogService = serviceFor(project, {
+      backgroundCatalog: () => [],
+      markDirty,
+      onCommitted,
+    })
+
+    await expect(missingCatalogService.executeTool('slots_edit', {
+      actions: [{
+        action: 'create',
+        node_id: 'node_a',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: { type: 'NoNoise', parameters: [] },
+        },
+      }],
+    }, {
+      origin: 'mcp',
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Background noise catalog is unavailable.',
+    })
+    expect(encodeDesignDocument(project)).toEqual(before)
+
+    const knownCatalogService = serviceFor(project, { markDirty, onCommitted })
+    await expect(knownCatalogService.execute({
+      origin: 'gui',
+      operations: [{
+        kind: 'design.update',
+        value: { description: 'candidate-only change' },
+      }, {
+        kind: 'slots.create',
+        node_id: 'node_a',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: { type: 'UnknownNoise', parameters: [] },
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Unknown background noise type: UnknownNoise',
+    })
+    expect(encodeDesignDocument(project)).toEqual(before)
+    expect(markDirty).not.toHaveBeenCalled()
+    expect(onCommitted).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when template and generator clones lack authoritative background metadata', async () => {
+    const project = createEmptyProject('Cloned catalog admission')
+    project.net.physicalConfig.nodeTemplate.slots.push({
+      id: 'template_slot',
+      type: 'Qubit',
+      backgroundNoise: { type: 'NoNoise', parameters: [] },
+    })
+    const before = encodeDesignDocument(project)
+    const markDirty = vi.fn()
+    const missingCatalogService = serviceFor(project, {
+      backgroundCatalog: () => [],
+      markDirty,
+    })
+
+    await expect(missingCatalogService.execute({
+      operations: [{
+        kind: 'topology.create_node',
+        id: 'node_generated_from_template',
+        value: { name: 'Template clone', position: [0, 0] },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Background noise catalog is unavailable.',
+    })
+    expect(encodeDesignDocument(project)).toEqual(before)
+
+    const generatorService = serviceFor(project, {
+      markDirty,
+      generators: {
+        unknown_background: net => {
+          const generatedNode = new Node({
+            id: 'node_generated_by_layout',
+            name: 'Layout clone',
+            position: [1, 1],
+            data: {
+              slots: [{
+                id: 'slot_generated_by_layout',
+                type: 'Qubit',
+                backgroundNoise: { type: 'UnknownNoise', parameters: [] },
+              }],
+              protocols: [],
+            },
+          })
+          net.nodes.push(generatedNode)
+          return { generatedNodes: [generatedNode], generatedEdges: [] }
+        },
+      },
+    })
+    await expect(generatorService.execute({
+      operations: [{
+        kind: 'network.generate',
+        value: { generator: 'unknown_background' },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Unknown background noise type: UnknownNoise',
+    })
+    expect(encodeDesignDocument(project)).toEqual(before)
+    expect(markDirty).not.toHaveBeenCalled()
   })
 
   it('rolls back every candidate change when one operation fails', async () => {
@@ -776,21 +906,11 @@ describe('DesignCommandService', () => {
     })
 
     await expect(service.requireBackgroundNoise({
-      type: 'LegacyNoise',
+      type: 'UnknownNoise',
       parameters: [{ value: 0.25 }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: 'Unknown background noise type: LegacyNoise',
-    })
-    await expect(service.requireBackgroundNoise({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
-    }, {
-      project,
-      allowLegacyLiteral: true,
-    })).resolves.toEqual({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
+      message: 'Unknown background noise type: UnknownNoise',
     })
 
     await service.execute({
@@ -855,7 +975,9 @@ describe('DesignCommandService', () => {
         context: { node_names: ['A'], self: 1 },
       }),
     )
-    await expect(serviceFor(project).requireBackgroundNoise({
+    await expect(serviceFor(project, {
+      backgroundCatalog: () => [],
+    }).requireBackgroundNoise({
       type: 'TemporarilyUnavailableNoise',
       parameters: [{
         field: 'rate',
@@ -863,7 +985,7 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('requires catalog metadata'),
+      message: 'Background noise catalog is unavailable.',
     })
 
     await service.execute({
