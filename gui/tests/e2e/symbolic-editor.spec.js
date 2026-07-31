@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 const SYMBOLIC_PROTOCOL_TYPE = {
   type: 'TestProtocols.SymbolicProt',
@@ -74,11 +75,9 @@ async function mockConfiguration(page) {
       capabilities: { unsafe_code_evaluation: true },
     },
   }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    contentType: 'application/json',
-    json: { success: false, message: 'Simulation not found' },
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
   await page.route('**/test_symbolic_expression', route => {
     const { expr } = route.request().postDataJSON()
     if (expr === 'valid_untrusted_expression') {

@@ -4,7 +4,7 @@ import { normalizeLogSeverity, normalizeLogSource } from '../utils/logRecords.js
 import {
   SimulationPhase,
   createSimulationState,
-  isNotFoundResponse,
+  isNotFoundError,
   legacySimulationStatus,
   reduceSimulationState,
   simulationCapabilities
@@ -16,14 +16,16 @@ const ALIVE_POLL_INTERVAL = 60_000
 const STATE_POLL_TIMEOUT = 15 * 60_000
 
 function responseError(response, fallback) {
-  const message = response?.message || response?.error || response?.details?.error || response?.detail || fallback
-  const error = new Error(message)
-  error.response = response
+  const error = new Error(fallback)
+  error.name = 'UnexpectedApiResponseError'
+  error.code = 'MALFORMED_SUCCESS_RESPONSE'
+  error.status = null
+  error.details = { body: response ?? null }
   return error
 }
 
 function errorPayload(error) {
-  return error?.response ?? error
+  return typeof error?.toJSON === 'function' ? error.toJSON() : error
 }
 
 function isAbortError(error) {
@@ -56,6 +58,7 @@ export function useSimulationController({
   let logAbortController = null
   let logFetchPromise = null
   let aliveAbortController = null
+  let logFetchFailureReported = false
   let disposed = false
   const seenPanicIds = new Set()
 
@@ -221,12 +224,7 @@ export function useSimulationController({
   }
 
   function applyBackendResponse(response, { fallbackPhase, message } = {}) {
-    if (!response || response.success === false || response.detail) {
-      if (isNotFoundResponse(response)) {
-        dispatch({ type: 'NOT_FOUND' })
-        resetSlotStates()
-        return false
-      }
+    if (!response || response.success === false) {
       throw responseError(response, 'Backend request failed')
     }
 
@@ -470,9 +468,14 @@ export function useSimulationController({
       return response
     } catch (error) {
       if (!contextIsCurrent(context) || isAbortError(error)) return null
+      if (isNotFoundError(error)) {
+        dispatch({ type: 'NOT_FOUND' })
+        resetSlotStates()
+        return null
+      }
       dispatch({ type: 'ERROR', error, message: error.message })
       if (addLogs) addLog('error', 'Failed to get simulation status', 'Web API', errorPayload(error))
-      return error.response || null
+      return null
     }
   }
 
@@ -546,6 +549,12 @@ export function useSimulationController({
         stateTimer = setTimeout(poll, STATE_POLL_INTERVAL)
       } catch (error) {
         if (isAbortError(error) || generation !== pollingGeneration || projectName !== getProjectName()) return
+        if (isNotFoundError(error)) {
+          stopPolling()
+          dispatch({ type: 'NOT_FOUND' })
+          resetSlotStates()
+          return
+        }
         stopPolling()
         dispatch({ type: 'ERROR', error, message: `Polling error: ${error.message}` })
         addLog('error', `Polling error: ${error.message}`, 'Web API', errorPayload(error))
@@ -597,8 +606,11 @@ export function useSimulationController({
         disposed
         || generation !== pollingGeneration
         || projectName !== getProjectName()
-        || !Array.isArray(response?.logs)
       ) return
+      if (!Array.isArray(response?.logs)) {
+        throw responseError(response, 'Backend logs response is invalid')
+      }
+      logFetchFailureReported = false
       for (const backendLog of response.logs) {
         const severity = normalizeLogSeverity(backendLog.severity || backendLog.level)
         if (severity === 'panic') {
@@ -621,7 +633,15 @@ export function useSimulationController({
         })
       }
     } catch (error) {
-      if (!isAbortError(error)) console.error('Failed to fetch backend logs', error)
+      if (
+        !isAbortError(error)
+        && !logFetchFailureReported
+        && generation === pollingGeneration
+        && projectName === getProjectName()
+      ) {
+        logFetchFailureReported = true
+        addLog('error', 'Failed to fetch backend logs', 'Web API', errorPayload(error))
+      }
     }
   }
 
@@ -633,12 +653,8 @@ export function useSimulationController({
     try {
       const response = await api.getSimulationStatus(context.projectName, { signal: aliveAbortController.signal })
       if (!contextIsCurrent(context)) return
-      if (isNotFoundResponse(response)) {
-        stopAlivePolling()
-        return
-      }
+      applyBackendResponse(response)
       if (response?.success && response.state?.simulation) {
-        applyBackendResponse(response)
         if (response.state.simulation.simulation_auto_purged) {
           stopPolling()
           stopAlivePolling()
@@ -647,7 +663,14 @@ export function useSimulationController({
         }
       }
     } catch (error) {
-      if (!isAbortError(error)) console.error('Alive check failed', error)
+      if (isAbortError(error) || !contextIsCurrent(context)) return
+      if (isNotFoundError(error)) {
+        stopAlivePolling()
+        dispatch({ type: 'NOT_FOUND' })
+        resetSlotStates()
+        return
+      }
+      addLog('error', 'Simulation alive check failed', 'Web API', errorPayload(error))
     }
   }
 
@@ -667,6 +690,7 @@ export function useSimulationController({
     lifecycleGeneration += 1
     stopPolling()
     seenPanicIds.clear()
+    logFetchFailureReported = false
     resetSlotStates()
     hideSlotState?.()
     dispatch({ type: 'RESET' })

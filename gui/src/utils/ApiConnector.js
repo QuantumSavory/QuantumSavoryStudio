@@ -304,9 +304,10 @@ export class ApiConnector {
       this.getDefaultBgNoise(),
       ...backgroundCatalog.background_types,
     ]
-    this._config.value.slotTypes = Array.isArray(slotCatalog.slot_types)
-      ? [...slotCatalog.slot_types]
-      : ['Qubit', 'Qumode']
+    if (!Array.isArray(slotCatalog.slot_types)) {
+      throw new Error('Slot types response is invalid')
+    }
+    this._config.value.slotTypes = [...slotCatalog.slot_types]
 
     const parsedTypes = protocolCatalog.protocol_types.map(type => ({
       ...type,

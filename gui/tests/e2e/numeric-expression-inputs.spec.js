@@ -1,4 +1,8 @@
 import { expect, test } from '@playwright/test'
+import {
+  canonicalErrorResponse,
+  simulationNotFoundResponse,
+} from './httpResponses.js'
 
 const PROTOCOL_TYPE = 'QuantumSavory.ProtocolZoo.NumericExpressionProt'
 const PROTOCOL_DEFINITION = {
@@ -52,10 +56,9 @@ async function mockBackend(page, {
       capabilities: { unsafe_code_evaluation: evaluationEnabled },
     },
   }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    json: { success: false, error_code: 'NOT_FOUND' },
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
   await page.route('**/logs/**', route => route.fulfill({
     json: { success: true, logs: [], count: 0 },
   }))
@@ -66,14 +69,14 @@ async function mockBackend(page, {
     const request = route.request().postDataJSON()
     numericRequests.push(request)
     if (!evaluationEnabled) {
-      return route.fulfill({
+      return route.fulfill(canonicalErrorResponse({
+        code: 'UNSAFE_EVALUATION_DISABLED',
+        message: 'Server-side Julia evaluation is disabled.',
         status: 403,
-        json: {
-          success: false,
-          error: 'Server-side Julia evaluation is disabled.',
-          error_code: 'UNSAFE_EVALUATION_DISABLED',
+        details: {
+          configuration_variable: 'WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION',
         },
-      })
+      }))
     }
     if (numericResponder) {
       const response = await numericResponder(request)

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 const EDGE_PROTOCOL_TYPE = {
   type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
@@ -47,11 +48,9 @@ async function mockConfiguration(page) {
       capabilities: { unsafe_code_evaluation: false },
     },
   }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    contentType: 'application/json',
-    json: { success: false, message: 'Simulation not found' },
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
 }
 
 async function loadApp(page) {

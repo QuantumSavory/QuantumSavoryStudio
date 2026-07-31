@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 async function mockBackend(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -29,11 +30,9 @@ async function mockBackend(page) {
     contentType: 'application/json',
     json: { success: true },
   }))
-  await page.route('**/get_state**', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    json: { success: false, error_code: 'NOT_FOUND' },
-  }))
+  await page.route('**/get_state**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
   await page.route('**/logs/**', route => route.fulfill({
     status: 200,
     contentType: 'application/json',

@@ -17,6 +17,37 @@ end
 
 plain_value(value) = JSON3.read(JSON3.write(value))
 
+struct BackendRequestError <: Exception
+  payload::Dict{String,Any}
+end
+
+Base.showerror(io::IO, error::BackendRequestError) =
+  print(io, JSON3.write(error.payload))
+
+function sidecar_error_payload(
+  code::AbstractString,
+  message::AbstractString;
+  status::Union{Nothing,Integer}=nothing,
+  retryable::Bool=false,
+  details::AbstractDict=Dict{String,Any}(),
+)
+  payload = Dict{String,Any}(
+    "code" => String(code),
+    "message" => String(message),
+    "retryable" => retryable,
+    "details" => plain_dictionary(details),
+  )
+  status === nothing || (payload["status"] = Int(status))
+  return payload
+end
+
+function exact_string_keys(value, expected)
+  value isa AbstractDict || return false
+  actual_keys = String[string(key) for key in keys(value)]
+  return length(actual_keys) == length(expected) &&
+    Set(actual_keys) == Set(expected)
+end
+
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
   configuration = plain_dictionary(JSON3.read(readline(stdin)))
@@ -26,12 +57,61 @@ function startup_configuration()
   configuration
 end
 
-function backend_error_payload(body)
-  envelope = plain_dictionary(get(body, "error", Dict{String,Any}()))
-  details = plain_dictionary(get(envelope, "details", Dict{String,Any}()))
+function malformed_backend_payload(
+  code::AbstractString,
+  message::AbstractString,
+  body;
+  status::Union{Nothing,Integer}=nothing,
+)
+  details = Dict{String,Any}("body" => plain_value(body))
+  return sidecar_error_payload(
+    code,
+    message;
+    status,
+    retryable=status === nothing || status >= 500,
+    details,
+  )
+end
+
+function backend_error_payload(body; status::Integer)
+  if !exact_string_keys(body, ("error",))
+    return malformed_backend_payload(
+      "MALFORMED_ERROR_RESPONSE",
+      "The WebQuantumSavory backend returned a malformed error response.",
+      body;
+      status,
+    )
+  end
+
+  envelope = body["error"]
+  if !exact_string_keys(envelope, ("code", "message", "details")) ||
+    !(envelope["code"] isa AbstractString) ||
+    isempty(envelope["code"]) ||
+    !(envelope["message"] isa AbstractString) ||
+    !(envelope["details"] isa AbstractDict)
+    return malformed_backend_payload(
+      "MALFORMED_ERROR_RESPONSE",
+      "The WebQuantumSavory backend returned a malformed error response.",
+      body;
+      status,
+    )
+  end
+
+  details = plain_dictionary(envelope["details"])
+  retryable = get(details, "retryable", false)
+  if !(retryable isa Bool)
+    return malformed_backend_payload(
+      "MALFORMED_ERROR_RESPONSE",
+      "The WebQuantumSavory backend returned a malformed error response.",
+      body;
+      status,
+    )
+  end
+
   error_payload = Dict{String,Any}(
-    "code" => string(get(envelope, "code", "INTERNAL_ERROR")),
-    "message" => string(get(envelope, "message", "Internal backend error")),
+    "code" => String(envelope["code"]),
+    "message" => String(envelope["message"]),
+    "status" => Int(status),
     "retryable" => pop!(details, "retryable", false),
     "details" => details,
   )
@@ -41,20 +121,64 @@ function backend_error_payload(body)
   return error_payload
 end
 
-function backend_request(configuration, endpoint, payload)
-  response = HTTP.post(
-    "$(configuration["bridge_url"])/$endpoint",
-    ["Content-Type" => "application/json", "Accept" => "application/json"],
-    JSON3.write(Dict("capability" => configuration["capability"], payload...));
-    status_exception=false,
-  )
-  body = isempty(response.body) ?
-    Dict{String,Any}() :
-    plain_dictionary(JSON3.read(String(response.body)))
-  if response.status < 200 || response.status >= 300 || get(body, "success", false) !== true
-    return false, backend_error_payload(body)
+function backend_response(response)
+  body = try
+    isempty(response.body) && throw(ArgumentError("response body is empty"))
+    plain_value(JSON3.read(String(response.body)))
+  catch error
+    return false, sidecar_error_payload(
+      "INVALID_JSON_RESPONSE",
+      "The WebQuantumSavory backend returned invalid JSON.";
+      status=response.status,
+      retryable=response.status >= 500,
+      details=Dict{String,Any}(
+        "exception_type" => string(typeof(error)),
+        "exception_message" => sprint(showerror, error),
+      ),
+    )
+  end
+
+  if response.status < 200 || response.status >= 300
+    return false, backend_error_payload(body; status=response.status)
+  end
+  if !(body isa AbstractDict) || get(body, "success", nothing) !== true
+    return false, malformed_backend_payload(
+      "MALFORMED_SUCCESS_RESPONSE",
+      "The WebQuantumSavory backend returned a malformed success response.",
+      body;
+      status=response.status,
+    )
   end
   return true, get(body, "result", body)
+end
+
+function backend_request(
+  configuration,
+  endpoint,
+  payload;
+  post=HTTP.post,
+)
+  url = "$(configuration["bridge_url"])/$endpoint"
+  response = try
+    post(
+      url,
+      ["Content-Type" => "application/json", "Accept" => "application/json"],
+      JSON3.write(Dict("capability" => configuration["capability"], payload...));
+      status_exception=false,
+    )
+  catch error
+    return false, sidecar_error_payload(
+      "NETWORK_ERROR",
+      "The WebQuantumSavory backend could not be reached.";
+      retryable=true,
+      details=Dict{String,Any}(
+        "exception_type" => string(typeof(error)),
+        "exception_message" => sprint(showerror, error),
+        "url" => url,
+      ),
+    )
+  end
+  return backend_response(response)
 end
 
 function tool_result(configuration, tool_name, arguments)
@@ -65,11 +189,14 @@ function tool_result(configuration, tool_name, arguments)
       Dict("tool" => tool_name, "arguments" => plain_dictionary(arguments)),
     )
   catch error
-    false, Dict{String,Any}(
-      "code" => "INTERNAL_ERROR",
-      "message" => "The WebQuantumSavory backend could not be reached.",
-      "retryable" => true,
-      "details" => Dict("exception_type" => string(typeof(error))),
+    false, sidecar_error_payload(
+      "INTERNAL_ERROR",
+      "The MCP sidecar could not process the backend response.";
+      retryable=false,
+      details=Dict{String,Any}(
+        "exception_type" => string(typeof(error)),
+        "exception_message" => sprint(showerror, error),
+      ),
     )
   end
   structured = result isa AbstractDict ?
@@ -105,7 +232,7 @@ end
 
 function resource_value(configuration, uri)
   ok, result = backend_request(configuration, "resource", Dict("uri" => uri))
-  ok || error(string(result["message"]))
+  ok || throw(BackendRequestError(plain_dictionary(result)))
   return plain_dictionary(result)
 end
 
@@ -180,21 +307,18 @@ function resources(configuration)
 end
 
 function report_ready(configuration)
-  response = HTTP.post(
-    "$(configuration["bridge_url"])/ready",
-    ["Content-Type" => "application/json", "Accept" => "application/json"],
-    JSON3.write(Dict(
-      "capability" => configuration["capability"],
-      "port" => configuration["port"],
-    ));
-    status_exception=false,
+  ok, result = backend_request(
+    configuration,
+    "ready",
+    Dict("port" => configuration["port"]),
   )
-  200 <= response.status < 300 || error("Backend rejected the ready callback")
+  ok || throw(BackendRequestError(plain_dictionary(result)))
+  return nothing
 end
 
 function report_session_waiting(configuration)
   try
-    backend_request(
+    ok, result = backend_request(
       configuration,
       "activity",
       Dict(
@@ -204,7 +328,15 @@ function report_session_waiting(configuration)
         "status" => "pending",
       ),
     )
-  catch
+    ok || @warn "Could not report MCP session waiting activity" code=get(
+      result,
+      "code",
+      nothing,
+    ) status=get(result, "status", nothing)
+  catch error
+    @warn "Could not report MCP session waiting activity" exception_type=string(
+      typeof(error),
+    )
   end
 end
 
@@ -242,7 +374,7 @@ function main()
   @async begin
     if wait_for_session_initialization(transport)
       try
-        backend_request(
+        ok, result = backend_request(
           configuration,
           "activity",
           Dict(
@@ -252,7 +384,15 @@ function main()
             "status" => "success",
           ),
         )
-      catch
+        ok || @warn "Could not report MCP session initialized activity" code=get(
+          result,
+          "code",
+          nothing,
+        ) status=get(result, "status", nothing)
+      catch error
+        @warn "Could not report MCP session initialized activity" exception_type=string(
+          typeof(error),
+        )
       end
     end
   end

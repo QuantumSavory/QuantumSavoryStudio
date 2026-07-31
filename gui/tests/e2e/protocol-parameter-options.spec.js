@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { canonicalErrorResponse } from './httpResponses.js'
 
 const KNOWN_FUNCTIONS = [
   'minimum',
@@ -128,11 +129,12 @@ async function mockConfiguration(page) {
   }))
   await page.route('**/tag_types', route => {
     tagCatalogState.requests += 1
-    return route.fulfill(tagCatalogState.fail ? {
+    return route.fulfill(tagCatalogState.fail ? canonicalErrorResponse({
+      code: 'SERVER_ERROR',
+      message: 'Named tag catalog unavailable',
       status: 503,
-      contentType: 'application/json',
-      json: { error: 'Named tag catalog unavailable' },
-    } : {
+      details: { catalog: 'tag_types' },
+    }) : {
       status: 200,
       contentType: 'application/json',
       json: TAG_CATALOG,

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from '@playwright/test'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 const EMBEDDED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlWlY4AAAAASUVORK5CYII='
 const MARKDOWN_DESCRIPTION = `# Bell network
@@ -50,11 +51,9 @@ async function mockBackend(page) {
     contentType: 'application/json',
     json: { success: true },
   }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    contentType: 'application/json',
-    json: { success: false, message: 'Simulation not found' },
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
 }
 
 async function loadApp(page) {

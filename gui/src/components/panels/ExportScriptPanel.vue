@@ -121,15 +121,6 @@ function sanitizeFilename(candidate) {
   return `${basename || 'quantum-savory-simulation'}.jl`
 }
 
-function responseErrorMessage(response) {
-  if (typeof response?.error === 'string' && response.error) return response.error
-  if (typeof response?.error?.message === 'string' && response.error.message) {
-    return response.error.message
-  }
-  if (typeof response?.message === 'string' && response.message) return response.message
-  return 'The server returned an invalid export response.'
-}
-
 async function generateScript() {
   const generation = ++requestGeneration
   requestController?.abort()
@@ -146,7 +137,7 @@ async function generateScript() {
       || typeof response.script !== 'string'
       || response.script.trim().length === 0
     ) {
-      throw new Error(responseErrorMessage(response))
+      throw new Error('The server returned an invalid export response.')
     }
 
     script.value = response.script

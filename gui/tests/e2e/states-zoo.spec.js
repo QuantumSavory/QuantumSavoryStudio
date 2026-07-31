@@ -1,4 +1,8 @@
 import { test, expect } from '@playwright/test'
+import {
+  canonicalErrorResponse,
+  simulationNotFoundResponse,
+} from './httpResponses.js'
 
 const TRANSPARENT_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+XlW5WQAAAABJRU5ErkJggg=='
 const RED_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZrJ0AAAAASUVORK5CYII='
@@ -117,11 +121,9 @@ async function mockConfiguration(page, { previewHandler } = {}) {
       capabilities: { unsafe_code_evaluation: false },
     },
   }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    contentType: 'application/json',
-    json: { success: false, message: 'Simulation not found' },
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
 }
 
 async function loadApp(page) {
@@ -698,14 +700,12 @@ test.describe('States Zoo variables', () => {
           return undefined
         }
         if (previewBehavior === 'error') {
-          return route.fulfill({
+          return route.fulfill(canonicalErrorResponse({
+            code: 'VALIDATION_ERROR',
+            message: 'Preview failed for this value',
             status: 422,
-            contentType: 'application/json',
-            json: {
-              success: false,
-              error: { type: 'validation_error', message: 'Preview failed for this value' },
-            },
-          })
+            details: { state_type: payload.state_type },
+          }))
         }
         return route.fulfill({
           status: 200,

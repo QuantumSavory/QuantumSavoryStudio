@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 async function mockBackend(page, parseRequests, { platformHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
@@ -15,10 +16,9 @@ async function mockBackend(page, parseRequests, { platformHandler } = {}) {
     })
   })
   await page.route('**/destroy_simulation', route => route.fulfill({ json: { success: true } }))
-  await page.route('**/get_state?**', route => route.fulfill({
-    status: 404,
-    json: { success: false, error_code: 'NOT_FOUND', message: 'Simulation not found' }
-  }))
+  await page.route('**/get_state?**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
   await page.route('**/logs/**', route => route.fulfill({ json: { success: true, logs: [] } }))
   await page.route('**/parse_network_graph', async route => {
     parseRequests.push(route.request().postDataJSON())

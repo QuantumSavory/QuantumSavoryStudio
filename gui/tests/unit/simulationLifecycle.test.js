@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SimulationPhase,
   createSimulationState,
-  isNotFoundResponse,
+  isNotFoundError,
   phaseFromBackendState,
   reduceSimulationState,
   simulationCapabilities
@@ -88,11 +88,11 @@ describe('simulation lifecycle reducer', () => {
     expect(state.foregroundRequest).toBeNull()
   })
 
-  it('recognizes all supported not-found response shapes', () => {
-    expect(isNotFoundResponse({ error_code: 'NOT_FOUND' })).toBe(true)
-    expect(isNotFoundResponse({ status_code: 404 })).toBe(true)
-    expect(isNotFoundResponse({ detail: 'Simulation not found' })).toBe(true)
-    expect(isNotFoundResponse({ message: 'network unavailable' })).toBe(false)
+  it('recognizes only the canonical not-found classification', () => {
+    expect(isNotFoundError({ code: 'NOT_FOUND', status: 404 })).toBe(true)
+    expect(isNotFoundError({ status: 404 })).toBe(false)
+    expect(isNotFoundError({ error_code: 'NOT_FOUND' })).toBe(false)
+    expect(isNotFoundError({ message: 'Simulation not found' })).toBe(false)
   })
 
   it('derives runner capabilities only from phase and topology', () => {

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { simulationNotFoundResponse } from './httpResponses.js'
 
 const TAG_ALPHA = 'Example.Alpha.ReadyTag'
 const TAG_BETA = 'Example.Beta.ReadyTag'
@@ -112,11 +113,9 @@ async function mockBackendMetadata(page, {
     contentType: 'application/json',
     json: { success: true },
   }))
-  await page.route('**/get_state**', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    json: { success: false, error_code: 'NOT_FOUND' },
-  }))
+  await page.route('**/get_state**', route => route.fulfill(
+    simulationNotFoundResponse(),
+  ))
   await page.route('**/logs/**', route => route.fulfill({
     status: 200,
     contentType: 'application/json',

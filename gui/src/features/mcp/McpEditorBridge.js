@@ -17,8 +17,12 @@ function bridgeError(error, fallbackCode = 'INTERNAL_ERROR') {
   return {
     code: error?.code || fallbackCode,
     message: error?.message || 'The editor could not process the command.',
+    status: error?.status ?? 400,
     retryable: error?.retryable === true || error?.details?.retryable === true,
     details: error?.details || {},
+    method: error?.method,
+    url: error?.url,
+    cause: typeof error?.toJSON === 'function' ? error.toJSON().cause : undefined,
   }
 }
 

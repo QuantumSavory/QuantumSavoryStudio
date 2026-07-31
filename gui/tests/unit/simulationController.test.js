@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, ref } from 'vue'
 import { useSimulationController } from '../../src/composables/useSimulationController'
+import { ApiClientError } from '../../src/utils/httpClient.js'
 
 function deferred() {
   let resolve
@@ -473,6 +474,106 @@ describe('simulation controller polling ownership', () => {
 
     controller.resetSimulation()
     expect(controller.capabilities.value.canExploreTags).toBe(false)
+    stop()
+  })
+
+  it('preserves canonical status failures in the Tools Log', async () => {
+    const failure = new ApiClientError('The simulator failed.', {
+      code: 'SERVER_ERROR',
+      status: 500,
+      details: {
+        route: 'getSimulationState',
+        diagnostic_canary: 'status-canary',
+      },
+      method: 'GET',
+      url: 'http://api.test/get_state?name=A',
+      cause: new TypeError('connection reset'),
+    })
+    const api = {
+      getSimulationStatus: vi.fn(async () => { throw failure }),
+    }
+    const { controller, addLog, stop } = createController(api)
+
+    expect(await controller.getSimulationStatus()).toBeNull()
+
+    expect(addLog).toHaveBeenCalledWith(
+      'error',
+      'Failed to get simulation status',
+      'Web API',
+      expect.objectContaining({
+        code: 'SERVER_ERROR',
+        message: 'The simulator failed.',
+        status: 500,
+        details: {
+          route: 'getSimulationState',
+          diagnostic_canary: 'status-canary',
+        },
+        method: 'GET',
+        url: 'http://api.test/get_state?name=A',
+        cause: {
+          name: 'TypeError',
+          message: 'connection reset',
+        },
+      }),
+    )
+    stop()
+  })
+
+  it('handles only canonical NOT_FOUND errors as an empty lifecycle', async () => {
+    const failure = new ApiClientError('Simulation not found', {
+      code: 'NOT_FOUND',
+      status: 404,
+      details: { identifier: 'A' },
+      method: 'GET',
+      url: 'http://api.test/get_state?name=A',
+    })
+    const api = {
+      getSimulationStatus: vi.fn(async () => { throw failure }),
+    }
+    const { controller, addLog, stop } = createController(api)
+    controller.state.value = {
+      ...controller.state.value,
+      phase: 'prepared',
+      isParsed: true,
+      isPrepared: true,
+    }
+
+    expect(await controller.getSimulationStatus()).toBeNull()
+
+    expect(controller.phase.value).toBe('empty')
+    expect(addLog.mock.calls.some(([level]) => level === 'error')).toBe(false)
+    stop()
+  })
+
+  it('reports a repeated log-poll failure once and retries after recovery', async () => {
+    const failure = new ApiClientError('Logs unavailable', {
+      code: 'NETWORK_ERROR',
+      details: { diagnostic_canary: 'log-canary' },
+      method: 'GET',
+      url: 'http://api.test/logs/A',
+    })
+    const api = {
+      getBackendLogs: vi.fn()
+        .mockRejectedValueOnce(failure)
+        .mockRejectedValueOnce(failure)
+        .mockResolvedValueOnce({ success: true, logs: [] })
+        .mockRejectedValueOnce(failure),
+    }
+    const { controller, addLog, stop } = createController(api)
+
+    await controller.fetchBackendLogs()
+    await controller.fetchBackendLogs()
+    await controller.fetchBackendLogs()
+    await controller.fetchBackendLogs()
+
+    const failures = addLog.mock.calls.filter(([, message]) => (
+      message === 'Failed to fetch backend logs'
+    ))
+    expect(failures).toHaveLength(2)
+    expect(failures[0][3]).toMatchObject({
+      code: 'NETWORK_ERROR',
+      details: { diagnostic_canary: 'log-canary' },
+    })
     stop()
   })
 })

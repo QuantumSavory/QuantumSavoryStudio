@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { canonicalErrorResponse } from './httpResponses.js'
 
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
@@ -176,14 +177,12 @@ test.describe('Export Script panel', () => {
     await page.route('**/export_script', route => {
       requestCount += 1
       if (requestCount === 1) {
-        return route.fulfill({
+        return route.fulfill(canonicalErrorResponse({
+          code: 'VALIDATION_ERROR',
+          message: 'Unsupported protocol at node 2.',
           status: 422,
-          contentType: 'application/json',
-          json: {
-            success: false,
-            error: { message: 'Unsupported protocol at node 2.' },
-          },
-        })
+          details: { node_id: '2' },
+        }))
       }
 
       return route.fulfill({

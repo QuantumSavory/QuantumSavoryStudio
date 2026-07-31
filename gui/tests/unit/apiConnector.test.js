@@ -43,7 +43,7 @@ describe('ApiConnector project namespaces', () => {
     )
   })
 
-  it('keeps established slot defaults when an older metadata response omits them', async () => {
+  it('rejects slot metadata that omits the canonical catalog', async () => {
     globalThis.fetch = vi.fn(async url => {
       const pathname = new URL(url).pathname
       const bodies = {
@@ -60,9 +60,8 @@ describe('ApiConnector project namespaces', () => {
     })
     const connector = new ApiConnector('http://api.test')
 
-    await connector.init()
-
-    expect(connector.config.value.slotTypes).toEqual(['Qubit', 'Qumode'])
+    await expect(connector.init()).rejects.toThrow('Slot types response is invalid')
+    expect(connector.config.value.slotTypes).toBeUndefined()
   })
 
   it('rejects lifecycle failures instead of fabricating success-shaped fallbacks', async () => {

@@ -23,21 +23,8 @@ export function createSimulationState() {
   }
 }
 
-export function isNotFoundResponse(response) {
-  if (!response) return false
-  const code = response.code ?? response.error?.code ?? response.error_code
-  const status = response.status ?? response.status_code
-  const message = String(
-    response.message
-    ?? response.error?.message
-    ?? response.detail
-    ?? response.error
-    ?? '',
-  ).toLowerCase()
-  return code === 'NOT_FOUND'
-    || status === 404
-    || message.includes('not found')
-    || message.includes('404')
+export function isNotFoundError(error) {
+  return error?.code === 'NOT_FOUND'
 }
 
 export function phaseFromBackendState(backendState, fallback = SimulationPhase.PREPARED) {
