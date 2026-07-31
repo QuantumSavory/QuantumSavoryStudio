@@ -485,7 +485,12 @@ describe('project session', () => {
   ) => {
     const document = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
     document.schemaVersion = PROJECT_SCHEMA_VERSION - 1
-    const harness = createHarness({ projects: stored ? { B: document } : {} })
+    const fetchPlatformInfo = vi.fn()
+    const harness = createHarness({
+      projects: stored ? { B: document } : {},
+      getPlatformInfo: vi.fn(() => null),
+      fetchPlatformInfo
+    })
     const activeProject = harness.projectData.value
     const activeName = harness.currentProjectName.value
     const activeSelection = harness.selectedItem.value
@@ -499,6 +504,7 @@ describe('project session', () => {
     expect(harness.store.openProject).not.toHaveBeenCalled()
     expect(harness.store.setRecentProjectName).not.toHaveBeenCalled()
     expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+    expect(fetchPlatformInfo).not.toHaveBeenCalled()
     expect(harness.calls.reset).not.toHaveBeenCalled()
     expect(harness.calls.closeWindows).not.toHaveBeenCalled()
     expect(harness.showError).toHaveBeenCalledWith(
