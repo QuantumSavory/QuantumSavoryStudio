@@ -131,6 +131,6 @@ acceptance, except ACC-012 is blocked as recorded below.
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
 - **Nonconformance:** As of 2026-07-31, declared QuantumSavory SHA
-  `b00a894e4584f3821df88b34fb096289bc7dd2a4` returns `upload-pack: not our ref`,
-  blocking preparation. After replacing or publishing it, save/reopen coverage and a
-  maintainer acceptance record remain required.
+  `9339c8336e2194df0de459aa1c4e0a5daaa6bac3` is a local coordinator commit absent
+  from the declared upstream refs, blocking preparation. After replacing or publishing
+  it, save/reopen coverage and a maintainer acceptance record remain required.
