@@ -447,7 +447,7 @@
     fetch(waiting_reset)
     @test hub.prepared_revision === nothing
 
-    for reported_revision in (nothing, 1)
+    for reported_revision in (nothing, false, 1)
       mismatch_hub = WebQuantumSavory.CollaborationHub()
       mismatch_binding = WebQuantumSavory.bind_editor!(
         mismatch_hub,
@@ -649,6 +649,28 @@
     @test mismatch.error_code == "REVISION_CONFLICT"
     @test mismatch.details["current_revision"] == 1
     @test mismatch.details["prepared_revision"] == 0
+    @test WebQuantumSavory.design_mirror(hub)["hash"] == "revision-one-hash"
+
+    boolean_revision = try
+      WebQuantumSavory.commit_gui_snapshot!(
+        hub,
+        Dict(
+          owner...,
+          "origin" => "gui",
+          "base_revision" => 1,
+          "document_changed" => false,
+          "result" => Dict(
+            "kind" => "simulation_prepared",
+            "prepared_revision" => true,
+          ),
+        ),
+      )
+      nothing
+    catch error
+      error
+    end
+    @test boolean_revision isa WebQuantumSavory.APIError
+    @test boolean_revision.error_code == "VALIDATION_FAILED"
     @test WebQuantumSavory.design_mirror(hub)["hash"] == "revision-one-hash"
   end
 

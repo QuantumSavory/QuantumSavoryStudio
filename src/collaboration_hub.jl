@@ -831,6 +831,7 @@ function commit_browser_command!(
         if action in ("prepare", "run")
           prepared_revision = get(result, "prepared_revision", nothing)
           valid_revision = prepared_revision isa Integer &&
+            !(prepared_revision isa Bool) &&
             Int(prepared_revision) == hub.revision
           if changed || !valid_revision
             _desynchronize_binding_locked!(
@@ -941,7 +942,7 @@ function commit_gui_snapshot!(
         ),
       )
       prepared_revision = get(result, "prepared_revision", nothing)
-      prepared_revision isa Integer || throw(
+      prepared_revision isa Integer && !(prepared_revision isa Bool) || throw(
         _mcp_error(
           "VALIDATION_FAILED",
           "A simulation lifecycle report requires an integer prepared revision.",
