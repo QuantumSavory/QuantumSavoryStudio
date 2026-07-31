@@ -157,24 +157,17 @@ test.describe('Project description', () => {
     await expect.poll(() => pastedImage.evaluate(image => image.complete && image.naturalWidth === 1)).toBe(true)
   })
 
-  test('persists only in full saved and exported JSON, while legacy and import paths are normalized', async ({ page }) => {
+  test('persists only in full saved and exported JSON', async ({ page }) => {
     const defaults = await page.evaluate(() => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       const initialDescription = setup.projectData.description
       setup.createNewProject('Description Persistence Test')
       const newDescription = setup.projectData.description
-      const legacy = setup.deserializeProjectData({
-        name: 'Legacy Project',
-        variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-      })
-      return { initialDescription, newDescription, legacyDescription: legacy.description }
+      return { initialDescription, newDescription }
     })
     expect(defaults).toEqual({
       initialDescription: '',
       newDescription: '',
-      legacyDescription: '',
     })
 
     await page.getByRole('tab', { name: 'Description' }).click()

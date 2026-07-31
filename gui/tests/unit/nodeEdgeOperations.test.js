@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import { useNodeEdgeOperations } from '../../src/composables/useNodeEdgeOperations'
-import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../src/utils/projectCodec'
+import {
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  createEmptyProject,
+} from '../../src/utils/projectCodec'
 import Edge from '../../src/models/Edge'
 import Node from '../../src/models/Node'
 import {
@@ -38,7 +42,10 @@ describe('node and edge operation map state', () => {
     const nodeA = new Node({ id: 'a', name: 'A', position: [-72, 42] })
     const nodeB = new Node({ id: 'b', name: 'B', position: [-71, 42] })
     const physical = new Edge({ id: 'physical', source: nodeA, target: nodeB })
-    const projectData = ref({ net: { nodes: [nodeA, nodeB], edges: [physical] } })
+    const project = createEmptyProject('Edge operations')
+    project.net.nodes = [nodeA, nodeB]
+    project.net.edges = [physical]
+    const projectData = ref(project)
     const alert = vi.fn()
     const operations = useNodeEdgeOperations(projectData, ref(false), vi.fn(), {
       showAlert: alert,

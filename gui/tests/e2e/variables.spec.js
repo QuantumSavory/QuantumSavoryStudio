@@ -362,24 +362,6 @@ test.describe('Global protocol variables', () => {
     )
   })
 
-  test('defaults legacy project data without variables to an empty list', async ({ page }) => {
-    const variables = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      if (typeof setupState?.deserializeProjectData !== 'function') {
-        throw new Error('Project deserializer is unavailable')
-      }
-
-      const project = setupState.deserializeProjectData({
-        name: 'Legacy Project',
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-      })
-      return JSON.parse(JSON.stringify(project.variables))
-    })
-
-    expect(variables).toEqual([])
-  })
-
   test('offers the same supported value forms as protocol parameters', async ({ page }) => {
     await page.getByRole('tab', { name: 'Variables' }).click()
     const variablesPanel = page.getByTestId('variables-panel')

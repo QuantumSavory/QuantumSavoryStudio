@@ -182,7 +182,7 @@ describe('RunnerPanel representation controls', () => {
     )
   })
 
-  it('defaults legacy projects and locks representation changes after parsing', async () => {
+  it('defaults incomplete live configuration and locks changes after parsing', async () => {
     const wrapper = mountRunner({
       projectData: { simulationConfig: { time: 1 } },
       phase: 'parsed',

@@ -143,7 +143,7 @@ describe('collaborative design codec', () => {
   })
 
   it('rejects incomplete background parameter records before hydration', () => {
-    const project = createEmptyProject('Legacy background')
+    const project = createEmptyProject('Incomplete background')
     project.net.nodes.push({
       id: 'node_a',
       name: 'A',
@@ -155,7 +155,7 @@ describe('collaborative design codec', () => {
           id: 'slot_a',
           type: 'Qubit',
           backgroundNoise: {
-            type: 'LegacyNoise',
+            type: 'IncompleteNoise',
             parameters: [{
               field: 'rate',
               type: 'Float64',
@@ -211,7 +211,7 @@ describe('States Zoo trace variable ownership', () => {
   })
 })
 
-function legacyProject() {
+function storedProject() {
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name: 'Embedded Name',
@@ -329,7 +329,7 @@ function fullPhysicalOverrides(overrides = {}) {
 }
 
 function discriminatingStoredProject() {
-  const project = legacyProject()
+  const project = storedProject()
   project.net.nodes[0].data.slots[0].backgroundNoise.parameters.push({
     field: 'rate',
     type: 'Float64',
@@ -442,7 +442,7 @@ describe('project schema v2 admission', () => {
     ['null', null],
     ['missing', undefined],
   ])('rejects a %s schema marker with stable diagnostics', (_label, version) => {
-    const raw = legacyProject()
+    const raw = storedProject()
     if (version === undefined) delete raw.schemaVersion
     else raw.schemaVersion = version
     const original = structuredClone(raw)
@@ -580,7 +580,7 @@ describe('project schema v2 admission', () => {
 
 describe('decodeStoredProject', () => {
   it('hydrates current storage into independent model identities and honors the storage name', () => {
-    const raw = legacyProject()
+    const raw = storedProject()
     const original = structuredClone(raw)
     const decoded = decodeStoredProject(raw, {
       storageName: 'Storage Name',
@@ -653,7 +653,7 @@ describe('decodeStoredProject', () => {
   })
 
   it('adds fresh runtime slot state only after schema admission', () => {
-    const raw = legacyProject()
+    const raw = storedProject()
     const original = structuredClone(raw)
 
     const { project } = decodeStoredProject(raw)
@@ -665,27 +665,27 @@ describe('decodeStoredProject', () => {
   })
 
   it('rejects duplicate node IDs and dangling edge references', () => {
-    const project = legacyProject()
+    const project = storedProject()
     project.net.nodes[1].id = project.net.nodes[0].id
     expect(() => decodeStoredProject(project)).toThrow(/duplicate node ID/)
 
-    const dangling = legacyProject()
+    const dangling = storedProject()
     dangling.net.edges[0].target = 'missing_node'
     expect(() => decodeStoredProject(dangling)).toThrow(/references a missing node/)
   })
 
   it('rejects malformed and duplicate persisted annotations', () => {
-    const malformed = legacyProject()
+    const malformed = storedProject()
     malformed.annotations[0].backgroundColor = 'white'
     expect(() => decodeStoredProject(malformed)).toThrow(/backgroundColor/)
 
-    const duplicate = legacyProject()
+    const duplicate = storedProject()
     duplicate.annotations.push(structuredClone(duplicate.annotations[0]))
     expect(() => decodeStoredProject(duplicate)).toThrow(/duplicate annotation ID/)
   })
 
   it('normalizes physical routes and overrides while rejecting ambiguous or invalid data', () => {
-    const raw = legacyProject()
+    const raw = storedProject()
     raw.net.physicalConfig.refractiveIndex = 1.5
     raw.net.edges[0].data.curvePoints = [{
       id: 'curve_1',
@@ -716,7 +716,7 @@ describe('decodeStoredProject', () => {
       nodeTemplate: { slots: [] },
     })
 
-    const duplicate = legacyProject()
+    const duplicate = storedProject()
     duplicate.net.edges.push({
       ...structuredClone(duplicate.net.edges[0]),
       id: 'duplicate',
@@ -731,7 +731,7 @@ describe('decodeStoredProject', () => {
     }
     expect(() => decodeStoredProject(duplicate)).not.toThrow()
 
-    const invalid = legacyProject()
+    const invalid = storedProject()
     invalid.net.edges[0].data.curvePoints = [{
       id: 'bad', position: [-72, 43], type: 'rounded',
     }]
@@ -744,15 +744,15 @@ describe('decodeStoredProject', () => {
     invalid.net.edges[0].data.physicalOverrides = fullPhysicalOverrides({ transmissivity: 1.1 })
     expect(() => decodeStoredProject(invalid)).toThrow(/transmissivity/)
 
-    const invalidGlobalLoss = legacyProject()
+    const invalidGlobalLoss = storedProject()
     invalidGlobalLoss.net.physicalConfig.lossDbPerKm = -0.1
     expect(() => decodeStoredProject(invalidGlobalLoss)).toThrow(/lossDbPerKm/)
 
-    const polarNode = legacyProject()
+    const polarNode = storedProject()
     polarNode.net.nodes[0].position = [0, 89]
     expect(() => decodeStoredProject(polarNode)).toThrow(/position/)
 
-    const polarCurve = legacyProject()
+    const polarCurve = storedProject()
     polarCurve.net.edges[0].data.curvePoints = [{
       id: 'polar', position: [0, 89], type: 'smooth',
     }]
@@ -762,9 +762,8 @@ describe('decodeStoredProject', () => {
 
 describe('encodeStoredProject', () => {
   it('writes the closed v2 storage shape without mutating the live model graph', () => {
-    const decoded = decodeStoredProject(legacyProject(), {
+    const decoded = decodeStoredProject(storedProject(), {
       storageName: 'Storage Name',
-      defaultBackgroundNoise: DEFAULT_NOISE,
     })
     const liveSlot = decoded.project.net.nodes[0].data.slots[0]
     liveSlot.isLocked = true
@@ -829,9 +828,8 @@ describe('encodeStoredProject', () => {
   })
 
   it('round-trips identities, references, description, tagged data, and map state', () => {
-    const first = decodeStoredProject(legacyProject(), {
+    const first = decodeStoredProject(storedProject(), {
       storageName: 'Round Trip',
-      defaultBackgroundNoise: DEFAULT_NOISE,
     })
     const stored = encodeStoredProject(first.project, {
       name: first.project.name,
@@ -841,7 +839,6 @@ describe('encodeStoredProject', () => {
     })
     const second = decodeStoredProject(stored, {
       storageName: 'Round Trip',
-      defaultBackgroundNoise: DEFAULT_NOISE,
     })
 
     expect(second.schemaVersion).toBe(PROJECT_SCHEMA_VERSION)
@@ -860,14 +857,14 @@ describe('backend payload codecs', () => {
     const project = createEmptyProject('Default Variables')
     project.variables = [
       {
-        id: 'legacy-empty',
-        name: 'legacy_empty',
+        id: 'default-empty',
+        name: 'default_empty',
         type: 'Float64',
         value: null,
       },
       {
-        id: 'legacy-sentinel',
-        name: 'legacy_sentinel',
+        id: 'default-sentinel',
+        name: 'default_sentinel',
         type: 'default',
         selectedType: 'default',
         value: 'default',
@@ -915,7 +912,7 @@ describe('backend payload codecs', () => {
           selectedType: 'expression:Float64',
           value: { kind: 'numeric_expression', source: '1 // 4' },
         },
-        { name: 'legacy_string', type: 'Float64', value: '0.5' },
+        { name: 'direct_string', type: 'Float64', value: '0.5' },
         { name: 'metadata_default', type: 'Int64', value: null },
       ],
     }))
@@ -951,14 +948,14 @@ describe('backend payload codecs', () => {
         type: 'Float64',
         value: { kind: 'numeric_expression', source: '1 // 4' },
       },
-      { name: 'legacy_string', type: 'Float64', value: '0.5' },
+      { name: 'direct_string', type: 'Float64', value: '0.5' },
     ])
   })
 
   it('normalizes the protocol default sentinel to keyword omission', () => {
     const project = createEmptyProject('Protocol default')
     project.net.protocols.push(new FloatingProtocol({
-      id: 'legacy-default',
+      id: 'protocol-default',
       type: 'Example.Protocol',
       parameters: [{
         name: 'tag_or_function',
@@ -1035,9 +1032,8 @@ describe('backend payload codecs', () => {
   })
 
   it('removes UI/storage state and normalizes slots and placed protocols without mutation', () => {
-    const { project } = decodeStoredProject(legacyProject(), {
+    const { project } = decodeStoredProject(storedProject(), {
       storageName: 'Payload Project',
-      defaultBackgroundNoise: DEFAULT_NOISE,
     })
     project.schemaVersion = 99
     project.uiGlobal = { map: { position: [0, 0], zoom: 1 } }
@@ -1248,9 +1244,7 @@ describe('backend payload codecs', () => {
 
 describe('summarizeProject', () => {
   it('calculates topology and protocol metadata without persistence access', () => {
-    const { project } = decodeStoredProject(legacyProject(), {
-      defaultBackgroundNoise: DEFAULT_NOISE,
-    })
+    const { project } = decodeStoredProject(storedProject())
 
     expect(summarizeProject(project)).toEqual({
       nodeCount: 2,

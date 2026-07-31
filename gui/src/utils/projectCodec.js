@@ -59,12 +59,6 @@ export const TRANSIENT_SLOT_FIELDS = Object.freeze([
   'ui_expanded',
   'renderedResult',
 ])
-const STORAGE_ONLY_PROJECT_FIELDS = new Set([
-  'schemaVersion',
-  'platformInfo',
-  'uiGlobal',
-])
-const TRANSIENT_SLOT_FIELD_SET = new Set(TRANSIENT_SLOT_FIELDS)
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -207,7 +201,7 @@ function finiteNumber(value, fallback) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
-function normalizeNodeTemplate(value, context) {
+function normalizeNodeTemplate(value) {
   if (value == null) return { slots: [] }
   if (!isRecord(value)) throw new Error('Project nodeTemplate must be an object')
   if (value.slots != null && !Array.isArray(value.slots)) {
@@ -232,13 +226,13 @@ function normalizeNodeTemplate(value, context) {
     return {
       id: slot.id,
       type: slot.type,
-      backgroundNoise: plainBackgroundNoise(slot.backgroundNoise, context),
+      backgroundNoise: plainBackgroundNoise(slot.backgroundNoise),
     }
   })
   return { slots }
 }
 
-function normalizePhysicalConfig(value, context = {}) {
+function normalizePhysicalConfig(value) {
   if (value != null && !isRecord(value)) {
     throw new Error('Project physicalConfig must be an object')
   }
@@ -258,7 +252,7 @@ function normalizePhysicalConfig(value, context = {}) {
   )
   return {
     ...normalizedValues,
-    nodeTemplate: normalizeNodeTemplate(source.nodeTemplate, context),
+    nodeTemplate: normalizeNodeTemplate(source.nodeTemplate),
   }
 }
 
@@ -317,101 +311,55 @@ export function normalizeProjectName(value, fallback = DEFAULT_PROJECT_NAME) {
   return normalized || fallback
 }
 
-function validateTopology(source, context) {
-  const nodes = Array.isArray(source.net?.nodes) ? source.net.nodes : []
+function validateTopology(source) {
+  const nodes = source.net.nodes
   const nodeIds = new Set()
   const physicalEndpointPairs = new Set()
 
-  normalizePhysicalConfig(source.net?.physicalConfig, context)
+  normalizePhysicalConfig(source.net.physicalConfig)
 
   for (const node of nodes) {
-    const id = node?.id
-    if (typeof id !== 'string' || !id) throw new Error('Project contains a node without an ID')
+    const id = node.id
     if (nodeIds.has(id)) throw new Error(`Project contains duplicate node ID: ${id}`)
-    if (!Array.isArray(node.position) || node.position.length !== 2 || !node.position.every(Number.isFinite)) {
-      throw new Error(`Project node ${id} has an invalid position`)
-    }
     nodeIds.add(id)
   }
 
-  for (const edge of Array.isArray(source.net?.edges) ? source.net.edges : []) {
-    if (edge?.isLogic != null && typeof edge.isLogic !== 'boolean') {
-      throw new Error(`Project edge ${edge?.id || '(unknown)'} isLogic must be a boolean`)
-    }
-    const sourceId = isRecord(edge?.source) ? edge.source.id : edge?.source
-    const targetId = isRecord(edge?.target) ? edge.target.id : edge?.target
+  for (const edge of source.net.edges) {
+    const sourceId = edge.source
+    const targetId = edge.target
     if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) {
-      throw new Error(`Project edge ${edge?.id || '(unknown)'} references a missing node`)
+      throw new Error(`Project edge ${edge.id} references a missing node`)
     }
-    if (edge?.isLogic !== true) {
+    if (!edge.isLogic) {
       const endpointPair = [sourceId, targetId].sort().join('\u0000')
       if (physicalEndpointPairs.has(endpointPair)) {
         throw new Error(`Project contains duplicate physical edge endpoints: ${sourceId}, ${targetId}`)
       }
       physicalEndpointPairs.add(endpointPair)
-      normalizeCurvePoints(edge?.data?.curvePoints, edge?.id || '(unknown)')
-      normalizePhysicalOverrides(edge?.data?.physicalOverrides, edge?.id || '(unknown)')
+      normalizeCurvePoints(edge.data.curvePoints, edge.id)
+      normalizePhysicalOverrides(edge.data.physicalOverrides, edge.id)
     }
   }
 }
 
-function defaultBackgroundNoise(context) {
-  const configuredDefault = typeof context.defaultBackgroundNoise === 'function'
-    ? context.defaultBackgroundNoise()
-    : context.defaultBackgroundNoise
-
-  if (isRecord(configuredDefault)) {
-    return cloneValue(configuredDefault)
-  }
-  return { type: 'default', parameters: [] }
-}
-
-function normalizeBackgroundNoise(value, context) {
-  if (value == null || value === '' || value === 'default') {
-    return defaultBackgroundNoise(context)
-  }
-  if (typeof value === 'string') {
-    return { type: value, parameters: [] }
-  }
+function normalizeBackgroundNoise(value) {
   if (!isRecord(value)) {
-    return defaultBackgroundNoise(context)
+    throw new Error('Background noise must be an object')
   }
-  const type = typeof value.type === 'string' && value.type ? value.type : 'default'
+  if (typeof value.type !== 'string' || !value.type) {
+    throw new Error('Background noise requires a type')
+  }
+  if (!Array.isArray(value.parameters)) {
+    throw new Error(`Background ${value.type} parameters must be an array`)
+  }
   return {
-    ...cloneValue(value),
-    type,
-    parameters: Array.isArray(value.parameters)
-      ? value.parameters.map((parameter, index) => {
-          const source = isRecord(parameter) ? cloneValue(parameter) : {}
-          if (
-            (typeof source.field !== 'string' || !source.field)
-            && typeof source.name === 'string'
-            && source.name
-          ) {
-            source.field = source.name
-          }
-          // Schema-v1 background records may contain only `field`/`value`.
-          // Without a saved descriptor there is no sound editor branch to
-          // infer here; the live catalog supplies it when the constructor is
-          // next opened. Keep the literal losslessly in the meantime.
-          if (
-            !Object.hasOwn(source, 'type')
-            && !Object.hasOwn(source, 'selectedType')
-          ) {
-            return {
-              ...source,
-              value: normalizeNumericExpressionValue(
-                source.value,
-                `Background ${type} parameter ${index + 1}`,
-              ),
-            }
-          }
-          return normalizeConstructorParameter(
-            source,
-            `Background ${type} parameter ${index + 1}`,
-          )
-        })
-      : [],
+    type: value.type,
+    parameters: value.parameters.map((parameter, index) => (
+      normalizeConstructorParameter(
+        parameter,
+        `Background ${value.type} parameter ${index + 1}`,
+      )
+    )),
   }
 }
 
@@ -431,14 +379,14 @@ function normalizeNumericExpressionValue(value, context) {
 }
 
 /**
- * Normalize legacy scalar parameters into the explicit descriptor convention.
+ * Canonicalize a live constructor parameter into the durable descriptor form.
  *
  * The runtime metadata snapshot remains untouched. `selectedType` identifies
  * only the durable editor branch; minimized payloads translate it separately.
  */
 function normalizeConstructorParameter(rawParameter, context = 'Constructor parameter') {
-  const source = isRecord(rawParameter) ? rawParameter : {}
-  const parameter = cloneValue(source)
+  if (!isRecord(rawParameter)) throw new Error(`${context} must be an object`)
+  const parameter = cloneValue(rawParameter)
   const value = normalizeNumericExpressionValue(parameter.value, context)
 
   if (value == null || value === '' || value === 'default') {
@@ -516,12 +464,13 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
 }
 
 function normalizeVariableRecord(rawVariable, context = 'Variable') {
-  const source = isRecord(rawVariable) ? rawVariable : {}
-  const variable = cloneValue(source)
+  if (!isRecord(rawVariable)) throw new Error(`${context} must be an object`)
+  const variable = cloneValue(rawVariable)
   const value = normalizeNumericExpressionValue(variable.value, context)
-  const type = typeof variable.type === 'string' && variable.type
-    ? variable.type
-    : 'Float64'
+  if (typeof variable.type !== 'string' || !variable.type) {
+    throw new Error(`${context} requires a type`)
+  }
+  const type = variable.type
 
   if (
     value === 'default'
@@ -595,78 +544,52 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
 }
 
 function hydrateProtocol(rawProtocol) {
-  const source = isRecord(rawProtocol) ? rawProtocol : {}
-  const protocol = new FloatingProtocol({
-    id: source.id,
-    type: source.type,
-    parameters: Array.isArray(source.parameters)
-      ? source.parameters.map((parameter, index) => normalizeConstructorParameter(
-          parameter,
-          `Protocol parameter ${index + 1}`,
-        ))
-      : [],
+  return new FloatingProtocol({
+    id: rawProtocol.id,
+    type: rawProtocol.type,
+    parameters: rawProtocol.parameters.map(cloneValue),
   })
-  Object.assign(protocol, omitFields(source, new Set(['id', 'type', 'parameters'])))
-  return protocol
 }
 
-function hydrateNode(rawNode, context) {
-  const source = isRecord(rawNode) ? rawNode : {}
-  const sourceData = isRecord(source.data) ? source.data : {}
+function hydrateNode(rawNode) {
   const data = {
-    ...omitFields(sourceData, new Set(['slots', 'protocols'])),
-    slots: Array.isArray(sourceData.slots)
-      ? sourceData.slots.map(slot => {
-          const storedSlot = isRecord(slot) ? cloneValue(slot) : {}
-          return {
-            ...storedSlot,
-            backgroundNoise: normalizeBackgroundNoise(storedSlot.backgroundNoise, context),
-            isLocked: false,
-            assignment: false,
-          }
-        })
-      : [],
-    protocols: Array.isArray(sourceData.protocols)
-      ? sourceData.protocols.map(hydrateProtocol)
-      : [],
+    ...(rawNode.data.type ? { type: rawNode.data.type } : {}),
+    slots: rawNode.data.slots.map(slot => ({
+      id: slot.id,
+      type: slot.type,
+      backgroundNoise: cloneValue(slot.backgroundNoise),
+      isLocked: false,
+      assignment: false,
+    })),
+    protocols: rawNode.data.protocols.map(hydrateProtocol),
   }
-  const node = new Node({
-    id: source.id,
-    name: source.name,
-    position: source.position,
+  return new Node({
+    id: rawNode.id,
+    name: rawNode.name,
+    position: rawNode.position,
     data,
   })
-  Object.assign(node, omitFields(source, new Set(['id', 'name', 'position', 'data'])))
-  return node
 }
 
 function hydrateEdge(rawEdge, nodeMap) {
-  const source = isRecord(rawEdge) ? rawEdge : {}
-  const sourceData = isRecord(source.data) ? source.data : {}
   const data = {
-    ...omitFields(sourceData, new Set(['protocols'])),
-    protocols: Array.isArray(sourceData.protocols)
-      ? sourceData.protocols.map(hydrateProtocol)
-      : [],
+    ...(rawEdge.data.type ? { type: rawEdge.data.type } : {}),
+    protocols: rawEdge.data.protocols.map(hydrateProtocol),
   }
-  if (source.isLogic === true) {
-    delete data.curvePoints
-    delete data.physicalOverrides
-  } else {
-    data.curvePoints = normalizeCurvePoints(sourceData.curvePoints, source.id)
-    data.physicalOverrides = normalizePhysicalOverrides(sourceData.physicalOverrides, source.id)
+  if (!rawEdge.isLogic) {
+    data.curvePoints = normalizeCurvePoints(rawEdge.data.curvePoints, rawEdge.id)
+    data.physicalOverrides = normalizePhysicalOverrides(
+      rawEdge.data.physicalOverrides,
+      rawEdge.id,
+    )
   }
-  const sourceId = isRecord(source.source) ? source.source.id : source.source
-  const targetId = isRecord(source.target) ? source.target.id : source.target
-  const edge = new Edge({
-    id: source.id,
-    source: nodeMap[sourceId] || source.source,
-    target: nodeMap[targetId] || source.target,
+  return new Edge({
+    id: rawEdge.id,
+    source: nodeMap[rawEdge.source],
+    target: nodeMap[rawEdge.target],
     data,
-    isLogic: source.isLogic === true,
+    isLogic: rawEdge.isLogic,
   })
-  Object.assign(edge, omitFields(source, new Set(['id', 'source', 'target', 'data', 'isLogic'])))
-  return edge
 }
 
 function plainConstructorParameter(rawParameter, identity, context) {
@@ -679,8 +602,8 @@ function plainConstructorParameter(rawParameter, identity, context) {
   }
 }
 
-function plainBackgroundNoise(value, context = {}) {
-  const source = normalizeBackgroundNoise(value, context)
+function plainBackgroundNoise(value) {
+  const source = normalizeBackgroundNoise(value)
   return {
     type: source.type,
     parameters: source.parameters.map((parameter, index) => (
@@ -708,16 +631,16 @@ function plainProtocol(protocol) {
   }
 }
 
-function plainSlot(slot, context = {}) {
+function plainSlot(slot) {
   const source = isRecord(slot) ? slot : {}
   return {
     id: source.id,
     type: source.type,
-    backgroundNoise: plainBackgroundNoise(source.backgroundNoise, context),
+    backgroundNoise: plainBackgroundNoise(source.backgroundNoise),
   }
 }
 
-function plainNode(node, context = {}) {
+function plainNode(node) {
   const source = isRecord(node) ? node : {}
   const sourceData = isRecord(source.data) ? source.data : {}
   return {
@@ -729,7 +652,7 @@ function plainNode(node, context = {}) {
         ? { type: sourceData.type }
         : {}),
       slots: Array.isArray(sourceData.slots)
-        ? sourceData.slots.map(slot => plainSlot(slot, context))
+        ? sourceData.slots.map(plainSlot)
         : [],
       protocols: Array.isArray(sourceData.protocols)
         ? sourceData.protocols.map(plainProtocol)
@@ -845,92 +768,42 @@ export function createEmptyProject(name = DEFAULT_PROJECT_NAME) {
 export function decodeStoredProject(raw, context = {}) {
   admitProjectDocument(raw)
   const source = raw
-  const schemaVersion = Number.isInteger(source.schemaVersion) ? source.schemaVersion : 0
-  if (schemaVersion > PROJECT_SCHEMA_VERSION) {
-    throw new Error(
-      `Project schema version ${schemaVersion} is newer than supported version ${PROJECT_SCHEMA_VERSION}`,
-    )
-  }
-  validateTopology(source, context)
+  validateTopology(source)
   const name = normalizeProjectName(context.storageName, normalizeProjectName(source.name))
-  const nodes = Array.isArray(source.net?.nodes)
-    ? source.net.nodes.map(node => hydrateNode(node, context))
-    : []
+  const nodes = source.net.nodes.map(hydrateNode)
   const nodeMap = Object.fromEntries(nodes.map(node => [node.id, node]))
-  const edges = Array.isArray(source.net?.edges)
-    ? source.net.edges.map(edge => hydrateEdge(edge, nodeMap))
-    : []
+  const edges = source.net.edges.map(edge => hydrateEdge(edge, nodeMap))
   edges.forEach(edge => setEdgeCorrectNodeOrder(edge, nodes))
 
   const minimumTime = finiteNumber(context.minimumTime, DEFAULT_SIMULATION_TIME)
   const minimumTimeStep = finiteNumber(context.minimumTimeStep, DEFAULT_SIMULATION_TIME_STEP)
-  const configuredTime = finiteNumber(source.simulationConfig?.time, DEFAULT_SIMULATION_TIME)
-  const configuredTimeStep = finiteNumber(
-    source.simulationConfig?.timeStep,
-    DEFAULT_SIMULATION_TIME_STEP,
-  )
-  const representationConfig = normalizeRepresentationConfig(source.simulationConfig)
-  const rawUiGlobal = isRecord(source.uiGlobal) ? source.uiGlobal : {}
-  const map = normalizeMap(rawUiGlobal.map, context)
+  const map = normalizeMap(source.uiGlobal?.map, context)
 
   const project = {
-    ...omitFields(source, new Set([
-      'name',
-      'description',
-      'annotations',
-      'variables',
-      'simulationConfig',
-      'net',
-      ...STORAGE_ONLY_PROJECT_FIELDS,
-    ])),
     name,
-    description: typeof source.description === 'string' ? source.description : '',
+    description: source.description,
     annotations: normalizeAnnotations(source.annotations),
-    variables: Array.isArray(source.variables)
-      ? source.variables.map((variable, index) => {
-          const normalized = normalizeVariableRecord(variable, `Variable ${index + 1}`)
-          const hydrated = new Variable(normalized)
-          Object.assign(
-            hydrated,
-            omitFields(
-              normalized,
-              new Set(['id', 'name', 'type', 'value', 'selectedType']),
-            ),
-          )
-          return hydrated
-        })
-      : [],
+    variables: source.variables.map(variable => new Variable(cloneValue(variable))),
     simulationConfig: {
-      ...omitFields(source.simulationConfig, new Set([
-        'time',
-        'timeStep',
-        'qubitRepresentation',
-        'qumodeRepresentation',
-      ])),
-      time: Math.max(minimumTime, configuredTime),
-      timeStep: Math.max(minimumTimeStep, configuredTimeStep),
-      ...representationConfig,
+      time: Math.max(minimumTime, source.simulationConfig.time),
+      timeStep: Math.max(minimumTimeStep, source.simulationConfig.timeStep),
+      qubitRepresentation: source.simulationConfig.qubitRepresentation,
+      qumodeRepresentation: source.simulationConfig.qumodeRepresentation,
     },
     net: {
-      ...omitFields(source.net, new Set(['nodes', 'edges', 'protocols', 'physicalConfig'])),
       nodes,
       edges,
-      protocols: Array.isArray(source.net?.protocols)
-        ? source.net.protocols.map(hydrateProtocol)
-        : [],
-      physicalConfig: normalizePhysicalConfig(source.net?.physicalConfig, context),
+      protocols: source.net.protocols.map(hydrateProtocol),
+      physicalConfig: normalizePhysicalConfig(source.net.physicalConfig),
     },
   }
 
   return {
     project,
     map,
-    platformInfo: isRecord(source.platformInfo) ? cloneValue(source.platformInfo) : null,
-    schemaVersion,
-    uiGlobal: {
-      ...omitFields(rawUiGlobal, new Set(['map'])),
-      map,
-    },
+    platformInfo: source.platformInfo ? cloneValue(source.platformInfo) : null,
+    schemaVersion: source.schemaVersion,
+    uiGlobal: { map },
   }
 }
 
@@ -965,13 +838,13 @@ export function encodeStoredProject(project, context = {}) {
     ...(isRecord(platformInfo) ? { platformInfo: plainPlatformInfo(platformInfo) } : {}),
     net: {
       nodes: Array.isArray(sourceNet.nodes)
-        ? sourceNet.nodes.map(node => plainNode(node, context))
+        ? sourceNet.nodes.map(plainNode)
         : [],
       edges: Array.isArray(sourceNet.edges) ? sourceNet.edges.map(plainEdge) : [],
       protocols: Array.isArray(sourceNet.protocols)
         ? sourceNet.protocols.map(plainProtocol)
         : [],
-      physicalConfig: normalizePhysicalConfig(sourceNet.physicalConfig, context),
+      physicalConfig: normalizePhysicalConfig(sourceNet.physicalConfig),
     },
     uiGlobal,
   }
@@ -982,9 +855,8 @@ export function encodeStoredProject(project, context = {}) {
 /**
  * Encode the transport-neutral collaborative design document.
  *
- * This is deliberately a projection of the established stored-project codec:
- * storage migrations and model normalization therefore remain implemented in
- * exactly one place.
+ * This is deliberately a projection of the stored-project codec so durable
+ * model normalization remains implemented in exactly one place.
  */
 export function encodeDesignDocument(project) {
   const document = encodeStoredProject(project)
@@ -1004,7 +876,7 @@ export function decodeDesignDocument(document, context = {}) {
 }
 
 function hasValue(parameter) {
-  return (!Object.hasOwn(parameter || {}, 'selectedType') || parameter.selectedType !== 'default')
+  return parameter?.selectedType !== 'default'
     && parameter?.value != null
     && parameter.value !== ''
 }
@@ -1038,23 +910,15 @@ function cleanProtocol(protocol, excludedParameterNames) {
 }
 
 function cleanBackgroundNoise(value) {
-  if (typeof value === 'string') {
-    return { type: value, parameters: [] }
+  return {
+    type: value.type,
+    parameters: value.parameters
+      .filter(hasValue)
+      .map(parameter => ({
+        name: parameter.field,
+        value: cloneValue(parameter.value),
+      })),
   }
-  const source = isRecord(value) ? cloneValue(value) : { type: 'default', parameters: [] }
-  delete source.doc
-  source.parameters = Array.isArray(source.parameters)
-    ? source.parameters
-        .filter(hasValue)
-        .map(parameter => {
-          const cleaned = {
-            name: parameter.field ?? parameter.name,
-            value: cloneValue(parameter.value),
-          }
-          return cleaned
-        })
-    : []
-  return source
 }
 
 /**
@@ -1095,7 +959,7 @@ export function toSimulationPayload(project) {
               data: {
                 ...sourceData,
                 slots: (sourceData.slots || []).map(slot => {
-                  const cleaned = omitFields(slot, TRANSIENT_SLOT_FIELD_SET)
+                  const cleaned = cloneValue(slot)
                   cleaned.backgroundNoise = cleanBackgroundNoise(cleaned.backgroundNoise)
                   return cleaned
                 }),

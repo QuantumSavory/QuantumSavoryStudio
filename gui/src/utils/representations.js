@@ -60,9 +60,8 @@ function normalizedChoice(value, allowedOptions, fallback) {
 /**
  * Return the canonical representation defaults accepted by the backend.
  *
- * Missing or stale project fields fall back to the general QuantumOptics
- * representation, keeping projects saved before representation selection
- * backward compatible.
+ * Incomplete live editor state falls back to the general QuantumOptics
+ * representation before crossing a codec boundary.
  */
 export function normalizeRepresentationConfig(config = {}) {
   return {

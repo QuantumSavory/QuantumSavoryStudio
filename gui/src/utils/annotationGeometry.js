@@ -255,9 +255,8 @@ export function normalizeAnnotation(value, label = 'Project annotation') {
   }
 }
 
-/** Validate and clone the persisted annotation collection. Missing legacy data becomes empty. */
+/** Validate and clone the persisted annotation collection. */
 export function normalizeAnnotations(value) {
-  if (value == null) return []
   if (!Array.isArray(value)) throw new Error('Project annotations must be an array')
 
   const ids = new Set()

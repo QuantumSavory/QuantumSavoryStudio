@@ -78,7 +78,6 @@ export function useProjectSession({
   function codecContext(storageName) {
     return {
       storageName,
-      defaultBackgroundNoise: () => api.getDefaultBgNoise(),
       defaultMapCenter,
       defaultMapZoom,
       minimumTime: 1.0,

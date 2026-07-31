@@ -1302,14 +1302,6 @@ onMounted( async () => {
     api.fetchSimulationLogGroups()
   ])
   applicationMetadataPending.value = false
-  // One-time migration: ensure metadata index exists for existing projects
-  const metadataIndex = ProjectStore.getMetadataIndex()
-  const existingProjects = ProjectStore.listProjects()
-  
-  // If index is empty but projects exist, rebuild it
-  if (Object.keys(metadataIndex).length === 0 && existingProjects.length > 0) {
-    ProjectStore.rebuildMetadataIndex()
-  }
   
   // Restore only if no user-initiated project transition won the startup race.
   if (

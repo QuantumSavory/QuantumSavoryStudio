@@ -87,9 +87,9 @@ describe('annotation persistence contract', () => {
     expect(raw).toEqual(original)
   })
 
-  it('defaults missing legacy collections and rejects duplicate durable IDs', () => {
-    expect(normalizeAnnotations()).toEqual([])
-    expect(normalizeAnnotations(null)).toEqual([])
+  it('requires a collection and rejects duplicate durable IDs', () => {
+    expect(() => normalizeAnnotations()).toThrow(/must be an array/)
+    expect(() => normalizeAnnotations(null)).toThrow(/must be an array/)
     expect(() => normalizeAnnotations({})).toThrow(/must be an array/)
     expect(() => normalizeAnnotations([annotation(), annotation()]))
       .toThrow(/duplicate annotation ID/)
