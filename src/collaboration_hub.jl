@@ -111,6 +111,30 @@ function _mcp_error(
   return APIError(String(message), status, String(code), error_details)
 end
 
+function _browser_command_error(value)
+  browser_error = value isa AbstractDict ? value : Dict{String,Any}()
+  browser_details = get(browser_error, "details", Dict{String,Any}())
+  details = browser_details isa AbstractDict ?
+    Dict{String,Any}(string(key) => nested for (key, nested) in browser_details) :
+    Dict{String,Any}()
+  for key in ("method", "url", "cause")
+    haskey(browser_error, key) && (details[key] = browser_error[key])
+  end
+  browser_status = get(browser_error, "status", 400)
+  status = browser_status isa Integer && 400 <= browser_status <= 599 ?
+    Int(browser_status) :
+    400
+  return Dict{String,Any}(
+    "code" => string(get(browser_error, "code", "VALIDATION_FAILED")),
+    "message" => string(
+      get(browser_error, "message", "The browser rejected the command."),
+    ),
+    "status" => status,
+    "retryable" => get(browser_error, "retryable", false) === true,
+    "details" => details,
+  )
+end
+
 function _activity_timestamp(value::DateTime)
   return Dates.format(value, dateformat"yyyy-mm-ddTHH:MM:SS.sss") * "Z"
 end
@@ -769,12 +793,8 @@ function commit_browser_command!(
 
     success = get(request, "success", false) === true
     if !success
-      browser_error = get(request, "error", Dict{String,Any}())
-      error = Dict{String,Any}(
-        "code" => string(get(browser_error, "code", "VALIDATION_FAILED")),
-        "message" => string(get(browser_error, "message", "The browser rejected the command.")),
-        "retryable" => get(browser_error, "retryable", false),
-        "details" => get(browser_error, "details", Dict{String,Any}()),
+      error = _browser_command_error(
+        get(request, "error", Dict{String,Any}()),
       )
       delete!(hub.pending, command_id)
       pending.operation_id === nothing ||

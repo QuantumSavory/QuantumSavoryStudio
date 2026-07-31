@@ -499,6 +499,70 @@
     end
   end
 
+  @testset "browser simulation rejection preserves structured diagnostics" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    waiting = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict("type" => "simulation_action", "action" => "run");
+        timeout_seconds=2,
+      )
+    catch error
+      error
+    end
+    command = WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=1,
+    )
+
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => command["command_id"],
+        "base_revision" => command["base_revision"],
+        "success" => false,
+        "error" => Dict(
+          "code" => "SIMULATOR_REJECTED",
+          "message" => "Simulator rejected Play.",
+          "status" => 422,
+          "retryable" => false,
+          "details" => Dict(
+            "phase" => "run",
+            "diagnostic_canary" => "hub-canary",
+          ),
+          "method" => "POST",
+          "url" => "http://api.test/run_simulation",
+          "cause" => Dict(
+            "name" => "TypeError",
+            "message" => "simulator diagnostic",
+          ),
+        ),
+      ),
+    )
+
+    rejection = fetch(waiting)
+    @test rejection isa WebQuantumSavory.APIError
+    @test rejection.error_code == "SIMULATOR_REJECTED"
+    @test rejection.status_code == 422
+    @test rejection.message == "Simulator rejected Play."
+    @test rejection.details["phase"] == "run"
+    @test rejection.details["diagnostic_canary"] == "hub-canary"
+    @test rejection.details["method"] == "POST"
+    @test rejection.details["url"] == "http://api.test/run_simulation"
+    @test rejection.details["cause"] == Dict(
+      "name" => "TypeError",
+      "message" => "simulator diagnostic",
+    )
+    @test rejection.details["retryable"] == false
+  end
+
   @testset "GUI preparation reports are design-neutral and revision-safe" begin
     hub = WebQuantumSavory.CollaborationHub()
     binding = WebQuantumSavory.bind_editor!(hub, binding_request())
