@@ -393,17 +393,21 @@ export function normalizeLogRecord(log, { nodes = [] } = {}) {
   return normalized
 }
 
-export function areConsecutiveLogsEqual(first, second) {
+function logContentsEqual(first, second) {
   const firstRecord = normalizeLogRecord(first)
   const secondRecord = normalizeLogRecord(second)
-  const firstId = stringValue(firstRecord.id)
-  const secondId = stringValue(secondRecord.id)
-  if (firstId && secondId && firstId !== secondId) return false
   return firstRecord.message === secondRecord.message
     && firstRecord.level === secondRecord.level
     && firstRecord.source === secondRecord.source
     && firstRecord.subsystem === secondRecord.subsystem
     && firstRecord.group === secondRecord.group
+}
+
+export function areConsecutiveLogsEqual(first, second, { compareIds = true } = {}) {
+  const firstId = stringValue(first?.id)
+  const secondId = stringValue(second?.id)
+  if (compareIds && firstId && secondId && firstId !== secondId) return false
+  return logContentsEqual(first, second)
 }
 
 export function emptyStructuredLogFilters() {

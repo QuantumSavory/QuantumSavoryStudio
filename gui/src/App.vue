@@ -150,7 +150,8 @@ function appendLogRecord(logEntry, { stableId = false } = {}) {
   if (
     !stableId
     && lastLog
-    && areConsecutiveLogsEqual(lastLog, logEntry)
+    && applicationLogIds.get(lastLog.id) !== lastLog
+    && areConsecutiveLogsEqual(lastLog, logEntry, { compareIds: false })
   ) {
     lastLog.timestamp = logEntry.timestamp;
     lastLog.count = (lastLog.count || 1) + 1;

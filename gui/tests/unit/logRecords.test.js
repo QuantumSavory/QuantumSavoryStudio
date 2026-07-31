@@ -230,6 +230,29 @@ describe('log record presentation', () => {
     expect(areConsecutiveLogsEqual({ ...first, id: null }, network)).toBe(false)
   })
 
+  it('compares app-authored content independently of generated record IDs', () => {
+    const first = createAppLogRecord({
+      id: 'app-1',
+      level: 'info',
+      message: 'Polling resumed',
+      producer: 'Web API',
+    })
+    const second = createAppLogRecord({
+      id: 'app-2',
+      level: 'info',
+      message: 'Polling resumed',
+      producer: 'Web API',
+    })
+
+    expect(areConsecutiveLogsEqual(first, second)).toBe(false)
+    expect(areConsecutiveLogsEqual(first, second, { compareIds: false })).toBe(true)
+    expect(areConsecutiveLogsEqual(
+      first,
+      { ...second, level: 'error' },
+      { compareIds: false },
+    )).toBe(false)
+  })
+
   it('defers expensive raw serialization until requested', () => {
     const toJSON = vi.fn(() => ({ response: 'complete backend state' }))
     const normalized = normalizeLogRecord(createAppLogRecord({
