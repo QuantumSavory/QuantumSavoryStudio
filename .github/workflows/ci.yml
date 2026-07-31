@@ -14,6 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  agent-docs:
+    name: Agent documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: ./ci/agent-docs.sh
+
   backend-unit:
     name: Backend unit
     runs-on: ubuntu-24.04

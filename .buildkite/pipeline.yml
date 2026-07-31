@@ -3,6 +3,11 @@ env:
   JULIA_NUM_THREADS: auto
 
 steps:
+  - label: ":memo: Agent documentation"
+    key: agent-docs
+    command: ./ci/agent-docs.sh
+    timeout_in_minutes: 5
+
   - label: ":julia: Backend unit"
     key: backend-unit
     command: ./ci/backend-unit.sh

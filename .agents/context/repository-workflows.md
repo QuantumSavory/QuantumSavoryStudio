@@ -32,6 +32,7 @@ Prefer the checked-in wrappers for full component boundaries:
 
 | Change surface | Canonical command | What it selects |
 | --- | --- | --- |
+| Agent documentation | `./ci/agent-docs.sh` | Strict router, context, V-model, traceability, link, and budget lint |
 | Backend component | `./ci/backend-unit.sh` | `test/test_unit.jl` |
 | MCP boundary | `./ci/mcp-unit.sh` | Backend hub/supervisor, sidecar unit, and real transport suites |
 | Frontend component/build | `./ci/frontend-build.sh` | Locked install, Vitest, production build, version-drift check |
@@ -80,9 +81,9 @@ Edit `gui/public/` for static frontend source.
 
 ## Finish
 
-Run the documentation linter for documentation changes, review `git diff --check`,
-inspect `git status`, and report every check not run. Never treat a committed test file
-as current passing execution evidence without a durable run record.
+Run `./ci/agent-docs.sh` for documentation changes, review `git diff --check`, inspect
+`git status`, and report every check not run. Never treat a committed test file as
+current passing execution evidence without a durable run record.
 
 ## Anchors
 
