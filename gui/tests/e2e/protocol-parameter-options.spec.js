@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { canonicalErrorResponse } from './httpResponses.js'
 import {
+  addOneSlotToEachNode,
   mockParseAndDestroy,
   parseNetworkThroughRunner,
 } from './simulationLifecycle.js'
@@ -233,8 +234,8 @@ async function createProjectWithEdge(page) {
         value: null,
       }],
     })
-    projectData.net.nodes.forEach(node => node.createNewSlot())
   }, { savedTag: TAG_BETA })
+  await addOneSlotToEachNode(page)
 }
 
 function parameterRow(editor, name) {

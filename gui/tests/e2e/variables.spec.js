@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import {
+  addOneSlotToEachNode,
   mockParseAndDestroy,
   parseNetworkThroughRunner,
   stopSimulationThroughRunner,
@@ -105,8 +106,8 @@ async function createProjectWithEdgeProtocol(page) {
         value: null,
       }],
     })
-    projectData.net.nodes.forEach(node => node.createNewSlot())
   })
+  await addOneSlotToEachNode(page)
 }
 
 function parameterRow(editor, name) {

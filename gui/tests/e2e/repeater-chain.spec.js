@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import {
+  addOneSlotToEachNode,
   mockParseAndDestroy,
   parseNetworkThroughRunner,
 } from './simulationLifecycle.js'
@@ -208,10 +209,7 @@ test.describe('Layout Tools repeater chain generator', () => {
     await expect(page.locator('#chain-create-virtual-edge')).toBeChecked()
     await page.getByRole('button', { name: 'Cancel' }).click()
 
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      setupState.projectData.net.nodes.forEach(node => node.createNewSlot())
-    })
+    await addOneSlotToEachNode(page)
     await parseNetworkThroughRunner(page)
     await expect(helper).toBeDisabled()
     await expect(page.getByText(

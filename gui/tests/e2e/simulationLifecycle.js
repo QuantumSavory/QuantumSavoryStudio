@@ -11,6 +11,18 @@ export async function mockParseAndDestroy(page) {
   }))
 }
 
+export async function addOneSlotToEachNode(page) {
+  const nodes = page.locator('.node-marker')
+  const nodeCount = await nodes.count()
+  const nodePanel = page.locator('#nodePanel')
+
+  for (let index = 0; index < nodeCount; index += 1) {
+    await nodes.nth(index).click()
+    await nodePanel.getByRole('button', { name: 'Add Slot' }).click()
+    await nodePanel.locator('.slot-row-container').waitFor()
+  }
+}
+
 export async function parseNetworkThroughRunner(page) {
   await page.getByRole('button', { name: 'Toggle advanced controls' }).click()
   const response = page.waitForResponse(candidate => (
