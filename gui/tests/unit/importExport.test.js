@@ -20,17 +20,27 @@ function importProject(overrides = {}) {
 function createHarness() {
   const importIntoSession = vi.fn(async () => true)
   const showAlert = vi.fn()
+  const importedProjectData = { value: null }
+  const conflictProjectName = { value: '' }
+  const showImportConflictDialog = { value: false }
   const composable = useImportExport({
     currentProjectName: { value: 'Current' },
-    importedProjectData: { value: null },
-    conflictProjectName: { value: '' },
-    showImportConflictDialog: { value: false },
+    importedProjectData,
+    conflictProjectName,
+    showImportConflictDialog,
     addLog: vi.fn(),
     importIntoSession,
     serializeProjectData: vi.fn(),
     showAlert,
   })
-  return { composable, importIntoSession, showAlert }
+  return {
+    composable,
+    importIntoSession,
+    showAlert,
+    importedProjectData,
+    conflictProjectName,
+    showImportConflictDialog,
+  }
 }
 
 afterEach(() => vi.restoreAllMocks())
@@ -74,6 +84,32 @@ describe('project import admission', () => {
 
     expect(await harness.composable.validateAndProcessImport(importProject())).toBe(true)
     expect(harness.importIntoSession.mock.calls[0][0].annotations).toEqual([])
+  })
+
+  it.each([
+    ['cancel', async harness => harness.composable.cancelImportConflict(), null],
+    ['overwrite', harness => harness.composable.handleImportConflictOverwrite(), 'Imported Project'],
+    ['rename', harness => harness.composable.handleImportConflictNewName(), 'Imported Project 2'],
+  ])('releases an admitted conflict candidate on %s', async (_action, resolveConflict, finalName) => {
+    vi.spyOn(ProjectStore, 'listProjects').mockReturnValue(['Imported Project'])
+    const harness = createHarness()
+    const raw = importProject()
+
+    await harness.composable.validateAndProcessImport(raw)
+    expect(harness.showImportConflictDialog.value).toBe(true)
+    expect(harness.importedProjectData.value).not.toBe(raw)
+    expect(harness.conflictProjectName.value).toBe('Imported Project')
+
+    await resolveConflict(harness)
+
+    expect(harness.showImportConflictDialog.value).toBe(false)
+    expect(harness.importedProjectData.value).toBeNull()
+    expect(harness.conflictProjectName.value).toBe('')
+    if (finalName) {
+      expect(harness.importIntoSession).toHaveBeenCalledWith(expect.any(Object), finalName)
+    } else {
+      expect(harness.importIntoSession).not.toHaveBeenCalled()
+    }
   })
 
   it('rejects invalid annotation data before reading storage or changing the session', async () => {

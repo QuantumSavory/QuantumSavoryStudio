@@ -92,21 +92,29 @@ export function useImportExport({
     return uniqueName
   }
 
-  async function handleImportConflictOverwrite() {
-    showImportConflictDialog.value = false
-    return processImport(importedProjectData.value, conflictProjectName.value)
-  }
-
-  async function handleImportConflictNewName() {
-    showImportConflictDialog.value = false
-    const uniqueName = generateUniqueName(conflictProjectName.value)
-    return processImport(importedProjectData.value, uniqueName)
-  }
-
-  function cancelImportConflict() {
+  function takeImportConflict() {
+    const conflict = {
+      data: importedProjectData.value,
+      name: conflictProjectName.value
+    }
     showImportConflictDialog.value = false
     importedProjectData.value = null
     conflictProjectName.value = ''
+    return conflict
+  }
+
+  async function handleImportConflictOverwrite() {
+    const conflict = takeImportConflict()
+    return processImport(conflict.data, conflict.name)
+  }
+
+  async function handleImportConflictNewName() {
+    const conflict = takeImportConflict()
+    return processImport(conflict.data, generateUniqueName(conflict.name))
+  }
+
+  function cancelImportConflict() {
+    takeImportConflict()
   }
 
   function exportProject() {
