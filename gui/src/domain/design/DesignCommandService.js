@@ -1328,7 +1328,6 @@ export class DesignCommandService {
         definition,
         value.parameters,
         operation.placement,
-        null,
         operation.owner_id,
       ),
     }
@@ -1356,14 +1355,6 @@ export class DesignCommandService {
       operation.owner_id,
       definition,
     )
-    const preservedParameterTypes = type === previousType
-      ? new Map(
-          (protocol.parameters || []).map(parameter => [
-            parameter.name,
-            deepClone(parameter.type),
-          ]),
-        )
-      : null
     protocol.type = type
     if (Object.hasOwn(value, 'parameters') || type !== previousType) {
       protocol.parameters = await this.protocolParameters(
@@ -1371,7 +1362,6 @@ export class DesignCommandService {
         definition,
         value.parameters,
         operation.placement,
-        preservedParameterTypes,
         operation.owner_id,
       )
     }
@@ -1441,7 +1431,6 @@ export class DesignCommandService {
         definition,
         entry.protocol.parameters,
         entry.placement,
-        null,
         entry.ownerId,
       )
     }
@@ -1452,7 +1441,6 @@ export class DesignCommandService {
     definition,
     supplied,
     placement,
-    preservedTypes = null,
     ownerId = null,
   ) {
     const defaults = createProtocolFromDefinition(definition).parameters
@@ -1461,7 +1449,6 @@ export class DesignCommandService {
       label: 'Protocol',
       placement,
       ownerId,
-      preservedTypes,
       defaults,
     })
   }
@@ -1482,7 +1469,6 @@ export class DesignCommandService {
       placement = 'floating',
       ownerId = null,
       template = false,
-      preservedTypes = null,
       defaults = [],
       rejectMetadataMismatch = false,
     } = {},
@@ -1531,9 +1517,6 @@ export class DesignCommandService {
     const normalizedParameters = []
     for (const parameter of canonicalDefaults) {
       const parameterName = String(parameter?.[identity] ?? '')
-      const canonicalParameter = preservedTypes?.has(parameterName)
-        ? { ...parameter, type: deepClone(preservedTypes.get(parameterName)) }
-        : parameter
       const parameterDefinition = definitions.get(parameterName)
       const suppliedParameter = byName.get(parameterName)
       if (!suppliedParameter) {
@@ -1543,7 +1526,7 @@ export class DesignCommandService {
             `${label} parameter ${parameterName} is required.`,
           )
         }
-        normalizedParameters.push(canonicalParameter)
+        normalizedParameters.push(parameter)
         continue
       }
       if (
@@ -1648,7 +1631,7 @@ export class DesignCommandService {
         normalizedSelectedType = effectiveType.id
       }
       normalizedParameters.push({
-        ...canonicalParameter,
+        ...parameter,
         value: normalizedValue,
         selectedType: normalizedSelectedType,
         ...(typeof suppliedParameter.latex === 'string'

@@ -1302,7 +1302,7 @@ describe('DesignCommandService', () => {
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
         expect.objectContaining({
           name: 'tag',
-          type: 'Any',
+          type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
           selectedType: 'Nothing',
           value: 'nothing',
         }),
