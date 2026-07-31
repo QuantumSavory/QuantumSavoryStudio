@@ -33,7 +33,12 @@ describe('layout tools physical settings', () => {
         {
           type: 'ThermalNoise',
           doc: 'Thermal background',
-          parameters: [{ field: 'rate', type: 'Float64', doc: 'Noise rate' }],
+          parameters: [{
+            field: 'rate',
+            type: 'Float64',
+            doc: 'Noise rate',
+            required: false,
+          }],
         },
       ],
     })
@@ -169,7 +174,6 @@ describe('layout tools physical settings', () => {
           parameters: [{
             field: 'rate',
             type: 'Float64',
-            doc: 'Noise rate',
             selectedType: 'default',
             value: null,
           }],

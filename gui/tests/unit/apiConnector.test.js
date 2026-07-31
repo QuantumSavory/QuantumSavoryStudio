@@ -1,5 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiConnector } from '../../src/utils/ApiConnector'
+import {
+  ApiConnector,
+  validateConstructorParameterMetadata,
+} from '../../src/utils/ApiConnector'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
 const values = new Map()
@@ -67,6 +70,73 @@ describe('ApiConnector project namespaces', () => {
 
     await expect(connector.init()).rejects.toThrow('Slot types response is invalid')
     expect(connector.config.value.slotTypes).toBeUndefined()
+  })
+
+  it('admits only exact Boolean constructor required metadata', () => {
+    const parameter = {
+      field: 'success_probs',
+      type: 'Vector{Float64}',
+      doc: 'Per-client success probabilities.',
+      required: true,
+      min: null,
+      max: null,
+    }
+    expect(validateConstructorParameterMetadata(parameter, 'parameter'))
+      .toEqual(parameter)
+
+    for (const required of [null, 0, 1, 'false', 'true']) {
+      expect(() => validateConstructorParameterMetadata(
+        { ...parameter, required },
+        'parameter',
+      )).toThrow('must be a Boolean')
+    }
+    const missing = { ...parameter }
+    delete missing.required
+    expect(() => validateConstructorParameterMetadata(missing, 'parameter'))
+      .toThrow('invalid shape')
+  })
+
+  it('caches constructor catalogs atomically after complete validation', async () => {
+    const parameter = {
+      field: 'rate',
+      type: 'Float64',
+      doc: 'Rate.',
+      required: false,
+      min: null,
+      max: null,
+    }
+    globalThis.fetch = vi.fn(async url => {
+      const pathname = new URL(url).pathname
+      const bodies = {
+        '/known_functions': { known_functions: ['identity'] },
+        '/states_zoo_types': { states_zoo_types: [] },
+        '/background_types': {
+          background_types: [{
+            type: 'Noise',
+            doc: 'Noise.',
+            parameters: [parameter],
+          }],
+        },
+        '/slot_types': { slot_types: [{ type: 'Qubit', doc: 'Qubit.' }] },
+        '/protocol_types': {
+          protocol_types: [{
+            type: 'Protocol',
+            doc: 'Protocol.',
+            group: 'node',
+            parameters: [{ ...parameter, required: 'false' }],
+            virtual: null,
+          }],
+        },
+      }
+      return { ok: true, json: async () => bodies[pathname] }
+    })
+    const connector = new ApiConnector('http://api.test')
+    connector._config.value = { sentinel: true }
+    connector.known_functions.value = ['old']
+
+    await expect(connector.init()).rejects.toThrow('required must be a Boolean')
+    expect(connector.config.value).toEqual({ sentinel: true })
+    expect(connector.getKnownFunctions()).toEqual(['old'])
   })
 
   it('rejects lifecycle failures instead of fabricating success-shaped fallbacks', async () => {

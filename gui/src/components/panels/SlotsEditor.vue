@@ -107,6 +107,7 @@ import SlotIcon from '../map/SlotIcon.vue'
 import { api } from '../../utils/ApiConnector'
 import { deepClone } from '../../utils/protocolConstructors'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
+import { createConstructorParameterDrafts } from '../../utils/constructorParameters.js'
 import BackgroundNoiseConstructorForm from './BackgroundNoiseConstructorForm.vue'
 import SlotEditor from './SlotEditor.vue'
 
@@ -187,11 +188,10 @@ const slotTypes = computed(() => {
 
 function newBackgroundNoise(definition) {
   const backgroundNoise = deepClone(definition)
-  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
-    ...deepClone(parameter),
-    selectedType: 'default',
-    value: null,
-  }))
+  backgroundNoise.parameters = createConstructorParameterDrafts(
+    definition,
+    { identity: 'field' },
+  )
   return backgroundNoise
 }
 

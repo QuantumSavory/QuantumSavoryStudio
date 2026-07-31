@@ -110,6 +110,7 @@ describe('NodePanel background constructor drafts', () => {
             type: 'Float64',
             min: 0,
             doc: 'Decay time.',
+            required: false,
           }],
         },
       ],
@@ -189,7 +190,6 @@ describe('NodePanel background constructor drafts', () => {
       .toEqual(Array(2).fill({
         field: 't1',
         type: 'Float64',
-        doc: 'Decay time.',
         selectedType: 'expression:Float64',
         value: {
           kind: 'numeric_expression',

@@ -27,6 +27,29 @@
     :disabled="disabled"
     @change="commitNumericLiteral"
   />
+  <input
+    v-else-if="isNumericVectorType(type)"
+    type="text"
+    :value="numericVectorInputValue"
+    placeholder="[]"
+    :aria-label="valueInputLabel"
+    :aria-describedby="ariaDescribedby"
+    :aria-invalid="numericVectorValueInvalid"
+    :disabled="disabled"
+    @change="commitNumericVector"
+  />
+  <select
+    v-else-if="type === 'Bool' && requiredInput"
+    :value="requiredBooleanInputValue"
+    :aria-label="valueInputLabel"
+    :aria-describedby="ariaDescribedby"
+    :disabled="disabled"
+    @change="commitRequiredBoolean"
+  >
+    <option value="" disabled>Select true or false</option>
+    <option value="true">True</option>
+    <option value="false">False</option>
+  </select>
   <Checkbox
     v-else-if="type === 'Bool'"
     v-model="parameter.value"
@@ -99,12 +122,14 @@ import { api } from '../../utils/ApiConnector'
 import { markdownCodeBlock } from '../../utils/markdown.js'
 import {
   isNumericExpressionOptionId,
+  isNumericVectorType,
   isCodeType,
   isSymbolicType,
   isWildcardType,
   numericExpressionTargetType,
   parameterTypeIsNumber,
-  parseNumericParameterValue
+  parseNumericParameterValue,
+  parseNumericVectorParameterValue,
 } from '../../utils/parameterTypes'
 import CodeEditorWithSymbols from './CodeEditorWithSymbols.vue'
 import NumericExpressionInput from './NumericExpressionInput.vue'
@@ -157,6 +182,10 @@ const props = defineProps({
   numericMaximum: {
     type: Number,
     default: undefined
+  },
+  requiredInput: {
+    type: Boolean,
+    default: false
   }
 })
 const emit = defineEmits(['commit'])
@@ -183,6 +212,20 @@ const numericValueInvalid = computed(() => !parseNumericParameterValue(
     max: props.numericMaximum ?? props.parameter.max,
   },
 ).valid)
+const numericVectorInputValue = computed(() => (
+  Array.isArray(props.parameter.value)
+    ? JSON.stringify(props.parameter.value)
+    : (typeof props.parameter.value === 'string' ? props.parameter.value : '')
+))
+const numericVectorValueInvalid = computed(() => !parseNumericVectorParameterValue(
+  props.type,
+  props.parameter.value,
+).valid)
+const requiredBooleanInputValue = computed(() => {
+  if (props.parameter.value === true) return 'true'
+  if (props.parameter.value === false) return 'false'
+  return ''
+})
 const codeDraftInvalid = computed(() => Boolean(props.parameter.error))
 
 watch(
@@ -232,6 +275,27 @@ function commitNumericLiteral() {
     max: props.numericMaximum ?? props.parameter.max,
   })
   if (parsed.valid && !parsed.empty) emit('commit')
+}
+
+function commitNumericVector(event) {
+  const rawValue = event.target.value
+  const parsed = parseNumericVectorParameterValue(props.type, rawValue)
+  if (parsed.valid && !parsed.empty) {
+    props.parameter.value = parsed.value
+    delete props.parameter.error
+    emit('commit')
+    return
+  }
+  props.parameter.value = parsed.empty ? null : rawValue
+  props.parameter.error = `Enter a JSON array of ${props.type === 'Vector{Int64}'
+    ? 'integers'
+    : 'finite numbers'}.`
+}
+
+function commitRequiredBoolean(event) {
+  props.parameter.value = event.target.value === 'true'
+  delete props.parameter.error
+  emit('commit')
 }
 
 function commitPredefinedFunction() {

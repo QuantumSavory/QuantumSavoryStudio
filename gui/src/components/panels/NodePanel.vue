@@ -249,6 +249,7 @@ import {
 import LucideMenuIcon from '../LucideMenuIcon.vue'
 import { SIMULATION_EDITING_LOCK_MESSAGE, useUiServices } from '../../composables/uiServices'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
+import { createConstructorParameterDrafts } from '../../utils/constructorParameters.js'
 
 // Props: node (Node instance), justCreated (bool: true if node was just created and selected)
 const props = defineProps({
@@ -312,11 +313,10 @@ const slotTypes = computed(() => {
 function newBackgroundNoise(definition) {
   if (!definition) return { type: '', parameters: [] }
   const backgroundNoise = structuredClone(toRaw(definition))
-  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
-    ...structuredClone(toRaw(parameter)),
-    selectedType: 'default',
-    value: null,
-  }))
+  backgroundNoise.parameters = createConstructorParameterDrafts(
+    definition,
+    { identity: 'field' },
+  )
   return backgroundNoise
 }
 

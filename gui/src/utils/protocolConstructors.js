@@ -1,9 +1,10 @@
 import {
-  buildParameterInputOptions,
+  buildConstructorParameterInputOptions,
   parameterInputIsComplete,
   resolveParameterInputOption,
 } from './parameterTypes.js'
 import { isVariableReference } from '../models/Variable.js'
+import { createConstructorParameterDraft } from './constructorParameters.js'
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -64,23 +65,9 @@ function definitionParameters(definition) {
   return definition.parameters
 }
 
-function parameterFromDefinition(parameter) {
-  const name = parameter?.field
-  if (typeof name !== 'string' || !name) throw new Error(
-    'Runtime protocol metadata contains a parameter without a field name.',
-  )
-
-  return {
-    name,
-    type: deepClone(parameter.type),
-    selectedType: 'default',
-    value: null
-  }
-}
-
 function normalizeSeededParameter(parameter, definition) {
   const normalized = deepClone(parameter)
-  const options = buildParameterInputOptions(definition.type, definition)
+  const options = buildConstructorParameterInputOptions(definition.type, definition)
   const selection = resolveParameterInputOption(options, normalized)
   if (selection.explicit) return normalized
 
@@ -120,7 +107,7 @@ export function validateProtocolConstructorDraft(definition, protocol = null) {
     if (!parameterDefinition) throw new Error(`Constructor field ${field} is unknown.`)
     if (parameter.error) throw new Error(`Constructor field ${field} has a validation error.`)
 
-    const options = buildParameterInputOptions(
+    const options = buildConstructorParameterInputOptions(
       parameterDefinition.type,
       parameterDefinition,
     )
@@ -140,6 +127,14 @@ export function validateProtocolConstructorDraft(definition, protocol = null) {
       throw new Error(`Constructor field ${field} requires a complete ${option.label} value.`)
     }
   }
+  for (const definitionParameter of definitions) {
+    if (typeof definitionParameter?.required !== 'boolean') {
+      throw new Error('Runtime constructor metadata requires Boolean required fields.')
+    }
+    if (definitionParameter.required && !supplied.has(definitionParameter.field)) {
+      throw new Error(`Constructor field ${definitionParameter.field} is required.`)
+    }
+  }
   return true
 }
 
@@ -151,7 +146,7 @@ export function createProtocolFromDefinition(definition) {
   const parameters = definitionParameters(definition)
   return {
     type: definition.type,
-    parameters: parameters.map(parameterFromDefinition)
+    parameters: parameters.map(parameter => createConstructorParameterDraft(parameter))
   }
 }
 

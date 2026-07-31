@@ -207,7 +207,7 @@ describe('DesignCommandService', () => {
       protocolCatalog: () => ({
         node: [{
           type: 'QuantumSavory.LiveProtocol',
-          parameters: [{ field: 'rounds', type: 'Int64' }],
+          parameters: [{ field: 'rounds', type: 'Int64', required: false }],
         }],
         edge: [],
         floating: [],
@@ -486,7 +486,13 @@ describe('DesignCommandService', () => {
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
         type: 'ContextNoise',
-        parameters: [{ field: 'rate', type: 'Float64', min: 0, max: 10 }],
+        parameters: [{
+          field: 'rate',
+          type: 'Float64',
+          min: 0,
+          max: 10,
+          required: false,
+        }],
       }],
       validateNumericExpressionValue,
     })
@@ -587,7 +593,7 @@ describe('DesignCommandService', () => {
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
         type: 'ContextNoise',
-        parameters: [{ field: 'count', type: 'Int64' }],
+        parameters: [{ field: 'count', type: 'Int64', required: false }],
       }],
       validateNumericExpressionValue,
       generators: {
@@ -1118,19 +1124,26 @@ describe('DesignCommandService', () => {
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
         type: 'ThermalNoise',
-        parameters: [{ field: 'rate', type: 'Float64', min: 0, max: 1 }],
+        parameters: [{
+          field: 'rate',
+          type: 'Float64',
+          min: 0,
+          max: 1,
+          required: false,
+        }],
       }],
       protocolCatalog: () => ({
         node: [{
           type: 'Example.Protocol',
           parameters: [
-            { field: 'enabled', type: 'Bool', defaultValue: false },
-            { field: 'rounds', type: 'Int64' },
+            { field: 'enabled', type: 'Bool', defaultValue: false, required: false },
+            { field: 'rounds', type: 'Int64', required: false },
             {
               field: 'tag',
               type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
               kind: 'named_tag_type',
               nullable: true,
+              required: false,
             },
           ],
         }],
@@ -1323,6 +1336,108 @@ describe('DesignCommandService', () => {
     expect(project.variables).toHaveLength(1)
   })
 
+  it('admits required constructor fields atomically across direct and Variable inputs', async () => {
+    const project = createEmptyProject('Required protocol fields')
+    project.net.nodes.push(new Node({
+      id: 'switch',
+      name: 'Switch',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    project.variables.push(new Variable({
+      id: 'constructor_default',
+      name: 'constructor default',
+      type: 'default',
+      selectedType: 'default',
+      value: null,
+    }))
+    const service = serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            field: 'clientnodes',
+            type: 'Vector{Int64}',
+            required: true,
+          }, {
+            field: 'success_probs',
+            type: 'Vector{Float64}',
+            required: true,
+          }],
+        }],
+        edge: [],
+        floating: [],
+      }),
+    })
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'switch',
+        value: {
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            name: 'success_probs',
+            selectedType: 'Vector{Float64}',
+            value: [0.5],
+          }],
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Protocol parameter clientnodes is required.',
+    })
+    expect(project.net.nodes[0].data.protocols).toEqual([])
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'switch',
+        value: {
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            name: 'clientnodes',
+            selectedType: 'Vector{Int64}',
+            value: new VariableReference('constructor_default'),
+          }, {
+            name: 'success_probs',
+            selectedType: 'Vector{Float64}',
+            value: [0.5],
+          }],
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Required parameter clientnodes cannot use a Default Variable.',
+    })
+    expect(project.net.nodes[0].data.protocols).toEqual([])
+
+    await service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'switch',
+        value: {
+          type: 'SimpleSwitchDiscreteProt',
+          parameters: [{
+            name: 'clientnodes',
+            selectedType: 'Vector{Int64}',
+            value: [2],
+          }, {
+            name: 'success_probs',
+            selectedType: 'Vector{Float64}',
+            value: [0.5],
+          }],
+        },
+      }],
+    })
+    expect(project.net.nodes[0].data.protocols[0].parameters.map(parameter => (
+      parameter.value
+    ))).toEqual([[2], [0.5]])
+  })
+
   it('accepts numeric-expression tags only through matching authoritative descriptors', async () => {
     const project = createEmptyProject('Numeric expressions')
     project.net.nodes.push(new Node({
@@ -1336,7 +1451,12 @@ describe('DesignCommandService', () => {
       protocolCatalog: () => ({
         node: [{
           type: 'Example.NumericProtocol',
-          parameters: [{ field: 'timeout', type: 'Float64', min: 0 }],
+          parameters: [{
+            field: 'timeout',
+            type: 'Float64',
+            min: 0,
+            required: false,
+          }],
         }],
         edge: [],
         floating: [],
@@ -1432,7 +1552,7 @@ describe('DesignCommandService', () => {
       protocolCatalog: () => ({
         node: [{
           type: 'Example.NumericProtocol',
-          parameters: [{ field: 'timeout', type: 'Float64' }],
+          parameters: [{ field: 'timeout', type: 'Float64', required: false }],
         }],
         edge: [],
         floating: [],
@@ -1554,6 +1674,7 @@ describe('DesignCommandService', () => {
           parameters: [{
             field: 'retry_lock_time',
             type: ['Nothing', 'Float64'],
+            required: false,
           }],
         }],
         edge: [],
@@ -1604,9 +1725,11 @@ describe('DesignCommandService', () => {
             type: ['Nothing', 'DataType'],
             kind: 'named_tag_type',
             nullable: true,
+            required: false,
           }, {
             field: 'remote',
             type: ['QuantumSavory.Wildcard', 'Int64'],
+            required: false,
           }],
         }],
         edge: [],
@@ -1704,6 +1827,7 @@ describe('DesignCommandService', () => {
             type: 'Float64',
             min: 0,
             max: 1,
+            required: false,
           }],
         }],
         edge: [],
@@ -1819,7 +1943,11 @@ describe('DesignCommandService', () => {
       protocolCatalog: () => ({
         node: [{
           type: 'Example.SymbolicProtocol',
-          parameters: [{ field: 'observable', type: symbolicType }],
+          parameters: [{
+            field: 'observable',
+            type: symbolicType,
+            required: false,
+          }],
         }],
         edge: [],
         floating: [],

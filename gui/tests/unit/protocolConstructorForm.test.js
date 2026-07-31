@@ -16,14 +16,15 @@ const protocolDefinition = {
   type: PROTOCOL_TYPE,
   group: 'node',
   parameters: [
-    { field: 'sim', type: 'Any', doc: 'Injected simulation.' },
-    { field: 'node', type: 'Int64', doc: 'Injected node.' },
+    { field: 'sim', type: 'Any', doc: 'Injected simulation.', required: false },
+    { field: 'node', type: 'Int64', doc: 'Injected node.', required: false },
     {
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-      doc: 'Choose a lower remote node.'
+      doc: 'Choose a lower remote node.',
+      required: false,
     },
-    { field: 'rounds', type: 'Int64', doc: 'Number of rounds.' }
+    { field: 'rounds', type: 'Int64', doc: 'Number of rounds.', required: false }
   ]
 }
 
@@ -167,6 +168,7 @@ describe('ProtocolConstructorForm', () => {
       parameters: [{
         field: 'remote',
         type: ['Nothing', 'QuantumSavory.Wildcard', 'Int64'],
+        required: false,
       }],
     })
     const parameter = {
@@ -274,6 +276,7 @@ describe('ProtocolConstructorForm', () => {
             field: 'observable',
             type: symbolicType,
             doc: 'A symbolic observable.',
+            required: false,
           }],
         }],
         edge: [],
@@ -442,7 +445,8 @@ describe('ProtocolConstructorForm', () => {
             type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
             kind: 'named_tag_type',
             nullable: true,
-            doc: 'Tag head used for generated entanglement.'
+            doc: 'Tag head used for generated entanglement.',
+            required: false,
           }]
         }]
       }
@@ -511,7 +515,8 @@ describe('ProtocolConstructorForm', () => {
             field: 'tag',
             type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
             kind: 'named_tag_type',
-            nullable: true
+            nullable: true,
+            required: false,
           }]
         }]
       }
@@ -540,7 +545,8 @@ describe('ProtocolConstructorForm', () => {
       field: 'tag',
       type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
       kind: 'named_tag_type',
-      nullable: true
+      nullable: true,
+      required: false,
     }
     api._config.value = {
       protocolTypes: {
@@ -597,7 +603,8 @@ describe('ProtocolConstructorForm', () => {
             type: 'Type{<:QuantumSavory.AbstractTag}',
             kind: 'named_tag_type',
             nullable: false,
-            doc: 'Tag head to consume.'
+            doc: 'Tag head to consume.',
+            required: false,
           }]
         }]
       }
@@ -632,7 +639,8 @@ describe('ProtocolConstructorForm', () => {
           parameters: [{
             field: 'tag',
             type: 'DataType',
-            doc: 'A legacy unclassified field.'
+            doc: 'A legacy unclassified field.',
+            required: false,
           }]
         }]
       }
@@ -669,7 +677,8 @@ describe('ProtocolConstructorForm', () => {
             field: 'tag',
             type: 'Type{<:QuantumSavory.AbstractTag}',
             kind: 'named_tag_type',
-            nullable: true
+            nullable: true,
+            required: false,
           }]
         }]
       }
@@ -796,6 +805,48 @@ describe('ProtocolConstructorForm', () => {
 })
 
 describe('TypedValueInput disabled code values', () => {
+  it('keeps required booleans unresolved until true or false is explicit', async () => {
+    const parameter = { name: 'enabled', value: null }
+    const wrapper = mount(TypedValueInput, {
+      props: {
+        parameter,
+        type: 'Bool',
+        requiredInput: true,
+      },
+    })
+    const input = wrapper.get('select')
+
+    expect(input.element.value).toBe('')
+    expect(wrapper.emitted('commit')).toBeUndefined()
+    await input.setValue('false')
+    expect(parameter.value).toBe(false)
+    expect(wrapper.emitted('commit')).toHaveLength(1)
+  })
+
+  it('commits numeric-vector JSON as typed arrays, including empty arrays', async () => {
+    const parameter = { name: 'clients', value: null }
+    const wrapper = mount(TypedValueInput, {
+      props: { parameter, type: 'Vector{Int64}' },
+    })
+    const input = wrapper.get('input[type="text"]')
+
+    await input.setValue('[1, 2]')
+    await input.trigger('change')
+    expect(parameter.value).toEqual([1, 2])
+    expect(wrapper.emitted('commit')).toHaveLength(1)
+
+    await input.setValue('[]')
+    await input.trigger('change')
+    expect(parameter.value).toEqual([])
+    expect(wrapper.emitted('commit')).toHaveLength(2)
+
+    await input.setValue('[1.5]')
+    await input.trigger('change')
+    expect(parameter.value).toBe('[1.5]')
+    expect(parameter.error).toContain('JSON array of integers')
+    expect(wrapper.emitted('commit')).toHaveLength(2)
+  })
+
   it('does not commit empty explicit literal inputs', async () => {
     const textParameter = { name: 'label', value: null }
     const text = mount(TypedValueInput, {

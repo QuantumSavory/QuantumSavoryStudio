@@ -10,8 +10,21 @@ const definition = {
   type: BACKGROUND_TYPE,
   doc: 'Context-aware noise.',
   parameters: [
-    { field: 'rate', type: 'Float64', min: 0, max: 1, doc: 'Noise rate.' },
-    { field: 'count', type: 'Int64', min: 0, doc: 'Event count.' },
+    {
+      field: 'rate',
+      type: 'Float64',
+      min: 0,
+      max: 1,
+      doc: 'Noise rate.',
+      required: false,
+    },
+    {
+      field: 'count',
+      type: 'Int64',
+      min: 0,
+      doc: 'Event count.',
+      required: false,
+    },
   ],
 }
 const originalConfig = api._config.value

@@ -27,6 +27,133 @@ function scopedProjectName(uuid, projectName) {
   return `${uuid}_${String(projectName ?? '').trim()}`
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function requireCatalogString(value, context) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${context} must be a nonempty string`)
+  }
+  return value
+}
+
+function requireExactCatalogKeys(value, expected, context) {
+  const actual = Object.keys(value).sort()
+  const canonical = [...expected].sort()
+  if (
+    actual.length !== canonical.length
+    || actual.some((key, index) => key !== canonical[index])
+  ) {
+    throw new Error(`${context} has an invalid shape`)
+  }
+}
+
+export function validateConstructorParameterMetadata(parameter, context) {
+  if (!isRecord(parameter)) throw new Error(`${context} must be an object`)
+  const namedTag = Object.hasOwn(parameter, 'kind') || Object.hasOwn(parameter, 'nullable')
+  requireExactCatalogKeys(
+    parameter,
+    namedTag
+      ? ['field', 'type', 'doc', 'required', 'min', 'max', 'kind', 'nullable']
+      : ['field', 'type', 'doc', 'required', 'min', 'max'],
+    context,
+  )
+  requireCatalogString(parameter.field, `${context}.field`)
+  const types = Array.isArray(parameter.type) ? parameter.type : [parameter.type]
+  if (!types.length) throw new Error(`${context}.type must not be empty`)
+  types.forEach((type, index) => requireCatalogString(type, `${context}.type[${index}]`))
+  if (typeof parameter.doc !== 'string') throw new Error(`${context}.doc must be a string`)
+  if (typeof parameter.required !== 'boolean') {
+    throw new Error(`${context}.required must be a Boolean`)
+  }
+  for (const bound of ['min', 'max']) {
+    if (
+      parameter[bound] !== null
+      && (typeof parameter[bound] !== 'number' || !Number.isFinite(parameter[bound]))
+    ) {
+      throw new Error(`${context}.${bound} must be a finite number or null`)
+    }
+  }
+  if (namedTag) {
+    if (parameter.kind !== 'named_tag_type' || typeof parameter.nullable !== 'boolean') {
+      throw new Error(`${context} has invalid named-tag metadata`)
+    }
+  }
+  return {
+    ...parameter,
+    type: Array.isArray(parameter.type) ? [...parameter.type] : parameter.type,
+  }
+}
+
+function validateConstructorTypeMetadata(value, context, expectedKeys) {
+  if (!isRecord(value)) throw new Error(`${context} must be an object`)
+  requireExactCatalogKeys(value, expectedKeys, context)
+  requireCatalogString(value.type, `${context}.type`)
+  if (typeof value.doc !== 'string') throw new Error(`${context}.doc must be a string`)
+  if (!Array.isArray(value.parameters)) throw new Error(`${context}.parameters must be an array`)
+  return {
+    ...value,
+    parameters: value.parameters.map((parameter, index) => (
+      validateConstructorParameterMetadata(parameter, `${context}.parameters[${index}]`)
+    )),
+  }
+}
+
+export function validateBackgroundTypeCatalog(value) {
+  if (!Array.isArray(value)) throw new Error('Background types response is invalid')
+  return value.map((definition, index) => validateConstructorTypeMetadata(
+    definition,
+    `background_types[${index}]`,
+    ['type', 'doc', 'parameters'],
+  ))
+}
+
+export function validateSlotTypeCatalog(value) {
+  if (!Array.isArray(value)) throw new Error('Slot types response is invalid')
+  return value.map((definition, index) => {
+    if (!isRecord(definition)) throw new Error(`slot_types[${index}] must be an object`)
+    requireExactCatalogKeys(definition, ['type', 'doc'], `slot_types[${index}]`)
+    requireCatalogString(definition.type, `slot_types[${index}].type`)
+    if (typeof definition.doc !== 'string') {
+      throw new Error(`slot_types[${index}].doc must be a string`)
+    }
+    return { ...definition }
+  })
+}
+
+export function validateProtocolTypeCatalog(value) {
+  if (!Array.isArray(value)) throw new Error('Protocol types response is invalid')
+  return value.map((definition, index) => {
+    const context = `protocol_types[${index}]`
+    const validated = validateConstructorTypeMetadata(
+      definition,
+      context,
+      ['type', 'doc', 'group', 'parameters', 'virtual'],
+    )
+    if (!['floating', 'node', 'edge'].includes(validated.group)) {
+      throw new Error(`${context}.group is invalid`)
+    }
+    if (validated.virtual !== null && typeof validated.virtual !== 'boolean') {
+      throw new Error(`${context}.virtual must be a Boolean or null`)
+    }
+    return validated
+  })
+}
+
+function validateKnownFunctions(value) {
+  if (
+    !Array.isArray(value)
+    || value.some(entry => typeof entry !== 'string' || !entry.trim())
+  ) throw new Error('Known functions response is invalid')
+  return [...value]
+}
+
+function validateStatesZooTypes(value) {
+  if (!Array.isArray(value)) throw new Error('States Zoo types response is invalid')
+  return [...value]
+}
+
 const TAG_TARGET_KINDS = new Set(['register', 'slot', 'message_buffer'])
 
 function tagTargetId(target, key) {
@@ -93,7 +220,7 @@ export class ApiConnector {
 
   async fetchKnownFunctions(){
     const responseObject = await this.requestOperation('listKnownFunctions')
-    this.known_functions.value = responseObject.known_functions
+    this.known_functions.value = validateKnownFunctions(responseObject.known_functions)
   }
 
   async fetchStatesZooTypes({ signal, force = false } = {}) {
@@ -101,10 +228,7 @@ export class ApiConnector {
     if (!force && Array.isArray(cachedTypes)) return cachedTypes
 
     const responseObject = await this.requestOperation('listStatesZooTypes', { signal })
-    const types = responseObject?.states_zoo_types
-    if (!Array.isArray(types)) {
-      throw new Error('States Zoo types response is invalid')
-    }
+    const types = validateStatesZooTypes(responseObject?.states_zoo_types)
 
     this._config.value = {
       ...this._config.value,
@@ -297,50 +421,44 @@ export class ApiConnector {
 
   async init() {
     const [
-      ,
-      ,
+      knownFunctionsCatalog,
+      statesZooCatalog,
       backgroundCatalog,
       slotCatalog,
       protocolCatalog,
     ] = await Promise.all([
-      this.fetchKnownFunctions(),
-      this.fetchStatesZooTypes(),
+      this.requestOperation('listKnownFunctions'),
+      this.requestOperation('listStatesZooTypes'),
       this.requestOperation('listBackgroundTypes'),
       this.requestOperation('listSlotTypes'),
       this.requestOperation('listProtocolTypes'),
     ])
 
-    this._config.value.bgNoiseOptions = [
-      this.getDefaultBgNoise(),
-      ...backgroundCatalog.background_types,
-    ]
-    if (!Array.isArray(slotCatalog.slot_types)) {
-      throw new Error('Slot types response is invalid')
-    }
-    this._config.value.slotTypes = [...slotCatalog.slot_types]
-
-    const parsedTypes = protocolCatalog.protocol_types.map(type => ({
-      ...type,
-      parameters: type.parameters.filter(param => (
-        typeof param.type === 'string'
-        || param.type === 'Function'
-        || Array.isArray(param.type)
-      )),
-    }))
-    this._config.value.protocolTypes = {
+    const knownFunctions = validateKnownFunctions(knownFunctionsCatalog?.known_functions)
+    const statesZooTypes = validateStatesZooTypes(statesZooCatalog?.states_zoo_types)
+    const backgroundTypes = validateBackgroundTypeCatalog(
+      backgroundCatalog?.background_types,
+    )
+    const slotTypes = validateSlotTypeCatalog(slotCatalog?.slot_types)
+    const protocolTypes = validateProtocolTypeCatalog(protocolCatalog?.protocol_types)
+    const groupedProtocolTypes = {
       floating: [],
       node: [],
       edge: [],
     }
+    protocolTypes.forEach(type => groupedProtocolTypes[type.group].push(type))
 
-    parsedTypes.forEach(type => {
-      const groupName = type.group
-      if (groupName) {
-        this._config.value.protocolTypes[groupName].push(type)
-      } else {
-        this._config.value.protocolTypes.floating.push(type)
-      }
-    })
+    this.known_functions.value = knownFunctions
+    this._config.value = {
+      ...this._config.value,
+      statesZooTypes,
+      bgNoiseOptions: [
+        this.getDefaultBgNoise(),
+        ...backgroundTypes,
+      ],
+      slotTypes,
+      protocolTypes: groupedProtocolTypes,
+    }
   }
 
   getPlatformInfo(){

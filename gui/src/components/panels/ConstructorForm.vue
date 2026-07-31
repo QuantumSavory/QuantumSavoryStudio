@@ -35,6 +35,7 @@
               :aria-describedby="controlledDescriptionId(param)"
               @change="onSelectedTypeChanged(param)"
             >
+              <option v-if="!param.selectedType" value="" disabled>Select input</option>
               <option
                 v-for="option in parameterInputOptions(param)"
                 :key="option.id"
@@ -141,6 +142,7 @@
               :numeric-expression-context="numericExpressionContext"
               :numeric-minimum="runtimeParameterDefinition(param)?.min"
               :numeric-maximum="runtimeParameterDefinition(param)?.max"
+              :required-input="runtimeParameterDefinition(param)?.required === true"
               :template="template"
               :initially-open="effectiveOption(param).inputKind === 'code'
                 && !(typeof param.value === 'string' && param.value.trim())"
@@ -188,7 +190,7 @@ import { Link2, TriangleAlert, Unlink2 } from '@lucide/vue'
 import { useDomId } from '../../composables/useDomId'
 import { VariableReference, isVariableReference } from '../../models/Variable'
 import {
-  buildParameterInputOptions,
+  buildConstructorParameterInputOptions,
   getTypeOptionLabel,
   isNumericExpressionOptionId,
   isNumericExpressionValue,
@@ -258,7 +260,7 @@ function declaredParameterType(param) {
 }
 
 function parameterInputOptions(param) {
-  return buildParameterInputOptions(
+  return buildConstructorParameterInputOptions(
     declaredParameterType(param),
     runtimeParameterDefinition(param),
   )
@@ -351,7 +353,9 @@ function updateNamedTagTypeValue(param, value) {
 
 function onSelectedTypeChanged(param) {
   if (parameterDisabled(param)) return
-  resetValueForType(param, param.selectedType)
+  resetValueForType(param, param.selectedType, {
+    required: runtimeParameterDefinition(param)?.required === true,
+  })
   const option = effectiveOption(param)
   if (['default', 'boolean', 'intrinsic'].includes(option.inputKind)) emit('commit')
 }
@@ -366,6 +370,10 @@ function assignedVariable(param) {
 }
 
 function variableIsCompatible(param, variable) {
+  if (
+    runtimeParameterDefinition(param)?.required === true
+    && (variable?.selectedType === 'default' || variable?.type?.toLowerCase() === 'default')
+  ) return false
   return runtimeParameterDefinition(param)?.kind !== 'named_tag_type'
     && !!variable
     && parameterTypeSupportsVariableType(
@@ -425,8 +433,16 @@ function clearVariableAssignment(param) {
   if (parameterDisabled(param)) return
   const key = directParameterKey(param)
   const direct = directParameterValues.get(key)
-  param.selectedType = direct?.selectedType || 'default'
-  param.value = direct?.value ?? null
+  if (direct) {
+    param.selectedType = direct.selectedType
+    param.value = direct.value
+  } else if (runtimeParameterDefinition(param)?.required === true) {
+    param.selectedType = parameterInputOptions(param)[0]?.id || ''
+    param.value = null
+  } else {
+    param.selectedType = 'default'
+    param.value = null
+  }
   directParameterValues.delete(key)
   variablePickerParameter.value = null
   emit('commit')

@@ -8,7 +8,6 @@ import Variable, {
   isStatesZooVariable,
   isVariableReference,
   isVariableReferenced,
-  variableReferenceParameters,
 } from '../../models/Variable.js'
 import { generateUUid, setEdgeCorrectNodeOrder } from '../../utils/Utils.js'
 import {
@@ -23,7 +22,7 @@ import {
 } from '../../utils/edgeGeometry.js'
 import { isMapPosition } from '../../utils/mapCoordinates.js'
 import {
-  buildParameterInputOptions,
+  buildConstructorParameterInputOptions,
   buildVariableInputOptions,
   inferParameterInputOption,
   isCodeType,
@@ -36,12 +35,14 @@ import {
   parameterTypeIsNumber,
   parameterTypeSupportsVariableType,
   parseNumericParameterValue,
+  parseNumericVectorParameterValue,
   resolveParameterInputOption,
 } from '../../utils/parameterTypes.js'
 import {
   createProtocolFromDefinition,
   deepClone,
 } from '../../utils/protocolConstructors.js'
+import { createConstructorParameterDraft } from '../../utils/constructorParameters.js'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import {
   GLOBAL_PHYSICAL_PARAMETER_DESCRIPTORS,
@@ -1039,7 +1040,11 @@ export class DesignCommandService {
       expectedDescription = null,
     } = {},
   ) {
-    const choices = buildParameterInputOptions(declaredType, metadata, descriptorOptions)
+    const choices = buildConstructorParameterInputOptions(
+      declaredType,
+      metadata,
+      descriptorOptions,
+    )
     const value = parameter.value
     if (Object.hasOwn(parameter, 'selectedType')) {
       requireString(parameter.selectedType, 'Selected parameter type')
@@ -1228,17 +1233,11 @@ export class DesignCommandService {
       return value
     }
     if (type === 'Vector{Int64}' || type === 'Vector{Float64}') {
-      if (
-        !Array.isArray(value)
-        || !value.every(item => (
-          typeof item === 'number'
-          && Number.isFinite(item)
-          && (type !== 'Vector{Int64}' || Number.isInteger(item))
-        ))
-      ) {
+      const vector = parseNumericVectorParameterValue(type, value)
+      if (!vector.valid || vector.empty) {
         throw new DesignCommandError('VALIDATION_FAILED', `${label} is not a valid ${type}.`)
       }
-      return [...value]
+      return vector.value
     }
     throw new DesignCommandError(
       'VALIDATION_FAILED',
@@ -1293,12 +1292,9 @@ export class DesignCommandService {
         ownerId,
         template,
         rejectMetadataMismatch: true,
-        defaults: (definition.parameters || []).map(parameter => ({
-          ...deepClone(parameter),
-          field: String(parameter.field),
-          selectedType: 'default',
-          value: null,
-        })),
+        defaults: (definition.parameters || []).map(parameter => (
+          createConstructorParameterDraft(parameter, { identity: 'field' })
+        )),
       },
     )
     return {
@@ -1494,15 +1490,15 @@ export class DesignCommandService {
     } = {},
   ) {
     const canonicalDefaults = deepClone(defaults)
-    if (supplied === undefined) return canonicalDefaults
-    if (!Array.isArray(supplied)) {
+    const suppliedParameters = supplied === undefined ? [] : supplied
+    if (!Array.isArray(suppliedParameters)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
         `${label} parameters must be an array.`,
       )
     }
     const byName = new Map()
-    for (const parameter of supplied) {
+    for (const parameter of suppliedParameters) {
       const name = requireString(
         parameter?.[identity],
         `${label} parameter ${identity}`,
@@ -1518,6 +1514,14 @@ export class DesignCommandService {
     const definitions = new Map(
       (definition.parameters || []).map(parameter => [String(parameter.field), parameter]),
     )
+    for (const parameterDefinition of definitions.values()) {
+      if (typeof parameterDefinition.required !== 'boolean') {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `${label} catalog metadata requires Boolean required fields.`,
+        )
+      }
+    }
     for (const name of byName.keys()) {
       if (!definitions.has(name)) {
         throw new DesignCommandError(
@@ -1532,12 +1536,18 @@ export class DesignCommandService {
       const canonicalParameter = preservedTypes?.has(parameterName)
         ? { ...parameter, type: deepClone(preservedTypes.get(parameterName)) }
         : parameter
+      const parameterDefinition = definitions.get(parameterName)
       const suppliedParameter = byName.get(parameterName)
       if (!suppliedParameter) {
+        if (parameterDefinition?.required) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${label} parameter ${parameterName} is required.`,
+          )
+        }
         normalizedParameters.push(canonicalParameter)
         continue
       }
-      const parameterDefinition = definitions.get(parameterName)
       if (
         rejectMetadataMismatch
         && Object.hasOwn(suppliedParameter, 'type')
@@ -1556,6 +1566,15 @@ export class DesignCommandService {
         const assignmentType = variable.selectedType === 'default'
           ? 'default'
           : variable.type
+        if (
+          parameterDefinition.required
+          && String(assignmentType).toLowerCase() === 'default'
+        ) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `Required parameter ${parameterName} cannot use a Default Variable.`,
+          )
+        }
         if (!parameterTypeSupportsVariableType(declaredType, assignmentType)) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',
@@ -1584,7 +1603,9 @@ export class DesignCommandService {
         )
         normalizedSelectedType = effectiveType.id
         if (
-          ['number', 'numeric-expression'].includes(linkedOption.inputKind)
+          ['number', 'numeric-expression', 'numeric-vector'].includes(
+            linkedOption.inputKind,
+          )
           && (
             linkedOption.inputKind !== 'numeric-expression'
             || isNumericExpressionValue(variable.value)
@@ -1778,10 +1799,54 @@ export class DesignCommandService {
   }
 
   synchronizeVariableReferences(project, variable) {
-    for (const parameter of variableReferenceParameters(project, variable.id)) {
+    const references = []
+    for (const entry of protocolEntries(project)) {
+      const definition = this.protocolDefinition(entry.placement, entry.protocol.type)
+      const definitions = new Map(
+        (definition.parameters || []).map(parameter => [parameter.field, parameter]),
+      )
+      for (const parameter of entry.protocol.parameters || []) {
+        if (!isVariableReference(parameter.value) || parameter.value.id !== variable.id) continue
+        references.push({
+          parameter,
+          definition: definitions.get(parameter.name),
+        })
+      }
+    }
+    const slots = [
+      ...project.net.nodes.flatMap(node => node.data?.slots || []),
+      ...(project.net.physicalConfig?.nodeTemplate?.slots || []),
+    ]
+    const configuredBackgrounds = this.backgroundCatalog()
+    const backgroundCatalog = Array.isArray(configuredBackgrounds)
+      ? configuredBackgrounds
+      : []
+    for (const slot of slots) {
+      const background = slot.backgroundNoise
+      if (!background || background.type === 'default') continue
+      const constructor = backgroundCatalog.find(entry => entry.type === background.type)
+      const definitions = new Map(
+        (constructor?.parameters || []).map(parameter => [parameter.field, parameter]),
+      )
+      for (const parameter of background.parameters || []) {
+        if (!isVariableReference(parameter.value) || parameter.value.id !== variable.id) continue
+        references.push({
+          parameter,
+          definition: definitions.get(parameter.field),
+        })
+      }
+    }
+
+    for (const { parameter, definition } of references) {
+      if (!definition) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          'A linked constructor parameter is absent from the runtime catalog.',
+        )
+      }
       const option = parameterInputOptionForVariable(
-        parameter.type,
-        parameter,
+        definition.type,
+        definition,
         variable,
       )
       const parameterName = parameter.name || parameter.field || 'constructor parameter'

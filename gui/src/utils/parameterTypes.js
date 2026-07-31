@@ -61,11 +61,12 @@ function descriptor({
 
 function inputKindForType(type) {
   if (parameterTypeIsNumber(type)) return 'number'
+  if (isNumericVectorType(type)) return 'numeric-vector'
   if (type === 'Bool') return 'boolean'
   if (type === 'Function') return 'predefined-function'
   if (isCodeType(type)) return 'code'
   if (type === 'Nothing' || isWildcardType(type)) return 'intrinsic'
-  if (type === 'String' || String(type).startsWith('Vector{')) return 'text'
+  if (type === 'String') return 'text'
   return parameterTypeIsKnown(type) ? 'text' : 'unsupported'
 }
 
@@ -80,23 +81,24 @@ function uniqueDescriptors(options) {
 
 /**
  * Convert authoritative Julia constructor metadata to the frontend input
- * contract. Every field has one Default-first selector, even for singleton
- * Julia types.
+ * contract. Generic editors remain Default-first; constructor editors wrap
+ * this builder with their simulator-owned omission policy.
  */
 export function buildParameterInputOptions(
   inputType,
   metadata = {},
-  { numericExpressions = true } = {},
+  { numericExpressions = true, includeDefault = true } = {},
 ) {
   const declaredTypes = Array.isArray(inputType) ? inputType : [inputType]
-  const options = [
-    descriptor({
+  const options = []
+  if (includeDefault) {
+    options.push(descriptor({
       id: 'default',
       label: 'Default',
       inputKind: 'default',
       wireType: null,
-    }),
-  ]
+    }))
+  }
 
   if (metadata?.kind === 'named_tag_type') {
     if (metadata.nullable === true) {
@@ -158,6 +160,21 @@ export function buildParameterInputOptions(
   return uniqueDescriptors(options)
 }
 
+/** Build options for one simulator constructor field from its exact omission contract. */
+export function buildConstructorParameterInputOptions(
+  inputType,
+  metadata,
+  options = {},
+) {
+  if (typeof metadata?.required !== 'boolean') {
+    throw new TypeError('Constructor parameter metadata requires a Boolean required field')
+  }
+  return buildParameterInputOptions(inputType, metadata, {
+    ...options,
+    includeDefault: !metadata.required,
+  })
+}
+
 export function buildVariableInputOptions() {
   return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES)
 }
@@ -174,7 +191,7 @@ export function findParameterInputOption(inputType, metadata, id) {
  * (especially numeric expressions), then fall back to semantic compatibility.
  */
 export function parameterInputOptionForVariable(inputType, metadata, variable) {
-  const options = buildParameterInputOptions(inputType, metadata)
+  const options = buildConstructorParameterInputOptions(inputType, metadata)
   const selectedType = variable?.selectedType || variable?.type
   const exact = options.find(option => option.id === selectedType && option.enabled)
   if (exact) return exact
@@ -339,6 +356,10 @@ export function parameterInputIsComplete(option, parameter = {}) {
     const parsed = parseNumericParameterValue(option.wireType, value, parameter)
     return parsed.valid && !parsed.empty
   }
+  if (option.inputKind === 'numeric-vector') {
+    const parsed = parseNumericVectorParameterValue(option.wireType, value)
+    return parsed.valid && !parsed.empty
+  }
   if (option.inputKind === 'boolean') return typeof value === 'boolean'
   if (option.inputKind === 'intrinsic') {
     return option.id === 'Nothing'
@@ -349,12 +370,6 @@ export function parameterInputIsComplete(option, parameter = {}) {
     return typeof value === 'string' && value.trim().length > 0
   }
   if (option.inputKind === 'text') {
-    if (String(option.wireType).startsWith('Vector{')) {
-      return Array.isArray(value) && value.length > 0 && value.every(item => (
-        typeof item === 'number' && Number.isFinite(item)
-          && (option.wireType !== 'Vector{Int64}' || Number.isInteger(item))
-      ))
-    }
     return typeof value === 'string' && value.trim().length > 0
   }
   return false
@@ -381,6 +396,40 @@ export function parseNumericParameterValue(type, rawValue, parameter = {}) {
     valid,
     empty: false,
     value: valid ? value : null,
+  }
+}
+
+export function isNumericVectorType(type) {
+  return type === 'Vector{Int64}' || type === 'Vector{Float64}'
+}
+
+/** Parse the explicit JSON-array editor shared by authoring and admission. */
+export function parseNumericVectorParameterValue(type, rawValue) {
+  if (!isNumericVectorType(type)) {
+    return { valid: false, empty: false, value: null }
+  }
+  if (rawValue == null || rawValue === '') {
+    return { valid: true, empty: true, value: null }
+  }
+
+  let value = rawValue
+  if (typeof rawValue === 'string') {
+    if (!rawValue.trim()) return { valid: true, empty: true, value: null }
+    try {
+      value = JSON.parse(rawValue)
+    } catch {
+      return { valid: false, empty: false, value: null }
+    }
+  }
+  const valid = Array.isArray(value) && value.every(item => (
+    typeof item === 'number'
+    && Number.isFinite(item)
+    && (type !== 'Vector{Int64}' || Number.isInteger(item))
+  ))
+  return {
+    valid,
+    empty: false,
+    value: valid ? [...value] : null,
   }
 }
 
@@ -417,7 +466,7 @@ export function unknownParameterTypes(type) {
   return parameterTypeIsKnown(type) ? [] : [type]
 }
 
-export function resetValueForType(parameter, type) {
+export function resetValueForType(parameter, type, { required = false } = {}) {
   delete parameter.error
   delete parameter.latex
 
@@ -428,7 +477,7 @@ export function resetValueForType(parameter, type) {
   } else if (isWildcardType(type)) {
     parameter.value = 'Wildcard'
   } else if (type === 'Bool') {
-    parameter.value = false
+    parameter.value = required ? null : false
   } else if (type === 'Nothing') {
     parameter.value = 'nothing'
   } else {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildConstructorParameterInputOptions,
   buildParameterInputOptions,
   buildVariableInputOptions,
   createNumericExpressionValue,
@@ -8,6 +9,7 @@ import {
   isNumericExpressionValue,
   parameterInputIsComplete,
   parseNumericParameterValue,
+  parseNumericVectorParameterValue,
   resolveParameterInputOption,
 } from '../../src/utils/parameterTypes'
 
@@ -32,6 +34,21 @@ describe('parameter input descriptors', () => {
         wireType: 'Float64',
       }),
     ])
+  })
+
+  it('uses the exact constructor omission contract to include or exclude Default', () => {
+    expect(buildConstructorParameterInputOptions('Float64', { required: false })
+      .map(option => option.id)).toEqual([
+        'default',
+        'Float64',
+        'expression:Float64',
+      ])
+    expect(buildConstructorParameterInputOptions('Float64', { required: true })
+      .map(option => option.id)).toEqual(['Float64', 'expression:Float64'])
+    expect(() => buildConstructorParameterInputOptions('Float64', {}))
+      .toThrow('Boolean required field')
+    expect(() => buildConstructorParameterInputOptions('Float64', { required: null }))
+      .toThrow('Boolean required field')
   })
 
   it('expands Function once and keeps unsupported declared members visible', () => {
@@ -155,6 +172,7 @@ describe('parameter input descriptors', () => {
       [option('String', 'String'), { value: 'name' }, true],
       [option('String', 'String'), { value: '   ' }, false],
       [option('Vector{Int64}', 'Vector{Int64}'), { value: [1, 2] }, true],
+      [option('Vector{Int64}', 'Vector{Int64}'), { value: [] }, true],
       [option('Vector{Int64}', 'Vector{Int64}'), { value: [1.5] }, false],
       [option('Vector{Float64}', 'Vector{Float64}'), { value: [0.5] }, true],
       [option('Function', 'Function'), { value: 'identity' }, true],
@@ -175,6 +193,31 @@ describe('parameter input descriptors', () => {
         error: 'Expression validation is in progress',
       },
     )).toBe(false)
+  })
+})
+
+describe('numeric vector parameter parsing', () => {
+  it.each([
+    ['Vector{Int64}', '[1, 2]', { valid: true, empty: false, value: [1, 2] }],
+    ['Vector{Float64}', [0.25, 1], { valid: true, empty: false, value: [0.25, 1] }],
+    ['Vector{Float64}', '[]', { valid: true, empty: false, value: [] }],
+    ['Vector{Int64}', '', { valid: true, empty: true, value: null }],
+  ])('normalizes %s value %#', (type, rawValue, expected) => {
+    expect(parseNumericVectorParameterValue(type, rawValue)).toEqual(expected)
+  })
+
+  it.each([
+    ['Vector{Int64}', '[1.5]'],
+    ['Vector{Float64}', '[null]'],
+    ['Vector{Float64}', '["1"]'],
+    ['Vector{Float64}', 'not json'],
+    ['Vector{String}', '[]'],
+  ])('rejects invalid %s value %#', (type, rawValue) => {
+    expect(parseNumericVectorParameterValue(type, rawValue)).toEqual({
+      valid: false,
+      empty: false,
+      value: null,
+    })
   })
 })
 

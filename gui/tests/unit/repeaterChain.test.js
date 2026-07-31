@@ -35,10 +35,20 @@ const ENTANGLER_DEFINITION = {
   group: 'edge',
   virtual: false,
   parameters: [
-    { field: 'nodeA', type: 'Int64' },
-    { field: 'nodeB', type: 'Int64' },
-    { field: 'success_prob', type: 'Float64', defaultValue: 0.001 },
-    { field: 'settings', type: 'Any', defaultValue: { nested: { value: 'metadata' } } }
+    { field: 'nodeA', type: 'Int64', required: false },
+    { field: 'nodeB', type: 'Int64', required: false },
+    {
+      field: 'success_prob',
+      type: 'Float64',
+      defaultValue: 0.001,
+      required: false,
+    },
+    {
+      field: 'settings',
+      type: 'Any',
+      defaultValue: { nested: { value: 'metadata' } },
+      required: false,
+    }
   ]
 }
 
@@ -47,17 +57,24 @@ const SWAPPER_DEFINITION = {
   group: 'node',
   virtual: null,
   parameters: [
-    { field: 'node', type: 'Int64' },
+    { field: 'node', type: 'Int64', required: false },
     {
       field: 'nodeL',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function']
+      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      required: false,
     },
     {
       field: 'nodeH',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function']
+      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      required: false,
     },
-    { field: 'rounds', type: 'Int64', defaultValue: -1 },
-    { field: 'settings', type: 'Any', defaultValue: { nested: { value: 'metadata' } } }
+    { field: 'rounds', type: 'Int64', defaultValue: -1, required: false },
+    {
+      field: 'settings',
+      type: 'Any',
+      defaultValue: { nested: { value: 'metadata' } },
+      required: false,
+    }
   ]
 }
 
@@ -66,7 +83,7 @@ const TRACKER_DEFINITION = {
   group: 'node',
   virtual: null,
   parameters: [
-    { field: 'node', type: 'Int64' }
+    { field: 'node', type: 'Int64', required: false }
   ]
 }
 
@@ -272,7 +289,11 @@ describe('protocol constructor helpers', () => {
   it('preserves and rejects explicit branches that contradict intrinsic values', () => {
     const definition = {
       type: 'Example.OptionalProtocol',
-      parameters: [{ field: 'mode', type: ['Nothing', 'String'] }],
+      parameters: [{
+        field: 'mode',
+        type: ['Nothing', 'String'],
+        required: false,
+      }],
     }
     const draft = {
       type: definition.type,
@@ -298,7 +319,11 @@ describe('protocol constructor helpers', () => {
   ])('rejects an explicit empty %s constructor branch', (selectedType, value) => {
     const definition = {
       type: 'Example.Protocol',
-      parameters: [{ field: 'value', type: ['Int64', 'String', 'Function'] }],
+      parameters: [{
+        field: 'value',
+        type: ['Int64', 'String', 'Function'],
+        required: false,
+      }],
     }
     const draft = {
       type: definition.type,
@@ -330,6 +355,28 @@ describe('protocol constructor helpers', () => {
         error: 'Expression validation is in progress',
       }],
     })).toThrow(/field success_prob has a validation error/)
+  })
+
+  it('keeps required fields out of Default and rejects omission', () => {
+    const definition = {
+      type: 'SimpleSwitchDiscreteProt',
+      parameters: [{
+        field: 'clientnodes',
+        type: 'Vector{Int64}',
+        required: true,
+      }],
+    }
+    const draft = createProtocolFromDefinition(definition)
+    expect(draft.parameters[0]).toMatchObject({
+      selectedType: 'Vector{Int64}',
+      value: null,
+    })
+    expect(() => validateProtocolConstructorDraft(definition, null))
+      .toThrow(/field clientnodes is required/)
+    expect(() => validateProtocolConstructorDraft(definition, draft))
+      .toThrow(/requires a complete Vector\{Int64\} value/)
+    draft.parameters[0].value = []
+    expect(validateProtocolConstructorDraft(definition, draft)).toBe(true)
   })
 })
 
@@ -856,7 +903,7 @@ describe('repeater-chain protocol automation', () => {
       ...TRACKER_DEFINITION,
       parameters: [
         ...TRACKER_DEFINITION.parameters,
-        { field: 'mode', type: ['Nothing', 'String'] },
+        { field: 'mode', type: ['Nothing', 'String'], required: false },
       ],
     }
     const automation = enabledAutomation({
