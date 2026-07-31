@@ -291,7 +291,6 @@ export class McpEditorBridge {
         const response = await this.client.commit({
           ...this.bindingIdentity(),
           command_id: command.command_id,
-          operation_id: command.operation_id,
           base_revision: command.base_revision,
           success: true,
           document_changed: documentChanged,
@@ -326,7 +325,6 @@ export class McpEditorBridge {
         await this.client.commit({
           ...this.bindingIdentity(),
           command_id: command.command_id,
-          operation_id: command.operation_id,
           base_revision: command.base_revision,
           success: false,
           error: bridgeError(error),

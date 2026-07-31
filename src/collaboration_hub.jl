@@ -1,6 +1,5 @@
 const MCP_EDITOR_LEASE_SECONDS = 8
 const MCP_COMMAND_QUEUE_SIZE = 32
-const MCP_OPERATION_CACHE_SIZE = 256
 const MCP_ACTIVITY_LIMIT = 500
 const MCP_ACTIVITY_DETAIL_LIMIT = 16 * 1024
 const MCP_SENSITIVE_DETAIL_KEY_FRAGMENTS = (
@@ -32,7 +31,6 @@ end
 mutable struct PendingBrowserCommand
   command::Dict{String,Any}
   response::Channel{Any}
-  operation_id::Union{Nothing,String}
   mutates_design::Bool
   delivered::Bool
   queued_at::DateTime
@@ -42,12 +40,10 @@ mutable struct CollaborationHub
   lock::ReentrantLock
   command_queue::Channel{Dict{String,Any}}
   pending::Dict{String,PendingBrowserCommand}
-  operation_commands::Dict{String,String}
-  operation_cache::Dict{String,Any}
-  operation_cache_order::Vector{String}
   snapshot::Union{Nothing,Dict{String,Any}}
   snapshot_hash::Union{Nothing,String}
   revision::Int
+  next_revision::Int
   prepared_revision::Union{Nothing,Int}
   binding::Union{Nothing,EditorBinding}
   activity::Vector{Dict{String,Any}}
@@ -63,11 +59,9 @@ function CollaborationHub(; clock=() -> Dates.now(Dates.UTC), id_source=nothing)
     ReentrantLock(),
     Channel{Dict{String,Any}}(MCP_COMMAND_QUEUE_SIZE),
     Dict{String,PendingBrowserCommand}(),
-    Dict{String,String}(),
-    Dict{String,Any}(),
-    String[],
     nothing,
     nothing,
+    0,
     0,
     nothing,
     nothing,
@@ -84,6 +78,12 @@ function CollaborationHub(; clock=() -> Dates.now(Dates.UTC), id_source=nothing)
     string("mcp-", identifier)
   end : id_source
   return hub
+end
+
+function _advance_revision_locked!(hub::CollaborationHub)
+  hub.revision = hub.next_revision
+  hub.next_revision += 1
+  return hub.revision
 end
 
 const COLLABORATION_HUB = Ref{Union{Nothing,CollaborationHub}}(nothing)
@@ -286,7 +286,6 @@ function _cancel_pending_locked!(
     isready(pending.response) || put!(pending.response, Dict("ok" => false, "error" => error))
   end
   empty!(hub.pending)
-  empty!(hub.operation_commands)
   old_queue = hub.command_queue
   hub.command_queue = Channel{Dict{String,Any}}(MCP_COMMAND_QUEUE_SIZE)
   close(old_queue)
@@ -308,10 +307,7 @@ function _desynchronize_binding_locked!(
   return nothing
 end
 
-function _clear_binding_cache_locked!(hub::CollaborationHub)
-  empty!(hub.operation_commands)
-  empty!(hub.operation_cache)
-  empty!(hub.operation_cache_order)
+function _clear_binding_state_locked!(hub::CollaborationHub)
   hub.prepared_revision = nothing
 end
 
@@ -326,8 +322,7 @@ function _expire_binding_locked!(hub::CollaborationHub)
     hub.binding = nothing
     hub.snapshot = nothing
     hub.snapshot_hash = nothing
-    hub.revision = 0
-    _clear_binding_cache_locked!(hub)
+    _clear_binding_state_locked!(hub)
     return binding
   end
   return nothing
@@ -377,7 +372,7 @@ function bind_editor!(
   )
   isempty(snapshot_hash) && throw(_mcp_error("VALIDATION_FAILED", "hash is required"))
 
-  binding = lock(hub.lock) do
+  binding, binding_revision = lock(hub.lock) do
     _expire_binding_locked!(hub)
     existing = hub.binding
     if existing !== nothing && existing.editor_id != editor_id
@@ -395,7 +390,7 @@ function bind_editor!(
       "PROJECT_CHANGED",
       "The project binding was replaced.",
     )
-    existing !== nothing && _clear_binding_cache_locked!(hub)
+    existing !== nothing && _clear_binding_state_locked!(hub)
     new_binding = EditorBinding(
       hub.id_source(),
       editor_id,
@@ -409,10 +404,10 @@ function bind_editor!(
     hub.binding = new_binding
     hub.snapshot = Dict{String,Any}(string(k) => v for (k, v) in snapshot)
     hub.snapshot_hash = snapshot_hash
-    hub.revision = 0
+    _advance_revision_locked!(hub)
     hub.prepared_revision = nothing
     hub.accepting = true
-    new_binding
+    (new_binding, hub.revision)
   end
   record_mcp_activity!(
     hub,
@@ -420,12 +415,12 @@ function bind_editor!(
     "bound";
     summary="Bound project $(binding.project_name)",
     status="success",
-    revision_after=0,
+    revision_after=binding_revision,
     editor_id=binding.editor_id,
   )
   return Dict(
     "binding_id" => binding.id,
-    "revision" => 0,
+    "revision" => binding_revision,
     "lease_seconds" => MCP_EDITOR_LEASE_SECONDS,
   )
 end
@@ -494,8 +489,7 @@ function unbind_editor!(
     hub.binding = nothing
     hub.snapshot = nothing
     hub.snapshot_hash = nothing
-    hub.revision = 0
-    _clear_binding_cache_locked!(hub)
+    _clear_binding_state_locked!(hub)
     current
   end
   record_mcp_activity!(
@@ -556,23 +550,27 @@ function design_mirror(hub::CollaborationHub=collaboration_hub())
   end
 end
 
-function _remember_operation_locked!(
-  hub::CollaborationHub,
-  operation_id::String,
-  result,
-)
-  hub.operation_cache[operation_id] = deepcopy(result)
-  filter!(!=(operation_id), hub.operation_cache_order)
-  push!(hub.operation_cache_order, operation_id)
-  while length(hub.operation_cache_order) > MCP_OPERATION_CACHE_SIZE
-    delete!(hub.operation_cache, popfirst!(hub.operation_cache_order))
-  end
+function _pending_readback_tool(pending::PendingBrowserCommand)
+  pending.mutates_design && return "design_get"
+  payload = get(pending.command, "payload", Dict{String,Any}())
+  get(payload, "type", "") == "simulation_action" && return "simulation_status"
+  return nothing
+end
+
+function _validated_expected_revision(value)
+  value isa Integer && !(value isa Bool) && value >= 0 || throw(
+    _mcp_error(
+      "VALIDATION_FAILED",
+      "expected_revision must be a non-negative integer.",
+      details=Dict("field" => "expected_revision"),
+    ),
+  )
+  return Int(value)
 end
 
 function enqueue_browser_command!(
   hub::CollaborationHub,
   payload::AbstractDict;
-  operation_id=nothing,
   expected_revision=nothing,
   mutates_design::Bool=false,
   timeout_seconds::Real=30,
@@ -582,27 +580,19 @@ function enqueue_browser_command!(
     hub.accepting || throw(
       _mcp_error("SERVER_STOPPED", "The MCP listener is stopping.", retryable=true, status=409),
     )
-    if operation_id !== nothing
-      stable_id = strip(string(operation_id))
-      isempty(stable_id) && throw(
-        _mcp_error("VALIDATION_FAILED", "operation_id must be a nonempty stable string"),
-      )
-      haskey(hub.operation_cache, stable_id) &&
-        return (:result, deepcopy(hub.operation_cache[stable_id]), nothing)
-      if haskey(hub.operation_commands, stable_id)
-        return (:pending, hub.pending[hub.operation_commands[stable_id]], nothing)
+    if expected_revision !== nothing
+      validated_revision = _validated_expected_revision(expected_revision)
+      if validated_revision != hub.revision
+        throw(
+          _mcp_error(
+            "REVISION_CONFLICT",
+            "The visible project changed since revision $validated_revision.",
+            retryable=true,
+            status=409,
+            details=Dict("current_revision" => hub.revision),
+          ),
+        )
       end
-    end
-    if expected_revision !== nothing && Int(expected_revision) != hub.revision
-      throw(
-        _mcp_error(
-          "REVISION_CONFLICT",
-          "The visible project changed since revision $(Int(expected_revision)).",
-          retryable=true,
-          status=409,
-          details=Dict("current_revision" => hub.revision),
-        ),
-      )
     end
     length(hub.pending) >= MCP_COMMAND_QUEUE_SIZE && throw(
       _mcp_error("EDITOR_BUSY", "The browser command queue is full.", retryable=true, status=429),
@@ -616,17 +606,14 @@ function enqueue_browser_command!(
       "base_revision" => hub.revision,
       "payload" => Dict{String,Any}(string(k) => v for (k, v) in payload),
     )
-    operation_id === nothing || (command["operation_id"] = string(operation_id))
     entry = PendingBrowserCommand(
       command,
       Channel{Any}(1),
-      operation_id === nothing ? nothing : string(operation_id),
       mutates_design,
       false,
       hub.clock(),
     )
     hub.pending[command_id] = entry
-    operation_id === nothing || (hub.operation_commands[string(operation_id)] = command_id)
     (:enqueue, entry, hub.command_queue)
   end
 
@@ -640,8 +627,6 @@ function enqueue_browser_command!(
         command_id = pending.command["command_id"]
         get(hub.pending, command_id, nothing) === pending &&
           delete!(hub.pending, command_id)
-        pending.operation_id === nothing ||
-          delete!(hub.operation_commands, pending.operation_id)
       end
       throw(
         _mcp_error(
@@ -657,7 +642,6 @@ function enqueue_browser_command!(
       "queued";
       summary=string(get(payload, "type", "command")),
       status="pending",
-      operation_id=operation_id,
       command_id=pending.command["command_id"],
     )
   end
@@ -672,18 +656,52 @@ function enqueue_browser_command!(
     return isready(pending.response)
   end
   if wait_result == :timed_out
-    throw(
-      _mcp_error(
-        "OPERATION_PENDING",
-        "The browser is still processing this operation.",
-        retryable=true,
-        status=202,
-      ),
-    )
+    outcome, readback_tool = lock(hub.lock) do
+      if isready(pending.response)
+        (:ready, nothing)
+      elseif !pending.delivered &&
+        get(hub.pending, pending.command["command_id"], nothing) === pending
+        delete!(hub.pending, pending.command["command_id"])
+        (:cancelled, nothing)
+      else
+        (:uncertain, _pending_readback_tool(pending))
+      end
+    end
+    if outcome == :cancelled
+      throw(
+        _mcp_error(
+          "OPERATION_CANCELLED",
+          "The browser command timed out before delivery.";
+          retryable=true,
+          status=409,
+        ),
+      )
+    elseif outcome == :uncertain
+      if readback_tool === nothing
+        throw(
+          _mcp_error(
+            "OPERATION_PENDING",
+            "The browser is still processing this read.",
+            retryable=true,
+            status=409,
+          ),
+        )
+      end
+      throw(
+        _mcp_error(
+          "OUTCOME_UNKNOWN",
+          "The browser command was delivered but its outcome is unknown.";
+          status=409,
+          details=Dict(
+            "readback_required" => true,
+            "readback_tool" => readback_tool,
+          ),
+        ),
+      )
+    end
   end
-  # A caller may retry a timed-out operation while the original request is
-  # still in flight. Keep the one-shot response available so every waiter for
-  # that stable operation ID observes the same outcome.
+  # The response can become ready between the timed wait and timeout
+  # classification. Preserve that completed response without replay state.
   response = fetch(pending.response)
   if get(response, "ok", false)
     return response["result"]
@@ -713,16 +731,25 @@ function next_browser_command!(
     _verify_binding_owner!(binding, request)
     hub.command_queue
   end
-  result = timedwait(() -> isready(queue), Float64(timeout_seconds); pollint=0.02)
-  result == :timed_out && return nothing
-  command = try
-    take!(queue)
-  catch
-    return nothing
-  end
-  lock(hub.lock) do
-    pending = get(hub.pending, command["command_id"], nothing)
-    pending === nothing || (pending.delivered = true)
+  deadline = time() + Float64(timeout_seconds)
+  command = nothing
+  while command === nothing
+    remaining = deadline - time()
+    remaining <= 0 && return nothing
+    result = timedwait(() -> isready(queue), remaining; pollint=0.02)
+    result == :timed_out && return nothing
+    candidate = try
+      take!(queue)
+    catch
+      return nothing
+    end
+    active = lock(hub.lock) do
+      pending = get(hub.pending, candidate["command_id"], nothing)
+      pending === nothing && return false
+      pending.delivered = true
+      return true
+    end
+    active && (command = candidate)
   end
   record_mcp_activity!(
     hub,
@@ -775,30 +802,12 @@ function commit_browser_command!(
         ),
       )
     end
-    if pending.operation_id !== nothing &&
-      string(get(request, "operation_id", "")) != pending.operation_id
-      _desynchronize_binding_locked!(
-        hub,
-        binding,
-        "The acknowledgement operation ID does not match.",
-      )
-      throw(
-        _mcp_error(
-          "PROJECT_CHANGED",
-          "The acknowledgement operation ID does not match.",
-          status=409,
-        ),
-      )
-    end
-
     success = get(request, "success", false) === true
     if !success
       error = _browser_command_error(
         get(request, "error", Dict{String,Any}()),
       )
       delete!(hub.pending, command_id)
-      pending.operation_id === nothing ||
-        delete!(hub.operation_commands, pending.operation_id)
       (
         pending.response,
         Dict("ok" => false, "error" => error),
@@ -864,7 +873,7 @@ function commit_browser_command!(
         )
         hub.snapshot = Dict{String,Any}(string(k) => v for (k, v) in snapshot)
         hub.snapshot_hash = snapshot_hash
-        hub.revision += 1
+        _advance_revision_locked!(hub)
       end
       if get(command_payload, "type", "") == "simulation_action"
         action = get(command_payload, "action", "")
@@ -872,13 +881,7 @@ function commit_browser_command!(
         action == "reset" && (hub.prepared_revision = nothing)
       end
       delete!(hub.pending, command_id)
-      pending.operation_id === nothing ||
-        delete!(hub.operation_commands, pending.operation_id)
       result["revision"] = hub.revision
-      pending.operation_id === nothing || begin
-        result["operation_id"] = pending.operation_id
-        _remember_operation_locked!(hub, pending.operation_id, result)
-      end
       (
         pending.response,
         Dict("ok" => true, "result" => result),
@@ -903,7 +906,6 @@ function commit_browser_command!(
     revision_before=activity[4],
     revision_after=activity[5],
     command_id=get(request, "command_id", nothing),
-    operation_id=get(request, "operation_id", nothing),
     affected_ids=get(
       get(request, "result", Dict{String,Any}()),
       "affected_ids",
@@ -972,7 +974,7 @@ function commit_gui_snapshot!(
     before = hub.revision
     hub.snapshot = Dict{String,Any}(string(k) => v for (k, v) in snapshot)
     hub.snapshot_hash = snapshot_hash
-    hub.revision += 1
+    _advance_revision_locked!(hub)
     (before, hub.revision, "gui_commit")
   end
   record_mcp_activity!(

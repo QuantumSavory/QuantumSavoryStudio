@@ -20,8 +20,8 @@ prose in `.agents/context/`, not beside a second schema.
 
 ## Contract rules
 
-- `mcp/v1/` remains active until every co-shipped consumer moves together; approved v2
-  requirements alone do not change runtime behavior.
+- `mcp/v2/` is the sole current MCP registry. Keep no older registry, compatibility
+  adapter, or migration path.
 - `project/v2.schema.json` is the project-document field authority. Compile it as strict
   JSON Schema 2020-12; close application-owned objects and name each extension point.
   Change schema, codec, fixtures, and admission tests together; add no pre-v2 migration.

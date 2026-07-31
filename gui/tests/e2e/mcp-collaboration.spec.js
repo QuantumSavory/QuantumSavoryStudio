@@ -124,7 +124,6 @@ test.describe('Local MCP collaboration', () => {
       expect(initialDesign.structuredContent.revision).toBe(0)
 
       const topology = await callTool('topology_edit', {
-        operation_id: 'browser-e2e-topology',
         expected_revision: 0,
         actions: [
           {
@@ -160,7 +159,6 @@ test.describe('Local MCP collaboration', () => {
       await expect(page.locator('.edge-list-item')).toHaveCount(1)
 
       const incompleteRun = await callTool('simulation_run', {
-        operation_id: 'browser-e2e-incomplete-run',
         duration: 0.001,
       })
       expect(incompleteRun.isError).toBe(true)
@@ -184,7 +182,6 @@ test.describe('Local MCP collaboration', () => {
       })
 
       const slots = await callTool('slots_edit', {
-        operation_id: 'browser-e2e-slots',
         expected_revision: 1,
         actions: [
           {
@@ -212,7 +209,6 @@ test.describe('Local MCP collaboration', () => {
       ))
       expect(entangler).toBeTruthy()
       const protocol = await callTool('protocols_edit', {
-        operation_id: 'browser-e2e-protocol',
         expected_revision: 2,
         actions: [{
           action: 'create',
@@ -249,7 +245,6 @@ test.describe('Local MCP collaboration', () => {
         .not.toContain('Unclassified GUI design change')
 
       const stale = await callTool('topology_edit', {
-        operation_id: 'browser-e2e-stale',
         expected_revision: 3,
         actions: [{
           action: 'update_node',
@@ -271,7 +266,6 @@ test.describe('Local MCP collaboration', () => {
         .toBe('GUI revision between MCP reads.')
 
       const running = await callTool('simulation_run', {
-        operation_id: 'browser-e2e-run',
         duration: 0.001,
       })
       expect(running.isError).toBe(false)
@@ -287,9 +281,7 @@ test.describe('Local MCP collaboration', () => {
         prepared: 4,
       })
 
-      const resetAfterMcpRun = await callTool('simulation_reset', {
-        operation_id: 'browser-e2e-reset-after-mcp-run',
-      })
+      const resetAfterMcpRun = await callTool('simulation_reset')
       expect(resetAfterMcpRun.isError).toBe(false)
       await expect(page.locator('#runnerPanel .stop-btn')).toBeDisabled()
 
@@ -305,21 +297,15 @@ test.describe('Local MCP collaboration', () => {
         return status.structuredContent.prepared_source_revision
       }, { timeout: 15_000 }).toBe(4)
 
-      const resetAfterGuiRun = await callTool('simulation_reset', {
-        operation_id: 'browser-e2e-reset-after-gui-run',
-      })
+      const resetAfterGuiRun = await callTool('simulation_reset')
       expect(resetAfterGuiRun.isError).toBe(false)
 
-      const prepared = await callTool('simulation_prepare', {
-        operation_id: 'browser-e2e-prepare',
-      })
+      const prepared = await callTool('simulation_prepare')
       expect(prepared.isError).toBe(false)
       expect(prepared.structuredContent.prepared_revision).toBe(4)
       await expect(page.locator('#runnerPanel .stop-btn')).toBeEnabled()
 
-      const reset = await callTool('simulation_reset', {
-        operation_id: 'browser-e2e-reset',
-      })
+      const reset = await callTool('simulation_reset')
       expect(reset.isError).toBe(false)
       await expect(page.locator('#runnerPanel .stop-btn')).toBeDisabled()
 

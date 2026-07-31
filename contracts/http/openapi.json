@@ -2550,10 +2550,6 @@
                 "type": "string",
                 "minLength": 1
               },
-              "operation_id": {
-                "type": "string",
-                "minLength": 1
-              },
               "base_revision": {
                 "type": "integer",
                 "minimum": 0

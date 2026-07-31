@@ -219,7 +219,6 @@ function dispatch_mcp_tool!(
     summary=tool,
     status="pending",
     tool=tool,
-    operation_id=get(arguments, "operation_id", nothing),
     details=arguments,
   )
   try
@@ -266,22 +265,22 @@ function dispatch_mcp_tool!(
       )
       Dict("kind" => kind, "type" => type_id, "entry" => entries[entry])
     elseif tool in MCP_DESIGN_MUTATION_TOOLS
-      operation_id = get(arguments, "operation_id", nothing)
       expected_revision = get(arguments, "expected_revision", nothing)
-      operation_id === nothing && throw(
-        _mcp_error("VALIDATION_FAILED", "operation_id is required"),
-      )
       expected_revision === nothing && throw(
         _mcp_error("VALIDATION_FAILED", "expected_revision is required"),
+      )
+      authoring_arguments = Dict{String,Any}(
+        string(key) => value
+        for (key, value) in arguments
+        if string(key) != "expected_revision"
       )
       enqueue_browser_command!(
         hub,
         Dict(
           "type" => "design_command",
           "tool" => tool,
-          "arguments" => Dict{String,Any}(string(k) => v for (k, v) in arguments),
+          "arguments" => authoring_arguments,
         );
-        operation_id,
         expected_revision,
         mutates_design=true,
         timeout_seconds=30,
@@ -294,7 +293,6 @@ function dispatch_mcp_tool!(
           "action" => MCP_SIMULATION_LIFECYCLE_TOOLS[tool],
           "duration" => get(arguments, "duration", nothing),
         );
-        operation_id=get(arguments, "operation_id", nothing),
         timeout_seconds=30,
       )
     elseif tool == "simulation_status"
@@ -359,7 +357,6 @@ function dispatch_mcp_tool!(
       summary=tool,
       status="success",
       tool=tool,
-      operation_id=get(arguments, "operation_id", nothing),
       duration_ms=round(Int, (time() - started_at) * 1000),
       revision_after=result isa AbstractDict ? get(result, "revision", nothing) : nothing,
       affected_ids=result isa AbstractDict ? get(result, "affected_ids", Any[]) : Any[],
@@ -374,7 +371,6 @@ function dispatch_mcp_tool!(
       summary=tool,
       status="error",
       tool=tool,
-      operation_id=get(arguments, "operation_id", nothing),
       duration_ms=round(Int, (time() - started_at) * 1000),
       details=Dict(
         "code" => error isa APIError ? error.error_code : "INTERNAL_ERROR",

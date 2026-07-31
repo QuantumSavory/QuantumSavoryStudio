@@ -4,7 +4,7 @@
   using Main.WebQuantumSavory
   using Test
 
-  function binding_request(; editor_id="editor-1", generation=1)
+  function binding_request(; editor_id="editor-1", generation=1, hash="initial-hash")
     Dict{String,Any}(
       "editor_id" => editor_id,
       "generation" => generation,
@@ -12,7 +12,7 @@
       "simulation_name" => "user_Project",
       "contract_version" => WebQuantumSavory.MCP_CONTRACT_VERSION,
       "snapshot" => Dict("name" => "Project", "net" => Dict()),
-      "hash" => "initial-hash",
+      "hash" => hash,
     )
   end
 
@@ -171,7 +171,7 @@
       hub,
       binding_request(editor_id="editor-2", generation=2),
     )
-    @test replacement["revision"] == 0
+    @test replacement["revision"] == 1
   end
 
   @testset "lease expiry cancels pending browser waits" begin
@@ -183,7 +183,6 @@
       WebQuantumSavory.enqueue_browser_command!(
         hub,
         Dict("type" => "design_command");
-        operation_id="expires-before-delivery",
         expected_revision=0,
         mutates_design=true,
         timeout_seconds=2,
@@ -215,19 +214,20 @@
       WebQuantumSavory.enqueue_browser_command!(
         hub,
         Dict("type" => "design_command");
-        operation_id="expires-after-delivery",
-        expected_revision=0,
+        expected_revision=replacement["revision"],
         mutates_design=true,
         timeout_seconds=2,
       )
     catch error
       error
     end
-    @test WebQuantumSavory.next_browser_command!(
+    delivered = WebQuantumSavory.next_browser_command!(
       hub,
       owner;
       timeout_seconds=1,
-    )["operation_id"] == "expires-after-delivery"
+    )
+    @test delivered["base_revision"] == replacement["revision"]
+    @test !haskey(delivered, "operation_id")
     now[] += Second(WebQuantumSavory.MCP_EDITOR_LEASE_SECONDS + 1)
     unknown = fetch(delivered_wait)
     @test unknown isa WebQuantumSavory.APIError
@@ -252,16 +252,61 @@
       hub,
       binding_request(generation=2),
     )
-    @test rebound["revision"] == 0
+    @test rebound["revision"] == 1
   end
 
-  @testset "revision acknowledgement and idempotency" begin
+  @testset "revision acknowledgement and readback recovery" begin
     hub = WebQuantumSavory.CollaborationHub()
+    @test :operation_commands ∉ fieldnames(typeof(hub))
+    @test :operation_cache ∉ fieldnames(typeof(hub))
+    @test :operation_cache_order ∉ fieldnames(typeof(hub))
     binding = WebQuantumSavory.bind_editor!(hub, binding_request())
     owner = Dict(
       "binding_id" => binding["binding_id"],
       "generation" => 1,
     )
+
+    cancelled = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict("type" => "design_command");
+        expected_revision=0,
+        mutates_design=true,
+        timeout_seconds=0.02,
+      )
+    catch error
+      error
+    end
+    pre_delivery = fetch(cancelled)
+    @test pre_delivery isa WebQuantumSavory.APIError
+    @test pre_delivery.error_code == "OPERATION_CANCELLED"
+    @test pre_delivery.details["retryable"] == true
+    @test !haskey(pre_delivery.details, "readback_required")
+    @test WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=0.05,
+    ) === nothing
+    @test WebQuantumSavory.design_mirror(hub)["revision"] == 0
+
+    for invalid_revision in (true, false, "0", -1, 0.0)
+      invalid = try
+        WebQuantumSavory.enqueue_browser_command!(
+          hub,
+          Dict("type" => "design_command");
+          expected_revision=invalid_revision,
+          mutates_design=true,
+          timeout_seconds=0.02,
+        )
+        nothing
+      catch error
+        error
+      end
+      @test invalid isa WebQuantumSavory.APIError
+      @test invalid.error_code == "VALIDATION_FAILED"
+      @test invalid.details["field"] == "expected_revision"
+      @test isempty(hub.pending)
+    end
 
     waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
@@ -270,21 +315,19 @@
         "tool" => "topology_edit",
         "arguments" => Dict(),
       );
-      operation_id="stable-operation",
       expected_revision=0,
       mutates_design=true,
       timeout_seconds=2,
     )
     command = WebQuantumSavory.next_browser_command!(hub, owner; timeout_seconds=1)
     @test command["base_revision"] == 0
-    @test command["operation_id"] == "stable-operation"
+    @test !haskey(command, "operation_id")
 
     WebQuantumSavory.commit_browser_command!(
       hub,
       Dict(
         owner...,
         "command_id" => command["command_id"],
-        "operation_id" => "stable-operation",
         "base_revision" => 0,
         "success" => true,
         "document_changed" => true,
@@ -298,68 +341,53 @@
     )
     result = fetch(waiting)
     @test result["revision"] == 1
-    @test result["operation_id"] == "stable-operation"
+    @test !haskey(result, "operation_id")
     @test WebQuantumSavory.design_mirror(hub)["hash"] == "updated-hash"
 
-    concurrently_waiting = @async WebQuantumSavory.enqueue_browser_command!(
-      hub,
-      Dict("type" => "design_command");
-      operation_id="concurrent-retry",
-      expected_revision=1,
-      mutates_design=true,
-      timeout_seconds=2,
-    )
-    retry_waiting = @async WebQuantumSavory.enqueue_browser_command!(
-      hub,
-      Dict("type" => "design_command");
-      operation_id="concurrent-retry",
-      expected_revision=1,
-      mutates_design=true,
-      timeout_seconds=2,
-    )
-    retry_command = WebQuantumSavory.next_browser_command!(
+    reply_lost = @async try
+      WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict("type" => "design_command");
+        expected_revision=1,
+        mutates_design=true,
+        timeout_seconds=0.05,
+      )
+    catch error
+      error
+    end
+    uncertain_command = WebQuantumSavory.next_browser_command!(
       hub,
       owner;
       timeout_seconds=1,
     )
+    uncertain = fetch(reply_lost)
+    @test uncertain isa WebQuantumSavory.APIError
+    @test uncertain.error_code == "OUTCOME_UNKNOWN"
+    @test uncertain.details["retryable"] == false
+    @test uncertain.details["readback_required"] == true
+    @test uncertain.details["readback_tool"] == "design_get"
     WebQuantumSavory.commit_browser_command!(
       hub,
       Dict(
         owner...,
-        "command_id" => retry_command["command_id"],
-        "operation_id" => "concurrent-retry",
+        "command_id" => uncertain_command["command_id"],
         "base_revision" => 1,
         "success" => true,
         "document_changed" => true,
         "snapshot" => Dict("name" => "Project", "net" => Dict("nodes" => ["node-1"])),
-        "hash" => "retry-hash",
+        "hash" => "reply-lost-hash",
         "result" => Dict("summary" => "Applied once"),
       ),
     )
-    @test fetch(concurrently_waiting) == fetch(retry_waiting)
-    retry_activity = filter(
-      record -> get(record, "phase", "") == "queued" &&
-        get(record, "operation_id", "") == "concurrent-retry",
-      WebQuantumSavory.mcp_activity(hub; limit=500)["activity"],
-    )
-    @test length(retry_activity) == 1
-
-    cached = WebQuantumSavory.enqueue_browser_command!(
-      hub,
-      Dict("type" => "design_command");
-      operation_id="stable-operation",
-      expected_revision=0,
-      mutates_design=true,
-      timeout_seconds=0.01,
-    )
-    @test cached == result
+    readback = WebQuantumSavory.design_mirror(hub)
+    @test readback["revision"] == 2
+    @test readback["hash"] == "reply-lost-hash"
     @test WebQuantumSavory.collaboration_status(hub)["pending_commands"] == 0
 
     conflict = try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
         Dict("type" => "design_command");
-        operation_id="new-operation",
         expected_revision=1,
         mutates_design=true,
         timeout_seconds=0.01,
@@ -372,6 +400,74 @@
     @test conflict.error_code == "REVISION_CONFLICT"
     @test conflict.details["current_revision"] == 2
     @test conflict.details["retryable"] == true
+
+    WebQuantumSavory.unbind_editor!(hub, owner)
+    rebound = WebQuantumSavory.bind_editor!(
+      hub,
+      binding_request(generation=2, hash="rebound-hash"),
+    )
+    rebound_readback = WebQuantumSavory.design_mirror(hub)
+    @test rebound["revision"] == 3
+    @test rebound_readback["revision"] == 3
+    @test rebound_readback["hash"] == "rebound-hash"
+
+    delayed = try
+      WebQuantumSavory.enqueue_browser_command!(
+        hub,
+        Dict("type" => "design_command");
+        expected_revision=2,
+        mutates_design=true,
+        timeout_seconds=0.01,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test delayed isa WebQuantumSavory.APIError
+    @test delayed.error_code == "REVISION_CONFLICT"
+    @test delayed.details["current_revision"] == 3
+    @test isempty(hub.pending)
+
+    fresh = @async WebQuantumSavory.enqueue_browser_command!(
+      hub,
+      Dict("type" => "design_command");
+      expected_revision=3,
+      mutates_design=true,
+      timeout_seconds=2,
+    )
+    fresh_command = WebQuantumSavory.next_browser_command!(
+      hub,
+      Dict(
+        "binding_id" => rebound["binding_id"],
+        "generation" => 2,
+      );
+      timeout_seconds=1,
+    )
+    @test fresh_command["base_revision"] == 3
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        "binding_id" => rebound["binding_id"],
+        "generation" => 2,
+        "command_id" => fresh_command["command_id"],
+        "base_revision" => 3,
+        "success" => true,
+        "document_changed" => true,
+        "snapshot" => Dict("name" => "Project", "net" => Dict("nodes" => ["fresh"])),
+        "hash" => "fresh-hash",
+        "result" => Dict("summary" => "Applied fresh work"),
+      ),
+    )
+    @test fetch(fresh)["revision"] == 4
+
+    restarted = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(
+      restarted,
+      binding_request(generation=3, hash="restart-hash"),
+    )
+    restart_readback = WebQuantumSavory.design_mirror(restarted)
+    @test restart_readback["revision"] == 0
+    @test restart_readback["hash"] == "restart-hash"
   end
 
   @testset "browser simulation readiness records the prepared design revision" begin
@@ -685,7 +781,6 @@
       WebQuantumSavory.enqueue_browser_command!(
         hub,
         Dict("type" => "design_command");
-        operation_id="stale-success",
         expected_revision=0,
         mutates_design=true,
         timeout_seconds=2,
@@ -710,7 +805,6 @@
         Dict(
           owner...,
           "command_id" => command["command_id"],
-          "operation_id" => "stale-success",
           "base_revision" => 0,
           "success" => true,
           "document_changed" => true,
@@ -745,7 +839,6 @@
         WebQuantumSavory.enqueue_browser_command!(
           hub,
           Dict("type" => "design_command");
-          operation_id="mismatch-operation",
           expected_revision=0,
           mutates_design=true,
           timeout_seconds=2,
@@ -791,37 +884,30 @@
       undelivered.hub,
     )["binding"]["desynchronized"]
 
-    for mismatch in (:base_revision, :operation_id)
-      delivered = start_pending_command(deliver=true)
-      acknowledgement = Dict{String,Any}(
-        delivered.owner...,
-        "command_id" => delivered.command["command_id"],
-        "operation_id" => "mismatch-operation",
-        "base_revision" => 0,
-        "success" => false,
-      )
-      mismatch == :base_revision && (acknowledgement["base_revision"] = 1)
-      mismatch == :operation_id &&
-        (acknowledgement["operation_id"] = "different-operation")
-      mismatch_error = try
-        WebQuantumSavory.commit_browser_command!(
-          delivered.hub,
-          acknowledgement,
-        )
-        nothing
-      catch error
-        error
-      end
-      @test mismatch_error isa WebQuantumSavory.APIError
-      @test mismatch_error.error_code == "PROJECT_CHANGED"
-      delivered_outcome = fetch(delivered.waiting)
-      @test delivered_outcome isa WebQuantumSavory.APIError
-      @test delivered_outcome.error_code == "OUTCOME_UNKNOWN"
-      @test isempty(delivered.hub.pending)
-      @test WebQuantumSavory.collaboration_status(
+    delivered = start_pending_command(deliver=true)
+    mismatch_error = try
+      WebQuantumSavory.commit_browser_command!(
         delivered.hub,
-      )["binding"]["desynchronized"]
+        Dict{String,Any}(
+          delivered.owner...,
+          "command_id" => delivered.command["command_id"],
+          "base_revision" => 1,
+          "success" => false,
+        ),
+      )
+      nothing
+    catch error
+      error
     end
+    @test mismatch_error isa WebQuantumSavory.APIError
+    @test mismatch_error.error_code == "PROJECT_CHANGED"
+    delivered_outcome = fetch(delivered.waiting)
+    @test delivered_outcome isa WebQuantumSavory.APIError
+    @test delivered_outcome.error_code == "OUTCOME_UNKNOWN"
+    @test isempty(delivered.hub.pending)
+    @test WebQuantumSavory.collaboration_status(
+      delivered.hub,
+    )["binding"]["desynchronized"]
   end
 
   @testset "activity is bounded and sanitized" begin
@@ -952,6 +1038,49 @@
     @test changed isa WebQuantumSavory.APIError
     @test changed.error_code == "PROJECT_CHANGED"
     @test changed.details["retryable"]
+  end
+
+  @testset "authoring revision metadata stops at the hub boundary" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    waiting = @async try
+      WebQuantumSavory.dispatch_mcp_tool!(
+        "topology_edit",
+        Dict{String,Any}(
+          "expected_revision" => binding["revision"],
+          "actions" => Any[],
+        );
+        hub,
+      )
+    catch error
+      error
+    end
+    command = WebQuantumSavory.next_browser_command!(
+      hub,
+      owner;
+      timeout_seconds=1,
+    )
+    arguments = command["payload"]["arguments"]
+    @test arguments == Dict{String,Any}("actions" => Any[])
+    @test !haskey(arguments, "expected_revision")
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => command["command_id"],
+        "base_revision" => binding["revision"],
+        "success" => false,
+        "error" => Dict(
+          "code" => "VALIDATION_FAILED",
+          "message" => "Expected test rejection.",
+        ),
+      ),
+    )
+    @test fetch(waiting).error_code == "VALIDATION_FAILED"
   end
 
   @testset "failed simulation replacement preserves the existing state" begin

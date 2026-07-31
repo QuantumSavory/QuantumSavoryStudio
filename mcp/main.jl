@@ -7,7 +7,7 @@ using ModelContextProtocol
 include(joinpath(@__DIR__, "src", "single_session_http_transport.jl"))
 
 const CONTRACT_FILE = normpath(
-  joinpath(@__DIR__, "..", "contracts", "mcp", "v1", "tools.json"),
+  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "tools.json"),
 )
 const HTTP_CONTRACT_FILE = normpath(
   joinpath(@__DIR__, "..", "contracts", "http", "openapi.json"),
@@ -132,6 +132,36 @@ end
 const SIDECAR_BRIDGE_REGISTRY = load_sidecar_bridge_operations()
 const SIDECAR_BRIDGE_OPERATIONS = SIDECAR_BRIDGE_REGISTRY.operations
 const SIDECAR_BRIDGE_SUCCESS_KEYS = SIDECAR_BRIDGE_REGISTRY.success_keys
+
+const TOOL_CONTRACT = plain_dictionary(
+  JSON3.read(read(CONTRACT_FILE, String)),
+)
+
+function load_tool_recovery_policies(contract=TOOL_CONTRACT)
+  return Dict(
+    string(tool["name"]) => begin
+      annotations = plain_dictionary(
+        get(tool, "annotations", Dict{String,Any}()),
+      )
+      input_schema = plain_dictionary(tool["input_schema"])
+      properties = plain_dictionary(
+        get(input_schema, "properties", Dict{String,Any}()),
+      )
+      read_only = get(annotations, "readOnlyHint", false) === true
+      readback_tool = if read_only
+        nothing
+      elseif haskey(properties, "expected_revision")
+        "design_get"
+      else
+        "simulation_status"
+      end
+      (read_only=read_only, readback_tool=readback_tool)
+    end
+    for tool in contract["tools"]
+  )
+end
+
+const TOOL_RECOVERY_POLICIES = load_tool_recovery_policies()
 
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
@@ -278,6 +308,23 @@ function backend_request(
   return backend_response(response, operation_id)
 end
 
+function normalize_tool_error(tool_name, error_payload)
+  structured = plain_dictionary(error_payload)
+  policy = get(TOOL_RECOVERY_POLICIES, string(tool_name), nothing)
+  if get(structured, "code", nothing) == "NETWORK_ERROR" &&
+    policy !== nothing &&
+    !policy.read_only
+    details = plain_dictionary(
+      get(structured, "details", Dict{String,Any}()),
+    )
+    details["readback_required"] = true
+    details["readback_tool"] = policy.readback_tool
+    structured["retryable"] = false
+    structured["details"] = details
+  end
+  return structured
+end
+
 function tool_result(configuration, tool_name, arguments)
   ok, result = try
     backend_request(
@@ -299,6 +346,7 @@ function tool_result(configuration, tool_name, arguments)
   structured = result isa AbstractDict ?
     plain_dictionary(result) :
     Dict{String,Any}("result" => plain_value(result))
+  ok || (structured = normalize_tool_error(tool_name, structured))
   return CallToolResult(
     content=[Dict{String,Any}(
       "type" => "text",
@@ -310,7 +358,7 @@ function tool_result(configuration, tool_name, arguments)
 end
 
 function load_tools(configuration; result_handler=tool_result)
-  contract = plain_dictionary(JSON3.read(read(CONTRACT_FILE, String)))
+  contract = TOOL_CONTRACT
   Int(contract["contract_version"]) == Int(configuration["contract_version"]) ||
     error("MCP contract version mismatch")
   output_schema = plain_dictionary(contract["default_output_schema"])

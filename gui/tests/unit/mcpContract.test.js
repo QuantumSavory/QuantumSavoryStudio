@@ -15,7 +15,7 @@ import { createEmptyProject } from '../../src/utils/projectCodec'
 
 describe('shared MCP contract registry', () => {
   it('loads one unique versioned definition for every advertised tool', () => {
-    expect(MCP_CONTRACT_VERSION).toBe(1)
+    expect(MCP_CONTRACT_VERSION).toBe(2)
     expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length)
     expect(MCP_TOOLS).toHaveLength(23)
     for (const tool of MCP_TOOLS) {
@@ -26,6 +26,61 @@ describe('shared MCP contract registry', () => {
         input_schema: expect.any(Object),
       })
     }
+  })
+
+  it('publishes readback-only recovery metadata without public operation IDs', () => {
+    const designMutations = MCP_TOOLS.filter(tool => (
+      tool.input_schema?.properties?.expected_revision
+    ))
+    const lifecycleMutations = MCP_TOOLS.filter(tool => (
+      tool.name.startsWith('simulation_')
+      && tool.annotations.readOnlyHint === false
+    ))
+    const reads = MCP_TOOLS.filter(tool => tool.annotations.readOnlyHint === true)
+
+    expect(designMutations.map(tool => tool.name)).toEqual([
+      'design_update',
+      'topology_edit',
+      'slots_edit',
+      'protocols_edit',
+      'variables_edit',
+      'states_edit',
+      'annotations_edit',
+      'network_generate',
+      'design_transaction',
+    ])
+    expect(lifecycleMutations.map(tool => tool.name)).toEqual([
+      'simulation_prepare',
+      'simulation_run',
+      'simulation_pause',
+      'simulation_resume',
+      'simulation_reset',
+    ])
+    for (const tool of MCP_TOOLS) {
+      expect(JSON.stringify(tool.input_schema)).not.toContain('"operation_id"')
+      expect(tool.annotations.idempotentHint)
+        .toBe(tool.annotations.readOnlyHint === true)
+    }
+    for (const tool of designMutations) {
+      expect(tool.input_schema.required).toContain('expected_revision')
+      expect(tool.description).toContain('design_get')
+    }
+    for (const tool of lifecycleMutations) {
+      expect(tool.input_schema.properties || {}).not.toHaveProperty('expected_revision')
+      expect(tool.description).toContain('simulation_status')
+    }
+    expect(reads.length).toBeGreaterThan(0)
+  })
+
+  it('ships exactly one MCP contract schema version', () => {
+    expect(() => readFileSync(
+      resolve(process.cwd(), '../contracts/mcp/v1/tools.json'),
+      'utf8',
+    )).toThrow()
+    expect(JSON.parse(readFileSync(
+      resolve(process.cwd(), '../contracts/mcp/v2/tools.json'),
+      'utf8',
+    )).contract_version).toBe(2)
   })
 
   it('publishes structural action schemas for every specialist edit tool', () => {

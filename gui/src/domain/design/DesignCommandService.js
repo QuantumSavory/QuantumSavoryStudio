@@ -447,8 +447,8 @@ export class DesignCommandService {
     this.register('network.generate', this.generateNetwork.bind(this))
   }
 
-  execute({ operations, origin = 'gui', operationId = null } = {}) {
-    return this.runExclusive(() => this.executeNow({ operations, origin, operationId }))
+  execute({ operations, origin = 'gui' } = {}) {
+    return this.runExclusive(() => this.executeNow({ operations, origin }))
   }
 
   /**
@@ -474,7 +474,6 @@ export class DesignCommandService {
   async executeTool(tool, argumentsObject, options = {}) {
     return this.execute({
       operations: operationsForTool(tool, argumentsObject),
-      operationId: argumentsObject.operation_id,
       ...options,
     })
   }
@@ -482,12 +481,11 @@ export class DesignCommandService {
   async executeToolNow(tool, argumentsObject, options = {}) {
     return this.executeNow({
       operations: operationsForTool(tool, argumentsObject),
-      operationId: argumentsObject.operation_id,
       ...options,
     })
   }
 
-  async executeNow({ operations, origin, operationId }) {
+  async executeNow({ operations, origin }) {
     if (!Array.isArray(operations) || operations.length === 0) {
       throw new DesignCommandError('VALIDATION_FAILED', 'At least one operation is required.')
     }
@@ -543,7 +541,6 @@ export class DesignCommandService {
     this.clearDeletedSelection(context.deletedIds)
     this.markDirty()
     const result = {
-      operation_id: operationId,
       summary: `${origin === 'mcp' ? 'Agent' : 'GUI'} applied ${operations.length} design operation${operations.length === 1 ? '' : 's'}.`,
       created_ids: context.createdIds,
       affected_ids: [...context.affectedIds],

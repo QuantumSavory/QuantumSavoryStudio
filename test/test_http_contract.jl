@@ -113,6 +113,9 @@
   @test validate_symbolic_request["properties"]["expr"] ==
     Dict("type" => "string", "minLength" => 1, "pattern" => "\\S")
 
+  editor_commit_request = operation_schemas["commitMcpEditorCommandRequest"]
+  @test !haskey(editor_commit_request["properties"], "operation_id")
+
   evaluation_failure = operation_schemas["evaluationFailure"]
   @test Set(evaluation_failure["required"]) ==
     Set(["success", "error_code", "error", "error_type"])

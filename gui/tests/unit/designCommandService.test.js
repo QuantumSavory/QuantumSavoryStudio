@@ -115,7 +115,6 @@ describe('DesignCommandService', () => {
 
     const result = await service.execute({
       origin: 'mcp',
-      operationId: 'create-alice',
       operations: [
         {
           kind: 'topology.create_node',

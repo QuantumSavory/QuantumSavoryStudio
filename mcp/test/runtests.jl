@@ -169,6 +169,26 @@ end
     @test unreachable[2]["retryable"] === true
     @test occursin("connection refused", unreachable[2]["details"]["exception_message"])
 
+    design_uncertain = normalize_tool_error(
+        "topology_edit",
+        unreachable[2],
+    )
+    @test design_uncertain["retryable"] === false
+    @test design_uncertain["details"]["readback_required"] === true
+    @test design_uncertain["details"]["readback_tool"] == "design_get"
+
+    lifecycle_uncertain = normalize_tool_error(
+        "simulation_run",
+        unreachable[2],
+    )
+    @test lifecycle_uncertain["retryable"] === false
+    @test lifecycle_uncertain["details"]["readback_required"] === true
+    @test lifecycle_uncertain["details"]["readback_tool"] == "simulation_status"
+
+    read_failure = normalize_tool_error("design_get", unreachable[2])
+    @test read_failure["retryable"] === true
+    @test !haskey(read_failure["details"], "readback_required")
+
     structured = BackendRequestError(Dict{String,Any}(
         "code" => "NOT_FOUND",
         "message" => "Missing resource",
@@ -188,7 +208,7 @@ end
         tool_name
     end
     tools = load_tools(
-        Dict{String,Any}("contract_version" => 1);
+        Dict{String,Any}("contract_version" => 2);
         result_handler=handler,
     )
 
@@ -198,4 +218,6 @@ end
     @test getfield(tools[3], :handler)(Dict{String,Any}()) == "catalog_list"
     @test getfield(tools[end], :handler)(Dict{String,Any}()) == "simulation_logs"
     @test dispatched == ["catalog_list", "simulation_logs"]
+    @test !isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v1", "tools.json"))
+    @test isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v2", "tools.json"))
 end

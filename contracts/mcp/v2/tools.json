@@ -1,0 +1,1239 @@
+{
+  "contract_version": 2,
+  "default_output_schema": {
+    "type": "object"
+  },
+  "tools": [
+    {
+      "name": "design_get",
+      "description": "Flush the bound editor and return the canonical design document, revision, and hash.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "metadata",
+                "topology",
+                "slots",
+                "protocols",
+                "variables",
+                "states",
+                "annotations",
+                "configuration"
+              ]
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_validate",
+      "description": "Run the browser's shared semantic validator against the current design without changing it.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalog_list",
+      "description": "List live slot, noise, protocol, States Zoo, function, annotation, and generator catalogs.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "background_noise",
+              "slots",
+              "protocols",
+              "states",
+              "known_functions",
+              "annotations",
+              "generators"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalog_get",
+      "description": "Get documentation, placement, defaults, and parameters for one live catalog entry.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "kind",
+          "type"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_update",
+      "description": "Atomically update the description, simulation configuration, or physical defaults. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action",
+                "value"
+              ],
+              "properties": {
+                "action": {
+                  "const": "update"
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    },
+                    "simulationConfig": {
+                      "type": "object",
+                      "properties": {
+                        "time": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "timeStep": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "qubitRepresentation": {
+                          "type": "string",
+                          "enum": [
+                            "QuantumOpticsRepr",
+                            "QuantumMCRepr",
+                            "CliffordRepr"
+                          ]
+                        },
+                        "qumodeRepresentation": {
+                          "type": "string",
+                          "enum": [
+                            "QuantumOpticsRepr",
+                            "QuantumMCRepr",
+                            "GabsRepr"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "physicalConfig": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "properties": {
+                        "refractiveIndex": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "lossDbPerKm": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "minProperties": 1,
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "topology_edit",
+      "description": "Atomically create, update, reorder, or remove nodes and physical or virtual edges. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create_node",
+                    "update_node",
+                    "remove_node",
+                    "reorder_node",
+                    "create_edge",
+                    "update_edge",
+                    "remove_edge"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "node_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "edge_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "to_index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "position": {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        },
+                        {
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        }
+                      ],
+                      "items": false
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "client_ref"
+                          ],
+                          "properties": {
+                            "client_ref": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "target": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "client_ref"
+                          ],
+                          "properties": {
+                            "client_ref": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "isLogic": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "curvePoints": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "position",
+                              "type"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "position": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ],
+                                "items": false
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "smooth",
+                                  "sharp"
+                                ]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "physicalOverrides": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "distanceMeters": {
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "minimum": 0
+                            },
+                            "refractiveIndex": {
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "exclusiveMinimum": 0
+                            },
+                            "delaySeconds": {
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "minimum": 0
+                            },
+                            "lossDbPerKm": {
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "minimum": 0
+                            },
+                            "transmissivity": {
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "slots_edit",
+      "description": "Atomically create, update, reorder, or remove node slots and background noise. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action",
+                "node_id"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "update",
+                    "remove",
+                    "reorder"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "slot_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "node_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "to_index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "backgroundNoise": {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "parameters"
+                      ],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "parameters": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "protocols_edit",
+      "description": "Atomically create, update, or remove node, edge, and floating protocols. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action",
+                "placement"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "update",
+                    "remove"
+                  ]
+                },
+                "placement": {
+                  "type": "string",
+                  "enum": [
+                    "node",
+                    "edge",
+                    "floating"
+                  ]
+                },
+                "owner_id": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "protocol_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parameters": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {},
+                          "selectedType": {
+                            "type": "string"
+                          },
+                          "value": {}
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "variables_edit",
+      "description": "Atomically create, update, or remove ordinary typed global variables. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "update",
+                    "remove"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "variable_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "selectedType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "value": {}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "states_edit",
+      "description": "Atomically create, update, or remove States Zoo variables and owned weighted trace companions. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "update",
+                    "remove"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "variable_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "state_type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "annotations_edit",
+      "description": "Atomically create, update, or remove map annotations. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "update",
+                    "remove"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "annotation_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "markdown": {
+                      "type": "string"
+                    },
+                    "bounds": {
+                      "type": "object",
+                      "required": [
+                        "west",
+                        "south",
+                        "east",
+                        "north"
+                      ],
+                      "properties": {
+                        "west": {
+                          "type": "number"
+                        },
+                        "south": {
+                          "type": "number"
+                        },
+                        "east": {
+                          "type": "number"
+                        },
+                        "north": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "backgroundColor": {
+                      "type": "string"
+                    },
+                    "borderColor": {
+                      "type": "string"
+                    },
+                    "area": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "freeCorner": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "items": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "network_generate",
+      "description": "Run one existing network generator with its GUI semantics. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "actions"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "action",
+                "value"
+              ],
+              "properties": {
+                "action": {
+                  "const": "generate"
+                },
+                "value": {
+                  "type": "object",
+                  "required": [
+                    "generator"
+                  ],
+                  "properties": {
+                    "generator": {
+                      "type": "string",
+                      "enum": [
+                        "repeater_chain",
+                        "star",
+                        "grid",
+                        "all_to_all"
+                      ]
+                    },
+                    "options": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_transaction",
+      "description": "Apply operations from multiple authoring domains as one atomic transaction. Read design_get first and pass its current revision; after an uncertain response, read design_get again before fresh work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "operations"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "design.update",
+                    "topology.create_node",
+                    "topology.update_node",
+                    "topology.remove_node",
+                    "topology.reorder_node",
+                    "topology.create_edge",
+                    "topology.update_edge",
+                    "topology.remove_edge",
+                    "slots.create",
+                    "slots.update",
+                    "slots.remove",
+                    "slots.reorder",
+                    "protocols.create",
+                    "protocols.update",
+                    "protocols.remove",
+                    "variables.create",
+                    "variables.update",
+                    "variables.remove",
+                    "states.create",
+                    "states.update",
+                    "states.remove",
+                    "annotations.create",
+                    "annotations.update",
+                    "annotations.remove",
+                    "network.generate"
+                  ]
+                },
+                "client_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "node_id": {},
+                "edge_id": {},
+                "slot_id": {},
+                "protocol_id": {},
+                "variable_id": {},
+                "placement": {
+                  "type": "string",
+                  "enum": [
+                    "node",
+                    "edge",
+                    "floating"
+                  ]
+                },
+                "owner_id": {},
+                "to_index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "value": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_prepare",
+      "description": "Flush, validate, parse, and prepare through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_run",
+      "description": "Run one additional duration through the browser controller; poll simulation_status for progress. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "duration": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_pause",
+      "description": "Pause through the bound browser simulation controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_resume",
+      "description": "Resume toward the existing cumulative target through the browser controller. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_reset",
+      "description": "Destroy/reset the bound simulation and restore design editability without changing the design. This action is not replay-safe; after an uncertain response, read simulation_status before fresh lifecycle work.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_status",
+      "description": "Return lifecycle phase, progress, target, and serialized bound simulation state.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_results",
+      "description": "Return the serialized bound simulation result summary.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_slot_result",
+      "description": "Return one bound simulation slot result and representation resource links.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "slot_id"
+        ],
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_protocol_result",
+      "description": "Return one bound simulation protocol result and representation resource links.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "protocol_id"
+        ],
+        "properties": {
+          "protocol_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_logs",
+      "description": "Return non-purging logs from the bound simulator.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

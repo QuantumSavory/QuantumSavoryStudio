@@ -105,7 +105,7 @@ describe('McpEditorBridge', () => {
     expect(client.bind).toHaveBeenCalledWith(expect.objectContaining({
       project_name: 'Bridge Project',
       simulation_name: 'user_Bridge Project',
-      contract_version: 1,
+      contract_version: 2,
       snapshot: expect.objectContaining({
         name: 'Bridge Project',
         schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -142,7 +142,6 @@ describe('McpEditorBridge', () => {
 
     await bridge.handleCommand({
       command_id: 'command-1',
-      operation_id: 'prepare-1',
       binding_id: 'binding-1',
       generation: 1,
       base_revision: 0,
@@ -161,7 +160,6 @@ describe('McpEditorBridge', () => {
     expect(designCommands.runExclusive).not.toHaveBeenCalled()
     expect(client.commit).toHaveBeenCalledWith(expect.objectContaining({
       command_id: 'command-1',
-      operation_id: 'prepare-1',
       success: true,
       document_changed: false,
       result: {
@@ -171,6 +169,7 @@ describe('McpEditorBridge', () => {
         prepared_revision: 0,
       },
     }))
+    expect(client.commit.mock.calls.at(-1)[0]).not.toHaveProperty('operation_id')
     expect(bridge.revision).toBe(0)
   })
 
@@ -199,7 +198,6 @@ describe('McpEditorBridge', () => {
 
     await bridge.handleCommand({
       command_id: 'command-run-invalid',
-      operation_id: 'run-invalid',
       base_revision: 0,
       payload: { type: 'simulation_action', action: 'run', duration: 1 },
     })
@@ -238,7 +236,6 @@ describe('McpEditorBridge', () => {
 
     await bridge.handleCommand({
       command_id: 'command-run-api-error',
-      operation_id: 'run-api-error',
       base_revision: 0,
       payload: { type: 'simulation_action', action: 'run', duration: 1 },
     })
@@ -359,7 +356,6 @@ describe('McpEditorBridge', () => {
 
     await bridge.handleCommand({
       command_id: 'command-2',
-      operation_id: 'edit-2',
       base_revision: 0,
       payload: {
         type: 'design_command',

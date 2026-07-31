@@ -1,6 +1,21 @@
 const MCP_PORT_ENV_VAR = "WEBQUANTUMSAVORY_MCP_PORT"
 const DEFAULT_MCP_PORT = 8001
-const MCP_CONTRACT_VERSION = 1
+const MCP_CONTRACT_FILE = normpath(
+  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "tools.json"),
+)
+
+Base.include_dependency(MCP_CONTRACT_FILE)
+
+function _mcp_contract_version(path::AbstractString=MCP_CONTRACT_FILE)
+  contract = JSON.parsefile(path)
+  version = get(contract, "contract_version", nothing)
+  if !(version isa Integer) || version isa Bool || version < 1
+    throw(ArgumentError("MCP contract_version must be a positive integer"))
+  end
+  return Int(version)
+end
+
+const MCP_CONTRACT_VERSION = _mcp_contract_version()
 
 struct MCPConfiguration
   enabled::Bool
