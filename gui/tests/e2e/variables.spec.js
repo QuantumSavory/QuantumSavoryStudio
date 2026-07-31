@@ -2,9 +2,13 @@ import { test, expect } from '@playwright/test'
 import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 import { simulationNotFoundResponse } from './httpResponses.js'
 import {
+  replaceStoredProjectAndReload,
+  saveAndReadProject,
+} from './projectBoundary.js'
+import {
   addOneSlotToEachNode,
   mockParseAndDestroy,
-  parseNetworkThroughRunner,
+  parsePayloadThroughRunner,
   stopSimulationThroughRunner,
 } from './simulationLifecycle.js'
 
@@ -90,28 +94,25 @@ async function createProjectWithEdgeProtocol(page) {
   await firstNode.locator('.connector.output').dragTo(page.locator('.node-marker').nth(1))
   await expect(page.locator('.edge-list-item')).toHaveCount(1)
 
-  await page.evaluate(() => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const projectData = setupState?.projectData
-    if (!projectData?.net?.edges?.[0]) {
-      throw new Error('Reactive project state is unavailable')
-    }
-
-    projectData.net.edges[0].data.protocols.push({
-      id: 'protocol_variables_edge',
-      type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-      parameters: [{
-        name: 'rounds',
-        type: 'Int64',
-        value: null,
-      }],
-    })
-  })
+  await page.locator('.edge-list-item').click()
+  const edgePanel = page.locator('#edgePanel')
+  await edgePanel.getByRole('button', { name: 'Add Protocol' }).click()
+  await page.getByRole('menuitem', { name: 'EntanglerProt', exact: true }).click()
+  await expect(edgePanel.locator('.protocol-editor', { hasText: 'EntanglerProt' })).toBeVisible()
   await addOneSlotToEachNode(page)
 }
 
 function parameterRow(editor, name) {
   return editor.locator('.param-item').filter({ hasText: name })
+}
+
+async function openEdgeProtocolEditor(page) {
+  await page.locator('.edge-list-item').first().click()
+  const editor = page.locator('#edgePanel .protocol-editor', { hasText: 'EntanglerProt' })
+  await expect(editor).toBeVisible()
+  await editor.locator('.protocol-list-type').click()
+  await expect(editor.locator('.protocol-container')).toBeVisible()
+  return editor
 }
 
 async function expectIconCentered(button) {
@@ -179,12 +180,10 @@ test.describe('Global protocol variables', () => {
     await expect(typeSelect).toHaveValue('Int64')
     await expect(valueInput).toHaveValue('7')
 
-    await page.locator('.edge-list-item').first().click()
-    const editor = page.locator('#edgePanel .protocol-editor', { hasText: 'EntanglerProt' })
-    await expect(editor).toBeVisible()
-    await editor.locator('.protocol-list-type').click()
+    const editor = await openEdgeProtocolEditor(page)
 
     const roundsRow = parameterRow(editor, 'rounds')
+    await expect(roundsRow.locator('input[type="number"]')).toHaveValue('')
     const bindingButton = roundsRow.getByRole('button', { name: 'Set rounds from a variable' })
     await expect(bindingButton).toBeEnabled()
     await expectIconCentered(bindingButton)
@@ -193,11 +192,6 @@ test.describe('Global protocol variables', () => {
     const variableSelector = roundsRow.getByRole('combobox', { name: 'Variable for rounds' })
     await expect(variableSelector).toHaveValue('')
     await expect(deleteButton).toBeEnabled()
-    const valueBeforeSelection = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      return setupState?.projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]?.value
-    })
-    expect(valueBeforeSelection).toBeNull()
 
     await variableSelector.selectOption(variableId)
     await expect(variableSelector).toHaveValue(variableId)
@@ -212,21 +206,14 @@ test.describe('Global protocol variables', () => {
       'retry_rounds (Int64)',
     )
 
-    const serialized = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const minimized = setupState?.minimizedProjectData?.value ?? setupState?.minimizedProjectData
-      const full = setupState?.serializeProjectData?.()
-      if (!full || !minimized) throw new Error('Serialized project state is unavailable')
-
-      const normalizedFull = JSON.parse(JSON.stringify(full))
-      const normalizedMinimized = JSON.parse(JSON.stringify(minimized))
-      return {
-        fullVariable: normalizedFull.variables[0],
-        minimizedVariable: normalizedMinimized.variables[0],
-        fullParameter: normalizedFull.net.edges[0].data.protocols[0].parameters[0],
-        minimizedParameter: normalizedMinimized.net.edges[0].data.protocols[0].parameters[0],
-      }
-    })
+    const stored = await saveAndReadProject(page, 'Variables Test Project')
+    const minimized = await parsePayloadThroughRunner(page)
+    const serialized = {
+      fullVariable: stored.variables[0],
+      minimizedVariable: minimized.variables[0],
+      fullParameter: stored.net.edges[0].data.protocols[0].parameters[0],
+      minimizedParameter: minimized.net.edges[0].data.protocols[0].parameters[0],
+    }
 
     const expectedVariable = {
       id: variableId,
@@ -256,7 +243,6 @@ test.describe('Global protocol variables', () => {
     expect(serialized.fullParameter).toEqual(expectedFullParameter)
     expect(serialized.minimizedParameter).toEqual(expectedMinimizedParameter)
 
-    await parseNetworkThroughRunner(page)
     await expect(addVariableButton).toBeDisabled()
     await expect(nameInput).toBeDisabled()
     await expect(typeSelect).toBeDisabled()
@@ -273,13 +259,17 @@ test.describe('Global protocol variables', () => {
     await expect(roundsRow.getByRole('button', { name: 'Use a direct value for rounds' })).toBeEnabled()
     await expect(deleteButton).toBeDisabled()
 
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      setupState.projectData.net.edges[0].data.protocols[0].parameters[0].type = 'UnsupportedType'
-    })
-    const unknownTypeIndicator = roundsRow.locator('.unknown-type-indicator')
+    const fixture = await saveAndReadProject(page, 'Variables Test Project')
+    fixture.net.edges[0].data.protocols[0].parameters[0].type = 'UnsupportedType'
+    await replaceStoredProjectAndReload(page, fixture)
+
+    const reopenedEditor = await openEdgeProtocolEditor(page)
+    const reopenedRoundsRow = parameterRow(reopenedEditor, 'rounds')
+    const unknownTypeIndicator = reopenedRoundsRow.locator('.unknown-type-indicator')
     await expect(unknownTypeIndicator).toHaveCount(0)
-    await expect(roundsRow.getByTestId('parameter-option-selector').locator('option')).toHaveText([
+    await expect(
+      reopenedRoundsRow.getByTestId('parameter-option-selector').locator('option'),
+    ).toHaveText([
       'Default',
       'Int64',
       'Int64 Expression',
@@ -289,23 +279,28 @@ test.describe('Global protocol variables', () => {
   test('filters the picker, explains availability, and preserves incompatible assignments', async ({ page }) => {
     await createProjectWithEdgeProtocol(page)
 
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const projectData = setupState?.projectData
-      const variables = projectData?.variables
-      const parameter = projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]
-      if (!variables || !parameter) throw new Error('Reactive project state is unavailable')
-      parameter.value = 2
-      variables.push(
-        { id: 'variable_label', name: 'round label', type: 'String', value: 'four' },
-        { id: 'variable_rounds', name: 'retry rounds', type: 'Int64', value: 4 },
-      )
-    })
+    await page.getByRole('tab', { name: 'Variables' }).click()
+    const variablesPanel = page.getByTestId('variables-panel')
+    const addVariable = variablesPanel.getByRole('button', { name: 'Add Variable' })
+    await addVariable.click()
+    let variableRows = variablesPanel.locator('.variable-row')
+    const labelVariable = variableRows.nth(0)
+    await labelVariable.locator('.variable-name-input').fill('round label')
+    await labelVariable.locator('.variable-type-select').selectOption('String')
+    await labelVariable.locator('.variable-value-input input[type="text"]').fill('four')
 
-    await page.locator('.edge-list-item').first().click()
-    const editor = page.locator('#edgePanel .protocol-editor', { hasText: 'EntanglerProt' })
-    await editor.locator('.protocol-list-type').click()
+    await addVariable.click()
+    variableRows = variablesPanel.locator('.variable-row')
+    const roundsVariable = variableRows.nth(1)
+    await roundsVariable.locator('.variable-name-input').fill('retry rounds')
+    await roundsVariable.locator('.variable-type-select').selectOption('Int64')
+    await roundsVariable.locator('.variable-value-input input[type="number"]').fill('4')
+    const roundsVariableId = await roundsVariable.getAttribute('data-variable-id')
+    expect(roundsVariableId).toMatch(/^variable_/)
+
+    let editor = await openEdgeProtocolEditor(page)
     const roundsRow = parameterRow(editor, 'rounds')
+    await roundsRow.locator('input[type="number"]').fill('2')
     const bindingControl = roundsRow.locator('.variable-binding-control')
     const bindingButton = roundsRow.getByRole('button', { name: 'Set rounds from a variable' })
 
@@ -322,40 +317,34 @@ test.describe('Global protocol variables', () => {
       'Select a variable',
       'retry rounds (Int64)',
     ])
+    await variableSelector.selectOption(roundsVariableId)
+    await expect(variableSelector).toHaveValue(roundsVariableId)
 
-    const valueBeforeSelection = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      return setupState?.projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]?.value
+    await page.getByRole('tab', { name: 'Variables' }).click()
+    await roundsVariable.locator('.variable-type-select').selectOption('String')
+    editor = await openEdgeProtocolEditor(page)
+    const reopenedRoundsRow = parameterRow(editor, 'rounds')
+    const reopenedBindingControl = reopenedRoundsRow.locator('.variable-binding-control')
+    const reopenedBindingButton = reopenedRoundsRow.getByRole('button', {
+      name: 'Set rounds from a variable',
     })
-    expect(valueBeforeSelection).toBe(2)
-
-    await variableSelector.selectOption('variable_rounds')
-    await expect(variableSelector).toHaveValue('variable_rounds')
-
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const variable = setupState?.projectData?.variables?.find(({ id }) => id === 'variable_rounds')
-      if (!variable) throw new Error('Assigned variable is unavailable')
-      variable.type = 'String'
-      variable.selectedType = 'String'
+    const incompatibleSelector = reopenedRoundsRow.getByRole('combobox', {
+      name: 'Variable for rounds',
     })
 
-    await expect(variableSelector).toHaveValue('variable_rounds')
-    await expect(variableSelector.locator('option')).toHaveText([
+    await expect(incompatibleSelector).toHaveValue(roundsVariableId)
+    await expect(incompatibleSelector.locator('option')).toHaveText([
       'Incompatible variable: retry rounds (String)',
     ])
-    const preservedReference = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const value = setupState?.projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]?.value
-      return JSON.parse(JSON.stringify(value))
-    })
-    expect(preservedReference).toEqual({ kind: 'variable', id: 'variable_rounds' })
+    const stored = await saveAndReadProject(page, 'Variables Test Project')
+    const preservedReference = stored.net.edges[0].data.protocols[0].parameters[0].value
+    expect(preservedReference).toEqual({ kind: 'variable', id: roundsVariableId })
 
-    await roundsRow.getByRole('button', { name: 'Use a direct value for rounds' }).click()
-    await expect(bindingButton).toBeDisabled()
-    await expect(roundsRow.locator('input[type="number"]')).toHaveValue('2')
+    await reopenedRoundsRow.getByRole('button', { name: 'Use a direct value for rounds' }).click()
+    await expect(reopenedBindingButton).toBeDisabled()
+    await expect(reopenedRoundsRow.locator('input[type="number"]')).toHaveValue('2')
     await page.mouse.move(0, 0)
-    await bindingControl.hover()
+    await reopenedBindingControl.hover()
     await expect(page.locator('.p-tooltip-text')).toHaveText(
       'No variables have a type supported by this parameter',
     )

@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test'
 import { simulationNotFoundResponse } from './httpResponses.js'
+import { saveAndReadProject } from './projectBoundary.js'
+import {
+  addOneSlotToEachNode,
+  mockParseAndDestroy,
+  parsePayloadThroughRunner,
+} from './simulationLifecycle.js'
 
 const SYMBOLIC_PROTOCOL_TYPE = {
   type: 'TestProtocols.SymbolicProt',
@@ -127,6 +133,7 @@ async function mockConfiguration(page) {
       json: { success: false, error: INVALID_FUNCTION_ERROR },
     })
   })
+  await mockParseAndDestroy(page)
 }
 
 async function loadApp(page) {
@@ -141,12 +148,7 @@ async function loadApp(page) {
   await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
 }
 
-async function createProjectWithProtocol(page, {
-  projectName,
-  protocolId,
-  protocolType,
-  parameters,
-}) {
+async function createProjectWithNode(page, projectName) {
   await page.locator('.hamburger-btn').click()
   await page.getByText('New', { exact: true }).click()
   await page.getByPlaceholder('Project name').fill(projectName)
@@ -156,22 +158,17 @@ async function createProjectWithProtocol(page, {
   await page.locator('canvas').first().click({ position: { x: 450, y: 300 } })
   await page.keyboard.up('Alt')
   await expect(page.locator('.node-marker')).toHaveCount(1)
+}
 
-  await page.evaluate(protocol => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const node = setupState?.projectData?.net?.nodes?.[0]
-    if (!node) throw new Error('Reactive node state is unavailable')
-
-    node.data.protocols.push(protocol)
-  }, {
-    id: protocolId,
-    type: protocolType,
-    parameters,
-  })
-
+async function createProjectWithProtocol(page, { projectName, protocolType }) {
+  await createProjectWithNode(page, projectName)
   await page.locator('.node-marker').click()
+  const nodePanel = page.locator('#nodePanel')
   const protocolName = protocolType.split('.').pop()
-  const editor = page.locator('#nodePanel .protocol-editor', { hasText: protocolName })
+  await nodePanel.getByRole('button', { name: 'Add Protocol' }).click()
+  await page.getByRole('menuitem', { name: protocolName, exact: true }).click()
+
+  const editor = nodePanel.locator('.protocol-editor', { hasText: protocolName })
   await expect(editor).toBeVisible()
   await editor.locator('.protocol-list-type').click()
   await expect(editor.locator('.protocol-container')).toBeVisible()
@@ -181,26 +178,14 @@ async function createProjectWithProtocol(page, {
 function createProjectWithSymbolicProtocol(page) {
   return createProjectWithProtocol(page, {
     projectName: 'Symbolic Editor Test',
-    protocolId: 'protocol_symbolic_editor',
     protocolType: SYMBOLIC_PROTOCOL_TYPE.type,
-    parameters: [{
-      name: 'observable',
-      type: 'Symbolic',
-      value: null,
-    }],
   })
 }
 
 async function createProjectWithCustomFunctionProtocol(page) {
   const editor = await createProjectWithProtocol(page, {
     projectName: 'Custom Function Editor Test',
-    protocolId: 'protocol_custom_function_editor',
     protocolType: CUSTOM_FUNCTION_PROTOCOL_TYPE.type,
-    parameters: [{
-      name: 'callback',
-      type: 'Function',
-      value: null,
-    }],
   })
   await editor.locator('.complexTypeSelector').selectOption('Lambda')
   return editor
@@ -405,13 +390,9 @@ test.describe('Code editor lifecycle', () => {
       { checkSmallViewport: true },
     )
 
-    const serializedParameter = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const minimized = setupState?.minimizedProjectData?.value ?? setupState?.minimizedProjectData
-      return JSON.parse(JSON.stringify(
-        minimized.net.nodes[0].data.protocols[0].parameters[0]
-      ))
-    })
+    await addOneSlotToEachNode(page)
+    const payload = await parsePayloadThroughRunner(page)
+    const serializedParameter = payload.net.nodes[0].data.protocols[0].parameters[0]
     expect(serializedParameter).toEqual({
       name: 'callback',
       type: 'Lambda',
@@ -420,6 +401,9 @@ test.describe('Code editor lifecycle', () => {
   })
 
   test('starts open for a new custom-function variable and collapses only after validation succeeds', async ({ page }) => {
+    const projectName = 'Custom Function Variable Test'
+    await createProjectWithNode(page, projectName)
+    await addOneSlotToEachNode(page)
     await page.getByRole('tab', { name: 'Variables' }).click()
     const variablesPanel = page.getByTestId('variables-panel')
     await variablesPanel.getByRole('button', { name: 'Add Variable' }).click()
@@ -431,14 +415,12 @@ test.describe('Code editor lifecycle', () => {
     await expectCustomFunctionValidationLifecycle(page, valueEditor)
 
     const variableId = await variableRow.getAttribute('data-variable-id')
-    const serializedVariables = await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const minimized = setupState?.minimizedProjectData?.value ?? setupState?.minimizedProjectData
-      return {
-        full: JSON.parse(JSON.stringify(setupState.serializeProjectData().variables[0])),
-        minimized: JSON.parse(JSON.stringify(minimized.variables[0])),
-      }
-    })
+    const stored = await saveAndReadProject(page, projectName)
+    const payload = await parsePayloadThroughRunner(page)
+    const serializedVariables = {
+      full: stored.variables[0],
+      minimized: payload.variables[0],
+    }
     const expectedVariable = {
       id: variableId,
       name: 'variable_1',

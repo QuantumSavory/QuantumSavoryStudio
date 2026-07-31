@@ -1,9 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { canonicalErrorResponse } from './httpResponses.js'
 import {
+  replaceStoredProjectAndReload,
+  saveAndReadProject,
+} from './projectBoundary.js'
+import {
   addOneSlotToEachNode,
   mockParseAndDestroy,
-  parseNetworkThroughRunner,
+  parsePayloadThroughRunner,
+  stopSimulationThroughRunner,
 } from './simulationLifecycle.js'
 
 const KNOWN_FUNCTIONS = [
@@ -184,57 +189,60 @@ async function createProjectWithEdge(page) {
   await firstNode.locator('.connector.output').dragTo(page.locator('.node-marker').nth(1))
   await expect(page.locator('.edge-list-item')).toHaveCount(1)
 
-  await page.evaluate(({ savedTag }) => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const projectData = setupState?.projectData
-    if (!projectData?.net?.nodes?.[0] || !projectData.net.edges?.[0]) {
-      throw new Error('Reactive project state is unavailable')
-    }
-
-    projectData.net.nodes[0].data.protocols.push({
-      id: 'protocol_swapper_parameter_options',
-      type: 'QuantumSavory.ProtocolZoo.SwapperProt',
-      parameters: [
-        {
-          name: 'nodeL',
-          type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-        },
-        {
-          name: 'nodeH',
-          type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
-        },
-        {
-          name: 'chooseL',
-          type: 'Function',
-        },
-      ],
-    })
-    projectData.net.edges[0].data.protocols.push({
-      id: 'protocol_entangler_parameter_options',
-      type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-      parameters: [{
-        name: 'chooseslotA',
-        type: ['Int64', 'Function'],
-      }, {
-        name: 'retry_lock_time',
-        type: ['Nothing', 'Float64'],
-      }, {
-        name: 'tag',
-        type: ['Nothing', 'DataType'],
-        selectedType: 'DataType',
-        value: savedTag,
-      }],
-    })
-    projectData.net.edges[0].data.protocols.push({
-      id: 'protocol_consumer_parameter_options',
-      type: 'QuantumSavory.ProtocolZoo.EntanglementConsumer',
-      parameters: [{
-        name: 'tag',
-        type: 'Any',
-        value: null,
-      }],
-    })
-  }, { savedTag: TAG_BETA })
+  const fixture = await saveAndReadProject(page, 'Protocol Parameter Options')
+  fixture.net.nodes[0].data.protocols.push({
+    id: 'protocol_swapper_parameter_options',
+    type: 'QuantumSavory.ProtocolZoo.SwapperProt',
+    parameters: [{
+      name: 'nodeL',
+      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      selectedType: 'default',
+      value: null,
+    }, {
+      name: 'nodeH',
+      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      selectedType: 'default',
+      value: null,
+    }, {
+      name: 'chooseL',
+      type: 'Function',
+      selectedType: 'default',
+      value: null,
+    }],
+  })
+  fixture.net.edges[0].data.protocols.push({
+    id: 'protocol_entangler_parameter_options',
+    type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
+    parameters: [{
+      name: 'chooseslotA',
+      type: ['Int64', 'Function'],
+      selectedType: 'default',
+      value: null,
+    }, {
+      name: 'retry_lock_time',
+      type: ['Nothing', 'Float64'],
+      selectedType: 'default',
+      value: null,
+    }, {
+      name: 'tag',
+      type: ['Nothing', 'DataType'],
+      selectedType: 'DataType',
+      value: TAG_BETA,
+    }],
+  })
+  fixture.net.edges[0].data.protocols.push({
+    id: 'protocol_consumer_parameter_options',
+    type: 'QuantumSavory.ProtocolZoo.EntanglementConsumer',
+    parameters: [{
+      name: 'tag',
+      type: 'Any',
+      selectedType: 'default',
+      value: null,
+    }],
+  })
+  await replaceStoredProjectAndReload(page, fixture)
+  await expect(page.locator('.node-marker')).toHaveCount(2)
+  await expect(page.locator('.edge-list-item')).toHaveCount(1)
   await addOneSlotToEachNode(page)
 }
 
@@ -250,29 +258,23 @@ async function openProtocolEditor(panel, protocolName) {
   return editor
 }
 
-async function serializedNodeParameter(page, name) {
-  return page.evaluate(parameterName => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const minimized = setupState?.minimizedProjectData
-    const payload = minimized?.value ?? minimized
-    return payload?.net?.nodes?.[0]?.data?.protocols?.[0]?.parameters?.find(
-      parameter => parameter.name === parameterName,
-    )
-  }, name)
+function nodeParameter(payload, name) {
+  return payload.net.nodes[0].data.protocols[0].parameters.find(
+    parameter => parameter.name === name,
+  )
 }
 
-async function serializedEdgeParameter(page, name, protocolType = ENTANGLER_TYPE.type) {
-  return page.evaluate(({ parameterName, resolvedProtocolType }) => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const minimized = setupState?.minimizedProjectData
-    const payload = minimized?.value ?? minimized
-    const protocol = payload?.net?.edges?.[0]?.data?.protocols?.find(
-      candidate => candidate.type === resolvedProtocolType,
-    )
-    return protocol?.parameters?.find(
-      parameter => parameter.name === parameterName,
-    )
-  }, { parameterName: name, resolvedProtocolType: protocolType })
+function edgeParameter(payload, name, protocolType = ENTANGLER_TYPE.type) {
+  const protocol = payload.net.edges[0].data.protocols.find(
+    candidate => candidate.type === protocolType,
+  )
+  return protocol?.parameters.find(parameter => parameter.name === name)
+}
+
+async function capturePayloadAndUnlock(page) {
+  const payload = await parsePayloadThroughRunner(page)
+  await stopSimulationThroughRunner(page)
+  return payload
 }
 
 test.describe('Protocol parameter options', () => {
@@ -300,7 +302,8 @@ test.describe('Protocol parameter options', () => {
     await expect(nodeLRow.locator('.param-value')).toHaveText('Wildcard')
     await expect(nodeLRow.locator('.param-value input, .param-value select')).toHaveCount(0)
 
-    const serializedParameter = await serializedNodeParameter(page, 'nodeL')
+    const wildcardPayload = await capturePayloadAndUnlock(page)
+    const serializedParameter = nodeParameter(wildcardPayload, 'nodeL')
     expect(serializedParameter).toEqual({
       name: 'nodeL',
       type: 'QuantumSavory.Wildcard',
@@ -309,6 +312,7 @@ test.describe('Protocol parameter options', () => {
 
     await nodeLTypeSelector.selectOption('Int64')
     await expect(nodeLRow.locator('input[type="number"]')).toHaveValue('')
+    await nodeLTypeSelector.selectOption('default')
 
     await page.locator('.edge-list-item').first().click()
     const entanglerEditor = await openProtocolEditor(page.locator('#edgePanel'), 'EntanglerProt')
@@ -329,7 +333,8 @@ test.describe('Protocol parameter options', () => {
     const retryRow = parameterRow(entanglerEditor, 'retry_lock_time')
     await retryRow.locator('.complexTypeSelector').selectOption('Nothing')
     await expect(retryRow.locator('.param-value')).toHaveText('Nothing')
-    await expect.poll(() => serializedEdgeParameter(page, 'retry_lock_time')).toEqual({
+    const nothingPayload = await capturePayloadAndUnlock(page)
+    expect(edgeParameter(nothingPayload, 'retry_lock_time')).toEqual({
       name: 'retry_lock_time',
       type: 'Nothing',
       value: 'nothing',
@@ -367,7 +372,8 @@ test.describe('Protocol parameter options', () => {
     const predefinedSelector = chooseLRow.locator('.functionSelector')
     await expect(predefinedSelector).toBeVisible()
     await predefinedSelector.selectOption('identity')
-    await expect.poll(() => serializedNodeParameter(page, 'chooseL')).toEqual({
+    const functionPayload = await capturePayloadAndUnlock(page)
+    expect(nodeParameter(functionPayload, 'chooseL')).toEqual({
       name: 'chooseL',
       type: 'Function',
       value: 'identity',
@@ -375,7 +381,8 @@ test.describe('Protocol parameter options', () => {
 
     await chooseLTypeSelector.selectOption('default')
     await expect(chooseLRow.locator('.param-value')).toBeEmpty()
-    await expect.poll(() => serializedNodeParameter(page, 'chooseL')).toBeUndefined()
+    const defaultPayload = await capturePayloadAndUnlock(page)
+    expect(nodeParameter(defaultPayload, 'chooseL')).toBeUndefined()
 
     await chooseLTypeSelector.selectOption('Lambda')
     await expect(chooseLRow.locator('.code-editor-with-symbols')).toBeVisible()
@@ -402,7 +409,8 @@ test.describe('Protocol parameter options', () => {
     await tagTypeSelector.selectOption('Nothing')
     await expect(tagInput).toHaveCount(0)
     await expect(tagRow.locator('.param-value')).toHaveText('Nothing')
-    await expect.poll(() => serializedEdgeParameter(page, 'tag')).toMatchObject({
+    const nothingPayload = await capturePayloadAndUnlock(page)
+    expect(edgeParameter(nothingPayload, 'tag')).toMatchObject({
       name: 'tag',
       type: 'Nothing',
       value: 'nothing',
@@ -414,7 +422,8 @@ test.describe('Protocol parameter options', () => {
     await page.locator('.named-tag-type-overlay')
       .getByRole('option', { name: /ReadyTag.*Example\.Alpha/ }).click()
     await expect(tagInput).toHaveValue(`ReadyTag — ${TAG_ALPHA}`)
-    await expect.poll(() => serializedEdgeParameter(page, 'tag')).toMatchObject({
+    const alphaPayload = await capturePayloadAndUnlock(page)
+    expect(edgeParameter(alphaPayload, 'tag')).toMatchObject({
       name: 'tag',
       type: 'DataType',
       value: TAG_ALPHA,
@@ -423,7 +432,8 @@ test.describe('Protocol parameter options', () => {
     await tagTypeSelector.selectOption('default')
     await expect(tagInput).toHaveCount(0)
     await expect(tagRow.locator('.param-value')).toBeEmpty()
-    await expect.poll(() => serializedEdgeParameter(page, 'tag')).toBeUndefined()
+    const defaultPayload = await capturePayloadAndUnlock(page)
+    expect(edgeParameter(defaultPayload, 'tag')).toBeUndefined()
 
     const consumer = await openProtocolEditor(panel, 'EntanglementConsumer')
     const consumerRow = parameterRow(consumer, 'tag')
@@ -442,8 +452,9 @@ test.describe('Protocol parameter options', () => {
     await consumerInput.fill('counterpart')
     await page.locator('.named-tag-type-overlay')
       .getByRole('option', { name: 'EntanglementCounterpart', exact: true }).click()
-    await expect.poll(() => serializedEdgeParameter(
-      page,
+    const consumerPayload = await capturePayloadAndUnlock(page)
+    expect(edgeParameter(
+      consumerPayload,
       'tag',
       CONSUMER_TYPE.type,
     )).toEqual({
@@ -454,7 +465,7 @@ test.describe('Protocol parameter options', () => {
 
     expect(page.tagCatalogState.requests).toBe(1)
 
-    await parseNetworkThroughRunner(page)
+    await parsePayloadThroughRunner(page)
     await expect(consumerInput).toBeDisabled()
     await expect(consumerRow.getByRole('button', { name: 'Set tag from a variable' })).toBeDisabled()
   })

@@ -24,12 +24,23 @@ export async function addOneSlotToEachNode(page) {
 }
 
 export async function parseNetworkThroughRunner(page) {
-  await page.getByRole('button', { name: 'Toggle advanced controls' }).click()
+  const parseButton = page.getByRole('button', { name: 'Parse', exact: true })
+  if (!await parseButton.isVisible()) {
+    await page.getByRole('button', { name: 'Toggle advanced controls' }).click()
+  }
   const response = page.waitForResponse(candidate => (
     candidate.url().endsWith('/parse_network_graph') && candidate.ok()
   ))
-  await page.getByRole('button', { name: 'Parse', exact: true }).click()
+  await parseButton.click()
   await response
+}
+
+export async function parsePayloadThroughRunner(page) {
+  const request = page.waitForRequest(candidate => (
+    candidate.url().endsWith('/parse_network_graph')
+  ))
+  await parseNetworkThroughRunner(page)
+  return (await request).postDataJSON()
 }
 
 export async function stopSimulationThroughRunner(page) {
