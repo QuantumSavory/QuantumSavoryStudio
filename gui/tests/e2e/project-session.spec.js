@@ -274,6 +274,29 @@ test('invalid browser imports preserve their source, active work, and storage', 
   expect(destroyRequests).toEqual([])
 })
 
+test('explicit Save As overwrite clears the target simulation namespace', async ({ page }) => {
+  const destroyRequests = []
+  await mockBackend(page, [], { destroyRequests })
+  await page.goto('/')
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+
+  const result = await page.evaluate(async target => {
+    const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+    await setup.createNewProject('Active Project')
+    setup.projectData.description = 'replacement snapshot'
+    localStorage.setItem(`cqn_project_${target.name}`, JSON.stringify(target))
+    return setup.createSaveAsProject(target.name, { overwrite: true })
+  }, projectDocument('Existing Target', { description: 'old snapshot' }))
+
+  expect(result).toBe(true)
+  await expect(page.locator('.project-name-label')).toHaveText('Existing Target')
+  expect(destroyRequests).toHaveLength(1)
+  expect(destroyRequests[0].name).toMatch(/_Existing Target$/)
+  expect(await page.evaluate(() => (
+    JSON.parse(localStorage.getItem('cqn_project_Existing Target')).description
+  ))).toBe('replacement snapshot')
+})
+
 test('invalid replacement classes preserve the populated active session', async ({ page }) => {
   const destroyRequests = []
   const invalidDocument = projectDocument('Invalid Candidate', { schemaVersion: 1 })

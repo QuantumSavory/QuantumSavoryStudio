@@ -376,6 +376,9 @@ export function useProjectSession({
     return runReplacement({
       prepare: async () => {
         name = canonicalName(name)
+        if (store.listProjects().includes(name)) {
+          throw new Error(`A project named "${name}" already exists`)
+        }
         return preparePersistedCandidate({
           name,
           decoded: {
@@ -407,9 +410,8 @@ export function useProjectSession({
     return runReplacement({
       prepare: async () => {
         name = canonicalName(name)
-        const targetIsDifferentProject = name !== currentProjectName.value
-          && store.listProjects().includes(name)
-        if (targetIsDifferentProject && !overwrite) {
+        const targetExists = store.listProjects().includes(name)
+        if (targetExists && !overwrite) {
           throw new Error(`A project named "${name}" already exists`)
         }
         return preparePersistedCandidate({
@@ -421,6 +423,7 @@ export function useProjectSession({
             platformInfo: currentPlatformInfo()
           },
           persistenceMethod: 'saveProject',
+          cleanupSimulation: targetExists,
           successMessages: [['info', `Project saved as: ${name}`]]
         })
       },

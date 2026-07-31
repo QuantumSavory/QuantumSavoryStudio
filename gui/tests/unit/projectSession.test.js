@@ -225,7 +225,7 @@ describe('project session', () => {
       seedTarget: true,
       run: (harness) => harness.session.open('B'),
       persistence: 'open',
-      cleanup: 1,
+      cleanupTarget: 'B',
       status: 1,
       demo: false
     },
@@ -233,7 +233,7 @@ describe('project session', () => {
       label: 'import',
       run: (harness, document) => harness.session.importProject(document, 'B'),
       persistence: 'open',
-      cleanup: 1,
+      cleanupTarget: 'B',
       status: 0,
       demo: false
     },
@@ -241,7 +241,7 @@ describe('project session', () => {
       label: 'demo',
       run: (harness, document) => harness.session.openDemo(document),
       persistence: null,
-      cleanup: 1,
+      cleanupTarget: 'B',
       status: 1,
       demo: true
     },
@@ -249,7 +249,7 @@ describe('project session', () => {
       label: 'create',
       run: harness => harness.session.create('B'),
       persistence: 'save',
-      cleanup: 0,
+      cleanupTarget: null,
       status: 0,
       demo: false
     },
@@ -257,7 +257,7 @@ describe('project session', () => {
       label: 'Save As',
       run: harness => harness.session.saveAs('B'),
       persistence: 'save',
-      cleanup: 0,
+      cleanupTarget: null,
       status: 0,
       demo: false
     }
@@ -265,7 +265,7 @@ describe('project session', () => {
     seedTarget,
     run,
     persistence,
-    cleanup,
+    cleanupTarget,
     status,
     demo
   }) => {
@@ -301,7 +301,12 @@ describe('project session', () => {
     expect(harness.selectedItem.value).toBeNull()
     expect(harness.selectedType.value).toBeNull()
     expect(beforeProjectReplacement).toHaveBeenCalledOnce()
-    expect(harness.api.destroySimulation).toHaveBeenCalledTimes(cleanup)
+    if (cleanupTarget) {
+      expect(harness.api.destroySimulation).toHaveBeenCalledOnce()
+      expect(harness.api.destroySimulation).toHaveBeenCalledWith(cleanupTarget)
+    } else {
+      expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+    }
     expect(harness.store.openProject).toHaveBeenCalledTimes(persistence === 'open' ? 1 : 0)
     expect(harness.store.saveProject).toHaveBeenCalledTimes(persistence === 'save' ? 1 : 0)
     expect(harness.store.setRecentProjectName).toHaveBeenCalledTimes(persistence ? 1 : 0)
@@ -372,6 +377,20 @@ describe('project session', () => {
     expect(await harness.session.saveAs('B', { overwrite: true })).toBe(true)
     expect(harness.currentProjectName.value).toBe('B')
     expect(harness.records.get('B').description).toBe('Replacement')
+    expect(harness.api.destroySimulation).toHaveBeenCalledOnce()
+    expect(harness.api.destroySimulation).toHaveBeenCalledWith('B')
+  })
+
+  it('rejects a duplicate create without replacing the stored or active project', async () => {
+    const storedTarget = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const harness = createHarness({ projects: { B: storedTarget } })
+    const before = snapshotProtectedState(harness)
+
+    expect(await harness.session.create(' B ')).toBe(false)
+
+    expectProtectedState(harness, before)
+    expect(harness.records.get('B')).toEqual(storedTarget)
+    expect(harness.showError).toHaveBeenCalledWith('A project named "B" already exists')
   })
 
   it('does not tear down the current session when version confirmation is declined', async () => {
