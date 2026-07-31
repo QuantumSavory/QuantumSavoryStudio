@@ -91,6 +91,18 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   }],
 }
 
+const TRACE_PROTOCOL_TYPE = {
+  type: 'TestProtocols.TraceConsumer',
+  doc: 'Protocol used to exercise generated trace variable assignment.',
+  group: 'node',
+  virtual: null,
+  parameters: [{
+    field: 'probability',
+    type: 'Float64',
+    doc: 'A generated state probability.',
+  }],
+}
+
 async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
     status: 200,
@@ -110,7 +122,7 @@ async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { protocol_types: [SYMBOLIC_PROTOCOL_TYPE] },
+    json: { protocol_types: [SYMBOLIC_PROTOCOL_TYPE, TRACE_PROTOCOL_TYPE] },
   }))
   await page.route('**/states_zoo_types', route => route.fulfill({
     status: 200,
@@ -139,6 +151,16 @@ async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/get_state?**', route => route.fulfill(
     simulationNotFoundResponse(),
   ))
+  await page.route('**/parse_network_graph', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    json: { success: true, message: 'Parsed' },
+  }))
+  await page.route('**/destroy_simulation', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    json: { success: true, message: 'Destroyed' },
+  }))
 }
 
 async function loadApp(page) {
@@ -189,42 +211,96 @@ async function expectWatermarkedPng(image, sourcePng, previousSource) {
   return image.getAttribute('src')
 }
 
-async function addNodeWithSymbolicProtocol(page) {
+async function addNodeWithProtocol(page, projectName, definition) {
+  const existingNodeCount = await page.locator('.node-marker').count()
   await page.keyboard.down('Alt')
   await page.locator('canvas').first().click({ position: { x: 450, y: 300 } })
   await page.keyboard.up('Alt')
-  await expect(page.locator('.node-marker')).toHaveCount(1)
+  const node = page.locator('.node-marker').last()
+  await expect(page.locator('.node-marker')).toHaveCount(existingNodeCount + 1)
+  await expect(node).toBeVisible()
+  const nodeId = await node.getAttribute('data-node-id')
 
-  await page.evaluate(() => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const node = setupState?.projectData?.net?.nodes?.[0]
-    if (!node) throw new Error('Reactive node state is unavailable')
-    node.data.protocols.push({
-      id: 'protocol_states_zoo_symbolic',
-      type: 'TestProtocols.SymbolicProt',
-      parameters: [{
-        name: 'observable',
-        type: 'SymbolicUtils.Symbolic{Real}',
-        value: null,
-      }],
-    })
+  const storedProject = await saveAndReadProject(page, projectName)
+  const storedNode = storedProject.net.nodes.find(candidate => candidate.id === nodeId)
+  expect(storedNode).toBeDefined()
+  storedNode.data.protocols.push({
+    id: `protocol_states_zoo_${nodeId}`,
+    type: definition.type,
+    parameters: definition.parameters.map(parameter => ({
+      name: parameter.field,
+      type: structuredClone(parameter.type),
+      selectedType: 'default',
+      value: null,
+    })),
   })
+  await importProject(
+    page,
+    storedProject,
+    `states-zoo-${definition.type.split('.').pop()}.json`,
+    { overwrite: true },
+  )
 
-  await page.locator('.node-marker').click()
-  const editor = page.locator('#nodePanel .protocol-editor', { hasText: 'SymbolicProt' })
+  await page.locator(`.node-marker[data-node-id="${nodeId}"]`).click()
+  const nodePanel = page.locator('#nodePanel')
+  const protocolName = definition.type.split('.').pop()
+  const editor = nodePanel.locator('.protocol-editor', { hasText: protocolName })
   await expect(editor).toBeVisible()
   await editor.locator('.protocol-list-type').click()
   await expect(editor.locator('.protocol-container')).toBeVisible()
   return editor
 }
 
-async function setSimulationPhase(page, phase) {
-  await page.evaluate(nextPhase => {
-    const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const simulationState = setupState?.simulationState?.value ?? setupState?.simulationState
-    if (!simulationState) throw new Error('Simulation state is unavailable')
-    simulationState.phase = nextPhase
-  }, phase)
+async function completeSimulationTopology(page) {
+  const nodes = page.locator('.node-marker')
+  const firstNode = nodes.first()
+  await firstNode.click()
+  const nodePanel = page.locator('#nodePanel')
+  await nodePanel.getByRole('button', { name: 'Add Slot' }).click()
+  await expect(nodePanel.locator('.slot-row-container')).toHaveCount(1)
+
+  await page.keyboard.down('Alt')
+  await page.locator('canvas').first().click({ position: { x: 650, y: 300 } })
+  await page.keyboard.up('Alt')
+  await expect(nodes).toHaveCount(2)
+  const secondNode = nodes.nth(1)
+  await secondNode.click()
+  await nodePanel.getByRole('button', { name: 'Add Slot' }).click()
+  await expect(nodePanel.locator('.slot-row-container')).toHaveCount(1)
+
+  await firstNode.hover()
+  await firstNode.locator('.connector.output').dragTo(secondNode)
+  await expect(page.locator('.edge-list-item')).toHaveCount(1)
+  await firstNode.click()
+}
+
+async function saveAndReadProject(page, projectName) {
+  await page.locator('.hamburger-btn').click()
+  await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
+  return page.evaluate(name => (
+    JSON.parse(localStorage.getItem(`cqn_project_${name}`))
+  ), projectName)
+}
+
+async function importProject(page, project, filename, { overwrite = false } = {}) {
+  await page.locator('.hamburger-btn').click()
+  const fileChooserPromise = page.waitForEvent('filechooser')
+  await page.getByRole('menuitem', { name: 'Import', exact: true }).click()
+  const fileChooser = await fileChooserPromise
+  await fileChooser.setFiles({
+    name: filename,
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(project)),
+  })
+  if (overwrite) {
+    const conflictDialog = page.getByRole('dialog', { name: 'Project Name Conflict' })
+    await expect(conflictDialog).toBeVisible()
+    await conflictDialog.getByRole('button', { name: 'Overwrite' }).click()
+  }
+  await expect(page.locator('.project-name-label')).toContainText(project.name)
+  const dialog = page.getByRole('dialog', { name: 'Project imported' })
+  await expect(dialog).toContainText(`Project "${project.name}" imported successfully!`)
+  await dialog.getByRole('button', { name: 'OK' }).click()
 }
 
 test.describe('States Zoo variables', () => {
@@ -305,7 +381,11 @@ test.describe('States Zoo variables', () => {
     await mockConfiguration(page)
     await loadApp(page)
     await createProject(page, 'States Zoo Protocol Variable')
-    const protocolEditor = await addNodeWithSymbolicProtocol(page)
+    const protocolEditor = await addNodeWithProtocol(
+      page,
+      'States Zoo Protocol Variable',
+      SYMBOLIC_PROTOCOL_TYPE,
+    )
 
     const panel = await openStatesZoo(page)
     const row = await addState(page, panel)
@@ -334,15 +414,26 @@ test.describe('States Zoo variables', () => {
       'Unlink this variable from protocol or background parameters before deleting it',
     )
 
-    await setSimulationPhase(page, 'parsed')
+    await completeSimulationTopology(page)
+    await page.getByRole('button', { name: 'Toggle advanced controls' }).click()
+    const parseResponse = page.waitForResponse(response => (
+      response.url().endsWith('/parse_network_graph') && response.ok()
+    ))
+    await page.getByRole('button', { name: 'Parse', exact: true }).click()
+    await parseResponse
     await expect(panel.getByRole('button', { name: 'Add State' })).toBeDisabled()
     await expect(row.locator('.states-zoo-name-input')).toBeDisabled()
     await expect(row.locator('.states-zoo-type-select')).toBeDisabled()
     await expect(row.locator('.states-zoo-parameter-range').first()).toBeDisabled()
     await expect(row.locator('.states-zoo-parameter-input').first()).toBeDisabled()
+    await protocolEditor.locator('.protocol-list-type').click()
     await expect(variableSelector).toBeDisabled()
 
-    await setSimulationPhase(page, 'empty')
+    const destroyResponse = page.waitForResponse(response => (
+      response.url().endsWith('/destroy_simulation') && response.ok()
+    ))
+    await page.locator('#runnerPanel .stop-btn').click()
+    await destroyResponse
     await expect(row.locator('.states-zoo-name-input')).toBeEnabled()
     await expect(row.locator('.states-zoo-type-select')).toBeEnabled()
     await expect(variableSelector).toBeEnabled()
@@ -386,14 +477,13 @@ test.describe('States Zoo variables', () => {
     await expect(note).toContainText('probability of successfully heralding the state')
     await expect(note).toContainText('heralded entanglement generation')
 
-    expect(await page.evaluate(id => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const variables = setupState?.projectData?.variables
-      const state = variables?.find(variable => variable.id === id)
-      const trace = variables?.find(variable => variable.id === `${id}_tr`)
+    let storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    const stateAndTrace = variables => {
+      const state = variables.find(variable => variable.id === stateId)
+      const trace = variables.find(variable => variable.id === traceId)
       return {
-        stateName: state?.name,
-        trace: trace && {
+        stateName: state.name,
+        trace: {
           id: trace.id,
           name: trace.name,
           type: trace.type,
@@ -401,7 +491,8 @@ test.describe('States Zoo variables', () => {
           statesZooTraceSourceId: trace.statesZooTraceSourceId,
         },
       }
-    }, stateId)).toEqual({
+    }
+    expect(stateAndTrace(storedProject.variables)).toEqual({
       stateName: 'state_1',
       trace: {
         id: traceId,
@@ -414,11 +505,9 @@ test.describe('States Zoo variables', () => {
 
     await row.locator('.states-zoo-name-input').fill('heralded_pair')
     await expect(note).toContainText('heralded_pair_tr')
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.find(variable => variable.id === id)?.name
-    }, traceId)).toBe('heralded_pair_tr')
+    storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    expect(storedProject.variables.find(variable => variable.id === traceId)?.name)
+      .toBe('heralded_pair_tr')
 
     const updatedPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
@@ -434,13 +523,8 @@ test.describe('States Zoo variables', () => {
     await expect(variablesPanel.locator('.variable-row')).toHaveCount(0)
     await expect(variablesPanel.locator('.empty-variables')).toHaveText('No variables')
 
-    await page.locator('.hamburger-btn').click()
-    await page.getByText('Save', { exact: true }).click()
-    expect(await page.evaluate(({ projectName, id }) => {
-      const project = JSON.parse(localStorage.getItem(`cqn_project_${projectName}`))
-      localStorage.setItem('recentProjectName', projectName)
-      return project.variables.find(variable => variable.id === id)
-    }, { projectName: 'Weighted States Zoo Project', id: traceId })).toEqual({
+    storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    expect(storedProject.variables.find(variable => variable.id === traceId)).toEqual({
       id: traceId,
       name: 'heralded_pair_tr',
       type: 'Float64',
@@ -451,23 +535,28 @@ test.describe('States Zoo variables', () => {
 
     await page.reload()
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.project-name-label')).toContainText(
+      'Weighted States Zoo Project',
+      { timeout: 15_000 },
+    )
     const reloadedPanel = await openStatesZoo(page)
     const reloadedRow = reloadedPanel.locator(`.states-zoo-row[data-variable-id="${stateId}"]`)
     await expect(reloadedRow.locator('.states-zoo-trace-note')).toContainText('heralded_pair_tr')
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.filter(variable => variable.id === id).length
-    }, traceId)).toBe(1)
+    expect(storedProject.variables.filter(variable => variable.id === traceId)).toHaveLength(1)
 
-    await page.evaluate(id => {
-      const projectData = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData
-      projectData.net.protocols.push({
-        id: 'trace_consumer',
-        parameters: [{ value: { kind: 'variable', id } }],
-      })
-    }, traceId)
+    const traceProtocolEditor = await addNodeWithProtocol(
+      page,
+      'Weighted States Zoo Project',
+      TRACE_PROTOCOL_TYPE,
+    )
+    const traceParameter = traceProtocolEditor.locator('.param-item').filter({ hasText: 'probability' })
+    await traceParameter.getByRole('button', { name: 'Set probability from a variable' }).click()
+    const traceSelector = traceParameter.getByRole('combobox', { name: 'Variable for probability' })
+    await expect(traceSelector.locator(`option[value="${traceId}"]`)).toHaveText(
+      'heralded_pair_tr (Float64)',
+    )
+    await traceSelector.selectOption(traceId)
+    await page.getByRole('tab', { name: 'States Zoo' }).click()
     const unweightedOption = reloadedRow.locator(
       '.states-zoo-type-select option[value="DepolarizedBellPair"]',
     )
@@ -478,11 +567,7 @@ test.describe('States Zoo variables', () => {
       'title',
       'Unlink the generated trace variable from protocol or background parameters before deleting this state',
     )
-    await page.evaluate(() => {
-      const protocols = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.net?.protocols
-      protocols.splice(protocols.findIndex(protocol => protocol.id === 'trace_consumer'), 1)
-    })
+    await traceParameter.getByRole('button', { name: 'Use a direct value for probability' }).click()
     await expect(unweightedOption).not.toHaveAttribute('disabled')
     await expect(reloadedDelete).toBeEnabled()
 
@@ -491,132 +576,120 @@ test.describe('States Zoo variables', () => {
     ))
     await reloadedRow.locator('.states-zoo-type-select').selectOption('DepolarizedBellPair')
     await unweightedPreview
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.some(variable => variable.id === id)
-    }, traceId)).toBe(false)
+    storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    expect(storedProject.variables.some(variable => variable.id === traceId)).toBe(false)
 
     const reweightedPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
     ))
     await reloadedRow.locator('.states-zoo-type-select').selectOption('BarrettKokBellPairW')
     await reweightedPreview
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.some(variable => variable.id === id)
-    }, traceId)).toBe(true)
+    storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    expect(storedProject.variables.find(variable => variable.id === traceId)).toMatchObject({
+      name: 'heralded_pair_tr',
+      statesZooTraceSourceId: stateId,
+    })
 
     await reloadedRow.locator('.delete-states-zoo-button').click()
     await expect(reloadedPanel.locator('.states-zoo-row')).toHaveCount(0)
-    expect(await page.evaluate(({ stateId: sourceId, traceId: companionId }) => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.some(variable => variable.id === sourceId || variable.id === companionId)
-    }, { stateId, traceId })).toBe(false)
+    storedProject = await saveAndReadProject(page, 'Weighted States Zoo Project')
+    expect(storedProject.variables.some(variable => (
+      variable.id === stateId || variable.id === traceId
+    ))).toBe(false)
   })
 
   test('does not overwrite trace ID or name collisions', async ({ page }) => {
     await mockConfiguration(page)
     await loadApp(page)
+    await createProject(page, 'States Zoo Collision Seed')
     const panel = await openStatesZoo(page)
     const row = await addState(page, panel)
     const stateId = await row.getAttribute('data-variable-id')
     const traceId = `${stateId}_tr`
 
-    await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      variables.push({ id: `${id}_tr`, name: 'unrelated', type: 'String', value: 'keep me' })
-    }, stateId)
+    const seedProject = await saveAndReadProject(page, 'States Zoo Collision Seed')
+    const idCollisionProject = structuredClone(seedProject)
+    idCollisionProject.name = 'States Zoo ID Collision'
+    idCollisionProject.variables.push({
+      id: traceId,
+      name: 'unrelated',
+      type: 'String',
+      value: 'keep me',
+    })
+    await importProject(page, idCollisionProject, 'states-zoo-id-collision.json')
+    const idCollisionPanel = await openStatesZoo(page)
+    const idCollisionRow = idCollisionPanel.locator(
+      `.states-zoo-row[data-variable-id="${stateId}"]`,
+    )
 
     const idCollisionPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
     ))
-    await row.locator('.states-zoo-type-select').selectOption('BarrettKokBellPairW')
+    await idCollisionRow.locator('.states-zoo-type-select').selectOption('BarrettKokBellPairW')
     await idCollisionPreview
-    await expect(row.locator('.states-zoo-preview-error')).toContainText(
+    await expect(idCollisionRow.locator('.states-zoo-preview-error')).toContainText(
       `ID '${traceId}' is already in use`,
     )
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      const collision = variables?.find(variable => variable.id === id)
-      return collision && {
-        name: collision.name,
-        type: collision.type,
-        value: collision.value,
-        statesZooTraceSourceId: collision.statesZooTraceSourceId,
-      }
-    }, traceId)).toEqual({
+    let storedProject = await saveAndReadProject(page, 'States Zoo ID Collision')
+    expect(storedProject.variables.find(variable => variable.id === traceId)).toMatchObject({
       name: 'unrelated',
       type: 'String',
       value: 'keep me',
-      statesZooTraceSourceId: undefined,
     })
 
-    await row.locator('.states-zoo-name-input').fill('id_collision_rename')
-    await expect(row.locator('.states-zoo-preview-error')).toContainText(
+    await idCollisionRow.locator('.states-zoo-name-input').fill('id_collision_rename')
+    await expect(idCollisionRow.locator('.states-zoo-preview-error')).toContainText(
       `ID '${traceId}' is already in use`,
     )
 
-    await page.evaluate(({ stateId: sourceId, traceId: occupiedId }) => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      const collisionIndex = variables.findIndex(variable => variable.id === occupiedId)
-      variables.splice(collisionIndex, 1)
-      variables.push({
-        id: 'unrelated_name',
-        name: 'id_collision_rename_tr',
-        type: 'String',
-        value: 'keep me too',
-      })
-      const state = variables.find(variable => variable.id === sourceId)
-      state.name = 'id_collision_rename'
-    }, { stateId, traceId })
-
+    storedProject = await saveAndReadProject(page, 'States Zoo ID Collision')
+    const nameCollisionProject = structuredClone(storedProject)
+    nameCollisionProject.name = 'States Zoo Name Collision'
+    nameCollisionProject.variables = nameCollisionProject.variables.filter(
+      variable => variable.id !== traceId,
+    )
+    nameCollisionProject.variables.push({
+      id: 'unrelated_name',
+      name: 'id_collision_rename_tr',
+      type: 'String',
+      value: 'keep me too',
+    })
+    await importProject(page, nameCollisionProject, 'states-zoo-name-collision.json')
+    const nameCollisionPanel = await openStatesZoo(page)
+    const nameCollisionRow = nameCollisionPanel.locator(
+      `.states-zoo-row[data-variable-id="${stateId}"]`,
+    )
+    await expect(nameCollisionRow.locator('.states-zoo-name-error')).toContainText(
+      "name 'id_collision_rename_tr' is already in use",
+    )
     const nameCollisionPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
     ))
-    await row.getByRole('button', { name: 'Retry preview' }).click()
+    await nameCollisionRow.getByRole('button', { name: 'Retry preview' }).click()
     await nameCollisionPreview
-    await expect(row.locator('.states-zoo-name-error')).toContainText(
+    await expect(nameCollisionRow.locator('.states-zoo-preview-error')).toContainText(
       "name 'id_collision_rename_tr' is already in use",
     )
-    await expect(row.locator('.states-zoo-preview-error')).toContainText(
-      "name 'id_collision_rename_tr' is already in use",
-    )
-    expect(await page.evaluate(() => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      return variables?.filter(variable => variable.name === 'id_collision_rename_tr').length
-    })).toBe(1)
+    storedProject = await saveAndReadProject(page, 'States Zoo Name Collision')
+    expect(storedProject.variables.filter(
+      variable => variable.name === 'id_collision_rename_tr',
+    )).toHaveLength(1)
 
-    await page.evaluate(() => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      variables.splice(variables.findIndex(variable => variable.id === 'unrelated_name'), 1)
-    })
     const recoveredPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
     ))
-    await row.locator('.states-zoo-name-input').fill('recovered_state')
+    await nameCollisionRow.locator('.states-zoo-name-input').fill('recovered_state')
     await recoveredPreview
-    await expect(row.locator('.states-zoo-preview-error')).toHaveCount(0)
-    await expect(row.locator('.states-zoo-trace-note')).toContainText('recovered_state_tr')
-    expect(await page.evaluate(id => {
-      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-        ?.projectData?.variables
-      const companion = variables?.find(variable => variable.id === id)
-      return companion && {
-        name: companion.name,
-        statesZooTraceSourceId: companion.statesZooTraceSourceId,
-      }
-    }, traceId)).toEqual({
+    await expect(nameCollisionRow.locator('.states-zoo-preview-error')).toHaveCount(0)
+    await expect(nameCollisionRow.locator('.states-zoo-trace-note'))
+      .toContainText('recovered_state_tr')
+    storedProject = await saveAndReadProject(page, 'States Zoo Name Collision')
+    expect(storedProject.variables.find(variable => variable.id === traceId)).toMatchObject({
       name: 'recovered_state_tr',
       statesZooTraceSourceId: stateId,
     })
+    expect(storedProject.variables.find(variable => variable.id === 'unrelated_name'))
+      .toMatchObject({ name: 'id_collision_rename_tr', value: 'keep me too' })
   })
 
   test('preserves tagged recipes through save, reload, and import', async ({ page }) => {
