@@ -7,6 +7,19 @@ const STORAGE_PREFIX = 'cqn_project_'
 const METADATA_INDEX_KEY = 'cqn_projects_metadata_index'
 const RECENT_PROJECT_NAME_KEY = 'recentProjectName'
 
+function unindexedProjectMetadata() {
+  const now = new Date().toISOString()
+  return {
+    createdAt: now,
+    updatedAt: now,
+    openedAt: null,
+    nodeCount: 0,
+    edgeCount: 0,
+    slotCount: 0,
+    protocolCount: 0
+  }
+}
+
 export default class ProjectStore {
   static getRecentProjectName() {
     return localStorage.getItem(RECENT_PROJECT_NAME_KEY)
@@ -112,19 +125,10 @@ export default class ProjectStore {
     const index = this.getMetadataIndex()
     const projectNames = this.listProjects()
     
-    // Filter index to only include projects that actually exist
-    const validProjects = projectNames
+    return projectNames
       .map(name => ({
         name,
-        metadata: index[name] || {
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          openedAt: null, // Don't default - will be sorted to end
-          nodeCount: 0,
-          edgeCount: 0,
-          slotCount: 0,
-          protocolCount: 0
-        }
+        metadata: index[name] || unindexedProjectMetadata()
       }))
       .sort((a, b) => {
         // Sort by openedAt (most recent first), fallback to updatedAt, then createdAt
@@ -133,26 +137,5 @@ export default class ProjectStore {
         return new Date(bDate) - new Date(aDate)
       })
       .slice(0, limit)
-    
-    return validProjects
-  }
-
-  // Get all projects with metadata (for future use in project lists)
-  static getAllProjectsWithMetadata() {
-    const index = this.getMetadataIndex()
-    const projectNames = this.listProjects()
-    
-    return projectNames.map(name => ({
-      name,
-      metadata: index[name] || {
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        openedAt: null, // Don't default to current time
-        nodeCount: 0,
-        edgeCount: 0,
-        slotCount: 0,
-        protocolCount: 0
-      }
-    }))
   }
 }
