@@ -70,6 +70,12 @@ end
         "recordMcpActivity" => "activity",
         "reportMcpSidecarReady" => "ready",
     )
+    @test SIDECAR_BRIDGE_SUCCESS_KEYS == Dict(
+        "invokeMcpTool" => Set(["success", "result"]),
+        "readMcpResource" => Set(["success", "result"]),
+        "recordMcpActivity" => Set(["success"]),
+        "reportMcpSidecarReady" => Set(["success"]),
+    )
 
     malformed = backend_error_payload(
         Dict{String,Any}("error" => "legacy");
@@ -92,19 +98,61 @@ end
     )
     @test extra_field["code"] == "MALFORMED_ERROR_RESPONSE"
 
-    invalid_json = backend_response(HTTP.Response(502, "not JSON"))
+    invalid_json = backend_response(
+        HTTP.Response(502, "not JSON"),
+        "invokeMcpTool",
+    )
     @test invalid_json[1] === false
     @test invalid_json[2]["code"] == "INVALID_JSON_RESPONSE"
     @test invalid_json[2]["status"] == 502
 
-    malformed_success = backend_response(HTTP.Response(
-        200,
-        JSON3.write(Dict("result" => Dict("value" => 1))),
-    ))
+    malformed_success = backend_response(
+        HTTP.Response(
+            200,
+            JSON3.write(Dict("result" => Dict("value" => 1))),
+        ),
+        "invokeMcpTool",
+    )
     @test malformed_success[1] === false
     @test malformed_success[2]["code"] == "MALFORMED_SUCCESS_RESPONSE"
     @test malformed_success[2]["details"]["body"] ==
         Dict{String,Any}("result" => Dict{String,Any}("value" => 1))
+
+    missing_result = backend_response(
+        HTTP.Response(200, JSON3.write(Dict("success" => true))),
+        "invokeMcpTool",
+    )
+    @test missing_result[1] === false
+    @test missing_result[2]["code"] == "MALFORMED_SUCCESS_RESPONSE"
+
+    extra_field_success = backend_response(
+        HTTP.Response(
+            200,
+            JSON3.write(Dict("success" => true, "legacy" => true)),
+        ),
+        "recordMcpActivity",
+    )
+    @test extra_field_success[1] === false
+    @test extra_field_success[2]["code"] == "MALFORMED_SUCCESS_RESPONSE"
+
+    valid_result = Dict{String,Any}("value" => 1)
+    valid_success = backend_response(
+        HTTP.Response(
+            200,
+            JSON3.write(Dict("success" => true, "result" => valid_result)),
+        ),
+        "readMcpResource",
+    )
+    @test valid_success[1] === true
+    @test plain_dictionary(valid_success[2]) == valid_result
+
+    valid_success_only = backend_response(
+        HTTP.Response(200, JSON3.write(Dict("success" => true))),
+        "reportMcpSidecarReady",
+    )
+    @test valid_success_only[1] === true
+    @test plain_dictionary(valid_success_only[2]) ==
+        Dict{String,Any}("success" => true)
 
     configuration = Dict{String,Any}(
         "bridge_url" => "http://127.0.0.1:1",

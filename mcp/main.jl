@@ -57,9 +57,62 @@ function exact_string_keys(value, expected)
     Set(actual_keys) == Set(expected)
 end
 
+function resolve_local_reference(contract, value)
+  seen = Set{String}()
+  while value isa AbstractDict && haskey(value, "\$ref")
+    reference = string(value["\$ref"])
+    startswith(reference, "#/") ||
+      error("Only local OpenAPI references are supported: $reference")
+    reference in seen &&
+      error("Cyclic OpenAPI reference: $reference")
+    push!(seen, reference)
+
+    resolved = contract
+    for encoded_token in split(reference[3:end], '/')
+      token = replace(encoded_token, "~1" => "/", "~0" => "~")
+      resolved isa AbstractDict && haskey(resolved, token) ||
+        error("Unresolved OpenAPI reference: $reference")
+      resolved = resolved[token]
+    end
+    value = resolved
+  end
+  return value
+end
+
+function bridge_success_keys(contract, operation_id, operation)
+  responses = plain_dictionary(get(operation, "responses", Dict{String,Any}()))
+  success_statuses = filter(status -> occursin(r"^2\d\d$", status), keys(responses))
+  length(success_statuses) == 1 ||
+    error("Sidecar bridge operation must have one success response: $operation_id")
+
+  response = resolve_local_reference(contract, responses[only(success_statuses)])
+  content = plain_dictionary(get(response, "content", Dict{String,Any}()))
+  exact_string_keys(content, ("application/json",)) ||
+    error("Sidecar bridge success response must be JSON: $operation_id")
+  media_type = plain_dictionary(content["application/json"])
+  schema = resolve_local_reference(
+    contract,
+    get(media_type, "schema", Dict{String,Any}()),
+  )
+  properties = plain_dictionary(get(schema, "properties", Dict{String,Any}()))
+  required = Set(string.(get(schema, "required", String[])))
+  get(schema, "type", nothing) == "object" &&
+    get(schema, "additionalProperties", nothing) === false &&
+    required == Set(string.(keys(properties))) ||
+    error("Sidecar bridge success response must be an exact object: $operation_id")
+  success_schema = resolve_local_reference(
+    contract,
+    get(properties, "success", Dict{String,Any}()),
+  )
+  get(success_schema, "const", nothing) === true ||
+    error("Sidecar bridge success response must require success=true: $operation_id")
+  return required
+end
+
 function load_sidecar_bridge_operations()
   contract = plain_dictionary(JSON3.read(read(HTTP_CONTRACT_FILE, String)))
   operations = Dict{String,String}()
+  success_keys = Dict{String,Set{String}}()
   for (path, path_item) in contract["paths"]
     startswith(path, "/_mcp/internal/") || continue
     post = plain_dictionary(get(path_item, "post", Dict{String,Any}()))
@@ -68,13 +121,17 @@ function load_sidecar_bridge_operations()
     get(post, "x-wqs-exposure", nothing) == "local-mcp" ||
       error("Sidecar bridge operation must be local-mcp: $operation_id")
     operations[operation_id] = replace(path, r"^/_mcp/internal/" => "")
+    success_keys[operation_id] =
+      bridge_success_keys(contract, operation_id, post)
   end
   Set(keys(operations)) == SIDECAR_BRIDGE_OPERATION_IDS ||
     error("OpenAPI sidecar bridge operation registry is incomplete")
-  return operations
+  return (operations=operations, success_keys=success_keys)
 end
 
-const SIDECAR_BRIDGE_OPERATIONS = load_sidecar_bridge_operations()
+const SIDECAR_BRIDGE_REGISTRY = load_sidecar_bridge_operations()
+const SIDECAR_BRIDGE_OPERATIONS = SIDECAR_BRIDGE_REGISTRY.operations
+const SIDECAR_BRIDGE_SUCCESS_KEYS = SIDECAR_BRIDGE_REGISTRY.success_keys
 
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
@@ -149,7 +206,15 @@ function backend_error_payload(body; status::Integer)
   return error_payload
 end
 
-function backend_response(response)
+function backend_response(response, operation_id)
+  expected_keys = get(
+    SIDECAR_BRIDGE_SUCCESS_KEYS,
+    string(operation_id),
+    nothing,
+  )
+  expected_keys === nothing &&
+    throw(ArgumentError("Unknown sidecar bridge operationId: $operation_id"))
+
   body = try
     isempty(response.body) && throw(ArgumentError("response body is empty"))
     plain_value(JSON3.read(String(response.body)))
@@ -169,7 +234,8 @@ function backend_response(response)
   if response.status < 200 || response.status >= 300
     return false, backend_error_payload(body; status=response.status)
   end
-  if !(body isa AbstractDict) || get(body, "success", nothing) !== true
+  if !exact_string_keys(body, expected_keys) ||
+    get(body, "success", nothing) !== true
     return false, malformed_backend_payload(
       "MALFORMED_SUCCESS_RESPONSE",
       "The WebQuantumSavory backend returned a malformed success response.",
@@ -177,7 +243,7 @@ function backend_response(response)
       status=response.status,
     )
   end
-  return true, get(body, "result", body)
+  return true, "result" in expected_keys ? body["result"] : body
 end
 
 function backend_request(
@@ -209,7 +275,7 @@ function backend_request(
       ),
     )
   end
-  return backend_response(response)
+  return backend_response(response, operation_id)
 end
 
 function tool_result(configuration, tool_name, arguments)
