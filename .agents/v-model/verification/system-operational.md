@@ -121,8 +121,11 @@ their status.
 - **Procedure:** Install dependencies, build, launch the integrated production application, and complete the primary model/save/Play workflow.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** The exact supported matrix entry installs, starts the production bundle, and completes the workflow without an environment-specific failure.
-- **Status:** implemented
-- **Evidence:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml), [`ci/browser-production.sh`](../../../ci/browser-production.sh), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** The maintained action pins Ubuntu 24.04, Julia 1.12, and Node 24
-  and drives Chromium against the integrated production launcher. The workflow omits
-  save/reopen, and no durable execution record accompanies this profile.
+- **Status:** blocked
+- **Evidence:** [`Project.toml`](../../../Project.toml),
+  [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
+  [`ci/browser-production.sh`](../../../ci/browser-production.sh),
+  [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
+- **Nonconformance:** As of 2026-07-31, the declared QuantumSavory SHA returns
+  `upload-pack: not our ref`, blocking clean installation. After replacing or publishing
+  it, the action still omits save/reopen and lacks durable run evidence.

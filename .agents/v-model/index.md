@@ -21,14 +21,12 @@ resource errors, and consolidated MCP matrices remain incomplete.
 
 ## Release-candidate status
 
-Release metadata and notes target `2.0.0`; no verification status changed. Required
-supported-environment execution and maintainer acceptance remain pending. The exact
-QuantumSavory pin cannot be fetched from its declared upstream and must be published or
-re-pinned before release. Dependency-owned MCP resource errors remain an accepted 2.0
-conformance gap rather than a release blocker: keep the affected actions incomplete, do
-not patch the transport locally, and revisit them when the provider supports JSON-RPC
-`error.data`. Keep `1.10.1` as the reference until evidence, acceptance, tag, and
-publication.
+`2.0.0` metadata is prepared without changing evidence. SYSV-021 and ACC-012 are
+blocked: the exact QuantumSavory pin cannot be fetched from its declared upstream and
+must be published or replaced before supported-environment execution and acceptance.
+Dependency-owned MCP resource `error.data` loss is an accepted conformance gap, not a
+release blocker; its actions stay incomplete and the transport stays unpatched. Keep
+`1.10.1` as the reference until evidence, acceptance, tag, and publication.
 
 ## Left-side specification
 
@@ -57,7 +55,8 @@ publication.
 
 Strict-schema and candidate-first actions UNITV-019/020 and INTV-015/016 are
 `implemented` pending a current frontend run; SYSV-018/019 retain exhaustive browser
-gaps. Acceptance remains `planned`; other actions retain their recorded status.
+gaps. Their acceptance actions remain `planned`; other actions retain their recorded
+status.
 
 The MCP mini-V has `passing` UNITV-016/017 evidence. UNITV-021, INTV-012/013/017,
 and SYSV-012/013 have incomplete artifacts; SYSV-020 and acceptance remain `planned`.

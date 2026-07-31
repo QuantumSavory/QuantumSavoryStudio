@@ -9,8 +9,10 @@ frontend admission/conversion, and HTTP/GUI handoff artifacts pending execution.
 metadata/result resources have passing component evidence; MCP recovery and transport
 have implemented but incomplete integration/system artifacts. Exact simulation-request
 projection remains passing, while backend admission and contract-parity artifacts await
-execution after the exact-identifier correction. Other release-2.0 actions retain their
-recorded status; no acceptance demonstration is passing.
+execution after the exact-identifier correction. Supported-environment verification and
+acceptance are blocked by an exact QuantumSavory revision that cannot be fetched from
+its declared upstream. Other release-2.0 actions retain their recorded status; no
+acceptance demonstration is passing.
 
 ## Action routes
 

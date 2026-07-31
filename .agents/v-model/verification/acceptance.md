@@ -1,7 +1,7 @@
 # Acceptance Actions
 
-Repository maintainers are the acceptance authority. These demonstrations remain
-planned until a durable release-2.0 acceptance record exists.
+Maintainers own acceptance. Actions remain planned pending durable 2.0
+acceptance, except ACC-012 is blocked as recorded below.
 
 ## ACC-001 — Validate interactive network modeling
 
@@ -122,11 +122,14 @@ planned until a durable release-2.0 acceptance record exists.
 
 - **Covers:** STK-012
 - **Method:** demonstration
-- **Procedure:** Install a prepared release checkout, start the integrated production application, and complete the primary model/save/Play workflow.
+- **Procedure:** Prepare a checkout, start production, and complete the primary model/save/Play workflow.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** Installation, startup, modeling, save/reopen, and Play complete without an environment-specific blocker.
-- **Status:** planned
-- **Evidence:** [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml), [`ci/browser-production.sh`](../../../ci/browser-production.sh), [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** CI defines the pinned Ubuntu/Julia/Node environment and exercises
-  the integrated production bundle through Chromium, but the action does not cover
-  save/reopen and no maintainer release-acceptance record exists.
+- **Status:** blocked
+- **Evidence:** [`Project.toml`](../../../Project.toml),
+  [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
+  [`ci/browser-production.sh`](../../../ci/browser-production.sh),
+  [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
+- **Nonconformance:** As of 2026-07-31, the declared QuantumSavory SHA returns
+  `upload-pack: not our ref`, blocking preparation. After replacing or publishing it,
+  save/reopen coverage and a maintainer acceptance record remain required.
