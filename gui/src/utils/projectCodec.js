@@ -1028,16 +1028,6 @@ export function toScriptExportPayloadFromSimulationPayload(payload, simulationCo
 }
 
 /**
- * Compatibility wrapper for callers that still have a live project graph.
- */
-export function toScriptExportPayload(project, simulationConfig = project?.simulationConfig) {
-  return toScriptExportPayloadFromSimulationPayload(
-    toSimulationPayload(project),
-    simulationConfig,
-  )
-}
-
-/**
  * Calculate project-list metadata without persistence concerns.
  */
 export function summarizeProject(project) {

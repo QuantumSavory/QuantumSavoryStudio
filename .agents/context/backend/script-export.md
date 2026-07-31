@@ -60,6 +60,11 @@ text. The target feature-specific disclosure rule is in
 The existing panel-level warning is general; no maintained supported/omitted-feature
 inventory currently proves exhaustive corresponding help.
 
+The frontend builds its simulation projection once, then
+`toScriptExportPayloadFromSimulationPayload` adds only run and representation
+configuration for this endpoint. There is no separate live-project compatibility
+projection.
+
 ## Verification boundaries
 
 Backend unit tests cover deterministic generation, parsing, selected execution
@@ -74,6 +79,7 @@ it, so that action remains planned.
 - **Generator:** [`src/script_export.jl`](../../../src/script_export.jl).
 - **Route:** [`routes.jl`](../../../routes.jl).
 - **Export help:** [`gui/src/components/panels/ExportScriptPanel.vue`](../../../gui/src/components/panels/ExportScriptPanel.vue).
+- **Frontend payload:** [`gui/src/utils/projectCodec.js`](../../../gui/src/utils/projectCodec.js).
 - **Component evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 - **Browser evidence:** [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js).

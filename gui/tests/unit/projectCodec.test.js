@@ -24,7 +24,6 @@ import {
   encodeStoredProject,
   normalizeProjectName,
   summarizeProject,
-  toScriptExportPayload,
   toScriptExportPayloadFromSimulationPayload,
   toSimulationPayload,
 } from '../../src/utils/projectCodec'
@@ -1198,7 +1197,7 @@ describe('backend payload codecs', () => {
     ])
   })
 
-  it('adds run and representation configuration for script export', () => {
+  it('adds script configuration to an existing simulation payload without rebuilding it', () => {
     const project = createEmptyProject('Script')
     project.description = 'Not simulator input'
     project.annotations.push({
@@ -1212,7 +1211,8 @@ describe('backend payload codecs', () => {
     project.simulationConfig.qubitRepresentation = 'CliffordRepr'
     project.simulationConfig.qumodeRepresentation = 'GabsRepr'
 
-    const payload = toScriptExportPayload(project, {
+    const simulationPayload = toSimulationPayload(project)
+    const payload = toScriptExportPayloadFromSimulationPayload(simulationPayload, {
       ...project.simulationConfig,
       time: 2.5,
       timeStep: 0.25,
@@ -1228,25 +1228,9 @@ describe('backend payload codecs', () => {
     expect(payload).not.toHaveProperty('description')
     expect(payload).not.toHaveProperty('annotations')
     expect(payload).not.toHaveProperty('schemaVersion')
-  })
-
-  it('adds script configuration to an existing simulation payload without rebuilding its graph', () => {
-    const simulationPayload = toSimulationPayload(createEmptyProject('Fast Path'))
-
-    const payload = toScriptExportPayloadFromSimulationPayload(
-      simulationPayload,
-      { time: 3, timeStep: 0.2, ignored: true }
-    )
-
     expect(payload).not.toBe(simulationPayload)
     expect(payload.net).toBe(simulationPayload.net)
     expect(payload.variables).toBe(simulationPayload.variables)
-    expect(payload.simulationConfig).toEqual({
-      time: 3,
-      timeStep: 0.2,
-      qubitRepresentation: 'QuantumOpticsRepr',
-      qumodeRepresentation: 'QuantumOpticsRepr',
-    })
   })
 
   it('normalizes stale representation choices at every payload boundary', () => {
