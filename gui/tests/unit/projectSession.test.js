@@ -34,7 +34,6 @@ function createHarness({
     closeWindows: vi.fn(),
     hide: vi.fn(),
     markSaved: vi.fn(),
-    syncLegacy: vi.fn(),
     clearLogs: vi.fn(),
     getSimulationStatus,
     beforeProjectReplacement
@@ -77,7 +76,6 @@ function createHarness({
     stopAlivePolling: calls.stopAlive,
     closeAllResultWindows: calls.closeWindows,
     hideSlotState: calls.hide,
-    syncLegacyProjectData: calls.syncLegacy,
     beforeProjectReplacement,
     confirmVersionMismatch,
     confirmDelete,
@@ -138,8 +136,7 @@ function snapshotProtectedState(harness) {
       closeWindows: harness.calls.closeWindows.mock.calls.length,
       hide: harness.calls.hide.mock.calls.length,
       clearLogs: harness.calls.clearLogs.mock.calls.length,
-      markSaved: harness.calls.markSaved.mock.calls.length,
-      syncLegacy: harness.calls.syncLegacy.mock.calls.length
+      markSaved: harness.calls.markSaved.mock.calls.length
     }
   }
 }
@@ -167,8 +164,7 @@ function expectProtectedState(harness, snapshot) {
     closeWindows: harness.calls.closeWindows.mock.calls.length,
     hide: harness.calls.hide.mock.calls.length,
     clearLogs: harness.calls.clearLogs.mock.calls.length,
-    markSaved: harness.calls.markSaved.mock.calls.length,
-    syncLegacy: harness.calls.syncLegacy.mock.calls.length
+    markSaved: harness.calls.markSaved.mock.calls.length
   }).toEqual(snapshot.effects)
 }
 
@@ -321,7 +317,6 @@ describe('project session', () => {
     expect(harness.calls.closeWindows).toHaveBeenCalledOnce()
     expect(harness.calls.hide).toHaveBeenCalledOnce()
     expect(harness.calls.clearLogs).toHaveBeenCalledOnce()
-    expect(harness.calls.syncLegacy).toHaveBeenCalledOnce()
     expect(harness.calls.markSaved).toHaveBeenCalledOnce()
   })
 

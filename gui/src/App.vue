@@ -80,7 +80,6 @@ import {
   toSimulationPayload
 } from './utils/projectCodec.js'
 import { UI_SERVICES_KEY } from './composables/uiServices.js'
-import { registerLegacyBridge, syncLegacyProjectData } from './utils/legacyBridge.js'
 import { generateRepeaterChain } from './utils/repeaterChain.js'
 import { generateStarNetwork } from './utils/starNetwork.js'
 import { generateGraphNetwork, GRAPH_TOPOLOGIES } from './utils/graphNetwork.js'
@@ -276,13 +275,6 @@ provide(UI_SERVICES_KEY, {
   getProjectData: () => projectData.value,
   getDialogFallbackFocus: () => menuButtonRef.value,
   showAlert,
-  showResultsView,
-  showEntangledSlots,
-  hideSlotState
-})
-
-const disposeLegacyBridge = registerLegacyBridge({
-  getProjectData: () => projectData.value,
   showResultsView,
   showEntangledSlots,
   hideSlotState
@@ -721,7 +713,6 @@ const {
   stopAlivePolling,
   closeAllResultWindows,
   hideSlotState,
-  syncLegacyProjectData,
   beforeProjectReplacement: () => (
     mcpBridge?.binding
       ? mcpBridge.unbind({ bestEffort: true })
@@ -1405,7 +1396,6 @@ onUnmounted(() => {
   mcpBridge.dispose()
   disposeProjectSession()
   disposeSimulationController()
-  disposeLegacyBridge()
 })
 </script>
 

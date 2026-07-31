@@ -48,7 +48,6 @@ export function useProjectSession({
   stopAlivePolling,
   closeAllResultWindows,
   hideSlotState = () => {},
-  syncLegacyProjectData = () => {},
   beforeProjectReplacement = () => {},
   confirmVersionMismatch = message => window.confirm(message),
   confirmDelete = message => window.confirm(message),
@@ -242,7 +241,6 @@ export function useProjectSession({
     mapCenter.value = [...candidate.decoded.map.position]
     mapZoom.value = candidate.decoded.map.zoom
 
-    syncLegacyProjectData()
     markAsSaved?.()
     for (const [level, message, source = 'System'] of candidate.successMessages) {
       addLog?.(level, message, source)
@@ -458,7 +456,6 @@ export function useProjectSession({
       mapCenter.value = [...defaultMapCenter]
       mapZoom.value = defaultMapZoom
       store.clearRecentProjectName()
-      syncLegacyProjectData()
       markAsSaved?.()
     }
     addLog?.('warning', `Project deleted: ${name}`, 'System')

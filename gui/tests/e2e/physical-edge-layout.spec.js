@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+const PROJECT_NAME = 'Physical Edge Layout'
+
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
     json: { known_functions: [] },
@@ -24,11 +26,29 @@ async function mockBackendMetadata(page) {
   }))
 }
 
+async function createProject(page) {
+  await page.locator('.hamburger-btn').click()
+  await page.getByRole('menuitem', { name: 'New' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New Project' })
+  await dialog.getByPlaceholder('Project name').fill(PROJECT_NAME)
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.project-name-label')).toHaveText(PROJECT_NAME)
+}
+
+async function saveAndReadProject(page) {
+  await page.locator('.hamburger-btn').click()
+  await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
+  return page.evaluate(name => (
+    JSON.parse(localStorage.getItem(`cqn_project_${name}`))
+  ), PROJECT_NAME)
+}
+
 async function createTwoNodeProject(page) {
   await mockBackendMetadata(page)
   await page.goto('/')
   const canvas = page.locator('canvas').first()
   await expect(canvas).toBeVisible({ timeout: 15_000 })
+  await createProject(page)
 
   await page.keyboard.down('Alt')
   await canvas.click({ position: { x: 400, y: 300 } })
@@ -62,7 +82,7 @@ test('edits physical curves and overrides while keeping virtual links nonphysica
   ).toHaveText('dB/km')
   await defaultLoss.fill('0.3')
   await defaultLoss.press('Tab')
-  await expect.poll(() => page.evaluate(() => window.projectData.net.physicalConfig)).toMatchObject({
+  expect((await saveAndReadProject(page)).net.physicalConfig).toMatchObject({
     refractiveIndex: 1.468,
     lossDbPerKm: 0.3,
   })
@@ -88,9 +108,7 @@ test('edits physical curves and overrides while keeping virtual links nonphysica
   await edgeTransmissivity.fill('0.5')
   await edgeTransmissivity.press('Tab')
   await expect(page.locator('#edge-loss-db-per-km')).toHaveText('n/a')
-  await expect.poll(() => page.evaluate(() => (
-    window.projectData.net.edges[0].data.physicalOverrides
-  ))).toMatchObject({
+  expect((await saveAndReadProject(page)).net.edges[0].data.physicalOverrides).toMatchObject({
     distanceMeters: 1000,
     lossDbPerKm: 0.4,
     transmissivity: 0.5,
@@ -156,9 +174,7 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
   await canvas.click({ position: { x: 525, y: 350 } })
   await expect(page.locator('.curve-point-handle')).toHaveCount(1)
 
-  const originalPosition = await page.evaluate(() => (
-    [...window.projectData.net.nodes[1].position]
-  ))
+  const originalPosition = (await saveAndReadProject(page)).net.nodes[1].position
   const zoomOut = page.getByTitle('Zoom out')
   for (let index = 0; index < 12; index += 1) await zoomOut.click()
 
@@ -183,9 +199,8 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
 
   const warning = page.getByRole('dialog', { name: 'Unable to update design' })
   await expect(warning).toContainText('impossible to draw or measure')
-  await expect.poll(() => page.evaluate(() => (
-    [...window.projectData.net.nodes[1].position]
-  ))).toEqual(originalPosition)
+  await warning.getByRole('button', { name: 'OK' }).click()
+  expect((await saveAndReadProject(page)).net.nodes[1].position).toEqual(originalPosition)
   await expect(page.locator('.edge-badge-distance')).toHaveCount(1)
   await expect(page.locator('.edge-badge-delay')).toHaveCount(1)
   expect(pageErrors).toEqual([])
@@ -195,5 +210,4 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
   // can shift the restored marker by a few display pixels.
   expect(Math.abs(markerAfter.x - markerBefore.x)).toBeLessThan(5)
   expect(Math.abs(markerAfter.y - markerBefore.y)).toBeLessThan(5)
-  await warning.getByRole('button', { name: 'OK' }).click()
 })

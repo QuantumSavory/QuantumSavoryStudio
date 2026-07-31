@@ -30,7 +30,8 @@ This applies to source under `gui/src/`. Components inherit `components/AGENTS.m
 - Route authoring through the shared design-command service and gate lifecycle work on
   the capability model.
 - Preserve durable IDs and retained object identity across graph reconciliation.
-- Add no `window.*` access outside `legacyBridge`.
+- Keep browser globals private to their resource owner. Share presentation actions through
+  injected UI services, and observe public UI, storage, or network boundaries in browser tests.
 - Release map, DOM, timer, polling, and window resources when their owner transitions
   or unmounts.
 - Keep view-only behavior in components; put reusable domain and orchestration behavior

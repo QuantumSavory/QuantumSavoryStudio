@@ -51,7 +51,7 @@ Every owner cleans up what it creates:
 
 - Map components: layers, sources, markers, map/DOM/pointer listeners.
 - Composables/controllers: timeouts, debounce timers, abort controllers, polls.
-- Shell/legacy bridge: window registrations, result windows, entanglement overlays.
+- Shell/window managers: result windows and entanglement overlays.
 - Dialog/panel components: document/media-query listeners and transient focus state.
 
 Cleanup runs on unmount and when a project/session replacement makes the resource stale.
@@ -81,8 +81,9 @@ do not promote them to V-model requirements without acceptance intent.
 Prefer stable IDs, roles, and durable classes in browser selectors. Playwright is fully
 parallel locally; maintained CI uses one worker. Tests normally use isolated page
 fixtures, while legacy `main.spec.js` alone deliberately uses a serial shared page.
-Match surrounding legacy formatting and avoid unrelated reformatting; change source
-styles, never generated minified output.
+Observe application state through public UI, storage, or network boundaries rather than
+publishing browser globals or inspecting Vue internals. Match surrounding legacy formatting
+and avoid unrelated reformatting; change source styles, never generated minified output.
 
 ## Anchors
 

@@ -45,7 +45,7 @@ derived or coordinated boundaries.
 | API commands, polling, final log drain, cleanup | `useSimulationController` |
 | Optional MCP binding and browser command execution | `features/mcp/` |
 | Map source/layer ordering and marker attachment | Focused map utilities/composables |
-| Retained legacy globals | `legacyBridge.js` |
+| Cross-feature presentation actions | Injected `uiServices` |
 
 `App.vue` chooses projections but does not own their stripping rules. API capability
 initialization also occurs in `App.vue`, not `main.js`.
