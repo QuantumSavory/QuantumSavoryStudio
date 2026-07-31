@@ -232,6 +232,16 @@ export function numericExpressionTargetType(id) {
   return isNumericExpressionOptionId(id) ? id.slice(NUMERIC_EXPRESSION_PREFIX.length) : null
 }
 
+export function intrinsicParameterInputOption(options, value) {
+  if (value === 'nothing') {
+    return options.find(option => option.id === 'Nothing') || null
+  }
+  if (value === 'Wildcard') {
+    return options.find(option => isWildcardType(option.id)) || null
+  }
+  return null
+}
+
 export function inferParameterInputOption(options, parameter = {}) {
   const selected = options.find(option => option.id === parameter.selectedType)
   if (selected) return selected
@@ -244,12 +254,8 @@ export function inferParameterInputOption(options, parameter = {}) {
     if (expressionOption) return expressionOption
   }
   if (value == null || value === '' || value === 'default') return options[0]
-  if (value === 'nothing') {
-    return options.find(option => option.id === 'Nothing') || options[0]
-  }
-  if (value === 'Wildcard') {
-    return options.find(option => isWildcardType(option.id)) || options[0]
-  }
+  const intrinsic = intrinsicParameterInputOption(options, value)
+  if (intrinsic) return intrinsic
   if (typeof value === 'boolean') {
     return options.find(option => option.id === 'Bool') || options[0]
   }
@@ -283,6 +289,39 @@ export function inferParameterInputOption(options, parameter = {}) {
       || options[0]
   }
   return options.find(option => option.inputKind !== 'default') || options[0]
+}
+
+/**
+ * Resolve one constructor input branch without rewriting an explicit selection.
+ *
+ * `expectedOption` supplies the branch selected by a linked Variable. Otherwise,
+ * reserved intrinsic wire values select their corresponding intrinsic branch.
+ * Only a parameter that omits `selectedType` may infer either branch.
+ */
+export function resolveParameterInputOption(
+  options,
+  parameter = {},
+  { expectedOption = null } = {},
+) {
+  const explicit = Object.hasOwn(parameter, 'selectedType')
+  if (!explicit) {
+    return {
+      explicit: false,
+      option: expectedOption || inferParameterInputOption(options, parameter),
+      expectedOption,
+      contradictory: false,
+    }
+  }
+
+  const option = options.find(candidate => candidate.id === parameter.selectedType) || null
+  const requiredOption = expectedOption
+    || intrinsicParameterInputOption(options, parameter.value)
+  return {
+    explicit: true,
+    option,
+    expectedOption: requiredOption,
+    contradictory: !!option && !!requiredOption && option.id !== requiredOption.id,
+  }
 }
 
 /** Return whether one descriptor-backed draft contains a committed value. */

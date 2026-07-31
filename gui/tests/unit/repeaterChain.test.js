@@ -269,6 +269,27 @@ describe('protocol constructor helpers', () => {
       .toThrow(/field rounds requires a complete Int64 Expression value/)
   })
 
+  it('preserves and rejects explicit branches that contradict intrinsic values', () => {
+    const definition = {
+      type: 'Example.OptionalProtocol',
+      parameters: [{ field: 'mode', type: ['Nothing', 'String'] }],
+    }
+    const draft = {
+      type: definition.type,
+      parameters: [{
+        name: 'mode',
+        type: ['Nothing', 'String'],
+        selectedType: 'String',
+        value: 'nothing',
+      }],
+    }
+
+    const seeded = seedProtocolConstructor(definition, draft)
+    expect(seeded.parameters[0].selectedType).toBe('String')
+    expect(() => validateProtocolConstructorDraft(definition, seeded))
+      .toThrow(/selects String, which does not match intrinsic value nothing/)
+  })
+
   it.each([
     ['Int64', null],
     ['String', ''],
@@ -824,5 +845,44 @@ describe('repeater-chain protocol automation', () => {
     expect(net.edges).toBe(originalEdges)
     expect(byId.start.data.protocols).toBe(startProtocols)
     expect(byId.end.data.protocols).toBe(endProtocols)
+  })
+
+  it('rejects contradictory intrinsic automation before mutating the network', () => {
+    const { net } = makeNetwork()
+    const originalNodes = net.nodes
+    const originalEdges = net.edges
+    const before = JSON.stringify(net)
+    const trackerDefinition = {
+      ...TRACKER_DEFINITION,
+      parameters: [
+        ...TRACKER_DEFINITION.parameters,
+        { field: 'mode', type: ['Nothing', 'String'] },
+      ],
+    }
+    const automation = enabledAutomation({
+      entangler: false,
+      swapper: false,
+      trackerProtocol: {
+        type: TRACKER_TYPE,
+        parameters: [{
+          name: 'mode',
+          type: ['Nothing', 'String'],
+          selectedType: 'String',
+          value: 'nothing',
+        }],
+      },
+    })
+    automation.tracker.definition = trackerDefinition
+    const options = baseOptions({ automation })
+
+    expect(validateRepeaterChain(net, options)).toMatchObject({
+      valid: false,
+      error: expect.stringContaining('does not match intrinsic value nothing'),
+    })
+    expect(() => generateRepeaterChain(net, options))
+      .toThrow(/does not match intrinsic value nothing/)
+    expect(net.nodes).toBe(originalNodes)
+    expect(net.edges).toBe(originalEdges)
+    expect(JSON.stringify(net)).toBe(before)
   })
 })

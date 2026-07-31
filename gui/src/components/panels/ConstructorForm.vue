@@ -190,11 +190,11 @@ import { VariableReference, isVariableReference } from '../../models/Variable'
 import {
   buildParameterInputOptions,
   getTypeOptionLabel,
-  inferParameterInputOption,
   isNumericExpressionOptionId,
   isNumericExpressionValue,
   parameterInputOptionForVariable,
   parameterTypeSupportsVariableType,
+  resolveParameterInputOption,
   resetValueForType,
   unknownParameterTypes,
 } from '../../utils/parameterTypes'
@@ -264,29 +264,22 @@ function parameterInputOptions(param) {
   )
 }
 
-function initialOption(param) {
-  const options = parameterInputOptions(param)
-  const explicit = options.find(option => option.id === param.selectedType)
-  if (explicit) return explicit
-  if (param.value === 'nothing') {
-    return options.find(option => option.id === 'Nothing') || options[0]
-  }
-  if (param.value === 'Wildcard') {
-    return options.find(option => option.inputKind === 'intrinsic') || options[0]
-  }
-  if (param.value == null || param.value === '' || param.value === 'default') return options[0]
-  return inferParameterInputOption(options, param)
-}
-
 function initializeParameter(param) {
   if (isVariableAssigned(param)) {
     const linkedOption = inputOptionForVariable(param, assignedVariable(param))
-    if (linkedOption) param.selectedType = linkedOption.id
+    const selection = resolveParameterInputOption(
+      parameterInputOptions(param),
+      param,
+      { expectedOption: linkedOption },
+    )
+    if (!selection.explicit && selection.option) param.selectedType = selection.option.id
     initializedParameters.add(param)
     return
   }
   if (initializedParameters.has(param)) return
-  param.selectedType = initialOption(param).id
+  const options = parameterInputOptions(param)
+  const selection = resolveParameterInputOption(options, param)
+  if (!selection.explicit && selection.option) param.selectedType = selection.option.id
   initializedParameters.add(param)
 }
 

@@ -1,7 +1,7 @@
 import {
   buildParameterInputOptions,
-  inferParameterInputOption,
   parameterInputIsComplete,
+  resolveParameterInputOption,
 } from './parameterTypes.js'
 import { isVariableReference } from '../models/Variable.js'
 
@@ -81,17 +81,13 @@ function parameterFromDefinition(parameter) {
 function normalizeSeededParameter(parameter, definition) {
   const normalized = deepClone(parameter)
   const options = buildParameterInputOptions(definition.type, definition)
-  if (options.some(option => option.id === normalized.selectedType)) return normalized
+  const selection = resolveParameterInputOption(options, normalized)
+  if (selection.explicit) return normalized
 
-  if (normalized.value == null || normalized.value === '' || normalized.value === 'default') {
-    normalized.selectedType = 'default'
+  normalized.selectedType = selection.option.id
+  if (selection.option.inputKind === 'default') {
     normalized.value = null
-    return normalized
   }
-  normalized.selectedType = inferParameterInputOption(
-    options,
-    { ...normalized, selectedType: undefined },
-  ).id
   return normalized
 }
 
@@ -123,19 +119,23 @@ export function validateProtocolConstructorDraft(definition, protocol = null) {
     const parameterDefinition = definitionsByName.get(field)
     if (!parameterDefinition) throw new Error(`Constructor field ${field} is unknown.`)
     if (parameter.error) throw new Error(`Constructor field ${field} has a validation error.`)
-    if (isStrictVariableReference(parameter.value)) continue
 
     const options = buildParameterInputOptions(
       parameterDefinition.type,
       parameterDefinition,
     )
-    const option = Object.hasOwn(parameter, 'selectedType')
-      ? options.find(candidate => candidate.id === parameter.selectedType)
-      : inferParameterInputOption(options, parameter)
+    const selection = resolveParameterInputOption(options, parameter)
+    const option = selection.option
     if (!option || !option.enabled) {
       const status = option ? 'disabled' : 'unknown'
       throw new Error(`Constructor field ${field} uses a ${status} input option.`)
     }
+    if (selection.contradictory) {
+      throw new Error(
+        `Constructor field ${field} selects ${option.id}, which does not match intrinsic value ${parameter.value}.`,
+      )
+    }
+    if (isStrictVariableReference(parameter.value)) continue
     if (!parameterInputIsComplete(option, parameter)) {
       throw new Error(`Constructor field ${field} requires a complete ${option.label} value.`)
     }

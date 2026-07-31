@@ -8,6 +8,7 @@ import Variable, {
   isStatesZooVariable,
   isVariableReference,
   isVariableReferenced,
+  variableReferenceParameters,
 } from '../../models/Variable.js'
 import { generateUUid, setEdgeCorrectNodeOrder } from '../../utils/Utils.js'
 import {
@@ -35,6 +36,7 @@ import {
   parameterTypeIsNumber,
   parameterTypeSupportsVariableType,
   parseNumericParameterValue,
+  resolveParameterInputOption,
 } from '../../utils/parameterTypes.js'
 import {
   createProtocolFromDefinition,
@@ -988,39 +990,42 @@ export class DesignCommandService {
     declaredType,
     parameter = {},
     metadata = {},
-    descriptorOptions = {},
+    {
+      descriptorOptions = {},
+      expectedOption = null,
+      expectedDescription = null,
+    } = {},
   ) {
     const choices = buildParameterInputOptions(declaredType, metadata, descriptorOptions)
     const value = parameter.value
     if (Object.hasOwn(parameter, 'selectedType')) {
-      const selectedType = requireString(parameter.selectedType, 'Selected parameter type')
-      const selected = choices.find(option => option.id === selectedType)
-      if (!selected) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Selected parameter type must be one of: ${choices.map(option => option.id).join(', ')}.`,
-        )
-      }
-      if (!selected.enabled) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Selected parameter type is unsupported: ${selectedType}.`,
-        )
-      }
-      const intrinsic = choices.find(option => (
-        (value === 'nothing' && option.id === 'Nothing')
-        || (value === 'Wildcard' && isWildcardType(option.id))
-      ))
-      if (intrinsic && intrinsic.id !== selected.id) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Selected parameter type ${selectedType} does not match intrinsic value ${value}.`,
-        )
-      }
-      return selected
+      requireString(parameter.selectedType, 'Selected parameter type')
     }
-
-    return inferParameterInputOption(choices, parameter)
+    const selection = resolveParameterInputOption(
+      choices,
+      parameter,
+      { expectedOption },
+    )
+    if (!selection.option) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Selected parameter type must be one of: ${choices.map(option => option.id).join(', ')}.`,
+      )
+    }
+    if (!selection.option.enabled) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Selected parameter type is unsupported: ${parameter.selectedType}.`,
+      )
+    }
+    if (selection.contradictory) {
+      const expectation = expectedDescription || `intrinsic value ${value}`
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Selected parameter type ${parameter.selectedType} does not match ${expectation}.`,
+      )
+    }
+    return selection.option
   }
 
   async requireTypedValue(
@@ -1478,7 +1483,16 @@ export class DesignCommandService {
             `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
           )
         }
-        normalizedSelectedType = linkedOption.id
+        const effectiveType = this.effectiveParameterDescriptor(
+          parameterDefinition.type,
+          suppliedParameter,
+          parameterDefinition,
+          {
+            expectedOption: linkedOption,
+            expectedDescription: `linked Variable ${variable.name} branch ${linkedOption.id}`,
+          },
+        )
+        normalizedSelectedType = effectiveType.id
         if (
           ['number', 'numeric-expression'].includes(linkedOption.inputKind)
           && (
@@ -1668,8 +1682,27 @@ export class DesignCommandService {
         `Variable ${variable.name}`,
         { placement: 'variable' },
       )
+      this.synchronizeVariableReferences(project, variable)
     }
     context.affectedIds.add(variable.id)
+  }
+
+  synchronizeVariableReferences(project, variable) {
+    for (const parameter of variableReferenceParameters(project, variable.id)) {
+      const option = parameterInputOptionForVariable(
+        parameter.type,
+        parameter,
+        variable,
+      )
+      const parameterName = parameter.name || parameter.field || 'constructor parameter'
+      if (!option) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `Variable ${variable.name} is incompatible with parameter ${parameterName}.`,
+        )
+      }
+      parameter.selectedType = option.id
+    }
   }
 
   removeVariable(project, operation, context) {

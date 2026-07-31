@@ -1180,7 +1180,7 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('infers MCP expression updates and reconciles stale linked parameter modes', async () => {
+  it('infers linked branches, synchronizes Variable changes, and rejects stale explicit modes', async () => {
     const project = createEmptyProject('Expression variable updates')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -1192,6 +1192,7 @@ describe('DesignCommandService', () => {
       valid: true,
       deferred: true,
     }))
+    const markDirty = vi.fn()
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
@@ -1202,6 +1203,7 @@ describe('DesignCommandService', () => {
         floating: [],
       }),
       validateNumericExpressionValue,
+      markDirty,
     })
 
     await service.execute({
@@ -1222,13 +1224,15 @@ describe('DesignCommandService', () => {
           type: 'Example.NumericProtocol',
           parameters: [{
             name: 'timeout',
-            selectedType: 'Float64',
             value: new VariableReference('variable_timeout'),
           }],
         },
       }],
     })
 
+    const protocol = project.net.nodes[0].data.protocols[0]
+    expect(protocol.parameters[0].selectedType).toBe('Float64')
+    const staleParameters = JSON.parse(JSON.stringify(protocol.parameters))
     const expression = { kind: 'numeric_expression', source: 'self / 2' }
     await service.execute({
       operations: operationsForTool('variables_edit', {
@@ -1245,8 +1249,41 @@ describe('DesignCommandService', () => {
       selectedType: 'expression:Float64',
       value: expression,
     })
-    const protocol = project.net.nodes[0].data.protocols[0]
-    expect(protocol.parameters[0].selectedType).toBe('Float64')
+    expect(protocol.parameters[0].selectedType).toBe('expression:Float64')
+
+    const synchronized = encodeDesignDocument(project)
+    const commitCount = markDirty.mock.calls.length
+    await expect(service.execute({
+      operations: [{
+        kind: 'protocols.update',
+        placement: 'node',
+        owner_id: 'node_a',
+        protocol_id: protocol.id,
+        value: { parameters: staleParameters },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Selected parameter type Float64 does not match linked Variable timeout branch expression:Float64.',
+    })
+    expect(encodeDesignDocument(project)).toEqual(synchronized)
+    expect(markDirty).toHaveBeenCalledTimes(commitCount)
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.update',
+        variable_id: 'variable_timeout',
+        value: {
+          type: 'String',
+          selectedType: 'String',
+          value: 'incompatible',
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Variable timeout is incompatible with parameter timeout.',
+    })
+    expect(encodeDesignDocument(project)).toEqual(synchronized)
+    expect(markDirty).toHaveBeenCalledTimes(commitCount)
 
     await service.execute({
       operations: [{
@@ -1256,11 +1293,6 @@ describe('DesignCommandService', () => {
         protocol_id: protocol.id,
         value: { parameters: protocol.parameters },
       }],
-    })
-
-    expect(protocol.parameters[0]).toMatchObject({
-      selectedType: 'expression:Float64',
-      value: { kind: 'variable', id: 'variable_timeout' },
     })
     expect(validateNumericExpressionValue).toHaveBeenLastCalledWith(
       'Float64',

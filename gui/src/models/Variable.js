@@ -109,29 +109,28 @@ export function isStatesZooTraceVariable(variable) {
     && variable?.id === `${sourceId}_tr`
 }
 
-export function isVariableReferenced(projectData, variableId) {
+export function variableReferenceParameters(projectData, variableId) {
   const net = projectData?.net
-  if (!net) return false
+  if (!net) return []
 
   const protocols = [
     ...(net.protocols || []),
     ...(net.nodes || []).flatMap(node => node.data?.protocols || []),
     ...(net.edges || []).flatMap(edge => edge.data?.protocols || [])
   ]
-
-  if (protocols.some(protocol => (
-    (protocol.parameters || []).some(parameter => (
-      isVariableReference(parameter.value) && parameter.value.id === variableId
-    ))
-  ))) return true
-
   const slots = [
     ...(net.nodes || []).flatMap(node => node.data?.slots || []),
     ...(net.physicalConfig?.nodeTemplate?.slots || []),
   ]
-  return slots.some(slot => (
-    (slot.backgroundNoise?.parameters || []).some(parameter => (
-      isVariableReference(parameter.value) && parameter.value.id === variableId
-    ))
+
+  return [
+    ...protocols.flatMap(protocol => protocol.parameters || []),
+    ...slots.flatMap(slot => slot.backgroundNoise?.parameters || []),
+  ].filter(parameter => (
+    isVariableReference(parameter.value) && parameter.value.id === variableId
   ))
+}
+
+export function isVariableReferenced(projectData, variableId) {
+  return variableReferenceParameters(projectData, variableId).length > 0
 }

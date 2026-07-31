@@ -8,6 +8,7 @@ import {
   isNumericExpressionValue,
   parameterInputIsComplete,
   parseNumericParameterValue,
+  resolveParameterInputOption,
 } from '../../src/utils/parameterTypes'
 
 describe('parameter input descriptors', () => {
@@ -89,13 +90,48 @@ describe('parameter input descriptors', () => {
     })).toBe(false)
   })
 
-  it('infers legacy numeric strings and metadata-backed named tags', () => {
+  it('infers numeric input strings and metadata-backed named tags', () => {
     const numericOptions = buildParameterInputOptions(['Int64', 'String'])
     expect(inferParameterInputOption(numericOptions, { value: '42' }).id).toBe('Int64')
 
     const tagOptions = buildParameterInputOptions('Anything', { kind: 'named_tag_type' })
     expect(inferParameterInputOption(tagOptions, { value: 'QuantumSavory.Tag' }).id)
       .toBe('DataType')
+  })
+
+  it('infers omitted branches and reports contradictory explicit branches centrally', () => {
+    const options = buildParameterInputOptions([
+      'Nothing',
+      'QuantumSavory.Wildcard',
+      'Int64',
+    ])
+    expect(resolveParameterInputOption(options, { value: 'Wildcard' })).toMatchObject({
+      explicit: false,
+      option: { id: 'QuantumSavory.Wildcard' },
+      contradictory: false,
+    })
+    expect(resolveParameterInputOption(options, {
+      selectedType: 'Int64',
+      value: 'Wildcard',
+    })).toMatchObject({
+      explicit: true,
+      option: { id: 'Int64' },
+      expectedOption: { id: 'QuantumSavory.Wildcard' },
+      contradictory: true,
+    })
+
+    const linkedOption = options.find(option => option.id === 'Int64')
+    expect(resolveParameterInputOption(options, {
+      selectedType: 'QuantumSavory.Wildcard',
+      value: { kind: 'variable', id: 'remote' },
+    }, {
+      expectedOption: linkedOption,
+    })).toMatchObject({
+      explicit: true,
+      option: { id: 'QuantumSavory.Wildcard' },
+      expectedOption: { id: 'Int64' },
+      contradictory: true,
+    })
   })
 
   it('checks completeness for every descriptor family and validation errors', () => {

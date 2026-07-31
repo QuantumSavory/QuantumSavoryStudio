@@ -159,6 +159,33 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('.param-value').text()).toContain('Wildcard')
   })
 
+  it('uses exact omitted-branch inference when several intrinsic choices exist', () => {
+    const type = 'Example.MultiIntrinsicProtocol'
+    api._config.value.protocolTypes.node.push({
+      type,
+      group: 'node',
+      parameters: [{
+        field: 'remote',
+        type: ['Nothing', 'QuantumSavory.Wildcard', 'Int64'],
+      }],
+    })
+    const parameter = {
+      name: 'remote',
+      type: ['Nothing', 'QuantumSavory.Wildcard', 'Int64'],
+      value: 'Wildcard',
+    }
+
+    const wrapper = mountForm({
+      protocol: { type, parameters: [parameter] },
+      category: 'node',
+    })
+
+    expect(parameter.selectedType).toBe('QuantumSavory.Wildcard')
+    expect(wrapper.get('.complexTypeSelector').element.value)
+      .toBe('QuantumSavory.Wildcard')
+    expect(wrapper.get('.param-value').text()).toContain('Wildcard')
+  })
+
   it('inherits the shared open, validate, compact, and reopen expression lifecycle', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
     vi.spyOn(api, 'validateNumericExpression').mockResolvedValue({
