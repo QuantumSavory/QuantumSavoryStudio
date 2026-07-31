@@ -2,7 +2,7 @@
 
 ## CMP-014 — Strict project-codec admission
 
-- **Normative statement:** Before normalization or hydration, the project codec shall require integer version 2 and validate the closed `contracts/project/v2.schema.json`, then clone and hydrate without source mutation.
+- **Normative statement:** Before normalization or hydration, the project codec shall require integer version 2 and validate the co-shipped closed version-2 schema, then clone and hydrate without source mutation.
 - **Parents:** SUB-015
 - **Acceptance criterion:** Schema-valid version 2 decodes independently; each application-owned object sets `additionalProperties: false` with no unnamed extension; invalid-version, malformed, and undeclared-field fixtures fail before side effects, and encoding emits valid version 2.
 - **Verification:** UNITV-019 (test)
@@ -22,7 +22,7 @@
 
 - **Normative statement:** Frontend projection and backend admission shall implement exact parse/export shapes: parse requires representations, export adds positive timing, Web-owned objects/tags are closed, slot and protocol IDs are globally unique, and only recursively untagged simulator values are extensible.
 - **Parents:** SUB-002, SUB-004, SUB-008, SUB-009
-- **Acceptance criterion:** Projection is nonmutating and endpoint-only; malformed/defaulted owned fields, duplicate result-addressing IDs, and unknown/nested tags fail; physical edges require five resolved fields while virtual edges forbid them; exact tags and catalog-backed States Zoo values agree with OpenAPI.
+- **Acceptance criterion:** Projection is nonmutating and endpoint-only; malformed/defaulted owned fields, duplicate result-addressing IDs, and unknown/nested tags fail; physical edges require five resolved fields while virtual edges forbid them; OpenAPI closes the States Zoo tag wrapper and numeric parameter map, while the runtime enforces catalog family, key, and range semantics.
 - **Verification:** UNITV-022 (test)
 - **Origin / risk:** Release-2.0 current-wire simplification; high data/correctness risk
 - **Context:** [Frontend-support API and errors](../../context/backend/api-routing-and-errors.md)

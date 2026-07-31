@@ -69,9 +69,9 @@ actions.
 
 ## SYS-017 — Enforce the current project schema
 
-- **Normative statement:** The product shall admit only documents carrying exact integer schema version 2 and satisfying the co-shipped closed JSON Schema at `contracts/project/v2.schema.json`, and shall refuse every other marker or shape before hydration or decode side effects.
+- **Normative statement:** The product shall admit only documents carrying exact integer schema version 2 and satisfying the co-shipped closed version-2 JSON Schema, and shall refuse every other marker or shape before hydration or decode side effects.
 - **Parents:** STK-010
-- **Acceptance criterion:** The current encoder emits documents valid against `contracts/project/v2.schema.json`; that contract sets `additionalProperties: false` at every application-owned object boundary and exposes no extension point unless it names one explicitly; older, newer, negative, missing, non-integer, malformed, or unsupported-field inputs return structured expected/actual/path diagnostics without modifying or deleting the input.
+- **Acceptance criterion:** The current encoder emits documents valid against the co-shipped version-2 schema; that contract closes every application-owned object boundary and exposes no extension point unless it names one explicitly; older, newer, negative, missing, non-integer, malformed, or unsupported-field inputs return structured expected/actual/path diagnostics without modifying or deleting the input.
 - **Verification:** SYSV-018 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 breaking schema contract; high compatibility/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

@@ -38,7 +38,9 @@ values with `kind` are closed variable-reference, numeric-expression, or States 
 recipes. Untagged JSON values may be recursively shaped for simulator-owned
 constructors, but no nested object may introduce `kind`; unknown discriminators are
 validation errors rather than forward-compatible fallbacks. States Zoo recipe parameter
-names and numeric ranges come from the selected simulator catalog entry.
+names and numeric ranges come from the selected simulator catalog entry. OpenAPI closes
+the tagged wrapper and requires a numeric parameter map; runtime catalog validation owns
+the selected family, exact parameter names, and ranges.
 
 The browser admits slot types and background-noise assignments only while their
 nonempty live catalogs are available and only for exact catalog type IDs. Its Web

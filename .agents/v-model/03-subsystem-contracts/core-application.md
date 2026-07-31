@@ -68,7 +68,7 @@ requirements.
 
 ## SUB-015 — Strict nonmutating project-schema admission
 
-- **Normative statement:** Project schema admission shall validate an isolated raw document for exact integer version 2 and the closed contract at `contracts/project/v2.schema.json` before normalization, hydration, storage, or active-session effects.
+- **Normative statement:** Project schema admission shall validate an isolated raw document for exact integer version 2 against the co-shipped closed version-2 contract before normalization, hydration, storage, or active-session effects.
 - **Parents:** SYS-017
 - **Acceptance criterion:** Documents valid against the co-shipped schema pass to projection/decode; every application-owned object rejects undeclared properties unless the schema explicitly names an extension point; every other marker class or shape fails with stable structured diagnostics, and admission neither mutates the source nor writes/deletes browser storage.
 - **Verification:** INTV-015 (test)
