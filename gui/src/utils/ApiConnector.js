@@ -25,22 +25,30 @@ function scopedProjectName(uuid, projectName) {
   return `${uuid}_${String(projectName ?? '').trim()}`
 }
 
-function tagTargetPayload(target = {}, { includeDestination = false } = {}) {
-  const kind = target.kind || target.target || 'register'
+const TAG_TARGET_KINDS = new Set(['register', 'slot', 'message_buffer'])
+
+function tagTargetId(target, key) {
+  const value = target?.[key]
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`tag target.${key} must be a non-empty string`)
+  }
+  return value
+}
+
+function tagTargetPayload(target, { includeDestination = false } = {}) {
+  const kind = target?.kind
+  if (!TAG_TARGET_KINDS.has(kind)) {
+    throw new TypeError('tag target.kind must be register, slot, or message_buffer')
+  }
   const payload = { target: kind }
-  if (kind === 'slot' && target.slot_id != null && target.slot_id !== '') {
-    payload.slot_id = String(target.slot_id)
-  }
-  if (kind !== 'slot' && target.node_id != null && target.node_id !== '') {
-    payload.node_id = String(target.node_id)
-  }
+  if (kind === 'slot') payload.slot_id = tagTargetId(target, 'slot_id')
+  else payload.node_id = tagTargetId(target, 'node_id')
   if (
     includeDestination
     && kind === 'register'
-    && target.destination_slot_id != null
-    && target.destination_slot_id !== ''
+    && target.destination_slot_id !== undefined
   ) {
-    payload.destination_slot_id = String(target.destination_slot_id)
+    payload.destination_slot_id = tagTargetId(target, 'destination_slot_id')
   }
   return payload
 }
@@ -389,10 +397,10 @@ export class ApiConnector {
     })
   }
 
-  async getSimulationStatus(projectNameOrData, { signal } = {}){
-    const projectName = typeof projectNameOrData === 'string'
-      ? projectNameOrData
-      : projectNameOrData?.name
+  async getSimulationStatus(projectName, { signal } = {}){
+    if (typeof projectName !== 'string') {
+      throw new TypeError('projectName must be a string')
+    }
     const query = new URLSearchParams({ name: this.getScopedSimulationName(projectName) })
     return this.requestOperation('getSimulationState', { query, signal })
   }

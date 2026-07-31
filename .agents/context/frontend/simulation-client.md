@@ -36,6 +36,9 @@ The API client prefixes simulation names with a persistent browser UUID and the 
 project name. `ApiConnector` and `McpControlClient` address routes by OpenAPI operation
 ID through the generated `gui/src/generated/httpOperations.js` registry; path
 identifiers are URL encoded. Literal API paths are not a second caller contract.
+Simulation-status callers pass the project name as a string. Tag callers pass an exact
+`kind` discriminant and nonempty string IDs; the client does not infer a default kind,
+read a wire-name alias, or coerce identifier types.
 
 The Runner's “Run for” value is an additional duration. The controller adds it to
 current simulated time and submits the backend's absolute cumulative target. Resume

@@ -33,6 +33,10 @@ describe('ApiConnector project namespaces', () => {
     const url = new URL(fetch.mock.calls[0][0])
     expect(url.pathname).toBe('/get_state')
     expect(url.searchParams.get('name')).toBe('user_A&B #/?')
+
+    await expect(connector.getSimulationStatus({ name: 'A' }))
+      .rejects.toThrow('projectName must be a string')
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it('exposes the exact UUID-scoped simulation name used by every API route', () => {
@@ -197,8 +201,7 @@ describe('ApiConnector project namespaces', () => {
 
     await connector.listTags('A/B?', {
       kind: 'register',
-      node_id: 'node/#1',
-      destination_slot_id: 'ignored-for-list'
+      node_id: 'node/#1'
     })
     await connector.attachTag('A/B?', {
       kind: 'register',
@@ -232,6 +235,21 @@ describe('ApiConnector project namespaces', () => {
       slot_id: 'slot/#1',
       query: tag
     })
+  })
+
+  it('rejects tag-target aliases and non-string external IDs before transport', async () => {
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.listTags('Project', {
+      target: 'register',
+      node_id: 'node-1'
+    })).rejects.toThrow('tag target.kind must be register, slot, or message_buffer')
+    await expect(connector.listTags('Project', {
+      kind: 'register',
+      node_id: 1
+    })).rejects.toThrow('tag target.node_id must be a non-empty string')
+
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('caches catalog metadata and sends preview specs without a simulation namespace', async () => {

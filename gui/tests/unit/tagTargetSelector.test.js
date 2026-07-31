@@ -30,8 +30,7 @@ describe('TagTargetSelector', () => {
       props: {
         modelValue: {
           kind: 'register',
-          node_id: '',
-          destination_slot_id: 'obsolete-destination'
+          node_id: ''
         },
         nodes,
         allowMessages: true
