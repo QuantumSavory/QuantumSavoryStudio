@@ -16,7 +16,7 @@ concurrency:
 jobs:
   backend-unit:
     name: Backend unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -33,7 +33,7 @@ jobs:
 
   mcp-unit:
     name: MCP unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -50,7 +50,7 @@ jobs:
 
   frontend-build:
     name: Frontend version and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -65,7 +65,7 @@ jobs:
 
   backend-integration:
     name: Backend integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -95,7 +95,7 @@ jobs:
 
   browser:
     name: Full Chromium
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -121,6 +121,70 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-diagnostics
+          path: ci-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  startup-smoke:
+    name: Startup smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - macos-15-intel
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+        with:
+          delete-old-caches: "false"
+          save-always: "false"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - run: julia --startup-file=no ci/startup-smoke.jl
+
+  browser-primary:
+    name: Primary browser flow (${{ matrix.engine }})
+    strategy:
+      fail-fast: false
+      matrix:
+        engine:
+          - firefox
+          - webkit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+        with:
+          delete-old-caches: "false"
+          save-always: "false"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - run: ./ci/browser-primary.sh "${{ matrix.engine }}"
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-${{ matrix.engine }}-diagnostics
           path: ci-artifacts/
           if-no-files-found: ignore
           retention-days: 7
