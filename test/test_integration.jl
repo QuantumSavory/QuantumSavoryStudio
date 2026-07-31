@@ -524,12 +524,16 @@
         entry -> entry["id"] == "DepolarizedBellPair",
         types_data["states_zoo_types"],
       ))
-      @test depolarized["parameters"] == [Dict(
-        "name" => "p",
-        "min" => 0,
-        "max" => 1,
-        "good" => 1,
-      )]
+      depolarized_parameter = only(depolarized["parameters"])
+      @test depolarized_parameter["name"] == "p"
+      @test depolarized_parameter["type"] == "Real"
+      @test depolarized_parameter["doc"] isa String
+      @test !isempty(depolarized_parameter["doc"])
+      @test depolarized_parameter["min"] == 0
+      @test depolarized_parameter["max"] == 1
+      @test depolarized_parameter["min_inclusive"] === true
+      @test depolarized_parameter["max_inclusive"] === true
+      @test depolarized_parameter["good"] == 1
 
       preview_response = make_request(
         "POST",
@@ -571,7 +575,13 @@
       @test zero_trace_response.status == 400
       zero_trace_data = parse_response(zero_trace_response)
       @test zero_trace_data["error"]["code"] == "VALIDATION_ERROR"
-      @test occursin("finite, positive", zero_trace_data["error"]["message"])
+      @test occursin(
+        "outside its declared type or range",
+        zero_trace_data["error"]["message"],
+      )
+      @test zero_trace_data["error"]["details"]["parameter"] == "ηᴬ"
+      @test zero_trace_data["error"]["details"]["min"] == 0
+      @test zero_trace_data["error"]["details"]["min_inclusive"] === false
 
       unknown_response = make_request(
         "POST",
