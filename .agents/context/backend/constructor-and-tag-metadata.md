@@ -10,16 +10,19 @@
 
 ## Authoritative sources
 
-Background, slot, and protocol catalogs derive from QuantumSavory runtime metadata.
-WebQuantumSavory must not maintain a parallel list. The exact entries are dependency
-data, so tests and documentation should inspect the catalog rather than freeze current
-member names.
+Background, slot, protocol, named-tag, and general-tag catalogs project QuantumSavory's
+explicit public schemas: `background_schemas`, `slot_schemas`,
+`ProtocolZoo.protocol_schemas`, `tag_head_schemas`, and
+`general_tag_signatures`. WebQuantumSavory must not maintain parallel simulator lists.
+These catalogs are deterministic: custom subtypes and unrelated loaded packages do not
+silently add entries. Tests should compare Web projections with the pinned dependency
+catalog instead of duplicating member lists.
 
 The typed-input flow is:
 
 ```text
-QuantumSavory constructor member
-  -> backend Julia-type metadata
+QuantumSavory ConstructorFieldSchema
+  -> backend wire metadata
   -> frontend input descriptor
   -> minimized base wire type plus optional tagged value
 ```
@@ -55,10 +58,10 @@ availability depends on a retained register/network.
 
 ## Compatibility boundary
 
-The root project declares QuantumSavory compatibility while sourcing a moving `master`
-revision and committing no Julia manifest. That makes exact catalog contents less stable
-than the WebQuantumSavory version alone suggests. Do not promise a fixed catalog without
-an explicit dependency policy.
+The root and test projects declare QuantumSavory `0.8` compatibility and source exact
+revision `b419b1268a5e5e3a91de64d88ecaa758610540db`; no Julia manifest is committed.
+Changing that revision is therefore the explicit point at which maintainers must review
+catalog projections, fixtures, generated imports, and this reference together.
 
 ## Anchors
 
@@ -67,8 +70,3 @@ an explicit dependency policy.
 - **Dependency declaration:** [`Project.toml`](../../../Project.toml).
 - **Contract evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl) and
   [`test/test_integration.jl`](../../../test/test_integration.jl).
-
-## Unresolved questions
-
-- Is tracking QuantumSavory `master` intentional for release builds, and which metadata
-  changes are compatibility-breaking?

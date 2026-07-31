@@ -41,9 +41,9 @@ requirements.
 
 ## SUB-005 — Authoritative metadata and typed-input boundary
 
-- **Normative statement:** Dynamic constructor/tag catalogs and explicit representation/state allowlists shall supply authoritative wire semantics, placement, nullability, bounds, and safe type resolution to every GUI input path.
+- **Normative statement:** Explicit simulator-owned constructor, protocol, tag, representation, and state-family catalogs, together with intentional Web-only representation choices, shall supply authoritative wire semantics, placement, nullability, bounds, and safe type resolution to every GUI input path.
 - **Parents:** SYS-004
-- **Acceptance criterion:** Backend and browser derive the same descriptor semantics from returned metadata; named-tag and explicit allowlist values resolve without source evaluation; unadvertised IDs and incompatible Variables fail.
+- **Acceptance criterion:** Backend and browser derive the same descriptor semantics from returned metadata; catalogs do not expand through subtype discovery or loaded-package reflection; named-tag and explicit Web-only values resolve without source evaluation; unadvertised IDs, coercible non-number state values, and incompatible Variables fail.
 - **Verification:** INTV-005 (test)
 - **Origin / risk:** Metadata pipeline and frontend descriptors; medium dependency risk
 - **Context:** [Constructor and tag metadata](../../context/backend/constructor-and-tag-metadata.md)

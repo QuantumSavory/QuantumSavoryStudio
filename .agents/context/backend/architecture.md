@@ -46,9 +46,11 @@ desktop browser. A public educational GUI may use the same backend in a Podman
 container, but MCP remains local-only. See
 [product boundary and deployment](../product-boundary-and-deployment.md).
 
-The backend dynamically derives most constructor catalogs from QuantumSavory. Explicit
-allowlists remain for representations and States Zoo recipes. These are different
-contracts and should not be described as one universal discovery mechanism.
+The backend projects QuantumSavory's explicit public constructor, protocol, tag, and
+state-family catalogs. Those catalogs are deterministic and do not grow through subtype
+discovery or unrelated loaded packages. Representation selection additionally has an
+intentional Web-only `GabsRepr` choice because that constructor requires a basis and is
+not in the simulator's zero-argument representation catalog.
 
 ## Startup warmup
 
@@ -66,9 +68,10 @@ so generated-output cleanup must stay narrowly scoped.
 
 ## Why imports may appear unused
 
-`InteractiveUtils`, `REPL`, and `CairoMakie` activate metadata or MIME-rendering
-extensions used indirectly by API behavior. Removing them based only on local symbol
-search can change runtime catalogs or rendering.
+`CairoMakie` renders States Zoo previews. The `ResumableFunctions` module binding is also
+required by `@resumable` macro expansion even though ordinary symbol search finds only
+the imported macro. `InteractiveUtils` and `REPL` were removed when simulator-owned
+catalogs replaced reflective discovery.
 
 ## Anchors
 
