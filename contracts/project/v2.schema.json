@@ -647,14 +647,23 @@
       }
     },
     "edge": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/logicalEdge"
+      "if": {
+        "type": "object",
+        "properties": {
+          "isLogic": {
+            "const": true
+          }
         },
-        {
-          "$ref": "#/$defs/physicalEdge"
-        }
-      ]
+        "required": [
+          "isLogic"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/logicalEdge"
+      },
+      "else": {
+        "$ref": "#/$defs/physicalEdge"
+      }
     },
     "nodeTemplate": {
       "type": "object",

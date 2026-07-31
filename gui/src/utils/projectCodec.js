@@ -130,6 +130,7 @@ function diagnosticExpected(error, path) {
 
 function schemaDiagnostics(document, errors) {
   return (errors || [])
+    .filter(error => error.keyword !== 'if')
     .map(error => {
       const path = pointerPath(error)
       return {

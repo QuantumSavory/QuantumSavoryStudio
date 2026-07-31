@@ -569,6 +569,29 @@ describe('project schema v2 admission', () => {
     }
   })
 
+  it.each([
+    ['physical', 0],
+    ['logical', 1],
+  ])('reports only the selected %s edge shape', (_label, edgeIndex) => {
+    const raw = discriminatingStoredProject()
+    raw.net.edges[edgeIndex].data.unexpected = true
+
+    let error
+    try {
+      admitProjectDocument(raw)
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(ProjectSchemaError)
+    expect(error.path).toBe(`/net/edges/${edgeIndex}/data/unexpected`)
+    expect(error.diagnostics).toEqual([{
+      path: `/net/edges/${edgeIndex}/data/unexpected`,
+      expected: 'declared field',
+      actual: true,
+    }])
+  })
+
   it('admits the explicit opaque Any-value extension without opening tagged objects', () => {
     const raw = discriminatingStoredProject()
     expect(admitProjectDocument(raw)).toBe(raw)
