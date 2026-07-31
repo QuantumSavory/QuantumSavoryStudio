@@ -65,7 +65,7 @@
             </li>
             <li><code>git clone https://github.com/QuantumSavory/WebQuantumSavory.git</code></li>
             <li><code>julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'</code></li>
-            <li><code>WQS_ENABLE_SOURCE_EVALUATION=true ./bin/server</code></li>
+            <li><code>WQS_DEPLOYMENT_PROFILE=local WQS_ENABLE_SOURCE_EVALUATION=true ./bin/server</code></li>
           </ol>
           <p class="unsafe-evaluation-note">
             The final command enables unsafe evaluation. Use it only with projects and code you trust.
