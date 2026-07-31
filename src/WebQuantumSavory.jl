@@ -10,7 +10,6 @@ using ConcurrentSim
 using Logging
 using Base64
 import CairoMakie
-using Genie
 using Dates
 import ResumableFunctions
 using ResumableFunctions: @resumable
