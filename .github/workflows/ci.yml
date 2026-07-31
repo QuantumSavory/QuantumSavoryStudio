@@ -153,8 +153,8 @@ jobs:
           cache-dependency-path: gui/package-lock.json
       - run: julia --startup-file=no ci/startup-smoke.jl
 
-  browser-primary:
-    name: Primary browser flow (${{ matrix.engine }})
+  browser-secondary:
+    name: Secondary browser flow (${{ matrix.engine }})
     strategy:
       fail-fast: false
       matrix:
@@ -179,12 +179,44 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: gui/package-lock.json
-      - run: ./ci/browser-primary.sh "${{ matrix.engine }}"
+      - run: ./ci/browser-secondary.sh "${{ matrix.engine }}"
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: browser-${{ matrix.engine }}-diagnostics
+          path: ci-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-production:
+    name: Integrated production browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v3
+        with:
+          delete-old-caches: "false"
+          save-always: "false"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+      - run: ./ci/browser-production.sh
+        env:
+          PLAYWRIGHT_INSTALL_SYSTEM_DEPS: "true"
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-production-diagnostics
           path: ci-artifacts/
           if-no-files-found: ignore
           retention-days: 7

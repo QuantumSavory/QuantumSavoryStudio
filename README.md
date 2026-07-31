@@ -424,7 +424,7 @@ Notes:
 
 ### CI checks
 
-GitHub Actions and Buildkite run the same five repository scripts:
+GitHub Actions and Buildkite run the same core repository scripts:
 
 ```bash
 ./ci/backend-unit.sh
@@ -432,13 +432,17 @@ GitHub Actions and Buildkite run the same five repository scripts:
 ./ci/frontend-build.sh
 ./ci/backend-integration.sh
 ./ci/browser.sh
+./ci/browser-production.sh
 ```
 
 Each script installs the locked project dependencies it needs, so it can run
 from a clean checkout once its language runtimes are available. The MCP,
-integration, and browser scripts start a test-mode backend, wait up to 120
-seconds for `/status`, and always stop it. On failure they preserve the backend
-log and any Playwright traces under the ignored `ci-artifacts/` directory.
+integration, and browser scripts start a bounded backend, wait up to 120
+seconds for `/status`, and always stop it. The production-browser check serves
+the built GUI from the production backend; the full browser check retains the
+Vite/MCP development topology for its broader scenarios. On failure they
+preserve the backend log and Playwright traces under the ignored
+`ci-artifacts/` directory.
 
 The browser script downloads the Chromium version locked by Playwright. On a
 new Linux machine, install the locked npm dependencies and its system packages
@@ -457,13 +461,15 @@ The browser step installs the locked Chromium binary and its Linux packages
 through Playwright. The MCP, integration, and browser jobs use distinct backend
 ports and concurrency groups. They can run together, while overlapping builds
 of the same job remain serialized so their fixed backend, sidecar, or Vite
-ports cannot contend.
+ports cannot contend. GitHub Actions also runs best-effort startup checks on
+Windows and macOS and primary-flow checks on Firefox and WebKit; those checks
+do not expand the declared Ubuntu/Chromium release-support boundary.
 
 Each Linux agent must still provide Git, Bash, curl, wget, tar, and Python 3.
 Browser agents must use a Playwright-supported Debian/Ubuntu base and let the
 job install apt packages as root or through passwordless `sudo`. Agents must be
 able to download Julia, mise, Node.js, npm packages, and Chromium, and ports
-8000 through 8003, 5173, and 18001 must be available. No queue name, secret,
+8000 through 8004, 5173, and 18001 must be available. No queue name, secret,
 or container image is assumed by `.buildkite/pipeline.yml`. Configure
 Buildkite's GitHub integration to create builds for pull requests and pushes
 to `main`.

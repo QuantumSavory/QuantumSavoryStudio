@@ -61,3 +61,19 @@ steps:
           version: "2026.7.2"
     artifact_paths: "ci-artifacts/**/*"
     timeout_in_minutes: 60
+
+  - label: ":chromium: Integrated production browser"
+    key: browser-production
+    command: ./ci/browser-production.sh
+    concurrency: 1
+    concurrency_group: "webquantumsavory/browser-production-server"
+    env:
+      PLAYWRIGHT_INSTALL_SYSTEM_DEPS: "true"
+      WEBQUANTUMSAVORY_CI_SERVER_PORT: "8004"
+    plugins:
+      - JuliaCI/julia#v1:
+          version: "1.12"
+      - mise#v1.1.4:
+          version: "2026.7.2"
+    artifact_paths: "ci-artifacts/**/*"
+    timeout_in_minutes: 60

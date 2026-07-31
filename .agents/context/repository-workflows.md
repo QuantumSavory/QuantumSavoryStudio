@@ -22,11 +22,9 @@ untracked; the npm lockfile is committed.
 | MCP sidecar | `julia --startup-file=no --project=mcp -e 'using Pkg; Pkg.instantiate()'` | Needed only for MCP work |
 
 `./bin/server` installs the locked frontend dependencies, builds the GUI, and starts
-the integrated application. The maintained CI matrix is the support declaration for
-Julia and Node versions; it currently selects Julia 1.12 and Node 24. Product intent
-supports local hosts on Linux, macOS, and Windows and standards-compliant
-HTML5/JavaScript desktop browsers. Mobile browsers are unsupported. CI currently
-exercises Ubuntu and Chromium, so the broader host/browser matrix is not yet verified.
+the integrated application. The release-support matrix is Ubuntu 24.04 x86_64, Julia
+1.12, Node 24, and the Playwright-locked Chromium build. Secondary host and browser
+checks are portability signals, not expanded support claims.
 
 ## Select the smallest check
 
@@ -39,6 +37,7 @@ Prefer the checked-in wrappers for full component boundaries:
 | Frontend component/build | `./ci/frontend-build.sh` | Locked install, Vitest, production build, version-drift check |
 | HTTP integration | `./ci/backend-integration.sh` | Built frontend plus real test-mode backend integration |
 | Browser system | `./ci/browser.sh` | Built frontend plus real backend, MCP, and serial Chromium suite |
+| Production browser | `./ci/browser-production.sh` | Canonical launcher, integrated production bundle, and primary Chromium flow |
 
 Useful focused commands:
 
@@ -62,11 +61,10 @@ readiness checks, diagnostics, and cleanup.
 5. Use `./ci/mcp-unit.sh` plus the MCP browser scenario for contract, bridge, transport,
    supervisor, or dependency-pin changes.
 
-CI enables unsafe evaluation for server-backed jobs. A real backend with evaluation
-disabled is a known verification gap; mocked browser tests and backend unit tests cover
-parts of that mode. Playwright declares several browser projects, but maintained scripts
-and CI select Chromium only. Browser tests use Vite's development server rather than
-serving the production bundle just built.
+Server-backed test jobs opt into restricted evaluation explicitly. The production
+browser job keeps evaluation and MCP disabled and serves the production bundle from the
+backend. Secondary Firefox/WebKit and Windows/macOS checks do not alter the release
+support declaration.
 
 ## Keep generated state out of commits
 

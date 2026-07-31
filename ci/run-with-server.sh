@@ -5,6 +5,16 @@ app_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 workdir=$1
 shift
 server_port=${WEBQUANTUMSAVORY_CI_SERVER_PORT:-8000}
+server_profile=${WEBQUANTUMSAVORY_CI_SERVER_PROFILE:-test}
+
+case "$server_profile" in
+  test|production)
+    ;;
+  *)
+    echo "WEBQUANTUMSAVORY_CI_SERVER_PROFILE must be test or production." >&2
+    exit 2
+    ;;
+esac
 
 case "$server_port" in
   ''|*[!0-9]*)
@@ -77,21 +87,31 @@ trap 'exit 143' TERM
 rm -rf "$artifact_dir"
 : > "$server_log"
 cd "$app_root"
-GENIE_ENV=test WQS_ENABLE_SOURCE_EVALUATION=true \
-  julia --color=yes --project="$app_root" \
-  -e '
-    using WebQuantumSavory
-    server_port = parse(Int, ENV["WEBQUANTUMSAVORY_CI_SERVER_PORT"])
-    push!(ARGS, "-p$server_port")
-    WebQuantumSavory.main()
-    WebQuantumSavory.Genie.config.server_port = server_port
-    servers = WebQuantumSavory.up(async=true)
-    server = servers.webserver
-    server === nothing && error("Test server failed to start")
-    println(stderr, "__WEBQUANTUMSAVORY_CI_READY__ pid=$(getpid())")
-    flush(stderr)
-    wait(server)
-  ' >"$server_log" 2>&1 &
+if [ "$server_profile" = production ]; then
+  GENIE_ENV=prod \
+    WQS_DEPLOYMENT_PROFILE=local \
+    WQS_ENABLE_SOURCE_EVALUATION=false \
+    WEBQUANTUMSAVORY_ENABLE_MCP=false \
+    "$app_root/bin/server" "-p$server_port" >"$server_log" 2>&1 &
+else
+  GENIE_ENV=test \
+    WQS_DEPLOYMENT_PROFILE=local \
+    WQS_ENABLE_SOURCE_EVALUATION=true \
+    julia --color=yes --project="$app_root" \
+    -e '
+      using WebQuantumSavory
+      server_port = parse(Int, ENV["WEBQUANTUMSAVORY_CI_SERVER_PORT"])
+      push!(ARGS, "-p$server_port")
+      WebQuantumSavory.main()
+      WebQuantumSavory.Genie.config.server_port = server_port
+      servers = WebQuantumSavory.up(async=true)
+      server = servers.webserver
+      server === nothing && error("Test server failed to start")
+      println(stderr, "__WEBQUANTUMSAVORY_CI_READY__ pid=$(getpid())")
+      flush(stderr)
+      wait(server)
+    ' >"$server_log" 2>&1 &
+fi
 server_pid=$!
 server_ready_marker="__WEBQUANTUMSAVORY_CI_READY__ pid=$server_pid"
 
@@ -108,6 +128,7 @@ server_owns_port() {
       | grep -Fxq "$server_pid"; then
     return 0
   fi
+  [ "$server_profile" = production ] && return 0
   grep -Fq "$server_ready_marker" "$server_log"
 }
 

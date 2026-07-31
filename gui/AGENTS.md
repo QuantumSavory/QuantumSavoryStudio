@@ -25,6 +25,7 @@ repository guidance in `../AGENTS.md`.
 - Unit checks: `npm run test:unit`
 - Production build: `npm run build`
 - Browser checks with the required backend: `../ci/browser.sh`
+- Production-bundle primary flow: `../ci/browser-production.sh`
 - Browser checks against an already running, correctly configured backend: `npm test`
 
 ## Local rules
