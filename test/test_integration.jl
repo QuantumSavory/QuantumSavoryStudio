@@ -379,6 +379,13 @@
         duplicate_protocol_id["net"]["edges"][1]["data"]["protocols"][1]["id"]
       push!(invalid_nested_payloads, duplicate_protocol_id)
 
+      duplicate_edge_id = deepcopy(test_payload)
+      push!(
+        duplicate_edge_id["net"]["edges"],
+        deepcopy(duplicate_edge_id["net"]["edges"][1]),
+      )
+      push!(invalid_nested_payloads, duplicate_edge_id)
+
       missing_protocol_parameter_value = deepcopy(test_payload)
       missing_protocol_parameter_value["net"]["edges"][1]["data"]["protocols"][1][
         "parameters"

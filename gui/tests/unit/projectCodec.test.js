@@ -691,10 +691,14 @@ describe('decodeStoredProject', () => {
     expect(raw).toEqual(original)
   })
 
-  it('rejects duplicate node IDs and dangling edge references', () => {
+  it('rejects duplicate node or edge IDs and dangling edge references', () => {
     const project = storedProject()
     project.net.nodes[1].id = project.net.nodes[0].id
     expect(() => decodeStoredProject(project)).toThrow(/duplicate node ID/)
+
+    const duplicateEdge = storedProject()
+    duplicateEdge.net.edges.push(structuredClone(duplicateEdge.net.edges[0]))
+    expect(() => decodeStoredProject(duplicateEdge)).toThrow(/duplicate edge ID/)
 
     const dangling = storedProject()
     dangling.net.edges[0].target = 'missing_node'

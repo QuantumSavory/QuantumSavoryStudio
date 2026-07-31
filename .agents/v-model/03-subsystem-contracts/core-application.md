@@ -32,9 +32,9 @@ requirements.
 
 ## SUB-004 — Canonical simulation payload and topology boundary
 
-- **Normative statement:** The simulator shall consume only an endpoint-specific validated minimized payload whose application-owned objects and tagged values are closed, whose recursive simulator-owned values are untagged, in which node-array order defines one-based simulator identity, slot and protocol IDs are globally unique, only physical edges enter the simulation graph, and virtual-edge protocols remain metadata-gated.
+- **Normative statement:** The simulator shall consume only an endpoint-specific validated minimized payload whose application-owned objects and tagged values are closed, whose recursive simulator-owned values are untagged, in which node-array order defines one-based simulator identity, node and edge IDs are unique, slot and protocol IDs are globally unique, only physical edges enter the simulation graph, and virtual-edge protocols remain metadata-gated.
 - **Parents:** SYS-002, SYS-004, SYS-005
-- **Acceptance criterion:** Validation rejects missing, extra, or mistyped fields at every owned request boundary, unknown or nested discriminators, duplicate unordered physical pairs, duplicate slot or protocol IDs anywhere in the payload, and invalid catalog/resolved values; physical edges carry all five resolved fields while virtual edges carry none; recursively untagged simulator values remain admissible; parsing preserves scalar node/source/target mapping; virtual edges are absent from the graph but retain only permitted protocols.
+- **Acceptance criterion:** Validation rejects missing, extra, or mistyped fields at every owned request boundary, unknown or nested discriminators, duplicate node, edge, slot, or protocol IDs, duplicate unordered physical pairs, and invalid catalog/resolved values; physical edges carry all five resolved fields while virtual edges carry none; recursively untagged simulator values remain admissible; parsing preserves scalar node/source/target mapping; virtual edges are absent from the graph but retain only permitted protocols.
 - **Verification:** INTV-004 (test)
 - **Origin / risk:** Parser/export contracts and tests; high topology-correctness risk
 - **Context:** [Constructor and tag metadata](../../context/backend/constructor-and-tag-metadata.md)

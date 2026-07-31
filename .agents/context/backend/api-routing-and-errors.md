@@ -143,9 +143,9 @@ the lifecycle lookup.
 
 Nonblank string IDs, names, and endpoint references retain their exact wire value.
 Validation neither coerces nor trims them, and endpoint matching compares the retained
-strings exactly. Slot and protocol IDs must also be unique across the full request, not
-merely within one owning node or edge, because result and runtime maps use those IDs as
-global keys.
+strings exactly. Node and edge IDs are unique within their collections; slot and
+protocol IDs must be unique across the full request because result and runtime maps use
+those IDs as global keys.
 
 Constructor values deliberately retain one simulator-owned extension point. The Web
 layer recognizes three exact `kind`-tagged variants (`variable`,

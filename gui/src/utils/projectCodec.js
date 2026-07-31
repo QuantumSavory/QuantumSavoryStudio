@@ -319,6 +319,7 @@ export function normalizeProjectName(value, fallback = DEFAULT_PROJECT_NAME) {
 function validateTopology(source) {
   const nodes = source.net.nodes
   const nodeIds = new Set()
+  const edgeIds = new Set()
   const physicalEndpointPairs = new Set()
 
   normalizePhysicalConfig(source.net.physicalConfig)
@@ -330,6 +331,8 @@ function validateTopology(source) {
   }
 
   for (const edge of source.net.edges) {
+    if (edgeIds.has(edge.id)) throw new Error(`Project contains duplicate edge ID: ${edge.id}`)
+    edgeIds.add(edge.id)
     const sourceId = edge.source
     const targetId = edge.target
     if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) {

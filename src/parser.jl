@@ -1374,6 +1374,7 @@ function validate_payload(payload; script_export::Bool=false)
 
     # Validate each edge structure
     edge_connections = []
+    edge_ids = Set{String}()
     physical_endpoint_pairs = Set{Tuple{String,String}}()
     for (i, edge) in enumerate(edges)
       _is_object_like(edge) || throw(validation_error("Edge $i must be an object"))
@@ -1402,7 +1403,8 @@ function validate_payload(payload; script_export::Bool=false)
       )
 
       # Validate source and target reference existing nodes
-      _required_nonempty_string(edge, "id", "Edge $i")
+      edge_id = _required_nonempty_string(edge, "id", "Edge $i")
+      _claim_unique_payload_id!(edge_ids, edge_id, "edge")
       source = _required_nonempty_string(edge, "source", "Edge $i")
       target = _required_nonempty_string(edge, "target", "Edge $i")
 

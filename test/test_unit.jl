@@ -2430,6 +2430,20 @@
       @test duplicate_protocol_error.message ==
         "Duplicate protocol ID: 'floatprot_0_1'"
 
+      duplicate_edge_id_payload = deepcopy(test_payload)
+      push!(
+        duplicate_edge_id_payload["net"]["edges"],
+        deepcopy(duplicate_edge_id_payload["net"]["edges"][1]),
+      )
+      duplicate_edge_id_error = try
+        WebQuantumSavory.validate_payload(duplicate_edge_id_payload)
+        nothing
+      catch error
+        error
+      end
+      @test duplicate_edge_id_error isa WebQuantumSavory.APIError
+      @test duplicate_edge_id_error.message == "Duplicate edge ID: 'edge1'"
+
       # Test edge referencing non-existent source node
       invalid_payload = deepcopy(test_payload)
       invalid_payload["net"]["edges"][1]["source"] = "nonexistent"
