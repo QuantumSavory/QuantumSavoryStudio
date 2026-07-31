@@ -1574,6 +1574,10 @@
       # Rejected: dangerous identifiers and syntactic forms are refused before
       # evaluation and surfaced as an ArgumentError validation failure.
       for source in (
+        "using Base",
+        "import Base",
+        "`ls`",
+        "@time 1",
         "x -> run(`ls`)",
         "Core.eval(:(1 + 1))",
         "@eval 1",
