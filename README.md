@@ -1,6 +1,25 @@
-# WebQuantumSavory (Quantum Network API)
+# WebQuantumSavory
 
-A Julia-based web API for quantum network operations, built with the Genie web framework and QuantumSavory quantum computing library. This API provides endpoints for creating, preparing, and running quantum network simulations.
+A GUI-first application for designing, running, and inspecting QuantumSavory quantum
+network simulations. It ships a Julia/Genie backend, a Vue browser client, and an
+optional loopback-only MCP sidecar as one co-versioned product.
+
+## Version 2 contract boundary
+
+WebQuantumSavory 2.0 intentionally supports only its current co-shipped contracts:
+
+- saved or imported projects must satisfy
+  [`contracts/project/v2.schema.json`](contracts/project/v2.schema.json) with
+  `schemaVersion: 2`; there is no schema-v1 migration;
+- parse and script-export requests use distinct closed OpenAPI schemas and reject
+  undeclared fields rather than coercing older payloads;
+- [`contracts/mcp/v2/contract.json`](contracts/mcp/v2/contract.json) is the sole MCP
+  tool/resource registry; and
+- HTTP success, error, platform-information, log, and panic records use the exact fields
+  in the active OpenAPI contract, without response aliases or fallback parsing.
+
+The browser, backend, and sidecar move with these contracts. The HTTP API is documented
+for the bundled client and is not a cross-release external compatibility promise.
 
 ## Installation
 
@@ -8,7 +27,7 @@ Prerequisites are Julia 1.12, Node.js 24, and npm.
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/QuantumSavory/WebQuantumSavory.git
    cd WebQuantumSavory
    ```
 
@@ -128,7 +147,55 @@ equivalent GUI action to that handler. Simulation lifecycle tools must continue
 to use the browser controller, while simulation reads and HTTP routes share
 the Julia `SimulationService`.
 
-## API Overview
+## API and generated documentation
+
+[`contracts/http/openapi.json`](contracts/http/openapi.json) is the OpenAPI 3.1 source
+for every supported HTTP operation, exact request and success schema, deployment
+exposure, and default error. A running server filters that source for its active profile
+and serves the result at `GET /openapi.json`; `GET /docs` automatically renders the same
+document as interactive Swagger UI. There is no separately maintained endpoint manual
+or checked-in generated Swagger output.
+
+Run `./ci/http-contract.sh` after changing the contract or a handler. It checks generated
+frontend operation-map freshness plus OpenAPI schema, profile, route, and application-
+version parity.
+
+| Surface | Canonical operations |
+| --- | --- |
+| Catalogs and previews | Background, slot, protocol, States Zoo, tag, function, and simulation-log-group catalogs; States Zoo and tag previews |
+| Simulation lifecycle | Parse, prepare, run, state, pause, destroy, and script export |
+| Live inspection | Simulation list, logs, slots, protocols, tags, and tag queries/mutations |
+| Restricted validation | Julia code, symbolic-expression, and numeric-expression validation when policy permits |
+| Operations and docs | Health, exact platform information, active OpenAPI JSON, and generated Swagger UI |
+| Local MCP bridge | Profile-gated `/_mcp/*` operations used only by the bundled browser and sidecar |
+
+Consult `/docs` or `/openapi.json` for the exact active paths and schemas instead of
+copying this grouped inventory into another client.
+
+### Exact simulation payloads
+
+`POST /parse_network_graph` accepts exactly `name`, `variables`, `simulationConfig`, and
+`net` at the top level. The checked-in
+[`assets/startup-warmup.json`](assets/startup-warmup.json) is a complete current request
+that can also be used as a local example:
+
+```bash
+curl --request POST http://localhost:8000/parse_network_graph \
+  --header "Content-Type: application/json" \
+  --data-binary @assets/startup-warmup.json
+```
+
+Script export has the same four top-level fields, but its `simulationConfig` additionally
+requires positive `time` and `timeStep`; parse configuration forbids those fields.
+Application-owned network, node, slot, background, protocol, parameter, and edge objects
+are closed and reject undeclared fields. Physical edges require all five resolved
+physical fields, while virtual edges forbid them.
+
+Constructor parameter values have three closed tagged forms: variable references,
+numeric expressions, and States Zoo recipes. Untagged recursive JSON is the explicit
+simulator-owned extension point; an object inside it cannot contain a `kind`
+discriminator. This keeps Web-owned tags exact without duplicating QuantumSavory's
+constructor schemas.
 
 ### Core Simulation Workflow
 
@@ -171,25 +238,8 @@ curl -X POST http://localhost:8000/pause_simulation \
 curl http://localhost:8000/get_state?name=my-simulation
 ```
 
-The state response will show `simulation_paused: true` and `simulation_running: false` when the simulation has been paused.
-
-### Information Endpoints
-
-- **`GET /background_types`** - Available background noise models
-- **`GET /slot_types`** - Available quantum slot types
-- **`GET /protocol_types`** - Available protocol types with parameters
-- **`GET /protocols/:name/:protocol_id`** - Details for a protocol instance in a simulation
-- **`GET /slots/:name/:slot_id`** - Details for a slot in a simulation
-- **`GET /simulations`** - List existing simulations with `name` and `status`
-- **`GET /known_functions`** - List of supported Julia functions usable as argument values
-- **`POST /test_code`** - Test Julia code when unsafe evaluation is enabled
-- **`POST /test_symbolic_expression`** - Evaluate a symbolic expression and return LaTeX when unsafe evaluation is enabled
-- **`POST /test_numeric_expression`** - Validate an `Int64` or `Float64` Julia
-  expression for a protocol placement when unsafe evaluation is enabled
-- **`GET /platform_info`** - Versions and server capabilities, including `unsafe_code_evaluation`
-- **`GET /logs/:name`** - Fetch log events for a simulation; supports `purge` query (default `true`). Example: `/logs/my-sim?purge=false`
-- **`GET /status`** - Server health check
-- **`GET /docs`** - Interactive Swagger UI
+The state response will show `simulation_paused: true` and `simulation_running: false`
+when the simulation has been paused.
 
 ### Simulation States
 
@@ -206,27 +256,15 @@ When monitoring simulation state via `GET /get_state`, the response includes a `
 - `simulation_progress` - Current simulation time progress
 - `simulation_error` - Error message if simulation failed
 
-## Getting Started
+### Project documents
 
-The best way to explore the API is through the interactive Swagger documentation at `/docs`. It provides:
-- Complete endpoint documentation
-- Request/response schemas
-- Interactive testing interface
-- Example payloads and responses
-
-The checked-in OpenAPI 3.1 document at `contracts/http/openapi.json` generates the
-active `/openapi.json` contract and Swagger UI. The parse and script-export operations
-have separate, closed request schemas. Both require exactly `name`, `variables`,
-`simulationConfig`, and `net`; parse configuration contains only the two explicit
-representation choices, while script export additionally requires positive `time` and
-`timeStep`. Application-owned network, node, slot, background, protocol, parameter,
-and edge objects reject undeclared fields.
-
-Constructor parameter values have three closed tagged forms: variable references,
-numeric expressions, and States Zoo recipes. Untagged JSON remains a recursive
-extension point for simulator-owned constructor data, but no object inside that value
-may contain a `kind` discriminator. This keeps Web-owned tags unambiguous without
-duplicating QuantumSavory constructor schemas.
+Saved/imported project documents are distinct from minimized simulator requests. The
+closed [`contracts/project/v2.schema.json`](contracts/project/v2.schema.json) contract
+requires `schemaVersion: 2` plus the durable description, annotations, variables,
+simulation configuration, network, and physical configuration. Older or unversioned
+documents are rejected without normalization, migration, storage rewriting, or partial
+session replacement. Complete current examples live under
+[`gui/src/demos/`](gui/src/demos/).
 
 ### Physical Links
 

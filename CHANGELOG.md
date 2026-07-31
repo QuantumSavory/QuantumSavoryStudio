@@ -1,6 +1,51 @@
 # Changelog
 
-## 1.11.0
+## 2.0.0
+
+### Breaking current-only contracts
+
+- Made project document schema v2 the only accepted durable format. Schema-v1 and
+  unversioned documents are rejected before normalization or session replacement;
+  WebQuantumSavory provides no migration or compatibility adapter.
+- Closed every Web-owned parse and script-export request object. Parse and export now
+  have distinct exact configuration schemas, physical and virtual edges are disjoint,
+  and undeclared, omitted, defaulted, aliased, or malformed owned fields fail before
+  simulator construction or source generation.
+- Adopted QuantumSavory 0.8 metadata as the authority for constructors, protocol
+  placement, tags, messages, and States Zoo families. The root project tracks an exact
+  upstream revision so these APIs and their Web consumer are reviewed together; local
+  subtype discovery and duplicate metadata tables are no longer supported.
+- Made live simulator catalogs the admission boundary for direct, copied, and generated
+  authoring. Unknown IDs, invalid placement, contradictory descriptors, incompatible
+  Variables, and unavailable or malformed catalogs leave the design unchanged.
+- Made MCP contract v2 the sole collaboration registry. The v1 registry and adapters
+  were removed; v2 adds canonical design readback, catalog and simulation resources,
+  structured result resources, exact revisions, and guarded recovery from uncertain
+  delivery.
+- Removed pre-2.0 route and response aliases, compatibility coercions, and fallback
+  shape guessing. The co-shipped HTTP boundary now consists only of OpenAPI-registered
+  operations, exact endpoint-specific successes, and the canonical structured error
+  envelope.
+- Closed the platform-information, ordinary-log, and panic DTOs. Browser admission uses
+  exact snake_case fields, simulator metadata lives only in ordinary-event `details`,
+  and backend diagnostics convert once into a separate application-log view.
+
+### Major changes
+
+- Unified GUI Play and MCP simulation readiness behind one browser-controller path that
+  flushes editor drafts, serializes design work, validates once, and parses, prepares,
+  or runs only when required.
+- Made saved-project open, import, demos, new-project creation, and Save As prepare an
+  isolated candidate before committing one complete session replacement, preserving
+  the active project and stored documents on rejected or superseded work.
+- Made `contracts/http/openapi.json` the private HTTP route and generated-documentation
+  authority. The active deployment profile serves its contract at `/openapi.json` and
+  an automatically generated Swagger UI at `/docs`.
+- Narrowed the supported release environment to Ubuntu 24.04 x86_64, Julia 1.12,
+  Node.js 24, and the Playwright-lock-selected Chromium desktop build. Other hosts and
+  browser engines remain advisory portability probes.
+
+### Additional changes
 
 - Unified Symbolic values, Custom Functions, and `Float64`/`Int64` expressions
   on one source-editor lifecycle: fresh and invalid drafts stay open,

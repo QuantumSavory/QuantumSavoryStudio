@@ -5,7 +5,7 @@ A Vue 3 + Vite application for interactive quantum network visualization and sim
 ## Development
 
 ### Prerequisites
-- Node.js (v18 or higher)
+- Node.js 24
 - npm
 
 ### Getting Started
@@ -32,6 +32,17 @@ generated files are ignored by Git; the root
 the GUI, and starts the API server.
 
 ## Testing
+
+Run the frontend unit suite and production build through the repository wrappers from
+the repository root:
+
+```bash
+./ci/frontend-build.sh
+```
+
+That check uses the locked dependencies and rejects release-version drift between the
+root Julia project, `package.json`, and the two root version entries in
+`package-lock.json`.
 
 ### End-to-End Tests
 This project uses Playwright for automated end-to-end testing.
