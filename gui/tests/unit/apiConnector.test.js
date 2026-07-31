@@ -167,12 +167,46 @@ describe('ApiConnector project namespaces', () => {
 
     expect(connector.getPlatformInfo()).toBeNull()
     expect(connector.isUnsafeCodeEvaluationEnabled()).toBe(false)
-    await expect(connector.fetchPlatformInfo()).resolves.toEqual(response)
-    expect(connector.getPlatformInfo()).toEqual(response)
+    const loaded = await connector.fetchPlatformInfo()
+    expect(loaded).toEqual(response)
+    expect(loaded).not.toBe(response)
+    expect(connector.getPlatformInfo()).toBe(loaded)
+    expect(Object.isFrozen(loaded)).toBe(true)
+    expect(Object.isFrozen(loaded.versions)).toBe(true)
+    expect(Object.isFrozen(loaded.quantumsavory)).toBe(true)
+    expect(Object.isFrozen(loaded.capabilities)).toBe(true)
+    expect(Object.isFrozen(loaded.capabilities.mcp)).toBe(true)
     expect(connector.getPlatformInfo().versions).not.toHaveProperty('quantumSavory')
     expect(connector.getPlatformInfo().capabilities)
       .not.toHaveProperty('unsafeCodeEvaluation')
     expect(connector.isUnsafeCodeEvaluationEnabled()).toBe(true)
+
+    response.versions.app = 'mutated source'
+    expect(connector.getPlatformInfo().versions.app).toBe('1.8.0')
+    expect(() => {
+      connector.getPlatformInfo().capabilities.mcp.available = false
+    }).toThrow(TypeError)
+  })
+
+  it('accepts every declared nullable platform metadata field', async () => {
+    const response = backendPlatformInfo({
+      julia: null,
+      genie: null,
+      quantumsavory: null,
+      app: null,
+      trackedRevision: null,
+      trackedSource: null,
+      treeHash: null,
+      commit: null,
+    })
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => response,
+    }))
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.fetchPlatformInfo()).resolves.toEqual(response)
+    expect(connector.getPlatformInfo()).toEqual(response)
   })
 
   it('rejects legacy platform aliases without populating the cache', async () => {
@@ -188,6 +222,50 @@ describe('ApiConnector project namespaces', () => {
       /platformInfo\.capabilities must contain exactly/,
     )
     expect(connector.getPlatformInfo()).toBeNull()
+  })
+
+  it.each([
+    ['conflicting QuantumSavory versions', response => {
+      response.quantumsavory.version = '9.9.9'
+    }],
+    ['a nonboolean unsafe-evaluation capability', response => {
+      response.capabilities.unsafe_code_evaluation = 'false'
+    }],
+    ['a nonboolean MCP availability capability', response => {
+      response.capabilities.mcp.available = 1
+    }],
+    ['a nonlocal MCP capability', response => {
+      response.capabilities.mcp.local_only = false
+    }],
+    ['an automatic MCP start mode', response => {
+      response.capabilities.mcp.start_mode = 'automatic'
+    }],
+  ])('rejects %s without populating the cache', async (_label, invalidate) => {
+    const response = backendPlatformInfo()
+    invalidate(response)
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => response,
+    }))
+    const connector = new ApiConnector('http://api.test')
+
+    await expect(connector.fetchPlatformInfo()).rejects.toThrow(TypeError)
+    expect(connector.getPlatformInfo()).toBeNull()
+  })
+
+  it('keeps the last immutable cache entry when a refresh is invalid', async () => {
+    const valid = backendPlatformInfo({ app: '2.0.0' })
+    const invalid = backendPlatformInfo({ app: '3.0.0' })
+    invalid.capabilities.mcp.local_only = false
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => valid })
+      .mockResolvedValueOnce({ ok: true, json: async () => invalid })
+    const connector = new ApiConnector('http://api.test')
+
+    const cached = await connector.fetchPlatformInfo()
+    await expect(connector.fetchPlatformInfo()).rejects.toThrow(TypeError)
+    expect(connector.getPlatformInfo()).toBe(cached)
+    expect(connector.getPlatformInfo().versions.app).toBe('2.0.0')
   })
 
   it('keeps tag explorer simulation names and external IDs at the HTTP boundary', async () => {

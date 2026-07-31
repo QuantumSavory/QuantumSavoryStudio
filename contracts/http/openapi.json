@@ -3389,6 +3389,7 @@
           },
           "getPlatformInfoResponse": {
             "type": "object",
+            "description": "Closed platform metadata DTO. quantumsavory.version is identical to versions.quantumsavory.",
             "additionalProperties": false,
             "required": [
               "versions",

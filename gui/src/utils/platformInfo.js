@@ -56,6 +56,11 @@ export function assertBackendPlatformInfo(platformInfo) {
   for (const key of QUANTUMSAVORY_INFO_KEYS) {
     requireNullableString(quantumsavory[key], `platformInfo.quantumsavory.${key}`)
   }
+  if (quantumsavory.version !== versions.quantumsavory) {
+    throw new TypeError(
+      'platformInfo.quantumsavory.version must match platformInfo.versions.quantumsavory',
+    )
+  }
   if (quantumsavory.commit !== null && !isFullGitCommitSha(quantumsavory.commit)) {
     throw new TypeError(
       'platformInfo.quantumsavory.commit must be a full lowercase Git SHA or null',
@@ -85,4 +90,17 @@ export function assertBackendPlatformInfo(platformInfo) {
     throw new TypeError('platformInfo.capabilities.mcp.start_mode must be manual')
   }
   return source
+}
+
+/** Return a detached immutable snapshot of an admitted backend DTO. */
+export function snapshotBackendPlatformInfo(platformInfo) {
+  const source = assertBackendPlatformInfo(platformInfo)
+  return Object.freeze({
+    versions: Object.freeze({ ...source.versions }),
+    quantumsavory: Object.freeze({ ...source.quantumsavory }),
+    capabilities: Object.freeze({
+      unsafe_code_evaluation: source.capabilities.unsafe_code_evaluation,
+      mcp: Object.freeze({ ...source.capabilities.mcp }),
+    }),
+  })
 }

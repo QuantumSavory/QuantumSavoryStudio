@@ -1213,6 +1213,11 @@
       ])
       @test Set(keys(platform_versions["properties"])) ==
         Set(platform_versions["required"])
+      nullable_string_types = Set(["string", "null"])
+      @test all(
+        Set(property["type"]) == nullable_string_types
+        for property in values(platform_versions["properties"])
+      )
       quantumsavory_schema = platform_schema["properties"]["quantumsavory"]
       @test quantumsavory_schema["additionalProperties"] == false
       @test Set(quantumsavory_schema["required"]) == Set([
@@ -1224,6 +1229,12 @@
       ])
       @test Set(keys(quantumsavory_schema["properties"])) ==
         Set(quantumsavory_schema["required"])
+      @test all(
+        Set(property["type"]) == nullable_string_types
+        for property in values(quantumsavory_schema["properties"])
+      )
+      @test quantumsavory_schema["properties"]["commit"]["pattern"] ==
+        "^(?:[0-9a-f]{40}|[0-9a-f]{64})\$"
       capability_schema = platform_schema["properties"]["capabilities"]
       @test capability_schema["additionalProperties"] == false
       @test Set(capability_schema["required"]) == Set([
@@ -1232,6 +1243,8 @@
       ])
       @test Set(keys(capability_schema["properties"])) ==
         Set(capability_schema["required"])
+      @test capability_schema["properties"]["unsafe_code_evaluation"]["type"] ==
+        "boolean"
       mcp_schema = capability_schema["properties"]["mcp"]
       @test mcp_schema["additionalProperties"] == false
       @test Set(mcp_schema["required"]) == Set([
@@ -1240,6 +1253,15 @@
         "start_mode",
       ])
       @test Set(keys(mcp_schema["properties"])) == Set(mcp_schema["required"])
+      @test mcp_schema["properties"]["available"]["type"] == "boolean"
+      @test mcp_schema["properties"]["local_only"] == Dict(
+        "type" => "boolean",
+        "const" => true,
+      )
+      @test mcp_schema["properties"]["start_mode"] == Dict(
+        "type" => "string",
+        "const" => "manual",
+      )
 
       numeric_schema =
         contract["components"]["schemas"]["NumericExpressionRequest"]

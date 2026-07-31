@@ -3,7 +3,7 @@ import { ref, readonly } from 'vue'
 import { generateUUid } from './Utils.js'
 import { requestJson } from './httpClient.js'
 import { httpOperation, httpOperationPath } from './httpOperations.js'
-import { assertBackendPlatformInfo } from './platformInfo.js'
+import { snapshotBackendPlatformInfo } from './platformInfo.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -351,7 +351,7 @@ export class ApiConnector {
   }
 
   async fetchPlatformInfo(){
-    const result = assertBackendPlatformInfo(
+    const result = snapshotBackendPlatformInfo(
       await this.requestOperation('getPlatformInfo'),
     )
     this._platformInfo.value = result
