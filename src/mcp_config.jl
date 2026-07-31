@@ -1,21 +1,35 @@
 const MCP_PORT_ENV_VAR = "WEBQUANTUMSAVORY_MCP_PORT"
 const DEFAULT_MCP_PORT = 8001
 const MCP_CONTRACT_FILE = normpath(
-  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "tools.json"),
+  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "contract.json"),
 )
 
 Base.include_dependency(MCP_CONTRACT_FILE)
 
-function _mcp_contract_version(path::AbstractString=MCP_CONTRACT_FILE)
+function _load_mcp_contract(path::AbstractString=MCP_CONTRACT_FILE)
   contract = JSON.parsefile(path)
-  version = get(contract, "contract_version", nothing)
-  if !(version isa Integer) || version isa Bool || version < 1
-    throw(ArgumentError("MCP contract_version must be a positive integer"))
-  end
-  return Int(version)
+  registry = load_mcp_contract_registry(contract)
+  Set(keys(registry.resources_by_id)) ==
+    Set(["design_current", "simulation_state"]) ||
+    throw(ArgumentError("MCP static resource providers are incomplete"))
+  Set(keys(registry.result_templates_by_kind)) ==
+    Set(["slots", "protocols"]) ||
+    throw(ArgumentError("MCP result resource providers are incomplete"))
+  catalog = get(registry.templates_by_id, "catalog", nothing)
+  catalog !== nothing &&
+    catalog.result_kind === nothing &&
+    catalog.variable == "kind" &&
+    catalog.mime_type == "application/json" ||
+    throw(ArgumentError("MCP catalog resource provider is incomplete"))
+  return (; contract, registry)
 end
 
-const MCP_CONTRACT_VERSION = _mcp_contract_version()
+_mcp_contract_version(path::AbstractString=MCP_CONTRACT_FILE) =
+  _load_mcp_contract(path).registry.version
+
+const MCP_CONTRACT = _load_mcp_contract()
+const MCP_RESOURCE_REGISTRY = MCP_CONTRACT.registry
+const MCP_CONTRACT_VERSION = MCP_RESOURCE_REGISTRY.version
 
 struct MCPConfiguration
   enabled::Bool

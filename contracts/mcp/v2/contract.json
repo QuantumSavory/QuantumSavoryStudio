@@ -3,6 +3,71 @@
   "default_output_schema": {
     "type": "object"
   },
+  "resources": [
+    {
+      "id": "design_current",
+      "uri": "wqs://design/current",
+      "name": "Current WebQuantumSavory design",
+      "description": "Canonical read-only mirror of the bound browser design.",
+      "mime_type": "application/json"
+    },
+    {
+      "id": "simulation_state",
+      "uri": "wqs://simulation/state",
+      "name": "Current simulation state",
+      "description": "Serialized runtime state for the bound simulation.",
+      "mime_type": "application/json"
+    }
+  ],
+  "resource_templates": [
+    {
+      "id": "catalog",
+      "uri_template": "wqs://catalog/{kind}",
+      "name": "Catalog",
+      "description": "One live WebQuantumSavory authoring catalog.",
+      "mime_type": "application/json"
+    },
+    {
+      "id": "slot_html",
+      "uri_template": "wqs://simulation/slots/{slot_id}/html",
+      "name": "Slot HTML representation",
+      "description": "Rendered HTML for a bound simulation slot.",
+      "mime_type": "text/html",
+      "result_kind": "slots",
+      "identifier_variable": "slot_id",
+      "format": "html"
+    },
+    {
+      "id": "slot_png",
+      "uri_template": "wqs://simulation/slots/{slot_id}/png",
+      "name": "Slot PNG representation",
+      "description": "Rendered PNG for a bound simulation slot.",
+      "mime_type": "image/png",
+      "result_kind": "slots",
+      "identifier_variable": "slot_id",
+      "format": "png"
+    },
+    {
+      "id": "protocol_html",
+      "uri_template": "wqs://simulation/protocols/{protocol_id}/html",
+      "name": "Protocol HTML representation",
+      "description": "Rendered HTML for a bound simulation protocol.",
+      "mime_type": "text/html",
+      "result_kind": "protocols",
+      "identifier_variable": "protocol_id",
+      "format": "html"
+    },
+    {
+      "id": "protocol_png",
+      "uri_template": "wqs://simulation/protocols/{protocol_id}/png",
+      "name": "Protocol PNG representation",
+      "description": "Rendered PNG for a bound simulation protocol.",
+      "mime_type": "image/png",
+      "result_kind": "protocols",
+      "identifier_variable": "protocol_id",
+      "format": "png"
+    }
+  ],
   "tools": [
     {
       "name": "design_get",
@@ -1170,6 +1235,7 @@
     {
       "name": "simulation_slot_result",
       "description": "Return one bound simulation slot result and representation resource links.",
+      "result_kind": "slots",
       "annotations": {
         "readOnlyHint": true,
         "destructiveHint": false,
@@ -1193,6 +1259,7 @@
     {
       "name": "simulation_protocol_result",
       "description": "Return one bound simulation protocol result and representation resource links.",
+      "result_kind": "protocols",
       "annotations": {
         "readOnlyHint": true,
         "destructiveHint": false,

@@ -121,8 +121,9 @@ bound browser tab and one MCP session are supported. Project transitions
 automatically unbind the current design. Use `simulation_reset` before changing
 simulation-affecting design state after preparation.
 
-The versioned tool contract is in `contracts/mcp/v2/tools.json`. New authoring
-tools must first gain a shared `DesignCommandService` handler and migrate the
+The versioned tool/resource contract is in
+`contracts/mcp/v2/contract.json`. New authoring tools must first gain a shared
+`DesignCommandService` handler and migrate the
 equivalent GUI action to that handler. Simulation lifecycle tools must continue
 to use the browser controller, while simulation reads and HTTP routes share
 the Julia `SimulationService`.

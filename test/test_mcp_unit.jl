@@ -124,6 +124,41 @@
     @test origin_error.error_code == "MCP_ORIGIN_FORBIDDEN"
   end
 
+  @testset "resource registry is the backend authority" begin
+    registry = WebQuantumSavory.MCP_RESOURCE_REGISTRY
+    @test registry.version == WebQuantumSavory.MCP_CONTRACT_VERSION == 2
+    @test Set(keys(registry.resources_by_id)) ==
+      Set(["design_current", "simulation_state"])
+    @test Set(keys(registry.result_templates_by_kind)) ==
+      Set(["slots", "protocols"])
+    @test length(registry.resource_templates) == 5
+    catalog = registry.templates_by_id["catalog"]
+    @test catalog.result_kind === nothing
+    @test catalog.variable == "kind"
+    @test catalog.mime_type == "application/json"
+    @test !isfile(joinpath(
+      @__DIR__,
+      "..",
+      "contracts",
+      "mcp",
+      "v2",
+      "tools.json",
+    ))
+    @test basename(WebQuantumSavory.MCP_CONTRACT_FILE) == "contract.json"
+
+    contract = deepcopy(WebQuantumSavory.MCP_CONTRACT.contract)
+    contract["resource_templates"][2]["mime_type"] = "image/png"
+    @test_throws ArgumentError WebQuantumSavory.load_mcp_contract_registry(
+      contract,
+    )
+    catalog_contract = deepcopy(WebQuantumSavory.MCP_CONTRACT.contract)
+    catalog_contract["resource_templates"][1]["uri_template"] =
+      "wqs://catalog/{catalog_kind}"
+    @test_throws ArgumentError WebQuantumSavory.load_mcp_contract_registry(
+      catalog_contract,
+    )
+  end
+
   @testset "dependency and transport boundaries" begin
     root_project = read(joinpath(@__DIR__, "..", "Project.toml"), String)
     sidecar_root = joinpath(@__DIR__, "..", "mcp")
@@ -1325,6 +1360,7 @@
         kind="slots",
         identifier,
         format="html",
+        mime_type="text/html",
       )
     end
     @test WebQuantumSavory._encode_mcp_resource_segment("x/y") == "x%2Fy"

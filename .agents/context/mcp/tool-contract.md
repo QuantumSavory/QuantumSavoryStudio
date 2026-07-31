@@ -18,11 +18,13 @@ and
 
 ## Current contract
 
-`contracts/mcp/v2/tools.json` is the sole metadata/schema registry; no v1 registry,
-adapter, or migration path remains. The sidecar derives its advertised version and tool
-registry from this file. Frontend contract checks and backend dispatch consume the same
-operation names. Version 2 advertises 23 tools across design/catalog reads, authoring,
-simulation lifecycle, and simulation reads.
+`contracts/mcp/v2/contract.json` is the sole tool/resource metadata and schema registry;
+no v1 registry, adapter, or migration path remains. The sidecar derives its advertised
+tools, static resources, resource templates, result-tool associations, URIs, and MIME
+types from this file. The backend derives result URI construction/parsing and resource
+MIME types from the same registry, while the frontend consumes the same operation and
+resource definitions. Version 2 advertises 23 tools, two static resources, and five
+resource templates.
 
 The current recovery rules are:
 
@@ -37,13 +39,17 @@ The current recovery rules are:
 - Run shares GUI readiness and records the prepared revision;
 - only a successful slot/protocol result with valid nonempty HTML and PNG advertises
   resource links;
+- the sidecar accepts result links only from the registry-associated tool and only when
+  every URI exactly matches the returned identifier, kind, and format;
 - resource identifiers use strict RFC 3986 unreserved-segment encoding and decode
   exactly once, so reserved characters, `%`, `+`, and Unicode round-trip without
   collisions;
 - backend and sidecar trust boundaries independently validate MIME type, base64,
   nonempty UTF-8 HTML, and the PNG signature.
 
-Exactly four result templates are advertised: slot HTML/PNG and protocol HTML/PNG.
+Exactly four result templates are advertised: slot HTML/PNG and protocol HTML/PNG. Each
+declares `result_kind`, `identifier_variable`, and `format`; contract loading rejects
+duplicate, incomplete, inconsistent, or unsupported resource metadata.
 Successful slot/protocol tool results contain one text item and two `resource_link`
 items while retaining the same links in `structuredContent`.
 
@@ -59,7 +65,8 @@ changes atomically across the registry, frontend, backend, sidecar, tests, and V
 
 ## Anchors
 
-- **Current registry:** [`contracts/mcp/v2/tools.json`](../../../contracts/mcp/v2/tools.json).
+- **Current registry:** [`contracts/mcp/v2/contract.json`](../../../contracts/mcp/v2/contract.json).
+- **Shared registry validation:** [`src/mcp_contract_registry.jl`](../../../src/mcp_contract_registry.jl).
 - **Sidecar loader/resources:** [`mcp/main.jl`](../../../mcp/main.jl).
 - **Backend dispatch:** [`src/mcp_adapters.jl`](../../../src/mcp_adapters.jl).
 - **Backend resource codec:** [`src/mcp_resources.jl`](../../../src/mcp_resources.jl).

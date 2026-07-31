@@ -5,9 +5,10 @@ using Logging
 using ModelContextProtocol
 
 include(joinpath(@__DIR__, "src", "single_session_http_transport.jl"))
+include(joinpath(@__DIR__, "..", "src", "mcp_contract_registry.jl"))
 
 const CONTRACT_FILE = normpath(
-  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "tools.json"),
+  joinpath(@__DIR__, "..", "contracts", "mcp", "v2", "contract.json"),
 )
 const HTTP_CONTRACT_FILE = normpath(
   joinpath(@__DIR__, "..", "contracts", "http", "openapi.json"),
@@ -133,11 +134,12 @@ const SIDECAR_BRIDGE_REGISTRY = load_sidecar_bridge_operations()
 const SIDECAR_BRIDGE_OPERATIONS = SIDECAR_BRIDGE_REGISTRY.operations
 const SIDECAR_BRIDGE_SUCCESS_KEYS = SIDECAR_BRIDGE_REGISTRY.success_keys
 
-const TOOL_CONTRACT = plain_dictionary(
+const MCP_CONTRACT = plain_dictionary(
   JSON3.read(read(CONTRACT_FILE, String)),
 )
+const MCP_RESOURCE_REGISTRY = load_mcp_contract_registry(MCP_CONTRACT)
 
-function load_tool_recovery_policies(contract=TOOL_CONTRACT)
+function load_tool_recovery_policies(contract=MCP_CONTRACT)
   return Dict(
     string(tool["name"]) => begin
       annotations = plain_dictionary(
@@ -168,10 +170,6 @@ const AMBIGUOUS_BRIDGE_ERROR_CODES = Set([
   "MALFORMED_ERROR_RESPONSE",
   "MALFORMED_SUCCESS_RESPONSE",
   "NETWORK_ERROR",
-])
-const RESULT_RESOURCE_TOOLS = Set([
-  "simulation_protocol_result",
-  "simulation_slot_result",
 ])
 const RESOURCE_PNG_SIGNATURE = UInt8[
   0x89,
@@ -349,32 +347,69 @@ function normalize_tool_error(tool_name, error_payload)
 end
 
 function tool_resource_links(tool_name, structured)
-  string(tool_name) in RESULT_RESOURCE_TOOLS || return ResourceLink[]
+  name = string(tool_name)
+  kind = get(MCP_RESOURCE_REGISTRY.result_tool_kinds, name, nothing)
   resources = get(structured, "resources", nothing)
-  exact_string_keys(resources, ("html", "png")) || throw(
-    BackendRequestError(sidecar_error_payload(
-      "MALFORMED_SUCCESS_RESPONSE",
-      "The backend did not return both result resource links.";
-      details=Dict("tool" => string(tool_name)),
-    )),
-  )
-  links = ResourceLink[]
-  for (format, mime_type) in (("html", "text/html"), ("png", "image/png"))
-    uri = get(resources, format, nothing)
-    uri isa AbstractString && !isempty(uri) || throw(
+  if kind === nothing
+    resources === nothing || throw(
       BackendRequestError(sidecar_error_payload(
         "MALFORMED_SUCCESS_RESPONSE",
-        "The backend returned an invalid result resource link.";
-        details=Dict("tool" => string(tool_name), "format" => format),
+        "A non-result tool returned reserved resource links.";
+        details=Dict("tool" => name),
+      )),
+    )
+    return ResourceLink[]
+  end
+
+  templates = MCP_RESOURCE_REGISTRY.result_templates_by_kind[kind]
+  formats = String[something(template.format) for template in templates]
+  exact_string_keys(resources, formats) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "MALFORMED_SUCCESS_RESPONSE",
+      "The backend did not return the exact result resource links.";
+      details=Dict("tool" => name),
+    )),
+  )
+  identifier_variables = Set(
+    something(template.identifier_variable)
+    for template in templates
+  )
+  identifier_variable = only(identifier_variables)
+  identifier = get(structured, identifier_variable, nothing)
+  identifier isa AbstractString && !isempty(identifier) || throw(
+    BackendRequestError(sidecar_error_payload(
+      "MALFORMED_SUCCESS_RESPONSE",
+      "The backend did not return the result resource identifier.";
+      details=Dict(
+        "tool" => name,
+        "identifier_variable" => identifier_variable,
+      ),
+    )),
+  )
+
+  links = ResourceLink[]
+  for template in templates
+    format = something(template.format)
+    uri = get(resources, format, nothing)
+    expected_uri = mcp_resource_template_uri(template, String(identifier))
+    uri isa AbstractString && uri == expected_uri || throw(
+      BackendRequestError(sidecar_error_payload(
+        "MALFORMED_SUCCESS_RESPONSE",
+        "The backend returned a noncanonical result resource link.";
+        details=Dict(
+          "tool" => name,
+          "format" => format,
+          "expected_uri" => expected_uri,
+        ),
       )),
     )
     push!(
       links,
       ResourceLink(
         uri=String(uri),
-        name="$(string(tool_name)) $format result",
-        description="Rendered $format representation for this simulation result.",
-        mime_type=mime_type,
+        name=template.name,
+        description=template.description,
+        mime_type=template.mime_type,
       ),
     )
   end
@@ -434,7 +469,7 @@ function tool_result(configuration, tool_name, arguments)
 end
 
 function load_tools(configuration; result_handler=tool_result)
-  contract = TOOL_CONTRACT
+  contract = MCP_CONTRACT
   Int(contract["contract_version"]) == Int(configuration["contract_version"]) ||
     error("MCP contract version mismatch")
   output_schema = plain_dictionary(contract["default_output_schema"])
@@ -556,64 +591,34 @@ function template_resource(configuration, uri, expected_mime_type)
   return rendered_resource_contents(uri, result, expected_mime_type)
 end
 
-function resources(configuration)
-  static_resources = [
+function resources(
+  configuration;
+  registry::MCPContractRegistry=MCP_RESOURCE_REGISTRY,
+)
+  static_resources = map(registry.resources) do resource
     MCPResource(
-      uri="wqs://design/current",
-      name="Current WebQuantumSavory design",
-      description="Canonical read-only mirror of the bound browser design.",
-      mime_type="application/json",
-      data_provider=() -> text_resource(configuration, "wqs://design/current"),
-    ),
-    MCPResource(
-      uri="wqs://simulation/state",
-      name="Current simulation state",
-      description="Serialized runtime state for the bound simulation.",
-      mime_type="application/json",
-      data_provider=() -> text_resource(configuration, "wqs://simulation/state"),
-    ),
-  ]
-  templates = [
+      uri=resource.uri,
+      name=resource.name,
+      description=resource.description,
+      mime_type=resource.mime_type,
+      data_provider=() -> text_resource(configuration, resource.uri),
+    )
+  end
+  templates = map(registry.resource_templates) do template
+    provider = if template.result_kind === nothing
+      (uri, _variables) -> text_resource(configuration, uri)
+    else
+      (uri, _variables) ->
+        template_resource(configuration, uri, template.mime_type)
+    end
     ResourceTemplate(
-      name="Catalog",
-      uri_template="wqs://catalog/{kind}",
-      mime_type="application/json",
-      description="One live WebQuantumSavory authoring catalog.",
-      data_provider=(uri, _variables) -> text_resource(configuration, uri),
-    ),
-    ResourceTemplate(
-      name="Slot HTML representation",
-      uri_template="wqs://simulation/slots/{slot_id}/html",
-      mime_type="text/html",
-      description="Rendered HTML for a bound simulation slot.",
-      data_provider=(uri, _variables) ->
-        template_resource(configuration, uri, "text/html"),
-    ),
-    ResourceTemplate(
-      name="Slot PNG representation",
-      uri_template="wqs://simulation/slots/{slot_id}/png",
-      mime_type="image/png",
-      description="Rendered PNG for a bound simulation slot.",
-      data_provider=(uri, _variables) ->
-        template_resource(configuration, uri, "image/png"),
-    ),
-    ResourceTemplate(
-      name="Protocol HTML representation",
-      uri_template="wqs://simulation/protocols/{protocol_id}/html",
-      mime_type="text/html",
-      description="Rendered HTML for a bound simulation protocol.",
-      data_provider=(uri, _variables) ->
-        template_resource(configuration, uri, "text/html"),
-    ),
-    ResourceTemplate(
-      name="Protocol PNG representation",
-      uri_template="wqs://simulation/protocols/{protocol_id}/png",
-      mime_type="image/png",
-      description="Rendered PNG for a bound simulation protocol.",
-      data_provider=(uri, _variables) ->
-        template_resource(configuration, uri, "image/png"),
-    ),
-  ]
+      name=template.name,
+      uri_template=template.uri_template,
+      mime_type=template.mime_type,
+      description=template.description,
+      data_provider=provider,
+    )
+  end
   return static_resources, templates
 end
 

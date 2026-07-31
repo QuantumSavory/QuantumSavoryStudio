@@ -63,11 +63,11 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 
 - **Covers:** CMP-012
 - **Method:** test
-- **Procedure:** Inspect every registry annotation; render discriminating slot/protocol results in HTML/PNG; round-trip opaque URI-significant IDs; exercise unavailable/malformed resources.
+- **Procedure:** Validate registry annotations/descriptors; reject invalid metadata and noncanonical links; render and round-trip slot/protocol HTML/PNG with opaque IDs; exercise both trust boundaries.
 - **Environment / configuration:** Contract loader plus backend resource adapter and sidecar resource provider
-- **Pass criterion:** Only intrinsically repeat-safe tools claim idempotence; every successful result has nonempty correct-MIME HTML/PNG; IDs round-trip; failures are structured validation/not-found.
+- **Pass criterion:** Intrinsic idempotence only; exact nonempty correct-MIME links; IDs round-trip; failures remain structured validation/not-found.
 - **Status:** passing
-- **Evidence:** [`contracts/mcp/v2/tools.json`](../../../contracts/mcp/v2/tools.json), [`gui/tests/unit/mcpContract.test.js`](../../../gui/tests/unit/mcpContract.test.js), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl), [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh)
+- **Evidence:** [`contracts/mcp/v2/contract.json`](../../../contracts/mcp/v2/contract.json), [`src/mcp_contract_registry.jl`](../../../src/mcp_contract_registry.jl), [`gui/tests/unit/mcpContract.test.js`](../../../gui/tests/unit/mcpContract.test.js), [`test/test_mcp_unit.jl`](../../../test/test_mcp_unit.jl), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl), [`ci/mcp-unit.sh`](../../../ci/mcp-unit.sh)
 - **Nonconformance:** None at this component boundary. The dependency-owned JSON-RPC
   resource-provider error envelope remains tracked at INTV-013.
 

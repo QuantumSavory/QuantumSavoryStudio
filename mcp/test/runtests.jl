@@ -223,8 +223,94 @@ end
     @test getfield(tools[3], :handler)(Dict{String,Any}()) == "catalog_list"
     @test getfield(tools[end], :handler)(Dict{String,Any}()) == "simulation_logs"
     @test dispatched == ["catalog_list", "simulation_logs"]
-    @test !isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v1", "tools.json"))
-    @test isfile(joinpath(@__DIR__, "..", "..", "contracts", "mcp", "v2", "tools.json"))
+    @test !isfile(joinpath(
+        @__DIR__,
+        "..",
+        "..",
+        "contracts",
+        "mcp",
+        "v1",
+        "contract.json",
+    ))
+    @test !isfile(joinpath(
+        @__DIR__,
+        "..",
+        "..",
+        "contracts",
+        "mcp",
+        "v2",
+        "tools.json",
+    ))
+    @test isfile(CONTRACT_FILE)
+
+    @test length(MCP_RESOURCE_REGISTRY.resources) == 2
+    @test length(MCP_RESOURCE_REGISTRY.resource_templates) == 5
+    @test length(MCP_RESOURCE_REGISTRY.result_templates) == 4
+    @test MCP_RESOURCE_REGISTRY.result_tool_kinds == Dict(
+        "simulation_slot_result" => "slots",
+        "simulation_protocol_result" => "protocols",
+    )
+
+    invalid_contracts = Dict{String,Any}[]
+    duplicate_resource = deepcopy(MCP_CONTRACT)
+    duplicate_resource["resources"][2]["id"] =
+        duplicate_resource["resources"][1]["id"]
+    push!(invalid_contracts, duplicate_resource)
+
+    missing_resource_metadata = deepcopy(MCP_CONTRACT)
+    pop!(missing_resource_metadata["resources"][1], "description")
+    push!(invalid_contracts, missing_resource_metadata)
+
+    wrong_resource_id = deepcopy(MCP_CONTRACT)
+    wrong_resource_id["resources"][1]["id"] = "legacy_design"
+    push!(invalid_contracts, wrong_resource_id)
+
+    wrong_resource_mime = deepcopy(MCP_CONTRACT)
+    wrong_resource_mime["resources"][1]["mime_type"] = "text/plain"
+    push!(invalid_contracts, wrong_resource_mime)
+
+    duplicate_template = deepcopy(MCP_CONTRACT)
+    duplicate_template["resource_templates"][2]["id"] =
+        duplicate_template["resource_templates"][1]["id"]
+    push!(invalid_contracts, duplicate_template)
+
+    missing_descriptor = deepcopy(MCP_CONTRACT)
+    pop!(missing_descriptor["resource_templates"][2], "format")
+    push!(invalid_contracts, missing_descriptor)
+
+    wrong_mime_type = deepcopy(MCP_CONTRACT)
+    wrong_mime_type["resource_templates"][2]["mime_type"] = "image/png"
+    push!(invalid_contracts, wrong_mime_type)
+
+    mismatched_variable = deepcopy(MCP_CONTRACT)
+    mismatched_variable["resource_templates"][2]["identifier_variable"] =
+        "protocol_id"
+    push!(invalid_contracts, mismatched_variable)
+
+    missing_template = deepcopy(MCP_CONTRACT)
+    pop!(missing_template["resource_templates"])
+    push!(invalid_contracts, missing_template)
+
+    extra_top_level = deepcopy(MCP_CONTRACT)
+    extra_top_level["legacy"] = true
+    push!(invalid_contracts, extra_top_level)
+
+    missing_top_level = deepcopy(MCP_CONTRACT)
+    pop!(missing_top_level, "default_output_schema")
+    push!(invalid_contracts, missing_top_level)
+
+    wrong_catalog_variable = deepcopy(MCP_CONTRACT)
+    wrong_catalog_variable["resource_templates"][1]["uri_template"] =
+        "wqs://catalog/{catalog_kind}"
+    push!(invalid_contracts, wrong_catalog_variable)
+
+    wrong_catalog_mime = deepcopy(MCP_CONTRACT)
+    wrong_catalog_mime["resource_templates"][1]["mime_type"] = "text/plain"
+    push!(invalid_contracts, wrong_catalog_mime)
+
+    for invalid_contract in invalid_contracts
+        @test_throws ArgumentError load_mcp_contract_registry(invalid_contract)
+    end
 end
 
 @testset "MCP result links and exact resource templates" begin
@@ -245,18 +331,84 @@ end
     @test result.content[3]["uri"] == structured["resources"]["png"]
     @test result.content[3]["mimeType"] == "image/png"
 
-    incomplete = call_tool_result(
-        true,
-        Dict{String,Any}(
-            "resources" => Dict("html" => structured["resources"]["html"]),
+    invalid_results = [
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "protocol_id" => structured["protocol_id"],
+                "resources" =>
+                    Dict("html" => structured["resources"]["html"]),
+            ),
         ),
-        "simulation_protocol_result",
-    )
-    @test incomplete.is_error
-    @test incomplete.structured_content["code"] == "MALFORMED_SUCCESS_RESPONSE"
-    @test getindex.(incomplete.content, "type") == ["text"]
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "protocol_id" => structured["protocol_id"],
+                "resources" => Dict(
+                    "html" => structured["resources"]["png"],
+                    "png" => structured["resources"]["html"],
+                ),
+            ),
+        ),
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "protocol_id" => structured["protocol_id"],
+                "resources" => Dict(
+                    "html" => "wqs://simulation/protocols/protocol /?#%+λ%2F/html",
+                    "png" => structured["resources"]["png"],
+                ),
+            ),
+        ),
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "protocol_id" => structured["protocol_id"],
+                "resources" => Dict(
+                    "html" => "wqs://simulation/protocols/other/html",
+                    "png" => "wqs://simulation/protocols/other/png",
+                ),
+            ),
+        ),
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "protocol_id" => structured["protocol_id"],
+                "resources" => Dict(
+                    "html" => "wqs://simulation/slots/other/html",
+                    "png" => "wqs://simulation/slots/other/png",
+                ),
+            ),
+        ),
+        (
+            "simulation_protocol_result",
+            Dict{String,Any}(
+                "resources" => structured["resources"],
+            ),
+        ),
+        (
+            "design_get",
+            Dict{String,Any}(
+                "resources" => structured["resources"],
+            ),
+        ),
+    ]
+    for (tool_name, invalid_structured) in invalid_results
+        invalid = call_tool_result(true, invalid_structured, tool_name)
+        @test invalid.is_error
+        @test invalid.structured_content["code"] ==
+            "MALFORMED_SUCCESS_RESPONSE"
+        @test getindex.(invalid.content, "type") == ["text"]
+    end
 
-    _, templates = resources(Dict{String,Any}())
+    static_resources, templates = resources(Dict{String,Any}())
+    @test [
+        (string(resource.uri), resource.name, resource.mime_type)
+        for resource in static_resources
+    ] == [
+        (resource.uri, resource.name, resource.mime_type)
+        for resource in MCP_RESOURCE_REGISTRY.resources
+    ]
     result_templates = templates[2:end]
     @test [
         (template.uri_template, template.mime_type)

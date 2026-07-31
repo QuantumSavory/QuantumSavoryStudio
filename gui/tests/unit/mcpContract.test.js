@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MCP_CONTRACT_VERSION,
+  MCP_RESOURCES,
+  MCP_RESOURCE_TEMPLATES,
   MCP_TOOLS,
   MCP_TOOL_NAMES,
 } from '../../src/features/mcp/contractRegistry'
@@ -76,13 +78,44 @@ describe('shared MCP contract registry', () => {
 
   it('ships exactly one MCP contract schema version', () => {
     expect(() => readFileSync(
-      resolve(process.cwd(), '../contracts/mcp/v1/tools.json'),
+      resolve(process.cwd(), '../contracts/mcp/v1/contract.json'),
       'utf8',
     )).toThrow()
     expect(JSON.parse(readFileSync(
-      resolve(process.cwd(), '../contracts/mcp/v2/tools.json'),
+      resolve(process.cwd(), '../contracts/mcp/v2/contract.json'),
       'utf8',
     )).contract_version).toBe(2)
+  })
+
+  it('publishes the exact static and templated resource registry', () => {
+    expect(MCP_RESOURCES).toHaveLength(2)
+    expect(MCP_RESOURCE_TEMPLATES).toHaveLength(5)
+    for (const resource of MCP_RESOURCES) {
+      expect(Object.keys(resource).sort()).toEqual([
+        'description',
+        'id',
+        'mime_type',
+        'name',
+        'uri',
+      ])
+    }
+    const resultTemplates = MCP_RESOURCE_TEMPLATES.filter(
+      template => template.result_kind,
+    )
+    expect(resultTemplates).toHaveLength(4)
+    for (const template of resultTemplates) {
+      expect(template).toMatchObject({
+        result_kind: expect.any(String),
+        identifier_variable: expect.any(String),
+        format: expect.stringMatching(/^(html|png)$/),
+      })
+      expect(template.uri_template).toContain(
+        `{${template.identifier_variable}}`,
+      )
+      expect(template.mime_type).toBe(
+        template.format === 'html' ? 'text/html' : 'image/png',
+      )
+    }
   })
 
   it('publishes structural action schemas for every specialist edit tool', () => {

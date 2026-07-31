@@ -30,6 +30,7 @@ Base.showerror(io::IO, e::APIError) = print(io, "APIError: $(e.message) (status:
 include("errors.jl")
 include("deployment_policy.jl")
 include("evaluation_policy.jl")
+include("mcp_contract_registry.jl")
 include("mcp_config.jl")
 include("platform_info.jl")
 include("http_contract.jl")

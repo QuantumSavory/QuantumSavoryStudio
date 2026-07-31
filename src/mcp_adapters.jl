@@ -385,18 +385,23 @@ function _resolve_mcp_resource(
   hub::CollaborationHub,
   simulation_service::SimulationService,
 )
-  if resource_uri == "wqs://design/current"
+  static_resource = get(
+    MCP_RESOURCE_REGISTRY.resources_by_uri,
+    resource_uri,
+    nothing,
+  )
+  if static_resource !== nothing && static_resource.id == "design_current"
     design = enqueue_browser_command!(
       hub,
       Dict("type" => "design_get", "sections" => nothing);
       timeout_seconds=20,
     )
     return Dict(
-      "mime_type" => "application/json",
+      "mime_type" => static_resource.mime_type,
       "value" => design,
     )
   end
-  if resource_uri == "wqs://simulation/state"
+  if static_resource !== nothing && static_resource.id == "simulation_state"
     status, context = _with_bound_simulation_read(
       hub;
       require_quiescent=true,
@@ -404,7 +409,7 @@ function _resolve_mcp_resource(
       simulation_status(simulation_service, simulation_name)
     end
     return Dict(
-      "mime_type" => "application/json",
+      "mime_type" => static_resource.mime_type,
       "value" => _simulation_revision_status(
         status;
         prepared_revision=context.prepared_revision,
@@ -413,16 +418,40 @@ function _resolve_mcp_resource(
     )
   end
 
-  catalog_match = match(r"^wqs://catalog/([^/]+)$", resource_uri)
-  if catalog_match !== nothing
+  catalog_template = only(filter(
+    template -> template.result_kind === nothing,
+    MCP_RESOURCE_REGISTRY.resource_templates,
+  ))
+  catalog_segment =
+    mcp_resource_template_segment(catalog_template, resource_uri)
+  if catalog_segment !== nothing
+    kind = try
+      mcp_decode_resource_identifier(catalog_segment)
+    catch error
+      error isa ArgumentError || rethrow()
+      throw(
+        _mcp_error(
+          "VALIDATION_FAILED",
+          "Malformed catalog resource URI.",
+          details=Dict("uri" => resource_uri),
+        ),
+      )
+    end
     catalog = _catalog_snapshot()
-    kind = catalog_match.captures[1]
     haskey(catalog, kind) || throw(
       _mcp_error("RESULT_NOT_FOUND", "Catalog resource not found.", status=404),
     )
     return Dict(
-      "mime_type" => "application/json",
+      "mime_type" => catalog_template.mime_type,
       "value" => Dict(kind => _catalog_entries(catalog, kind)),
+    )
+  elseif startswith(resource_uri, catalog_template.prefix)
+    throw(
+      _mcp_error(
+        "VALIDATION_FAILED",
+        "Malformed catalog resource URI.",
+        details=Dict("uri" => resource_uri),
+      ),
     )
   end
 
@@ -450,7 +479,7 @@ function _resolve_mcp_resource(
       result_resource.format,
     )
     return Dict(
-      "mime_type" => result_resource.format == "html" ? "text/html" : "image/png",
+      "mime_type" => result_resource.mime_type,
       "base64" => base64encode(bytes),
     )
   end
