@@ -83,19 +83,42 @@ const props = defineProps({
 const emit = defineEmits(['select', 'delete', 'update'])
 const { showResultsView } = useUiServices()
 const draftProtocol = ref(deepClone(props.protocol))
+const transientParameterFields = ['error', 'latex']
+
+function withTransientParameterState(protocol) {
+  const nextProtocol = deepClone(protocol)
+  const currentParameters = new Map(
+    (draftProtocol.value.parameters || []).map(parameter => [parameter.name, parameter]),
+  )
+  for (const parameter of nextProtocol.parameters || []) {
+    const current = currentParameters.get(parameter.name)
+    const sameInput = current
+      && current.selectedType === parameter.selectedType
+      && current.value === parameter.value
+    if (!sameInput) continue
+    for (const field of transientParameterFields) {
+      if (Object.hasOwn(current, field)) parameter[field] = deepClone(current[field])
+    }
+  }
+  return nextProtocol
+}
 
 watch(
   () => props.protocol,
   protocol => {
-    draftProtocol.value = deepClone(protocol)
+    draftProtocol.value = withTransientParameterState(protocol)
   },
   { deep: true },
 )
 
 function commitDraft() {
+  const parameters = deepClone(draftProtocol.value.parameters || [])
+  for (const parameter of parameters) {
+    for (const field of transientParameterFields) delete parameter[field]
+  }
   emit('update', {
     id: props.protocol.id,
-    parameters: deepClone(draftProtocol.value.parameters || []),
+    parameters,
   })
 }
 

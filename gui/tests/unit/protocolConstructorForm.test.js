@@ -695,6 +695,67 @@ describe('ProtocolConstructorForm', () => {
       expect.objectContaining({ protocolType: 'TestNodeProtocol' })
     )
   })
+
+  it('keeps validated previews local across canonical protocol updates', async () => {
+    const protocol = {
+      id: 'protocol-symbolic',
+      type: 'TestProtocols.SymbolicProt',
+      parameters: [{
+        name: 'observable',
+        type: 'Symbolic',
+        selectedType: 'Symbolic',
+        value: 'valid_protocol_expression'
+      }]
+    }
+    const ProtocolConstructorFormStub = {
+      props: ['protocol'],
+      emits: ['commit'],
+      methods: {
+        validate() {
+          this.protocol.parameters[0].latex = 'x^{2}'
+          this.$emit('commit')
+        }
+      },
+      template: `
+        <button
+          class="validate-symbolic-stub"
+          :data-latex="protocol.parameters[0].latex || ''"
+          @click="validate"
+        >
+          Validate
+        </button>
+      `
+    }
+    const wrapper = mount(ProtocolEditor, {
+      props: {
+        protocol,
+        category: 'node',
+        isSelected: true
+      },
+      global: {
+        directives: { tooltip },
+        provide: { [UI_SERVICES_KEY]: { showResultsView: vi.fn() } },
+        stubs: { ProtocolConstructorForm: ProtocolConstructorFormStub }
+      }
+    })
+
+    await wrapper.get('.validate-symbolic-stub').trigger('click')
+    expect(wrapper.emitted('update')[0][0].parameters[0]).not.toHaveProperty('latex')
+
+    await wrapper.setProps({ protocol: structuredClone(protocol) })
+    expect(wrapper.get('.validate-symbolic-stub').attributes('data-latex')).toBe('x^{2}')
+
+    await wrapper.setProps({
+      protocol: {
+        ...structuredClone(protocol),
+        parameters: [{
+          ...structuredClone(protocol.parameters[0]),
+          value: 'different_expression'
+        }]
+      }
+    })
+    expect(wrapper.get('.validate-symbolic-stub').attributes('data-latex')).toBe('')
+  })
 })
 
 describe('TypedValueInput disabled code values', () => {
