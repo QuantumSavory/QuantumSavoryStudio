@@ -342,6 +342,45 @@ function protocolCollection(project, operation) {
   throw new DesignCommandError('VALIDATION_FAILED', 'Protocol placement is required.')
 }
 
+function protocolEntries(project) {
+  const entries = []
+  const append = (protocols, placement, ownerId = null) => {
+    if (!Array.isArray(protocols)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Invalid ${placement} protocol collection.`,
+      )
+    }
+    for (const protocol of protocols) {
+      entries.push({ placement, ownerId, protocol })
+    }
+  }
+
+  append(project.net.protocols, 'floating')
+  for (const node of project.net.nodes) {
+    append(node.data?.protocols, 'node', node.id)
+  }
+  for (const edge of project.net.edges) {
+    append(edge.data?.protocols, 'edge', edge.id)
+  }
+  return entries
+}
+
+function protocolEntryKey({ placement, ownerId, protocol }) {
+  return JSON.stringify([
+    placement,
+    ownerId,
+    requireString(protocol?.id, 'Protocol ID'),
+  ])
+}
+
+function protocolSnapshot(project) {
+  return new Map(protocolEntries(project).map(entry => [
+    protocolEntryKey(entry),
+    JSON.stringify(entry.protocol),
+  ]))
+}
+
 function operationFromAction(tool, action) {
   if (typeof action?.kind === 'string') return action
   const name = action?.action
@@ -1281,26 +1320,15 @@ export class DesignCommandService {
     if (allProtocols.some(protocol => protocol.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Protocol ID already exists: ${id}`)
     }
-    const definitions = this.protocolCatalog()?.[operation.placement] || []
-    const definition = definitions.find(candidate => candidate.type === value.type)
-    if (!definition) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Protocol is not available for ${operation.placement} placement: ${value.type}`,
-      )
-    }
-    if (
-      operation.placement === 'edge'
-      && byId(project.net.edges, operation.owner_id, 'Edge').isLogic
-      && definition.virtual !== true
-    ) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        'The protocol is incompatible with virtual edges.',
-      )
-    }
+    const definition = this.protocolDefinition(operation.placement, value.type)
+    this.requireProtocolPlacement(
+      project,
+      operation.placement,
+      operation.owner_id,
+      definition,
+    )
     const constructor = {
-      type: value.type,
+      type: definition.type,
       parameters: await this.protocolParameters(
         project,
         definition,
@@ -1327,24 +1355,13 @@ export class DesignCommandService {
     const type = Object.hasOwn(value, 'type')
       ? requireString(value.type, 'Protocol type')
       : previousType
-    const definition = (this.protocolCatalog()?.[operation.placement] || [])
-      .find(candidate => candidate.type === type)
-    if (!definition) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Protocol is not available for ${operation.placement} placement: ${type}`,
-      )
-    }
-    if (
-      operation.placement === 'edge'
-      && byId(project.net.edges, operation.owner_id, 'Edge').isLogic
-      && definition.virtual !== true
-    ) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        'The protocol is incompatible with virtual edges.',
-      )
-    }
+    const definition = this.protocolDefinition(operation.placement, type)
+    this.requireProtocolPlacement(
+      project,
+      operation.placement,
+      operation.owner_id,
+      definition,
+    )
     const preservedParameterTypes = type === previousType
       ? new Map(
           (protocol.parameters || []).map(parameter => [
@@ -1365,6 +1382,75 @@ export class DesignCommandService {
       )
     }
     context.affectedIds.add(protocol.id)
+  }
+
+  protocolDefinition(placement, rawType) {
+    const type = requireString(rawType, 'Protocol type')
+    const catalog = this.protocolCatalog()
+    const definitions = record(catalog) && Array.isArray(catalog[placement])
+      ? catalog[placement]
+      : []
+    const definition = definitions.find(candidate => candidate?.type === type)
+    if (!definition) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Protocol is not available for ${placement} placement: ${type}`,
+      )
+    }
+    return definition
+  }
+
+  requireProtocolPlacement(project, placement, ownerId, definition) {
+    if (
+      placement === 'edge'
+      && byId(project.net.edges, ownerId, 'Edge').isLogic
+      && definition.virtual !== true
+    ) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'The protocol is incompatible with virtual edges.',
+      )
+    }
+  }
+
+  async admitGeneratedProtocolChanges(project, before) {
+    const seenIds = new Set()
+    for (const entry of protocolEntries(project)) {
+      if (!record(entry.protocol)) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          'Generated protocols must be objects.',
+        )
+      }
+      const id = requireString(entry.protocol.id, 'Protocol ID')
+      if (seenIds.has(id)) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `Protocol ID already exists: ${id}`,
+        )
+      }
+      seenIds.add(id)
+
+      const key = protocolEntryKey(entry)
+      if (before.get(key) === JSON.stringify(entry.protocol)) continue
+
+      const definition = this.protocolDefinition(entry.placement, entry.protocol.type)
+      this.requireProtocolPlacement(
+        project,
+        entry.placement,
+        entry.ownerId,
+        definition,
+      )
+      entry.protocol.type = definition.type
+      entry.protocol.parameters = await this.protocolParameters(
+        project,
+        definition,
+        entry.protocol.parameters,
+        entry.placement,
+        null,
+        entry.ownerId,
+      )
+    }
   }
 
   async protocolParameters(
@@ -1928,6 +2014,7 @@ export class DesignCommandService {
     if (typeof generator !== 'function') {
       throw new DesignCommandError('VALIDATION_FAILED', `Unknown network generator: ${value.generator || value.type}`)
     }
+    const protocolsBefore = protocolSnapshot(project)
     const result = await generator(project.net, deepClone(value.options || value))
     // Layout generators clone representative template values. Revalidate each
     // cloned assignment after its destination node has a stable position in
@@ -1944,6 +2031,7 @@ export class DesignCommandService {
         )
       }
     }
+    await this.admitGeneratedProtocolChanges(project, protocolsBefore)
     for (const node of result.generatedNodes || []) context.affectedIds.add(node.id)
     for (const edge of result.generatedEdges || []) context.affectedIds.add(edge.id)
     for (const node of result.removedNodes || []) context.deletedIds.add(node.id)

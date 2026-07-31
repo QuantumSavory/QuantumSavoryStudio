@@ -193,6 +193,98 @@ describe('DesignCommandService', () => {
     expect(generatedCommitted).not.toHaveBeenCalled()
   })
 
+  it('revalidates generator-supplied protocols against the live placement catalog', async () => {
+    const project = createEmptyProject('Generated protocol catalog')
+    project.net.nodes.push(new Node({
+      id: 'endpoint',
+      name: 'Endpoint',
+      position: [0, 0],
+      data: { type: 'City', slots: [], protocols: [] },
+    }))
+    const markDirty = vi.fn()
+    const onCommitted = vi.fn()
+    const service = serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{
+          type: 'QuantumSavory.LiveProtocol',
+          parameters: [{ field: 'rounds', type: 'Int64' }],
+        }],
+        edge: [],
+        floating: [],
+      }),
+      generators: {
+        definition_driven: async (net, options) => {
+          const definition = options.protocol_definition
+          net.nodes[0].data.protocols.push(new FloatingProtocol({
+            id: 'generated_tracker',
+            type: definition.type,
+            parameters: definition.parameters.map(parameter => ({
+              name: parameter.field,
+              type: parameter.type,
+              selectedType: 'Int64',
+              value: 2,
+            })),
+          }))
+          return { generatedNodes: [], generatedEdges: [] }
+        },
+      },
+      markDirty,
+      onCommitted,
+    })
+    const before = encodeDesignDocument(project)
+
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'network.generate',
+        value: {
+          generator: 'definition_driven',
+          options: {
+            protocol_definition: {
+              type: 'Injected.LiveProtocol',
+              parameters: [{ field: 'rounds', type: 'String' }],
+            },
+          },
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Protocol is not available for node placement: Injected.LiveProtocol',
+    })
+    expect(encodeDesignDocument(project)).toEqual(before)
+    expect(markDirty).not.toHaveBeenCalled()
+    expect(onCommitted).not.toHaveBeenCalled()
+
+    await service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'network.generate',
+        value: {
+          generator: 'definition_driven',
+          options: {
+            protocol_definition: {
+              type: 'QuantumSavory.LiveProtocol',
+              parameters: [{ field: 'rounds', type: 'String' }],
+            },
+          },
+        },
+      }],
+    })
+
+    expect(project.net.nodes[0].data.protocols).toEqual([{
+      id: 'generated_tracker',
+      type: 'QuantumSavory.LiveProtocol',
+      parameters: [{
+        name: 'rounds',
+        type: 'Int64',
+        selectedType: 'Int64',
+        value: 2,
+      }],
+    }])
+    expect(markDirty).toHaveBeenCalledTimes(1)
+    expect(onCommitted).toHaveBeenCalledTimes(1)
+  })
+
   it('validates partial physical-default updates through one design command', async () => {
     const project = createEmptyProject('Physical defaults')
     const service = serviceFor(project)
