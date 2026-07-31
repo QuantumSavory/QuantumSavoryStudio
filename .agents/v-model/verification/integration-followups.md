@@ -21,18 +21,20 @@
 
 - **Covers:** SUB-016
 - **Method:** test
-- **Procedure:** Delay candidate retrieval/preflight/decode for every replacement
-  class, inject rejection/failure, and overlap transitions while observing all active
-  and persistence owners.
+- **Procedure:** Exercise every replacement class in the project-session harness, with
+  strict import admission and focused browser wiring; delay asynchronous preflight and
+  acquired barriers, inject rejection, disposal, late commit failure, and overlap, and
+  observe active, target-simulation, and persistence owners.
 - **Environment / configuration:** Vitest/jsdom project-session integration with
   controllable promises/storage plus the release Chromium browser
 - **Pass criterion:** Active state and stored project documents persist through
-  candidate work; rejected/stale candidates have no active or project-document storage
-  effect; failed bootstrap automatic-open may clear only a stale recent-project
-  navigation pointer, and the latest successful candidate commits teardown,
+  candidate work; rejected/stale/disposed preparation has no active or project-document
+  storage effect; failed bootstrap automatic-open may clear only a stale recent-project
+  navigation pointer; acquired work is not rolled back and releases waiters; target
+  namespace ownership is exact; and the latest error-free candidate commits teardown,
   persistence, and installation once.
 - **Status:** passing
-- **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Evidence:** [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
 - **Nonconformance:** None at this integration boundary.
 
 ## INTV-017 — Verify MCP readback recovery boundary

@@ -97,9 +97,9 @@
 
 ## CMP-015 — Candidate-first project-session transaction
 
-- **Normative statement:** A project replacement shall prepare a side-effect-free candidate under one transition generation, recheck ownership, and commit teardown, persistence, and installation as one owning transition without restoring prior state.
+- **Normative statement:** A replacement shall prepare a side-effect-free candidate under one generation, recheck ownership, then let one owner commit teardown, persistence, and installation without rollback.
 - **Parents:** SUB-016
-- **Acceptance criterion:** Candidate work observes the old active session and stored documents; failed, cancelled, or stale work preserves both and persists no candidate; only failed bootstrap automatic-open may clear its stale recent pointer, and the successful owner commits once.
+- **Acceptance criterion:** Preparation observes the old session and documents; failed, cancelled, disposed, or stale preparation preserves both and persists nothing. Only failed bootstrap automatic-open may clear its stale recent pointer. Disposal admits no mutation; post-acquisition cancellation/error neither rolls back effects nor blocks waiters; an error-free owner commits once.
 - **Verification:** UNITV-020 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first invariant; high data-loss/state risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)

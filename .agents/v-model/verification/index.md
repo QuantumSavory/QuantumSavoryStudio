@@ -1,9 +1,8 @@
 # Verification and Acceptance
 
-The strict project-schema slice has passing component and integration evidence and
-partial browser-system evidence. Candidate-first project replacement has passing
-component, integration, and browser-system evidence. Other release-2.0 actions retain
-their recorded status; no acceptance demonstration is passing.
+The strict project-schema and candidate-first replacement slices have passing component
+and integration evidence plus implemented but incomplete browser-system evidence. Other
+release-2.0 actions retain their recorded status; no acceptance demonstration is passing.
 
 ## Action routes
 

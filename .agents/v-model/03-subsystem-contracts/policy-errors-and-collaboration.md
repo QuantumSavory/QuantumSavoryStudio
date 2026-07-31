@@ -61,7 +61,7 @@ active-project replacement.
 
 - **Normative statement:** Every active-project replacement shall prepare a nonmutating isolated candidate and commit teardown, persistence, and installation only after the latest owning candidate is valid and ready.
 - **Parents:** SYS-018
-- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, and competing transitions preserve active graph/name/selection/polling/results/collaboration and every stored project document until commit; rejected or stale candidates have no active or project-document persistence effect; bootstrap alone may clear a stale recent-project navigation pointer after failed automatic open, and the owning successful candidate replaces all session owners once.
+- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, Save As, and competing transitions preserve active graph/name/selection/map/polling/results/collaboration and every stored project document until commit; rejected or stale preparation has no active or project-document persistence effect, and bootstrap alone may clear a stale recent-project navigation pointer after failed automatic open. Disposal is terminal for new mutation; an acquired owner finishes without rollback, reports operational failure, and releases waiters, while an error-free owner replaces all session owners once.
 - **Verification:** INTV-016 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 transition boundary; high state/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

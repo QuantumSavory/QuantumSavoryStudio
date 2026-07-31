@@ -96,11 +96,11 @@ These actions cover discriminating gaps and approved release-2.0 behavior.
 
 - **Covers:** CMP-015
 - **Method:** test
-- **Procedure:** From a populated session, delay and fail every candidate phase for each replacement class, inject cancellation and supersession, and observe stored documents, the recent-project navigation pointer, and active owners.
+- **Procedure:** From a populated session, run every replacement class through preparation and commit; delay version confirmation, collaboration release, and target cleanup; inject schema, platform, name, and conflict rejection, cancellation, supersession, disposal, and a post-install exception; and observe stored documents, the recent-project navigation pointer, exact cleanup target, queue, and active owners.
 - **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
-- **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale candidates persist no candidate; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer, and one latest successful candidate performs teardown, persistence, and installation exactly once.
+- **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale/disposed preparation persists no candidate; schema admission precedes platform I/O; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer; disposal blocks later mutations while an acquired owner completes; acquired cancellation/exception causes no rollback and releases queued work; and one latest error-free candidate performs applicable target cleanup, teardown, persistence, and installation exactly once.
 - **Status:** passing
-- **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
+- **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
 - **Nonconformance:** None at this component boundary.
 
 ## UNITV-021 — Verify revision-guarded readback recovery

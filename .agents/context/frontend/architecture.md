@@ -69,7 +69,9 @@ edges, or reactive updates.
 `useProjectSession` prepares decoded replacement candidates without active-session or
 storage effects. After its final generation check, one acquired commit owns teardown,
 the graph-release tick, persistence, and installation; later requests wait for that
-owner and prepare from the resulting stable session.
+owner to settle. Acquisition is irrevocable: late cancellation or an operational
+exception does not restore effects already performed. Disposal rejects new mutations
+but permits an acquired owner to finish once.
 
 ## Anchors
 

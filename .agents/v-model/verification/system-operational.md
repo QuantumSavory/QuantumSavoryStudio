@@ -85,12 +85,16 @@ and supported environments. The strict-schema slice did not change their status.
 
 - **Covers:** SYS-018
 - **Method:** test
-- **Procedure:** From a populated project, start saved-project open, import, demo, create/new-project, and overlapping replacements with delayed, cancelled, incompatible, invalid, failing, and successful candidates.
+- **Procedure:** From a populated project, start saved-project open, import, demo, create/new-project, Save As, and overlapping replacements with delayed, cancelled, incompatible, invalid, disposed, failing, successful, and post-acquisition-exception candidates.
 - **Environment / configuration:** Real desktop browser with transition/persistence instrumentation and Tools Log
-- **Pass criterion:** Active state and stored project documents remain unchanged through unsuccessful or stale candidate work; no unsuccessful candidate persists; bootstrap failure may clear only a stale recent-project navigation pointer after automatic open, and the latest successful candidate tears down and replaces active session owners exactly once.
-- **Status:** passing
+- **Pass criterion:** Active state and stored project documents remain unchanged through rejected, stale, or disposed candidate preparation; no such candidate persists; bootstrap failure may clear only a stale recent-project navigation pointer after automatic open; acquired cancellation or exception is visible without rollback and releases queued work; disposal blocks later mutations while an acquired owner completes; and the latest successful candidate performs applicable target cleanup, tears down, persists, and replaces active session owners exactly once.
+- **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`ci/browser.sh`](../../../ci/browser.sh)
-- **Nonconformance:** None at this system boundary.
+- **Nonconformance:** The maintained browser artifact covers strict invalid replacement
+  classes, bootstrap recovery and overlap, Save As ownership, and unmount during
+  bootstrap, but it does not yet execute delayed, cancelled, failing, and successful
+  saved-open/import/demo/create/Save-As cases as a complete system matrix with direct
+  observation of every session owner.
 
 ## SYSV-020 — Verify MCP readback recovery
 

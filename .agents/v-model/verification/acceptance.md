@@ -105,12 +105,14 @@ planned until a durable release-2.0 acceptance record exists.
 
 - **Covers:** STK-011
 - **Method:** demonstration
-- **Procedure:** From a populated active project, attempt delayed, cancelled, invalid, incompatible, failing, superseded, and successful saved/import/demo/new-project replacements.
+- **Procedure:** From a populated active project, attempt delayed, cancelled, invalid, incompatible, failing, superseded, disposed, and successful saved/import/demo/new-project/Save-As replacements, including an operational failure after commit acquisition.
 - **Environment / configuration:** Supported desktop browser with visible project/session state
-- **Pass criterion:** Every unsuccessful or superseded candidate preserves active work and stored project documents and persists no candidate; failed bootstrap automatic-open may clear only its stale recent-project navigation pointer, and the successful latest candidate replaces the active project once.
+- **Pass criterion:** Every unsuccessful or superseded candidate preparation preserves active work and stored project documents and persists no candidate; failed bootstrap automatic-open may clear only its stale recent-project navigation pointer; disposal admits no new mutation; acquired work is reported and not rolled back after late cancellation or failure; and the error-free latest candidate replaces the active project once.
 - **Status:** planned
 - **Evidence:** Automated precursor: [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js)
-- **Nonconformance:** Automated browser evidence covers the transaction boundary, but repository maintainers have not recorded the complete release-2.0 acceptance demonstration.
+- **Nonconformance:** Automated unit/integration evidence covers the transaction boundary
+  and focused browser precursors cover representative paths, but the exhaustive browser
+  matrix and maintainer-recorded release-2.0 acceptance demonstration are absent.
 
 ## ACC-012 — Validate the supported release environment
 

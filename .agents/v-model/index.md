@@ -7,7 +7,7 @@
 - **Profile target:** Approved release-2.0 behavior; operational/HTTP slice reviewed at
   `09b09f5ff749f0bf4ff4a45f75728a310d7e1a56` and strict project-schema slice reviewed
   at `91d620084c08ee836b08120aa9bc3d9e4bea845a`; candidate-first
-  replacement slice at `7a4ef8345e95277875125190855dbdd94df578c4`
+  replacement slice at `3f2de0ae916fd0faa81177d293caf714b8e73e69`
 - **Released reference:** `1.10.1` is the latest tagged ancestor
 - **Intent confirmed:** 2026-07-31 release-2.0 planning approval
 - **Last reviewed:** 2026-07-31
@@ -17,8 +17,9 @@ maintainer decisions define intent; code, tests, public prose, and history suppl
 context without overriding it. Canonical OpenAPI, exact non-2xx errors, public-profile
 source denial, the release support boundary, and strict project admission now conform.
 Strict project admission and candidate-first replacement have passing component and
-integration evidence plus partial browser-system evidence. Readback recovery, cleanup,
-and shared Play/resources remain incomplete.
+integration evidence. Candidate-first browser-system evidence is implemented but does
+not cover the full named matrix. Readback recovery, cleanup, and shared Play/resources
+remain incomplete.
 
 ## Left-side specification
 
@@ -44,8 +45,9 @@ and shared Play/resources remain incomplete.
 The strict-schema mini-V executed the frontend unit/build path and focused serial
 Chromium flows. UNITV-019 and INTV-015 are `passing`; SYSV-018 is `implemented` with an
 exhaustive browser-matrix gap. The candidate-first mini-V executed the full frontend
-unit suite plus focused Chromium flows; UNITV-020, INTV-016, and SYSV-019 are `passing`.
-Acceptance remains `planned`. Actions outside these slices retain their recorded status.
+unit suite plus focused Chromium flows; UNITV-020 and INTV-016 are `passing`, while
+SYSV-019 is `implemented` with the same class-matrix gap. Acceptance remains `planned`.
+Actions outside these slices retain their recorded status.
 
 ## Source basis
 

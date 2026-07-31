@@ -50,9 +50,9 @@ candidate-first replacement, and the release-declared support environment.
 
 ## SYS-018 — Commit project replacement only after candidate preparation
 
-- **Normative statement:** Every active-project replacement shall prepare and validate an isolated candidate before atomically tearing down the prior session and installing the latest owning candidate.
+- **Normative statement:** Every active-project replacement shall prepare and validate an isolated candidate before the latest owner begins one serialized, irrevocable commit that tears down the prior session and installs the candidate.
 - **Parents:** STK-011
-- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, cancellation, failure, and overlapping replacements leave active graph/name/selection/session state and stored project documents unchanged until an owning candidate is ready; failure or supersession installs and persists no candidate; only bootstrap may clear a stale recent-project navigation pointer after failed automatic open, and success replaces the active session once.
+- **Acceptance criterion:** Saved-project open, import, demo, create/new-project, Save As, cancellation, preparation failure, and overlapping replacements leave active graph/name/selection/session state and stored project documents unchanged until an owning candidate is ready; preparation failure or supersession installs and persists no candidate, and only bootstrap may clear a stale recent-project navigation pointer after failed automatic open. Disposal cancels unacquired work and prevents new mutations; cancellation, disposal, or an operational exception after acquisition does not roll back completed commit effects, is reported, and releases queued work, while an error-free owner replaces the active session once.
 - **Verification:** SYSV-019 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first policy; high data-loss/state risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

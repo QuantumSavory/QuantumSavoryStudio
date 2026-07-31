@@ -16,8 +16,9 @@ Normative release-2.0 behavior is defined by
 [CMP-014](../../v-model/04-component-contracts.md#cmp-014--strict-project-codec-admission),
 and
 [CMP-015](../../v-model/04-component-contracts.md#cmp-015--candidate-first-project-session-transaction).
-The strict-schema and candidate-first transaction chains through CMP-015 are
-implemented.
+The strict-schema and candidate-first transaction chains through CMP-015 have passing
+component/integration evidence; the exhaustive candidate-first browser-system matrix
+remains incomplete.
 
 ## Canonical shapes
 
@@ -87,9 +88,22 @@ document and live graph are both validated before ownership is rechecked.
 After the final ownership check, one commit performs its applicable teardown,
 persistence, recent-pointer update, MapLibre graph-release tick, and installation.
 A request that arrives after commit ownership is acquired waits for that commit and
-prepares from the resulting stable session; it never cancels or rolls back a partially
-torn session. Failed, cancelled, incompatible, invalid, or stale preparation preserves
-active work and every stored project document and persists no candidate.
+prepares only after the owner settles; it never cancels or rolls back completed commit
+effects. An acquired operational exception is reported, releases waiters, and leaves
+effects already performed in place. Failed, cancelled, incompatible, invalid, disposed,
+or stale preparation preserves active work and every stored project document and
+persists no candidate.
+
+Simulator cleanup is target-owned. Saved open, import, demo, and an explicit Save As
+overwrite clear the target project's scoped simulator namespace before installation;
+unique create and Save As candidates do not issue cleanup for a namespace that cannot
+already exist. The session owner rejects duplicate create and non-explicit overwrite
+requests even when callers bypass dialog validation.
+
+Disposal is terminal for new save, delete, and replacement mutations. Unacquired work is
+cancelled, while an already acquired commit completes once. Application bootstrap checks
+mount ownership after each await, so metadata or automatic restore cannot restart
+lifecycle polling or listeners after unmount.
 
 Startup calls the distinct automatic-restore entry point. Only failure of that owning
 bootstrap request may clear its still-matching recent-project pointer; ordinary open and
@@ -114,3 +128,4 @@ derived attachment edges/bounds remain presentation data.
   and focused browser flows in
   [`gui/tests/e2e/description.spec.js`](../../../gui/tests/e2e/description.spec.js) and
   [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js).
+  These are browser precursors, not the exhaustive SYSV-019 matrix.

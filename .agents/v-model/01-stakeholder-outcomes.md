@@ -80,7 +80,7 @@ replacement, operation-ledger, and broad-platform outcomes rather than reusing t
 
 - **Normative statement:** A GUI user shall retain the active project unless a requested replacement has been prepared successfully and is ready to become the new active project.
 - **Parents:** None
-- **Acceptance criterion:** Failed, cancelled, incompatible, invalid, or superseded opens/imports/demos/new-project requests leave the active project and stored project documents unchanged; bootstrap may clear only a stale recent-project navigation pointer after failed automatic open, and a successful owning request replaces the active project once.
+- **Acceptance criterion:** Failed, cancelled, incompatible, invalid, or superseded candidate preparation leaves the active project and stored project documents unchanged; bootstrap may clear only a stale recent-project navigation pointer after failed automatic open. Once a ready candidate acquires commit ownership, cancellation or an operational exception does not restore earlier state, the exception is visible, and later requests wait for that owner to settle; an error-free owning request replaces the active project once.
 - **Verification:** ACC-011 (demonstration)
 - **Origin / risk:** Maintainer-approved release-2.0 candidate-first transition policy; high data-loss/state risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)
