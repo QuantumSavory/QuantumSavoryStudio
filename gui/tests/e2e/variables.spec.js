@@ -110,8 +110,11 @@ async function openEdgeProtocolEditor(page) {
   await page.locator('.edge-list-item').first().click()
   const editor = page.locator('#edgePanel .protocol-editor', { hasText: 'EntanglerProt' })
   await expect(editor).toBeVisible()
-  await editor.locator('.protocol-list-type').click()
-  await expect(editor.locator('.protocol-container')).toBeVisible()
+  const container = editor.locator('.protocol-container')
+  if (!await container.isVisible()) {
+    await editor.locator('.protocol-list-type').click()
+  }
+  await expect(container).toBeVisible()
   return editor
 }
 

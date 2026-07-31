@@ -521,7 +521,8 @@ test.describe('Layout Tools repeater chain generator', () => {
       'Node 3-3',
     ])
 
-    const { nodes: reloadedNodes, edges: storedEdges } = storedGraph(independentProject)
+    const reloadedProject = await saveAndReadProject(page, projectName)
+    const { nodes: reloadedNodes, edges: storedEdges } = storedGraph(reloadedProject)
     const reloadedEdges = storedEdges.map(edge => ({
       sourceIndex: reloadedNodes.indexOf(edge.source),
       targetIndex: reloadedNodes.indexOf(edge.target),

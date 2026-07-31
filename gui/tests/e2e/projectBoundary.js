@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 
 export async function saveAndReadProject(page, projectName) {
-  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.locator('.hamburger-btn').click()
   await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
 
   const storageKey = `cqn_project_${projectName}`

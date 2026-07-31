@@ -170,8 +170,11 @@ async function createProjectWithProtocol(page, { projectName, protocolType }) {
 
   const editor = nodePanel.locator('.protocol-editor', { hasText: protocolName })
   await expect(editor).toBeVisible()
-  await editor.locator('.protocol-list-type').click()
-  await expect(editor.locator('.protocol-container')).toBeVisible()
+  const container = editor.locator('.protocol-container')
+  if (!await container.isVisible()) {
+    await editor.locator('.protocol-list-type').click()
+  }
+  await expect(container).toBeVisible()
   return editor
 }
 
