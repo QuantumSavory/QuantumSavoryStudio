@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "WebQuantumSavory HTTP API",
-    "version": "1.10.1",
+    "version": "2.0.0",
     "description": "Canonical HTTP contract for the browser API, opt-in local MCP control plane, and test-only lifecycle support."
   },
   "tags": [

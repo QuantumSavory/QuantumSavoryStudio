@@ -710,7 +710,7 @@ function main()
   static_resources, resource_templates = resources(configuration)
   server = mcp_server(
     name="webquantumsavory",
-    version="1.0.0",
+    version="2.0.0",
     title="WebQuantumSavory local collaboration",
     description="Local browser-mediated quantum-network design and simulation tools.",
     tools=tools,
