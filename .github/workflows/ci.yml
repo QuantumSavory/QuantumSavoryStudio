@@ -153,6 +153,20 @@ jobs:
           cache-dependency-path: gui/package-lock.json
       - run: julia --startup-file=no ci/startup-smoke.jl
 
+  public-container:
+    name: Public Podman profile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends podman
+      - run: ./ci/public-container.sh
+
   browser-secondary:
     name: Secondary browser flow (${{ matrix.engine }})
     strategy:

@@ -43,23 +43,16 @@ registry. This is an absence of a product guarantee, not a prohibition on adding
 isolation later, and browser-local project persistence must not be mistaken for
 server-state isolation.
 
-Restricted Julia evaluation is independently opt-in through its environment variable in
-either profile. Its whitelist reduces risk but is not a security boundary. A public
-deployment that enables evaluation must place the host process inside an external
-container/host sandbox; the application cannot supply that isolation itself.
+Restricted Julia evaluation is local-only and independently opt-in. Public mode denies
+native-source execution regardless of the opt-in; the restricted language is still not
+a security sandbox.
 
 ## Support boundary
 
-- Local hosts: Linux, macOS, and Windows.
-- Runtime versions: the maintained CI matrix defines supported Julia and Node versions.
-- Clients: standards-compliant HTML5/JavaScript desktop browsers.
+- Supported host: Ubuntu 24.04 x86_64 with Julia 1.12 and Node 24.
+- Supported client: the Chromium build selected by the Playwright lock.
+- Windows/macOS and Firefox/WebKit checks are secondary portability signals.
 - Mobile browsers are unsupported.
-
-Current CI exercises Ubuntu and Chromium only. The broader operating-system and browser
-support statement is maintainer-confirmed intent, while representative cross-platform
-and cross-engine acceptance evidence remains planned. Planned evidence uses browser
-builds selected by the committed Playwright lock; no independent minimum version policy
-is declared.
 
 ## Persistence and compatibility
 
@@ -79,9 +72,7 @@ clear warning and a best-effort open attempt; it is not a hard compatibility gat
 
 ## Known evidence gaps
 
-- No maintained matrix currently exercises Linux, macOS, Windows, and representative
-  desktop browser engines together.
-- The repository does not yet contain the public Podman deployment definition or an
-  external-sandbox acceptance artifact.
+- The public Podman profile and black-box check are implemented but have no passing
+  remote CI record at this documentation update.
 - Public README examples can look like an external API promise even though the confirmed
   product boundary treats that API as frontend support.

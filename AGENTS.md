@@ -21,6 +21,7 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
 - Launch the integrated application: `./bin/server`
 - Backend unit checks: `./ci/backend-unit.sh`
 - Backend integration checks: `./ci/backend-integration.sh`
+- Public Podman profile: `./ci/public-container.sh`
 - All maintained check entry points and focused alternatives are in
   [repository workflows](.agents/context/repository-workflows.md).
 

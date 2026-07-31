@@ -38,6 +38,7 @@ Prefer the checked-in wrappers for full component boundaries:
 | HTTP integration | `./ci/backend-integration.sh` | Built frontend plus real test-mode backend integration |
 | Browser system | `./ci/browser.sh` | Built frontend plus real backend, MCP, and serial Chromium suite |
 | Production browser | `./ci/browser-production.sh` | Canonical launcher, integrated production bundle, and primary Chromium flow |
+| Public deployment | `./ci/public-container.sh` | Hardened Podman build, public-policy denial, restart volatility, and no database scaffold |
 
 Useful focused commands:
 

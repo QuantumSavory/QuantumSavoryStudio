@@ -4,7 +4,7 @@ A Julia-based web API for quantum network operations, built with the Genie web f
 
 ## Installation
 
-Prerequisites are Julia, Node.js 18 or newer, and npm.
+Prerequisites are Julia 1.12, Node.js 24, and npm.
 
 1. **Clone the repository**:
    ```bash
@@ -35,6 +35,29 @@ simulation is removed immediately afterward. This makes initial startup take lon
 the first interactive simulation and visualization requests do not pay Julia compilation
 latency. Test-mode startup skips the automatic workload; the backend unit suite exercises
 it directly.
+
+## Public Podman profile
+
+The public educational profile is built from the checked-in `Containerfile`. It runs as
+an unprivileged user, disables MCP, and denies native-source evaluation even if the
+local opt-in is supplied:
+
+```bash
+podman build -t webquantumsavory-public -f Containerfile .
+podman run --rm -p 127.0.0.1:8000:8000 \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m \
+  --tmpfs /home/webquantumsavory/.cache:rw,noexec,nosuid,nodev,size=256m \
+  --cap-drop all \
+  --security-opt no-new-privileges \
+  --pids-limit 512 \
+  --memory 4g \
+  webquantumsavory-public
+```
+
+`./ci/public-container.sh` builds and probes this profile with Podman, including public
+source denial and loss of process-local simulation state after restart. Saved projects
+remain browser-local; the image contains no account or server-side project database.
 
 ## UI Access
 
@@ -434,6 +457,8 @@ GitHub Actions and Buildkite run the same core repository scripts:
 ./ci/browser.sh
 ./ci/browser-production.sh
 ```
+
+GitHub Actions additionally runs `./ci/public-container.sh`.
 
 Each script installs the locked project dependencies it needs, so it can run
 from a clean checkout once its language runtimes are available. The MCP,
