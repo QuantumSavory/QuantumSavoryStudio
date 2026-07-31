@@ -51,12 +51,15 @@
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Enumerate direct, copied, and generated GUI input paths with real, missing, malformed, and incomplete catalogs/allowlists; include a generated protocol on an existing endpoint; submit advertised boundaries/nulls, unadvertised IDs, invalid placements, contradictory explicit descriptors, and incompatible Variables.
+- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs; cover required/omittable fields, a generated existing-owner protocol, boundaries/nulls, omission, unknown IDs, placement, descriptor conflicts, Variables, and simulator-owned construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** Every path derives matching type, placement, nullability, bounds, and safe resolution from current metadata; advertised values round-trip; malformed/missing metadata, unsupported values, invalid placement, and explicit descriptor contradictions fail without changing the design.
+- **Pass criterion:** All paths derive matching type, placement, requiredness, nullability, bounds, and resolution; false differs from omission; valid values construct through the simulator seam; invalid metadata, values, placement, or descriptors preserve the design.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** One real-browser background scenario covers its available catalog; malformed/missing/unknown metadata, generated protocols, and other catalogs/input kinds remain component-only, separate, or mocked.
+- **Nonconformance:** Upstream metadata lacks requiredness and a schema-backed
+  construction seam; Web consequently offers omission for the two required
+  SimpleSwitch fields and bypasses its public outer constructor. Other real-catalog,
+  generated-protocol, and malformed/unknown metadata cases also remain incomplete.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 

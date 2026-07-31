@@ -27,11 +27,30 @@ QuantumSavory ConstructorFieldSchema
   -> minimized base wire type plus optional tagged value
 ```
 
-Frontend descriptor IDs are UI choices, not Julia types on the wire. Default constructor
-selection omits the keyword so Julia applies its own default; metadata `defaultValue` is
-documentation rather than fresh draft state. An explicit descriptor must agree with an
-intrinsic value or linked Variable branch. Only an omitted descriptor may be inferred;
-a Variable branch change synchronizes every linked descriptor atomically or fails.
+Frontend descriptor IDs are UI choices, not Julia types on the wire. An explicit
+descriptor must agree with an intrinsic value or linked Variable branch. Only an
+omitted descriptor may be inferred; a Variable branch change synchronizes every linked
+descriptor atomically or fails.
+
+## Required-field construction follow-up
+
+Current constructor metadata does not distinguish required fields from omittable Julia
+keywords, so the browser offers `Default` for every field. That is incorrect for
+`SimpleSwitchDiscreteProt.clientnodes` and `success_probs`, the two required fields in
+the current catalog, and lets an incomplete draft fail only during construction. Do not
+solve this by serializing concrete default values: simulator defaults include values
+that are not a stable JSON contract.
+
+Implement the correction as two ordered changes. First, QuantumSavory adds an explicit
+mandatory `required::Bool` to every `ConstructorFieldSchema` declaration and a public
+`construct_from_schema(::Type{T}; kwargs...)` seam. Its default method performs keyword
+construction; the SimpleSwitch specialization routes through the public outer
+constructor that initializes hidden `_backlog` state. Then Web projects `required` in
+constructor metadata, removes `Default` from required fields, requires an explicit
+choice—including `true` or `false` for required booleans—before authoring commit, and
+uses the simulator construction seam in both runtime parsing and script export. Update
+OpenAPI, catalog/constructor tests, and SUB-005/INTV-005 evidence together. Keep the two
+repository changes as ordered upstream and consumer PRs.
 
 Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
 values with `kind` are closed variable-reference, numeric-expression, or States Zoo
