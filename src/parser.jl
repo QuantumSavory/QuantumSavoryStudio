@@ -255,7 +255,7 @@ function _required_nonempty_string(object, field::String, context::String)
   ))
   value = strip(String(raw_value))
   isempty(value) && throw(validation_error("$context field '$field' must not be blank"))
-  return value
+  return String(value)
 end
 
 function _require_exact_object_fields(

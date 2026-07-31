@@ -1056,7 +1056,27 @@
       @test response2.status == 400
       data2 = parse_response(response2)
       @test data2["success"] == false
-      @test occursin("Missing required field 'code'", data2["error"])
+      @test data2["error_code"] == "VALIDATION_ERROR"
+      @test occursin("missing required field: 'code'", data2["error"])
+
+      for invalid_code in (
+        nothing,
+        Dict("nested" => "x -> x"),
+        Any["x -> x"],
+      )
+        invalid_code_response = make_request(
+          "POST",
+          "/test_code";
+          body=Dict("code" => invalid_code),
+        )
+        @test invalid_code_response.status == 400
+        invalid_code_data = parse_response(invalid_code_response)
+        @test invalid_code_data["success"] == false
+        @test invalid_code_data["error_code"] == "VALIDATION_ERROR"
+        @test occursin("field 'code' must be a string", invalid_code_data["error"])
+        @test invalid_code_data["details"]["field"] == "code"
+        @test haskey(invalid_code_data["details"], "received_type")
+      end
 
       invalid_placement_response = make_request(
         "POST",
@@ -1277,7 +1297,30 @@
       @test response2.status == 400
       data2 = parse_response(response2)
       @test data2["success"] == false
-      @test occursin("Missing required field 'expr'", data2["error"])
+      @test data2["error_code"] == "VALIDATION_ERROR"
+      @test occursin("missing required field: 'expr'", data2["error"])
+
+      for invalid_expression in (
+        nothing,
+        Dict("nested" => "Z₁"),
+        Any["Z₁"],
+      )
+        invalid_expression_response = make_request(
+          "POST",
+          "/test_symbolic_expression";
+          body=Dict("expr" => invalid_expression),
+        )
+        @test invalid_expression_response.status == 400
+        invalid_expression_data = parse_response(invalid_expression_response)
+        @test invalid_expression_data["success"] == false
+        @test invalid_expression_data["error_code"] == "VALIDATION_ERROR"
+        @test occursin(
+          "field 'expr' must be a string",
+          invalid_expression_data["error"],
+        )
+        @test invalid_expression_data["details"]["field"] == "expr"
+        @test haskey(invalid_expression_data["details"], "received_type")
+      end
 
       if unsafe_evaluation_enabled
         # Execution error (bad expression)

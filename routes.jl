@@ -1902,7 +1902,7 @@ end
                       description: Variables and constants defined
                       example: {"PI": 3.14159}
       '400':
-        description: Code execution failed
+        description: Malformed request DTO
         content:
           application/json:
             schema:
@@ -1939,11 +1939,7 @@ end
 route("/test_code", method="POST") do
   payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
 
-  if !haskey(payload, "code")
-    throw(validation_error("Missing required field 'code'", Dict("required_field" => "code")))
-  end
-
-  code_string = payload["code"]
+  code_string = _required_nonempty_string(payload, "code", "Code test request")
   placement = get(payload, "placement", nothing)
   if placement !== nothing && !(
     placement isa AbstractString &&
@@ -2161,7 +2157,7 @@ end
                       type: string
                       description: LaTeX representation of the evaluated expression
       '400':
-        description: Evaluation failed
+        description: Malformed request DTO
         content:
           application/json:
             schema:
@@ -2196,11 +2192,11 @@ end
 route("/test_symbolic_expression", method="POST") do
   payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
 
-  if !haskey(payload, "expr")
-    throw(validation_error("Missing required field 'expr'", Dict("required_field" => "expr")))
-  end
-
-  expr = payload["expr"]
+  expr = _required_nonempty_string(
+    payload,
+    "expr",
+    "Symbolic expression request",
+  )
   require_unsafe_code_evaluation()
 
   success, results, error = Sandbox.test_symbolic_expression(expr)
