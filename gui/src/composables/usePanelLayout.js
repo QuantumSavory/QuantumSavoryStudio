@@ -1,16 +1,10 @@
 import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { readCssPixels } from '../utils/cssPixels.js'
 
-const SELECTED_ELEMENT_STORAGE_KEY = 'panelCollapsed_selected_element'
 const RIGHT_SIDEBAR_WIDTH_STORAGE_KEY = 'rightSidebar_width'
-const LEGACY_SELECTED_ELEMENT_KEYS = [
-  'panelCollapsed_node_panel',
-  'panelCollapsed_edge_panel',
-  'panelCollapsed_void_panel'
-]
 
 const PANEL_STORAGE_KEYS = Object.freeze({
-  selectedElementPanel: SELECTED_ELEMENT_STORAGE_KEY,
+  selectedElementPanel: 'panelCollapsed_selected_element',
   nodeListPanel: 'panelCollapsed_node_list',
   edgeListPanel: 'panelCollapsed_edge_list',
   floatingProtocolsPanel: 'panelCollapsed_floating_protocols',
@@ -27,21 +21,6 @@ const RIGHT_SIDEBAR_DIMENSION_FALLBACKS = Object.freeze({
 function readStoredBoolean(key) {
   const value = localStorage.getItem(key)
   return value === null ? null : value === 'true'
-}
-
-function readSelectedElementCollapsed() {
-  const stored = readStoredBoolean(SELECTED_ELEMENT_STORAGE_KEY)
-  const selectedElementCollapsed = stored !== null
-    ? stored
-    : LEGACY_SELECTED_ELEMENT_KEYS
-        .map(readStoredBoolean)
-        .some(value => value === true)
-
-  if (stored === null) {
-    localStorage.setItem(SELECTED_ELEMENT_STORAGE_KEY, String(selectedElementCollapsed))
-  }
-  LEGACY_SELECTED_ELEMENT_KEYS.forEach(key => localStorage.removeItem(key))
-  return selectedElementCollapsed
 }
 
 function readPanelCollapsed(key) {
@@ -102,7 +81,7 @@ export function usePanelLayout() {
     '--app-shell-sidebar-width': `${rightSidebarWidth.value}px`
   }))
   const panelCollapsedStates = ref({
-    selectedElementPanel: readSelectedElementCollapsed(),
+    selectedElementPanel: readPanelCollapsed(PANEL_STORAGE_KEYS.selectedElementPanel),
     nodeListPanel: readPanelCollapsed(PANEL_STORAGE_KEYS.nodeListPanel),
     edgeListPanel: readPanelCollapsed(PANEL_STORAGE_KEYS.edgeListPanel),
     floatingProtocolsPanel: readPanelCollapsed(PANEL_STORAGE_KEYS.floatingProtocolsPanel),

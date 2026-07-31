@@ -71,7 +71,9 @@ project-transition, MCP, and cleanup failures, including severe degradation warn
 through `--app-shell-sidebar-width`. `RightSidebarResizer` resizes from the fixed
 sidebar's left edge by pointer or keyboard. Clamp the width to retain the configured main
 panel minimum where the viewport permits, and preserve the width while the sidebar is
-hidden.
+hidden. The same composable reads each current panel-collapse key directly, defaults a
+missing value to expanded, and persists controlled changes; it does not migrate
+component-specific historical keys.
 
 These exact thresholds, placements, colors, and panel dimensions are current machinery;
 do not promote them to V-model requirements without acceptance intent.

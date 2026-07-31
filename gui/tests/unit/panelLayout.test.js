@@ -4,11 +4,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { usePanelLayout } from '../../src/composables/usePanelLayout'
 
-const legacyKeys = [
-  'panelCollapsed_node_panel',
-  'panelCollapsed_edge_panel',
-  'panelCollapsed_void_panel'
-]
 const mountedWrappers = []
 
 function mountPanelLayout() {
@@ -49,28 +44,23 @@ afterEach(() => {
   mountedWrappers.splice(0).forEach(wrapper => wrapper.unmount())
 })
 
-describe('selected-element panel storage migration', () => {
-  it('writes the canonical value and removes all migrated keys', () => {
-    localStorage.setItem(legacyKeys[0], 'false')
-    localStorage.setItem(legacyKeys[1], 'true')
-    localStorage.setItem(legacyKeys[2], 'false')
+describe('selected-element panel storage', () => {
+  it('restores the current collapsed state', () => {
+    localStorage.setItem('panelCollapsed_selected_element', 'true')
 
     const { panelCollapsedStates } = mountPanelLayout()
 
     expect(panelCollapsedStates.value.selectedElementPanel).toBe(true)
-    expect(localStorage.getItem('panelCollapsed_selected_element')).toBe('true')
-    legacyKeys.forEach(key => expect(localStorage.getItem(key)).toBeNull())
   })
 
-  it('keeps an existing canonical value and still removes migrated keys', () => {
-    localStorage.setItem('panelCollapsed_selected_element', 'false')
-    legacyKeys.forEach(key => localStorage.setItem(key, 'true'))
-
+  it('defaults to expanded and persists controlled changes', async () => {
     const { panelCollapsedStates } = mountPanelLayout()
 
     expect(panelCollapsedStates.value.selectedElementPanel).toBe(false)
-    expect(localStorage.getItem('panelCollapsed_selected_element')).toBe('false')
-    legacyKeys.forEach(key => expect(localStorage.getItem(key)).toBeNull())
+    panelCollapsedStates.value.selectedElementPanel = true
+    await nextTick()
+
+    expect(localStorage.getItem('panelCollapsed_selected_element')).toBe('true')
   })
 })
 
