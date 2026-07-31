@@ -23,7 +23,7 @@ incomplete.
 ## Release-candidate status
 
 `2.0.0` metadata is prepared without changing evidence. SYSV-021 and ACC-012 are blocked:
-QuantumSavory pin `9339c8336e2194df0de459aa1c4e0a5daaa6bac3` is unavailable upstream and
+QuantumSavory pin `0851ab9ade45f37e278a11846fbec9d8f522dabe` is unavailable upstream and
 must be published or replaced before supported-environment execution and acceptance.
 Dependency-owned MCP resource `error.data` loss is an accepted conformance gap, not a
 release blocker; its actions stay incomplete and the transport stays unpatched. Keep

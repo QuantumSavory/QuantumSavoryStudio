@@ -127,6 +127,6 @@ their status.
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
 - **Nonconformance:** As of 2026-07-31, pinned QuantumSavory commit
-  `9339c8336e2194df0de459aa1c4e0a5daaa6bac3` is absent from declared upstream
+  `0851ab9ade45f37e278a11846fbec9d8f522dabe` is absent from declared upstream
   refs, blocking clean installation. Publish it or pin a reachable equivalent; the
   action still omits save/reopen and lacks durable run evidence.

@@ -114,7 +114,7 @@ availability depends on a retained register/network.
 ## Compatibility boundary
 
 The root and test projects declare QuantumSavory `0.8` compatibility and source exact
-revision `9339c8336e2194df0de459aa1c4e0a5daaa6bac3`; no Julia manifest is committed.
+revision `0851ab9ade45f37e278a11846fbec9d8f522dabe`; no Julia manifest is committed.
 Changing that revision is therefore the explicit point at which maintainers must review
 catalog projections, fixtures, generated imports, and this reference together. As of
 2026-07-31 that revision is not exposed by the declared upstream remote, so a release or
