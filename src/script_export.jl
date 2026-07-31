@@ -379,8 +379,13 @@ function _script_declared_type(raw_type)
 end
 
 function _script_special_type(raw_type)
-  _is_symbolic_parameter_type(raw_type) && return "Symbolic"
-  for type_name in _script_declared_types(raw_type)
+  declared_types = raw_type isa AbstractVector ? raw_type : (raw_type,)
+  for declared_type in declared_types
+    if declared_type == "Symbolic" ||
+       _is_symbolic_parameter_type(declared_type)
+      return "Symbolic"
+    end
+    type_name = string(declared_type)
     if type_name in ("Function", "Lambda")
       return type_name
     end

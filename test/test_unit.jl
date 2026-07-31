@@ -1742,6 +1742,16 @@
         "slots -> first(slots)",
       ) == "Lambda"
       @test WebQuantumSavory._is_symbolic_parameter_type(QuantumSavory.SymQObj)
+      @test WebQuantumSavory._is_symbolic_parameter_type(typeof(QuantumSavory.X))
+      @test all(
+        type -> !WebQuantumSavory._is_symbolic_parameter_type(type),
+        (
+          "Symbolic",
+          "SymQObj",
+          "QuantumSymbolics.SymQObj",
+          "SymbolicUtils.Symbolic{Real}",
+        ),
+      )
       @test WebQuantumSavory._protocol_parameter_handling_type(
         QuantumSavory.SymQObj,
         "Symbolic",

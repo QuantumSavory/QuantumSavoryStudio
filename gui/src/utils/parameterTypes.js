@@ -17,7 +17,6 @@ export const KNOWN_PARAMETER_TYPES = [
   'Vector{Int64}',
   'Vector{Float64}',
   'Lambda',
-  'SymbolicUtils.Symbolic',
   'default'
 ]
 
@@ -171,8 +170,6 @@ export function findParameterInputOption(inputType, metadata, id) {
 /**
  * Resolve a protocol-field descriptor for a compatible Variable.
  *
- * Variable semantic aliases such as `Symbolic` can be accepted by a more
- * specific authoritative Julia type such as `SymbolicUtils.Symbolic{Real}`.
  * Prefer the Variable's exact editor branch when the constructor exposes it
  * (especially numeric expressions), then fall back to semantic compatibility.
  */
@@ -204,11 +201,7 @@ export function isWildcardType(type) {
 }
 
 export function isSymbolicType(type) {
-  return typeof type === 'string' && (type === 'Symbolic'
-    || type === 'SymbolicUtils.Symbolic'
-    || type.startsWith('SymbolicUtils.Symbolic{')
-    || type === 'QuantumSymbolics.SymQObj'
-    || type.startsWith('QuantumSymbolics.SymQObj{'))
+  return type === 'Symbolic'
 }
 
 export function isCodeType(type) {
@@ -370,7 +363,6 @@ export function parameterTypeSupportsVariableType(parameterType, variableType) {
     if (declaredType === 'Function') {
       return variableType === 'Function' || variableType === 'Lambda'
     }
-    if (isSymbolicType(declaredType)) return isSymbolicType(variableType)
     if (isWildcardType(declaredType)) return isWildcardType(variableType)
     if (declaredType === 'Int') return variableType === 'Int' || variableType === 'Int64'
     if (declaredType === 'Int64') return variableType === 'Int' || variableType === 'Int64'

@@ -86,7 +86,7 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   virtual: null,
   parameters: [{
     field: 'observable',
-    type: 'SymbolicUtils.Symbolic{Real}',
+    type: 'Symbolic',
     doc: 'A symbolic state.',
   }],
 }

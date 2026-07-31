@@ -236,8 +236,8 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('input[type="number"]').element.value).toBe('7')
   })
 
-  it('links a semantic Symbolic variable through the authoritative Julia descriptor', async () => {
-    const symbolicType = 'SymbolicUtils.Symbolic{Real}'
+  it('links a Symbolic variable through the canonical wire descriptor', async () => {
+    const symbolicType = 'Symbolic'
     api._config.value = {
       protocolTypes: {
         node: [{

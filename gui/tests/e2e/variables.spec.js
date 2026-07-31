@@ -126,7 +126,7 @@ async function expectIconCentered(button) {
 }
 
 test.describe('Protocol variable type compatibility', () => {
-  test('matches declared field types directionally and recognizes supported aliases', () => {
+  test('matches declared field types directionally and recognizes current wire types', () => {
     expect(parameterTypeSupportsVariableType('Int64', 'Int64')).toBe(true)
     expect(parameterTypeSupportsVariableType('Int64', 'String')).toBe(false)
     expect(parameterTypeSupportsVariableType(['Nothing', 'Float64'], 'Nothing')).toBe(true)
@@ -134,7 +134,7 @@ test.describe('Protocol variable type compatibility', () => {
     expect(parameterTypeSupportsVariableType(['Nothing', 'Float64'], 'Bool')).toBe(false)
     expect(parameterTypeSupportsVariableType('Function', 'Lambda')).toBe(true)
     expect(parameterTypeSupportsVariableType('Lambda', 'Function')).toBe(false)
-    expect(parameterTypeSupportsVariableType('SymbolicUtils.Symbolic{Real}', 'Symbolic')).toBe(true)
+    expect(parameterTypeSupportsVariableType('Symbolic', 'Symbolic')).toBe(true)
     expect(parameterTypeSupportsVariableType('Wildcard', 'QuantumSavory.Wildcard')).toBe(true)
     expect(parameterTypeSupportsVariableType('Any', 'Bool')).toBe(true)
     expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(true)

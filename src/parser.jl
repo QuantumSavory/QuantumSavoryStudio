@@ -674,30 +674,20 @@ end
 
 const NAMED_TAG_PARAMETER_KIND = "named_tag_type"
 
-"""Recognize current and legacy symbolic protocol type identities."""
+"""Recognize simulator-owned symbolic protocol type identities."""
 function _is_symbolic_parameter_type(type)
   members = try
     Base.uniontypes(type)
   catch
-    Any[type]
+    return false
   end
-  symbolic_type = isdefined(QuantumSavory, :SymQObj) ?
-    getfield(QuantumSavory, :SymQObj) : nothing
 
   return any(members) do member
-    if symbolic_type !== nothing
-      is_current_symbolic = try
-        member === symbolic_type || member <: symbolic_type
-      catch
-        false
-      end
-      is_current_symbolic && return true
+    try
+      member === QuantumSavory.SymQObj || member <: QuantumSavory.SymQObj
+    catch
+      false
     end
-
-    type_string = string(member)
-    return type_string in ("Symbolic", "SymQObj", "QuantumSymbolics.SymQObj") ||
-      startswith(type_string, "SymbolicUtils.Symbolic{") ||
-      startswith(type_string, "QuantumSymbolics.SymQObj{")
   end
 end
 
@@ -785,12 +775,7 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
     if member === Function
       return variable_name in ("Function", "Lambda")
     elseif _is_symbolic_parameter_type(member)
-      return variable_name in (
-        "Symbolic",
-        "SymQObj",
-        "QuantumSymbolics.SymQObj",
-      ) || startswith(variable_name, "SymbolicUtils.Symbolic{") ||
-        startswith(variable_name, "QuantumSymbolics.SymQObj{")
+      return variable_name == "Symbolic"
     elseif member === QuantumSavory.Wildcard
       return variable_name in ("Wildcard", "QuantumSavory.Wildcard")
     elseif member in (Int, Int64)
@@ -887,9 +872,7 @@ function parse_pt_type(parameters)
       continue
     end
 
-    # Normalize symbolic protocol values to the UI's stable symbolic type.
-    # QuantumSavory metadata has used both SymbolicUtils.Symbolic and
-    # QuantumSymbolics.SymQObj across releases.
+    # Normalize the simulator's symbolic type identity to the stable Web wire type.
     if _is_symbolic_parameter_type(t)
       push!(result, merge(wire_field, (type="Symbolic",)))
       continue
@@ -1774,10 +1757,15 @@ function _constructor_parameter_kwargs(
         ))
       end
 
+      handling_type = _constructor_parameter_handling_type(
+        declared_type,
+        variable.type,
+        variable.value,
+      )
       converted = _handle_typed_parameter!(
         kwargs,
         name,
-        variable.type,
+        handling_type,
         variable.value,
         ctx,
         state;

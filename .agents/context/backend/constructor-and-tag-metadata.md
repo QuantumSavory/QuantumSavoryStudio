@@ -31,6 +31,10 @@ Frontend descriptor IDs are UI choices, not Julia types on the wire. Default con
 selection omits the keyword so Julia applies its own default; metadata `defaultValue` is
 documentation rather than fresh draft state.
 
+Symbolic fields are classified from the declared Julia type's identity or subtyping
+under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.
+The frontend does not interpret package-qualified symbolic type spellings.
+
 ## Placement and physical context
 
 Protocol placement is part of the payload contract:

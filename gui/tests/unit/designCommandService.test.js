@@ -1309,8 +1309,8 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('links semantic Symbolic Variables through authoritative Julia field types', async () => {
-    const project = createEmptyProject('Symbolic aliases')
+  it('links Symbolic Variables through the canonical wire type', async () => {
+    const project = createEmptyProject('Symbolic variables')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'A',
@@ -1327,7 +1327,7 @@ describe('DesignCommandService', () => {
         parameters: { p: 1 },
       },
     }))
-    const symbolicType = 'SymbolicUtils.Symbolic{Real}'
+    const symbolicType = 'Symbolic'
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
