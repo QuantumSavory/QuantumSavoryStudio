@@ -17,4 +17,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TestSetExtensions = "98d24dd4-01ad-11ea-1b02-c9a08f80db04"
 
 [sources]
-QuantumSavory = {rev = "b7d3de510e7fec103dfcb2b516782bcc253f2a93", url = "https://github.com/QuantumSavory/QuantumSavory.jl.git"}
+QuantumSavory = {rev = "3cd578f5073f6f227c69842f33104da13290a004", url = "https://github.com/QuantumSavory/QuantumSavory.jl.git"}

@@ -135,7 +135,7 @@ reject extras. Parse accepts representation configuration only; export also requ
 positive `time` and `timeStep`. Physical edges require every resolved physical field,
 while virtual edges forbid them. Background noise is always the exact `{type,
 parameters}` object; the `default` type is the sole no-noise sentinel, with no string or
-null request alias retained behind validation.
+null request alias retained behind validation, and its parameters array must be empty.
 
 Prepare, run, pause, and destroy also reject every undeclared body field before a
 simulation lookup. Their shared name is a nonblank string; run requires exactly one

@@ -15,9 +15,9 @@
 
 - **Covers:** SUB-002
 - **Method:** test
-- **Procedure:** Round-trip an asymmetric project, derive the exact parse and export projections with additive field canaries, and mutate the outputs without source mutation.
+- **Procedure:** Round-trip an asymmetric project; derive parse/export projections with field/name canaries and exact no-noise; mutate outputs.
 - **Environment / configuration:** Vitest/jsdom with real codec and projection helpers
-- **Pass criterion:** Fields round-trip, hydration is independent, parse carries explicit representations but no timing, export carries only positive timing plus the parse semantics, undeclared fields do not cross, and inputs remain unchanged under output mutation.
+- **Pass criterion:** Fields round-trip independently; parse omits timing, export adds only positive timing, protocol names reach catalog admission, no-noise stays exact/parameterless, extras do not cross, and output mutation leaves inputs unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
 - **Nonconformance:** The durable artifact now discriminates mutation of both endpoint
@@ -38,20 +38,20 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build request trees covering asymmetric roles, duplicate IDs/pairs, required/complete constructors, concrete versus Default/null Variables, field mutations, `DataType` tags, tagged/opaque values, physical values, and placement through HTTP; compare validation/runtime with construction/evaluation canaries.
+- **Procedure:** Validate/build HTTP request trees spanning roles, duplicate IDs/pairs, constructors, exact/parameterized no-noise, Variables, mutations, tags, opaque values, physical values, and placement; verify rejected no-noise creates no simulation record.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Roles persist; physical edges alone enter the graph with five resolved fields; virtual protocols lack them; IDs stay unambiguous. Shared construction-free admission rejects required omission and invalid Variables/values; complete constructors build. Variables are concrete, tags use `DataType`, and exact tagged/opaque branches admit without validation-time evaluation.
+- **Pass criterion:** Roles persist; only physical edges enter the graph with five fields; virtual protocols lack them; IDs stay unambiguous. Construction-free admission rejects required omission, parameterized no-noise, and invalid Variables/values before runtime state; complete constructors build. Variables remain concrete, tags use `DataType`, and tagged/opaque branches admit without validation-time evaluation.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
-- **Nonconformance:** UNITV-010 still covers reordered nodes; no live-HTTP fixture combines every malformed branch with the constructor canary.
+- **Nonconformance:** UNITV-010 still covers reordered nodes; no live-HTTP fixture combines every malformed branch with the constructor canary, and the new no-noise HTTP canary has no current execution record.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Exercise direct/copied/generated inputs across catalog failure, existing-owner protocols, states, requiredness, `DataType` tags, attachments/roles, placement, bounds, IDs, conflicts, Variables, and keyword construction.
+- **Procedure:** Exercise direct/copied/generated inputs across catalog failure, existing-owner protocols, states, requiredness, tags, attachments/roles, field-name canaries, placement, bounds, conflicts, Variables, and construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** Paths match type, placement, requiredness, nullability, bounds, and resolution; tags use `DataType` plus kind/nullability. Attachments map to floating/node/edge ownership, bound roles are injected, and configurable roles stay explicit. Valid numerics construct; unsafe/fractional integers, aliases, and Default/null Variables fail; false/concrete Variables differ from optional omission; invalid input preserves design.
+- **Pass criterion:** Paths match type, placement, requiredness, nullability, bounds, and resolution; tags use `DataType` with kind/nullability. Attachments map ownership, bound roles are injected, and configurable schema fields stay explicit regardless of name. Unknown imported names reach catalog/backend rejection. Valid numerics construct; unsafe/fractional integers, aliases, and Default/null Variables fail; concrete Variables differ from omission; invalid input preserves design.
 - **Status:** planned
 - **Evidence:** [`Project.toml`](../../../Project.toml), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
 - **Nonconformance:** No real-stack action combines the complete catalog/failure matrix.

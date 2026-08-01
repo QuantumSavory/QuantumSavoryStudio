@@ -127,5 +127,5 @@ their status.
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
 - **Nonconformance:** The projects select reachable QuantumSavory commit
-  `b7d3de510e7fec103dfcb2b516782bcc253f2a93`, but the maintained action omits the
+  `3cd578f5073f6f227c69842f33104da13290a004`, but the maintained action omits the
   save/reopen segment and does not retain one full supported-environment run artifact.

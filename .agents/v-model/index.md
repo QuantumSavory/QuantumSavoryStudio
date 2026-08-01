@@ -21,7 +21,7 @@ MCP evidence remain incomplete.
 
 `2.0.0` metadata is prepared. Root and test projects select reachable QuantumSavory
 revision
-`b7d3de510e7fec103dfcb2b516782bcc253f2a93`; the root alone declares the `0.8`
+`3cd578f5073f6f227c69842f33104da13290a004`; the root alone declares the `0.8`
 compatibility range. SYSV-021 omits save/reopen and one full supported-environment
 artifact; ACC-012 awaits maintainer acceptance.
 Dependency-owned MCP resource `error.data` loss is accepted, not release-blocking; its

@@ -10,13 +10,10 @@
 
 ## Authoritative sources
 
-Background, slot, protocol, named-tag, and general-tag catalogs project QuantumSavory's
-explicit public schemas: `background_schemas`, `slot_schemas`,
-`ProtocolZoo.protocol_schemas`, `tag_head_schemas`, and
-`general_tag_signatures`. WebQuantumSavory must not maintain parallel simulator lists.
-These catalogs are deterministic: custom subtypes and unrelated loaded packages do not
-silently add entries. Tests should compare Web projections with the pinned dependency
-catalog instead of duplicating member lists.
+Catalogs project only QuantumSavory's explicit `background_schemas`, `slot_schemas`,
+`ProtocolZoo.protocol_schemas`, `tag_head_schemas`, and `general_tag_signatures`.
+WebQuantumSavory maintains no parallel lists. Entries are deterministic; tests compare
+Web projections directly with the pinned dependency instead of duplicating members.
 
 The typed-input flow is:
 
@@ -27,33 +24,27 @@ QuantumSavory ConstructorFieldSchema
   -> minimized base wire type plus optional tagged value
 ```
 
-Frontend descriptor IDs are UI choices, not Julia types on the wire. An explicit
-descriptor must agree with an intrinsic value or linked Variable branch. Only an
-omitted descriptor may be inferred; a Variable branch change synchronizes every linked
-descriptor atomically or fails.
+Descriptor IDs are UI choices, not Julia wire types. An explicit descriptor must agree
+with its intrinsic value or linked Variable. Inference is allowed only when the
+descriptor is absent; a Variable branch change synchronizes every link or fails.
 
 ## Constructor requiredness and keyword construction
 
-Every QuantumSavory `ConstructorFieldSchema` declares a mandatory `required::Bool`.
-Web projects constructor parameters as the exact object
-`{field,type,doc,required,min,max}`; named-tag fields add their declared `kind` and
-`nullable` members. Requiredness is read per field from the pinned catalog rather than
-duplicated as a Web list. Required fields must be present and complete, while omission
-of an optional field deliberately delegates to the simulator keyword default. Do not
-serialize concrete defaults as a substitute: simulator defaults are not a stable JSON
-contract.
+Every `ConstructorFieldSchema` declares `required::Bool`. Web projects exact
+`{field,type,doc,required,min,max}` objects; named-tag fields add `kind` and `nullable`.
+Requiredness comes from the pinned catalog, never a Web list. Required fields must be
+complete; omitting an optional field delegates to the simulator keyword default. Never
+serialize concrete defaults as a substitute: they are not a stable JSON contract.
 
 QuantumSavory owns keyword construction and hidden runtime state. In particular,
 `SimpleSwitchDiscreteProt` creates a fresh private `_backlog` from its required public
 arguments; Web neither advertises nor persists that field. Backend parsing, runtime
-construction, and script export share the required-field contract. Numeric scalars are
-finite JSON numbers and numeric vectors are JSON-number arrays; integer targets require
-integral values and Booleans are rejected as numbers. Booleans and nonblank strings
-retain their JSON types, and intrinsic branches use exact `nothing` or `Wildcard`
-sentinels. Numeric strings are not a wire form. An explicit parameter object can request
-keyword omission only with JSON null and a canonical declared type; absent optional
-fields remain absent. Function/Lambda text matching `default` after case-folding and
-trimming is invalid.
+construction, and export share requiredness. Numeric scalars/vectors contain finite JSON
+numbers; integer targets are integral, and Booleans are never numbers. Booleans,
+nonblank strings, and exact `nothing`/`Wildcard` sentinels retain their types. Numeric
+strings are invalid. Explicit omission requires JSON null and a canonical declared type;
+absent optional fields stay absent. Function/Lambda text matching case-folded, trimmed
+`default` is invalid.
 
 `_admit_constructor_parameters` is the pure shared classifier for preflight, runtime,
 and script export.
@@ -89,9 +80,10 @@ the selected family, exact parameter names, and ranges.
 The browser admits slot types and background-noise assignments only while their
 nonempty live catalogs are available and only for exact catalog type IDs. Its Web
 `default` no-noise entry joins the background catalog after the backend request
-succeeds; neither catalog has an empty-catalog fallback. Ordinary slot edits, template
-cloning, and layout generation share the same command admission boundary, so missing or
-unknown metadata cannot commit a candidate.
+succeeds. That entry is exactly `{type:"default",parameters:[]}`; parameters on it are
+invalid rather than ignored. Neither catalog has an empty-catalog fallback. Ordinary
+slot edits, template cloning, and layout generation share the same command admission
+boundary, so missing or unknown metadata cannot commit a candidate.
 
 Protocol admission is placement-scoped. Direct edits and every new or changed protocol
 left by a layout generator resolve an exact type in the current node, edge, or floating
@@ -103,7 +95,10 @@ may attach tracker protocols to existing endpoint owners.
 Simulator attachment metadata maps `NetworkAttachment`, `NodeAttachment`, and
 `EdgeAttachment` to Web floating, node, and edge placement. Attachment-bound node roles
 are injected from the owning location; configurable node roles remain explicit public
-constructor fields.
+constructor fields. Consequently, `ProtocolSchema` is the sole list of configurable
+fields: Web renders and projects every advertised name without an injection-name
+denylist. Unknown imported names survive projection so current catalog/backend admission
+can reject them explicitly.
 
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.
@@ -138,12 +133,12 @@ availability depends on a retained register/network.
 
 ## Compatibility boundary
 
-The root and test projects declare QuantumSavory `0.8` compatibility and source exact
-revision `b7d3de510e7fec103dfcb2b516782bcc253f2a93`; no Julia manifest is committed.
-Changing that revision is therefore the explicit point at which maintainers must review
-catalog projections, fixtures, generated imports, and this reference together. Release
-preparation separately verifies that the exact revision is reachable from the declared
-upstream URL.
+Only the root project declares QuantumSavory `0.8` compatibility. Both root and test
+projects source exact revision `3cd578f5073f6f227c69842f33104da13290a004`; no Julia
+manifest is committed. Changing that revision is therefore the explicit point at which
+maintainers must review catalog projections, fixtures, generated imports, and this
+reference together. Release preparation separately verifies that the exact revision is
+reachable from the declared upstream URL.
 
 ## Anchors
 

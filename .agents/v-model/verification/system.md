@@ -34,9 +34,9 @@ gaps recorded below.
 
 - **Covers:** SYS-004
 - **Method:** test
-- **Procedure:** Fetch real catalogs, render every input kind including canonical named-tag `DataType` and floating/integer state controls, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, concrete/null/legacy-Default Variable, fractional/unsafe-integer, malformed/missing-metadata, unsupported/aliased, invalid-placement, and contradictory explicit values.
+- **Procedure:** Fetch real catalogs, render every input kind including canonical named-tag `DataType`, floating/integer state controls, and a configurable protocol field named like a formerly inferred injected role; exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, concrete/null/legacy-Default Variable, fractional/unsafe-integer, malformed/missing-metadata, unsupported/aliased, invalid-placement, and contradictory explicit values.
 - **Environment / configuration:** Real browser/backend with no intercepted catalog routes
-- **Pass criterion:** Choices, numeric kinds, bounds, requiredness, and named-tag kind/nullability derive from current metadata or explicit allowlists; named tags use canonical `DataType`, and floating values, JavaScript-safe integers, required values, concrete Variables, and optional omission round-trip. Unsafe/fractional integers, malformed/missing metadata, descriptor aliases, Default/null Variables, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
+- **Pass criterion:** Choices, numeric kinds, bounds, requiredness, named-tag kind/nullability, and configurable protocol fields derive from current metadata or explicit allowlists without local name suppression; named tags use canonical `DataType`, and floating values, JavaScript-safe integers, required values, concrete Variables, and optional omission round-trip. Unsafe/fractional integers, malformed/missing metadata, descriptor aliases, Default/null Variables, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
 - **Status:** planned
 - **Evidence:** Automated precursors in [`test/test_unit.jl`](../../../test/test_unit.jl), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
 - **Nonconformance:** No current supported real-browser/backend action exercises the
@@ -92,12 +92,13 @@ gaps recorded below.
 
 - **Covers:** SYS-017
 - **Method:** test
-- **Procedure:** Import and reopen structurally valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents, plus schema-valid-but-semantically-invalid branch/reference fixtures including legacy Default/null Variables and named-tag aliases, through the real browser product.
+- **Procedure:** Import and reopen structurally valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents, plus parameterized no-noise and schema-valid-but-semantically-invalid branch/reference fixtures including legacy Default/null Variables and named-tag aliases, through the real browser product.
 - **Environment / configuration:** Supported browser with real storage, codec, import/session flow, and Tools Log
-- **Pass criterion:** Documents that pass both `contracts/project/v2.schema.json` and catalog-independent semantic admission open; the co-shipped schema closes every application-owned object and names any extension point explicitly. Variables are concrete/non-null, named tags use canonical `DataType`, and durable constructor omission has only the Default/null representation; live-catalog authoring/backend admission separately proves optionality. Every branch/reference contradiction fails before normalization, hydration, platform/session, or storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
+- **Pass criterion:** Documents that pass both `contracts/project/v2.schema.json` and catalog-independent semantic admission open; the co-shipped schema closes every application-owned object and names any extension point explicitly. No-noise has only `{type:"default",parameters:[]}`; Variables are concrete/non-null, named tags use canonical `DataType`, and durable constructor omission has only the Default/null representation; live-catalog authoring/backend admission separately proves optionality. Every branch/reference contradiction fails before normalization, hydration, platform/session, or storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`gui/tests/e2e/description.spec.js`](../../../gui/tests/e2e/description.spec.js)
 - **Nonconformance:** Focused browser tests prove version-2 save/reopen/import and a
   selected structured rejection. No one real-browser fixture drives every marker class,
   malformed shape, and closed application-owned boundary while asserting unchanged
-  input/storage and the Tools Log.
+  input/storage and the Tools Log; parameterized no-noise currently has only component
+  evidence and no browser execution record.

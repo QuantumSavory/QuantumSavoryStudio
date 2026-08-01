@@ -65,10 +65,11 @@ advisory results do not expand the approved support boundary. Browser builds are
 selected by the committed Playwright lock; no independent minimum version policy is
 declared.
 
-The root and test projects select exact reachable QuantumSavory revision
-`b7d3de510e7fec103dfcb2b516782bcc253f2a93`; the root declares compatibility with
-QuantumSavory `0.8`, and no Julia manifest is committed. That source pin is the explicit
-release-review boundary for simulator-owned metadata and construction behavior.
+Only the root project declares QuantumSavory compatibility, at `0.8`. Both root and test
+projects select exact reachable revision
+`3cd578f5073f6f227c69842f33104da13290a004` in their `[sources]` tables, and no Julia
+manifest is committed. That source pin is the explicit release-review boundary for
+simulator-owned metadata and construction behavior.
 
 ## Persistence and compatibility
 

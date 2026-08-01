@@ -327,10 +327,11 @@ QuantumSavory constructor metadata
 An optional constructor parameter begins with a **Default** choice. Default stores no
 value and omits the keyword from simulator and script-export payloads, so the
 QuantumSavory constructor applies its own default. Required parameters and Variables
-have no Default branch. Catalog `defaultValue` metadata is help text only; a new project
-does not copy it into the draft. Choosing an explicit literal, function, tag, opaque
-JSON, or expression starts an editor draft and requires a valid value before commit;
-invalid draft text never enters the durable model.
+have no Default branch. Simulator default values are neither copied into drafts nor
+serialized into project documents; the durable Default/null marker records only that
+the keyword is omitted. Choosing an explicit literal, function, tag, opaque JSON, or
+expression starts an editor draft and requires a valid value before commit; invalid
+draft text never enters the durable model.
 
 Every retained protocol or background-noise assignment crosses the minimized API as
 the same exact `{name,type,value}` object. Union choices and linked Variables emit their

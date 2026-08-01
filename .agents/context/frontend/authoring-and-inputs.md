@@ -54,10 +54,11 @@ service creates it once, only after completion; cancellation or incompleteness l
 design unchanged. Optional-only protocols retain immediate creation. Runtime metadata
 is not copied into project documents.
 
-Every background assignment (including Web `default`) and slot type resolves an exact
-live-catalog entry; no string/literal fallback exists. Missing metadata aborts the
-candidate. Installed expressions receive node context; generator templates defer it,
-then the command service revalidates each clone at its final node.
+Every background assignment and slot type resolves an exact live-catalog entry; no
+string/literal fallback exists. Web `default` is the exact no-noise record
+`{type:"default",parameters:[]}`, and a parameterized form aborts the candidate. Missing
+metadata also aborts it. Installed expressions receive node context; generator templates
+defer it, then the command service revalidates each clone at its final node.
 
 Generator options are not protocol authority. After topology stabilizes, the command
 service resolves every new/changed protocol (including trackers on existing endpoints)

@@ -12,9 +12,10 @@
   and undeclared, omitted, defaulted, aliased, or malformed owned fields fail before
   simulator construction or source generation.
 - Adopted QuantumSavory 0.8 metadata as the authority for constructors, protocol
-  placement, tags, messages, and States Zoo families. The root project tracks an exact
-  upstream revision so these APIs and their Web consumer are reviewed together; local
-  subtype discovery and duplicate metadata tables are no longer supported.
+  attachments and constructor-node roles, tags, messages, and States Zoo families. The
+  root project tracks an exact upstream revision so these APIs and their Web consumer
+  are reviewed together; local subtype discovery and duplicate metadata tables are no
+  longer supported.
 - Made States Zoo numeric metadata exact across the backend and browser. Continuous
   built-in parameters construct as `Float64`, Barrett–Kok exposes its required parity
   bit as `Int`, unsafe or fractional browser integer values fail, and the editor derives
@@ -30,7 +31,9 @@
 - Unified minimized protocol and background-noise parameters as exact
   `{name,type,value}` constructor assignments. Default drafts are omitted, retained
   union/Variable branches emit their canonical base type, and direct optional-null
-  omissions reject missing, legacy, or contradictory type discriminators.
+  omissions reject missing, legacy, or contradictory type discriminators. The Web
+  no-noise sentinel is exactly `{type:"default",parameters:[]}`; parameterized variants
+  fail before simulation or export effects.
 - Split project admission into the co-shipped schema's closed structural field boundary
   and a catalog-independent semantic pass for exact branches, safe integers, duplicate
   Variables, and dangling or incompatible references.

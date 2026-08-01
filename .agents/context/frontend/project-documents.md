@@ -41,6 +41,10 @@ Both protocol and background-noise assignments minimize through one constructor 
 retained fields emit exact `{name,type,value}` objects with the selected base wire type,
 while Default/null fields are absent.
 
+Web's no-noise selection is the closed `{type:"default",parameters:[]}` record in the
+durable document and both API projections. It is distinct from optional constructor
+Default/null omission; any parameter on no-noise is rejected.
+
 `contracts/project/v2.schema.json` owns durable fields and closes every owned object.
 After structural validation, `projectCodec` enforces exact
 `type`/`selectedType`/value agreement, safe integer members, unique Variable IDs/names,
