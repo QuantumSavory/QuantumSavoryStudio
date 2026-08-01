@@ -2196,10 +2196,22 @@
       @test extra isa WebQuantumSavory.APIError
       @test extra.details["extra"] == ["other"]
 
-      for invalid_value in ("0.5", true, 1 // 2, NaN, Inf, -Inf)
+      for invalid_value in ("0.5", true, NaN, Inf, -Inf, big(10)^400)
         invalid = states_zoo_error("DepolarizedBellPair", Dict("p" => invalid_value))
         @test invalid isa WebQuantumSavory.APIError
         @test occursin("outside its declared type or range", invalid.message)
+      end
+
+      for (real_value, expected_value) in (
+        (UInt8(1), 1.0),
+        (big(1), 1.0),
+        (1 // 2, 0.5),
+      )
+        state = WebQuantumSavory.construct_states_zoo_state(
+          "DepolarizedBellPair",
+          Dict("p" => real_value),
+        )
+        @test state.p === expected_value
       end
 
       for invalid_value in (-0.01, 1.01)

@@ -134,6 +134,7 @@ describe('ApiConnector project namespaces', () => {
       { ...parameter, type: '' },
       { ...parameter, integer: 'true' },
       { ...parameter, good: 0.5 },
+      { ...parameter, max: Number.MAX_SAFE_INTEGER + 1 },
       { ...parameter, min_inclusive: 'true' },
       { ...parameter, extra: null },
     ]) {

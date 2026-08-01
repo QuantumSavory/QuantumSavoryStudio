@@ -25,8 +25,8 @@ export function normalizeStateParameter(parameter, context = 'States Zoo paramet
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       throw new TypeError(`${context}.${field} must be a finite number`)
     }
-    if (integer && !Number.isInteger(value)) {
-      throw new TypeError(`${context}.${field} must be an integer`)
+    if (integer && !Number.isSafeInteger(value)) {
+      throw new TypeError(`${context}.${field} must be a safe integer`)
     }
     return [field, value]
   }))
@@ -53,7 +53,7 @@ export function normalizeStateParameter(parameter, context = 'States Zoo paramet
 
 export function stateParameterValueIsValid(rawValue, parameter) {
   if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) return false
-  if (parameter.integer && !Number.isInteger(rawValue)) return false
+  if (parameter.integer && !Number.isSafeInteger(rawValue)) return false
 
   const minimumValid = parameter.minInclusive
     ? rawValue >= parameter.min

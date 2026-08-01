@@ -1901,7 +1901,7 @@ export class DesignCommandService {
       const name = String(parameter.name)
       const rawValue = values[name]
       if (!stateParameterValueIsValid(rawValue, parameter)) {
-        const valueKind = parameter.integer ? 'finite integer' : 'finite number'
+        const valueKind = parameter.integer ? 'safe integer' : 'finite number'
         throw new DesignCommandError(
           'VALIDATION_FAILED',
           `${name} must be a ${valueKind} in ${formatStateParameterRange(parameter)}.`,

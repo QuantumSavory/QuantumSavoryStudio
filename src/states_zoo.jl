@@ -65,7 +65,7 @@ function _states_zoo_parameter_value(parameter, value)
     return value isa Int ? value : nothing
   end
 
-  (value isa Int || value isa AbstractFloat) && isfinite(value) || return nothing
+  value isa Real && isfinite(value) || return nothing
   converted = try
     convert(parameter.value_type, value)
   catch

@@ -82,7 +82,14 @@ describe('States Zoo parameter bounds', () => {
 
     expect(stateParameterValueIsValid(0, normalized)).toBe(true)
     expect(stateParameterValueIsValid(1, normalized)).toBe(true)
-    for (const value of [0.5, 1.5, true, '1', Number.NaN]) {
+    for (const value of [
+      0.5,
+      1.5,
+      true,
+      '1',
+      Number.NaN,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
       expect(stateParameterValueIsValid(value, normalized)).toBe(false)
     }
   })
@@ -96,6 +103,12 @@ describe('States Zoo parameter bounds', () => {
       .toThrow('min_inclusive must be a Boolean')
     expect(() => normalizeStateParameter({ ...genqoEta, good: Number.POSITIVE_INFINITY }))
       .toThrow('good must be a finite number')
+    expect(() => normalizeStateParameter({
+      ...genqoEta,
+      type: 'Int',
+      integer: true,
+      max: Number.MAX_SAFE_INTEGER + 1,
+    })).toThrow('max must be a safe integer')
   })
 
   it('accepts backend-declared concrete floating types without a name allowlist', () => {

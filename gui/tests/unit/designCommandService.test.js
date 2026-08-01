@@ -2083,7 +2083,11 @@ describe('DesignCommandService', () => {
     }
     expect(service.stateParameters(integerDefinition, { m: 1 })).toEqual({ m: 1 })
     expect(() => service.stateParameters(integerDefinition, { m: 0.5 }))
-      .toThrowError(/finite integer/)
+      .toThrowError(/safe integer/)
+    expect(() => service.stateParameters(
+      integerDefinition,
+      { m: Number.MAX_SAFE_INTEGER + 1 },
+    )).toThrowError(/safe integer/)
 
     const noParameters = { id: 'NoParameters', parameters: [] }
     expect(service.stateParameters(noParameters)).toEqual({})
