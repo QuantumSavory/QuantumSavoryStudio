@@ -320,6 +320,8 @@ function validateTopology(source) {
   const nodes = source.net.nodes
   const nodeIds = new Set()
   const edgeIds = new Set()
+  const slotIds = new Set()
+  const protocolIds = new Set()
   const physicalEndpointPairs = new Set()
 
   normalizePhysicalConfig(source.net.physicalConfig)
@@ -328,11 +330,29 @@ function validateTopology(source) {
     const id = node.id
     if (nodeIds.has(id)) throw new Error(`Project contains duplicate node ID: ${id}`)
     nodeIds.add(id)
+    for (const slot of node.data.slots) {
+      if (slotIds.has(slot.id)) {
+        throw new Error(`Project contains duplicate slot ID: ${slot.id}`)
+      }
+      slotIds.add(slot.id)
+    }
+    for (const protocol of node.data.protocols) {
+      if (protocolIds.has(protocol.id)) {
+        throw new Error(`Project contains duplicate protocol ID: ${protocol.id}`)
+      }
+      protocolIds.add(protocol.id)
+    }
   }
 
   for (const edge of source.net.edges) {
     if (edgeIds.has(edge.id)) throw new Error(`Project contains duplicate edge ID: ${edge.id}`)
     edgeIds.add(edge.id)
+    for (const protocol of edge.data.protocols) {
+      if (protocolIds.has(protocol.id)) {
+        throw new Error(`Project contains duplicate protocol ID: ${protocol.id}`)
+      }
+      protocolIds.add(protocol.id)
+    }
     const sourceId = edge.source
     const targetId = edge.target
     if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) {
@@ -347,6 +367,13 @@ function validateTopology(source) {
       normalizeCurvePoints(edge.data.curvePoints, edge.id)
       normalizePhysicalOverrides(edge.data.physicalOverrides, edge.id)
     }
+  }
+
+  for (const protocol of source.net.protocols) {
+    if (protocolIds.has(protocol.id)) {
+      throw new Error(`Project contains duplicate protocol ID: ${protocol.id}`)
+    }
+    protocolIds.add(protocol.id)
   }
 }
 

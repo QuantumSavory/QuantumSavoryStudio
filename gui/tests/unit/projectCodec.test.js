@@ -691,7 +691,7 @@ describe('decodeStoredProject', () => {
     expect(raw).toEqual(original)
   })
 
-  it('rejects duplicate node or edge IDs and dangling edge references', () => {
+  it('rejects duplicate durable IDs and dangling edge references before hydration', () => {
     const project = storedProject()
     project.net.nodes[1].id = project.net.nodes[0].id
     expect(() => decodeStoredProject(project)).toThrow(/duplicate node ID/)
@@ -703,6 +703,25 @@ describe('decodeStoredProject', () => {
     const dangling = storedProject()
     dangling.net.edges[0].target = 'missing_node'
     expect(() => decodeStoredProject(dangling)).toThrow(/references a missing node/)
+
+    const duplicateSlot = storedProject()
+    duplicateSlot.net.nodes[1].data.slots[0].id =
+      duplicateSlot.net.nodes[0].data.slots[0].id
+    const originalDuplicateSlot = structuredClone(duplicateSlot)
+    expect(() => decodeStoredProject(duplicateSlot)).toThrow(/duplicate slot ID/)
+    expect(duplicateSlot).toEqual(originalDuplicateSlot)
+
+    const duplicateNodeEdgeProtocol = storedProject()
+    duplicateNodeEdgeProtocol.net.edges[0].data.protocols[0].id =
+      duplicateNodeEdgeProtocol.net.nodes[0].data.protocols[0].id
+    expect(() => decodeStoredProject(duplicateNodeEdgeProtocol))
+      .toThrow(/duplicate protocol ID/)
+
+    const duplicateEdgeFloatingProtocol = storedProject()
+    duplicateEdgeFloatingProtocol.net.protocols[0].id =
+      duplicateEdgeFloatingProtocol.net.edges[0].data.protocols[0].id
+    expect(() => decodeStoredProject(duplicateEdgeFloatingProtocol))
+      .toThrow(/duplicate protocol ID/)
   })
 
   it('rejects malformed and duplicate persisted annotations', () => {

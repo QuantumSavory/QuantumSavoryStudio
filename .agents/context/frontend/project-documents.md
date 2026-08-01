@@ -35,8 +35,8 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 
 Encoding and projection helpers must not mutate their input. In memory, edges retain
 `Node` references; durable documents store endpoint IDs and hydrate references on decode.
-Project admission rejects duplicate node or edge IDs before hydration so those references
-remain unambiguous.
+Project admission rejects duplicate node, edge, globally scoped slot, or globally scoped
+protocol IDs before hydration so references and by-ID operations remain unambiguous.
 The codec emits explicit declared-field projections and does not preserve undeclared
 additive fields. The schema names two extension points: recursive, untagged `Any`
 parameter values for simulator-owned opaque data, and the numeric parameter map owned
