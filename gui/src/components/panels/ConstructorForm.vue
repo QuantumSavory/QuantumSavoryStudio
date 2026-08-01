@@ -269,12 +269,12 @@ function parameterInputOptions(param) {
 function initializeParameter(param) {
   if (isVariableAssigned(param)) {
     const linkedOption = inputOptionForVariable(param, assignedVariable(param))
-    const selection = resolveParameterInputOption(
-      parameterInputOptions(param),
-      param,
-      { expectedOption: linkedOption },
-    )
-    if (!selection.explicit && selection.option) param.selectedType = selection.option.id
+    if (linkedOption) {
+      param.selectedType = linkedOption.id
+    } else {
+      const selection = resolveParameterInputOption(parameterInputOptions(param), param)
+      if (!selection.explicit && selection.option) param.selectedType = selection.option.id
+    }
     initializedParameters.add(param)
     return
   }
