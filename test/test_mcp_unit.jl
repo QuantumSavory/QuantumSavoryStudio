@@ -458,18 +458,16 @@
     WebQuantumSavory.bind_editor!(saturated_hub, binding_request())
     waiters = Task[]
     for _ in 1:WebQuantumSavory.MCP_COMMAND_QUEUE_SIZE
-      push!(
-        waiters,
-        @async try
-          WebQuantumSavory.enqueue_browser_command!(
-            saturated_hub,
-            Dict("type" => "design_get");
-            timeout_seconds=2,
-          )
-        catch error
-          error
-        end,
-      )
+      waiter = @async try
+        WebQuantumSavory.enqueue_browser_command!(
+          saturated_hub,
+          Dict("type" => "design_get");
+          timeout_seconds=2,
+        )
+      catch error
+        error
+      end
+      push!(waiters, waiter)
     end
     @test timedwait(
       () -> lock(saturated_hub.lock) do

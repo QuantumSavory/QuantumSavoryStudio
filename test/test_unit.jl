@@ -4515,6 +4515,7 @@
       (error, catch_backtrace())
     end
     metadata_context = Dict(:slot => 3, :active => true)
+    colliding_metadata = Dict{Symbol,Any}(:module => :module_metadata)
     logger = WebQuantumSavory.Logger.make_logger(structured_state)
     Logging.handle_message(
       logger,
@@ -4535,7 +4536,7 @@
       context=metadata_context,
       exception=(captured_error, captured_backtrace),
       logging_module=:prefixed_module_metadata,
-      module=:module_metadata,
+      colliding_metadata...,
     )
     metadata_context[:slot] = 99
     WebQuantumSavory.Logger.log_event(
