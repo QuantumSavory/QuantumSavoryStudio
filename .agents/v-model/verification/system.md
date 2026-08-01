@@ -34,15 +34,15 @@ gaps recorded below.
 
 - **Covers:** SYS-004
 - **Method:** test
-- **Procedure:** Fetch real catalogs, render every input kind including floating and integer state controls, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, fractional/unsafe-integer, malformed/missing-metadata, unsupported, invalid-placement, and contradictory explicit values.
+- **Procedure:** Fetch real catalogs, render every input kind including canonical named-tag `DataType` and floating/integer state controls, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, concrete/null/legacy-Default Variable, fractional/unsafe-integer, malformed/missing-metadata, unsupported/aliased, invalid-placement, and contradictory explicit values.
 - **Environment / configuration:** Real browser/backend with no intercepted catalog routes
-- **Pass criterion:** Choices, numeric kinds, bounds, and requiredness derive from current metadata or explicit allowlists; floating values, JavaScript-safe integers, required values, and optional omission round-trip, while unsafe or fractional integers, malformed/missing metadata, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
+- **Pass criterion:** Choices, numeric kinds, bounds, requiredness, and named-tag kind/nullability derive from current metadata or explicit allowlists; named tags use canonical `DataType`, and floating values, JavaScript-safe integers, required values, concrete Variables, and optional omission round-trip. Unsafe/fractional integers, malformed/missing metadata, descriptor aliases, Default/null Variables, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
 - **Status:** planned
 - **Evidence:** Automated precursors in [`test/test_unit.jl`](../../../test/test_unit.jl), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
 - **Nonconformance:** No current supported real-browser/backend action exercises the
-  complete SimpleSwitch and catalog-failure matrix, and the exact upstream pin is not
-  remotely reachable. Existing real-browser coverage is limited to one background
-  catalog; other input and failure kinds remain separate or mocked.
+  complete constructor, attachment-role, and catalog-failure matrix. Existing
+  real-browser coverage is limited to one background catalog; other input and failure
+  kinds remain separate or mocked.
 
 ## SYSV-005 — Verify GUI simulation lifecycle
 
@@ -92,9 +92,9 @@ gaps recorded below.
 
 - **Covers:** SYS-017
 - **Method:** test
-- **Procedure:** Import and reopen schema-valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents through the real browser product.
+- **Procedure:** Import and reopen structurally valid version-2, older, newer, negative, missing, non-integer, malformed, undeclared-field-at-each-application-boundary, and structurally invalid documents, plus schema-valid-but-semantically-invalid branch/reference fixtures including legacy Default/null Variables and named-tag aliases, through the real browser product.
 - **Environment / configuration:** Supported browser with real storage, codec, import/session flow, and Tools Log
-- **Pass criterion:** Documents valid against `contracts/project/v2.schema.json` open; the co-shipped schema closes every application-owned object and names any extension point explicitly; every other class fails before hydration/session/storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
+- **Pass criterion:** Documents that pass both `contracts/project/v2.schema.json` and catalog-independent semantic admission open; the co-shipped schema closes every application-owned object and names any extension point explicitly. Variables are concrete/non-null, named tags use canonical `DataType`, and durable constructor omission has only the Default/null representation; live-catalog authoring/backend admission separately proves optionality. Every branch/reference contradiction fails before normalization, hydration, platform/session, or storage effects with structured expected/actual/path diagnostics, and source and stored input remain unchanged.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/e2e/project-session.spec.js`](../../../gui/tests/e2e/project-session.spec.js), [`gui/tests/e2e/description.spec.js`](../../../gui/tests/e2e/description.spec.js)
 - **Nonconformance:** Focused browser tests prove version-2 save/reopen/import and a

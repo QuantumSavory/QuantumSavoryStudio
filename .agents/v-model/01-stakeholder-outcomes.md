@@ -69,9 +69,9 @@ replacement, operation-ledger, and broad-platform outcomes rather than reusing t
 
 ## STK-010 — Open only current-schema project documents
 
-- **Normative statement:** A GUI user shall receive a clear refusal when a project document is not written in the current project schema, without a migration or compatibility promise.
+- **Normative statement:** A GUI user shall receive a clear refusal when a project document does not satisfy the current structural schema and catalog-independent semantic admission rules, without a migration or compatibility promise.
 - **Parents:** None
-- **Acceptance criterion:** A document conforming to the co-shipped closed current schema opens, while older, newer, negative, missing, non-integer, malformed, or undeclared-field documents fail with a structured visible reason and are not rewritten or deleted.
+- **Acceptance criterion:** A document conforming to the co-shipped closed current schema and its durable branch/reference invariants opens, while structurally invalid or schema-valid-but-semantically-invalid documents fail with a structured visible reason before hydration or I/O and are not rewritten or deleted.
 - **Verification:** ACC-010 (demonstration)
 - **Origin / risk:** Maintainer-approved release-2.0 breaking schema policy; high user-data risk
 - **Context:** [Project documents](../context/frontend/project-documents.md)

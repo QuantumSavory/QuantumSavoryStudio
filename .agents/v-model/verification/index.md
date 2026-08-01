@@ -1,18 +1,17 @@
 # Verification and Acceptance
 
-The strict project-schema and candidate-first replacement slices have implemented
-component and integration evidence pending current frontend execution, plus incomplete
-browser-system evidence. The canonical platform-information boundary has implemented
-backend, OpenAPI, frontend admission, display, and durable-project artifacts pending
-execution. The canonical diagnostic-event boundary has implemented backend, OpenAPI,
-frontend admission/conversion, and HTTP/GUI handoff artifacts pending execution. MCP
-metadata/result resources and exact project projection have implemented component and
-integration artifacts pending current durable runs; MCP recovery and transport have
-implemented but incomplete integration/system artifacts. Backend exact-request
-admission and contract-parity artifacts await execution after the identifier correction.
-Supported-environment verification and acceptance are blocked by an exact QuantumSavory
-revision that cannot be fetched from its declared upstream. Other release-2.0 actions
-retain their recorded status; no acceptance demonstration is passing.
+The strict project-admission and candidate-first replacement slices have implemented
+component and integration artifacts plus incomplete combined and browser-system
+matrices. The canonical platform-information and diagnostic-event boundaries have
+implemented backend, OpenAPI, frontend, and durable-project or HTTP/GUI handoff
+artifacts, with the cross-boundary gaps recorded in their actions. MCP metadata/result
+resources and exact project projection have implemented component and integration
+artifacts; MCP recovery and transport retain incomplete integration/system matrices.
+Backend exact-request admission and contract-parity artifacts are implemented, while a
+single live-HTTP malformed-branch/construction-canary matrix remains absent. The exact
+QuantumSavory revision is reachable; supported-environment verification still lacks its
+save/reopen segment and full durable run artifact. Other release-2.0 actions retain
+their recorded status; no acceptance demonstration is passing.
 
 ## Action routes
 

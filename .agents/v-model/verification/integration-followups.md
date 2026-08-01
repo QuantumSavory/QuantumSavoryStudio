@@ -33,18 +33,27 @@
 
 - **Covers:** SUB-015
 - **Method:** test
-- **Procedure:** Admit schema-valid version-2, older, newer, negative, missing,
+- **Procedure:** Admit structurally valid version-2, older, newer, negative, missing,
   non-integer, malformed, undeclared-field-at-each-application-boundary, and
-  structurally invalid documents while observing decode, source identity, and storage.
+  structurally invalid documents; add schema-valid-but-semantically-invalid closed
+  branch (including legacy Default/null Variables and named-tag aliases),
+  duplicate-Variable, and dangling/incompatible-reference fixtures while
+  observing normalization, hydration, platform lookup, source identity, and storage.
 - **Environment / configuration:** Vitest/jsdom with real codec, admission boundary,
   co-shipped JSON Schema validator, and storage spies
-- **Pass criterion:** Only input valid against `contracts/project/v2.schema.json`
-  reaches normalization/hydration; every application-owned object rejects undeclared
-  fields unless the schema explicitly names an extension point; every rejection is
-  structured, and no source or browser-storage mutation occurs during admission.
+- **Pass criterion:** Only input that passes `contracts/project/v2.schema.json` and
+  catalog-independent semantic admission reaches normalization/hydration; every
+  application-owned object rejects undeclared fields unless the schema explicitly names
+  an extension point, and durable branches/references remain mutually consistent.
+  Variables are concrete/non-null, named tags use canonical `DataType`, and durable
+  constructor omission has only the Default/null representation. Optionality remains a
+  live-catalog authoring/backend check. Every rejection is structured, and no
+  source mutation, platform request, or browser-storage effect occurs during admission.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** No current frontend execution record exists after the canonical platform-information boundary correction.
+- **Nonconformance:** No one integration table spans every structural boundary and every
+  semantic branch/reference failure while observing source, platform, hydration, and
+  storage effects together.
 
 ## INTV-016 — Verify candidate-first active-project transitions
 

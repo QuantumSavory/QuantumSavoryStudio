@@ -23,6 +23,13 @@
 - Made live simulator catalogs the admission boundary for direct, copied, and generated
   authoring. Unknown IDs, invalid placement, contradictory descriptors, incompatible
   Variables, and unavailable or malformed catalogs leave the design unchanged.
+- Removed the legacy Default Variable branch from project schema v2, OpenAPI, browser
+  authoring, MCP commands, backend admission, and script export. Variables now require
+  one concrete non-null typed value; exact JSON null remains only the omission form for
+  an optional constructor keyword, with no migration or compatibility adapter.
+- Split project admission into the co-shipped schema's closed structural field boundary
+  and a catalog-independent semantic pass for exact branches, safe integers, duplicate
+  Variables, and dangling or incompatible references.
 - Made MCP contract v2 the sole collaboration registry. The v1 registry and adapters
   were removed; v2 adds canonical design readback, catalog and simulation resources,
   structured result resources, exact revisions, and guarded recovery from uncertain
@@ -37,6 +44,14 @@
 
 ### Major changes
 
+- Unified construction-free backend parameter admission so preflight, runtime, and
+  script export share exact descriptor, Variable, requiredness, and numeric-bound checks
+  before evaluation or construction. Runtime materializes only source-bearing branches;
+  export only renders admitted branches and never constructs simulator values.
+- Added an opaque JSON editor for simulator-owned `Any` constructor values and kept
+  invalid text in editor-local draft state. Numeric draft parsing now checks the raw
+  decimal lexeme before conversion, preventing unsafe integers from rounding into the
+  durable model.
 - Unified GUI Play and MCP simulation readiness behind one browser-controller path that
   flushes editor drafts, serializes design work, validates once, and parses, prepares,
   or runs only when required.

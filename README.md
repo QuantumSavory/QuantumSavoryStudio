@@ -10,7 +10,8 @@ WebQuantumSavory 2.0 intentionally supports only its current co-shipped contract
 
 - saved or imported projects must satisfy
   [`contracts/project/v2.schema.json`](contracts/project/v2.schema.json) with
-  `schemaVersion: 2`; there is no schema-v1 migration;
+  `schemaVersion: 2` and the codec's catalog-independent branch/reference invariants;
+  there is no schema-v1 migration or compatibility normalization;
 - parse and script-export requests use distinct closed OpenAPI schemas and reject
   undeclared fields rather than coercing older payloads;
 - [`contracts/mcp/v2/contract.json`](contracts/mcp/v2/contract.json) is the sole MCP
@@ -197,7 +198,10 @@ Constructor parameter values have three closed tagged forms: variable references
 numeric expressions, and States Zoo recipes. Untagged recursive JSON is the explicit
 simulator-owned extension point; an object inside it cannot contain a `kind`
 discriminator. This keeps Web-owned tags exact without duplicating QuantumSavory's
-constructor schemas.
+constructor schemas. Primitive values retain their JSON type, constructor/project
+integers must be JavaScript-safe, and numeric strings or stringified arrays are never
+coerced. Simulation Variables always carry one concrete non-null typed value; JSON null
+is reserved for omission of an optional constructor keyword.
 
 ### Core Simulation Workflow
 
@@ -266,8 +270,11 @@ Saved/imported project documents are distinct from minimized simulator requests.
 closed [`contracts/project/v2.schema.json`](contracts/project/v2.schema.json) contract
 requires `schemaVersion: 2` plus the durable description, annotations, variables,
 simulation configuration, network, and physical configuration. Older or unversioned
-documents are rejected without normalization, migration, storage rewriting, or partial
-session replacement. Complete current examples live under
+documents, contradictory durable branches, duplicate Variables, and dangling or
+incompatible Variable references are rejected before normalization, hydration,
+platform lookup, storage rewriting, or partial session replacement. Variables must use
+a concrete non-null branch; the legacy `type: "default", value: null` form is invalid.
+Complete current examples live under
 [`gui/src/demos/`](gui/src/demos/).
 
 ### Physical Links
@@ -317,12 +324,13 @@ QuantumSavory constructor metadata
   → minimized base Julia type plus tagged value
 ```
 
-Every editable constructor parameter begins with a **Default** choice. Default
-stores no value and omits the keyword from simulator and script-export payloads,
-so the QuantumSavory constructor applies its own default. Catalog `defaultValue`
-metadata is help text only; a new project does not copy it into the draft.
-Choosing an explicit literal, function, tag, or expression starts an empty
-editor and requires a valid value before it is committed.
+An optional constructor parameter begins with a **Default** choice. Default stores no
+value and omits the keyword from simulator and script-export payloads, so the
+QuantumSavory constructor applies its own default. Required parameters and Variables
+have no Default branch. Catalog `defaultValue` metadata is help text only; a new project
+does not copy it into the draft. Choosing an explicit literal, function, tag, opaque
+JSON, or expression starts an editor draft and requires a valid value before commit;
+invalid draft text never enters the durable model.
 
 `Float64` and `Int64` parameters and Variables can use a Julia numeric
 expression. The declared type remains `Float64` or `Int64`; project JSON stores

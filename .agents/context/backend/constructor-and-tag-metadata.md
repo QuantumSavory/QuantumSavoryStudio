@@ -37,11 +37,11 @@ descriptor atomically or fails.
 Every QuantumSavory `ConstructorFieldSchema` declares a mandatory `required::Bool`.
 Web projects constructor parameters as the exact object
 `{field,type,doc,required,min,max}`; named-tag fields add their declared `kind` and
-`nullable` members. The current simulator catalog marks only
-`SimpleSwitchDiscreteProt.clientnodes` and `success_probs` as required. Required fields
-must be present and complete, while omission of an optional field deliberately delegates
-to the simulator keyword default. Do not serialize concrete defaults as a substitute:
-simulator defaults are not a stable JSON contract.
+`nullable` members. Requiredness is read per field from the pinned catalog rather than
+duplicated as a Web list. Required fields must be present and complete, while omission
+of an optional field deliberately delegates to the simulator keyword default. Do not
+serialize concrete defaults as a substitute: simulator defaults are not a stable JSON
+contract.
 
 QuantumSavory owns keyword construction and hidden runtime state. In particular,
 `SimpleSwitchDiscreteProt` creates a fresh private `_backlog` from its required public
@@ -54,10 +54,20 @@ sentinels. Numeric strings are not a wire form. Only JSON null omits a construct
 keyword, and Function/Lambda text matching `default` after case-folding and trimming is
 invalid.
 
+`_admit_constructor_parameters` is the pure shared classifier for preflight, runtime,
+and script export.
+It resolves declared fields, omission, exact transport branches, linked Variables,
+opaque/named-tag values, safe integers, and numeric bounds without evaluating source or
+calling a simulator constructor. Runtime assigns admitted literals directly and only
+evaluates or constructs source-bearing branches. Script export consumes the same records
+and only renders each branch; it never constructs a simulator value.
+
 The browser validates the complete protocol/background catalog response before
 publishing either half. Authoring removes `Default` from required fields, treats a
 required Boolean as unresolved until the user chooses `true` or `false`, and rejects a
-missing, stale, incompatible, or Default-valued linked Variable. GUI and MCP simulation
+missing, stale, null, legacy-Default, or incompatible linked Variable. Variables always
+carry a concrete non-null branch; Default remains only optional constructor omission.
+GUI and MCP simulation
 readiness use the same live-catalog validator and fail closed while either constructor
 catalog is unavailable. The closed OpenAPI catalog schemas include `required`; `/docs`
 continues to render generated Swagger UI from the active OpenAPI document, and generated
@@ -86,6 +96,11 @@ Generator-supplied definitions may seed drafts but cannot authorize a type, plac
 or parameter schema. Validation covers the whole candidate network because generators
 may attach tracker protocols to existing endpoint owners.
 
+Simulator attachment metadata maps `NetworkAttachment`, `NodeAttachment`, and
+`EdgeAttachment` to Web floating, node, and edge placement. Attachment-bound node roles
+are injected from the owning location; configurable node roles remain explicit public
+constructor fields.
+
 Symbolic fields are classified from the declared Julia type's identity or subtyping
 under `QuantumSavory.SymQObj`, then projected as the stable Web wire type `Symbolic`.
 The frontend does not interpret package-qualified symbolic type spellings.
@@ -107,7 +122,9 @@ frontend formula.
 
 A constructor field is a named-tag-type field only when the authoritative Julia member
 is `Type{<:AbstractTag}` or that type unioned with `Nothing`. Do not infer the semantic
-from saved strings. Fully qualified catalog IDs are used for safe resolution, and
+from saved strings. The Web catalog projects that member as the stable `DataType` wire
+descriptor, or `["Nothing", "DataType"]` when nullable, together with
+`kind: "named_tag_type"`. Fully qualified catalog IDs are used for safe resolution, and
 nullability comes from current constructor metadata.
 
 General tag tooling derives converter/signature choices from the runtime catalog and
@@ -118,12 +135,11 @@ availability depends on a retained register/network.
 ## Compatibility boundary
 
 The root and test projects declare QuantumSavory `0.8` compatibility and source exact
-revision `0851ab9ade45f37e278a11846fbec9d8f522dabe`; no Julia manifest is committed.
+revision `b7d3de510e7fec103dfcb2b516782bcc253f2a93`; no Julia manifest is committed.
 Changing that revision is therefore the explicit point at which maintainers must review
-catalog projections, fixtures, generated imports, and this reference together. As of
-2026-07-31 that revision is not exposed by the declared upstream remote, so a release or
-fresh supported-environment run is blocked until the upstream commit is published or
-the pin is replaced by a reachable equivalent.
+catalog projections, fixtures, generated imports, and this reference together. Release
+preparation separately verifies that the exact revision is reachable from the declared
+upstream URL.
 
 ## Anchors
 

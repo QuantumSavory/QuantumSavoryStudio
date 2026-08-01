@@ -26,7 +26,7 @@ actions.
 
 - **Normative statement:** The backend shall expose the current constructor, placement, tag, representation, and structured-state metadata needed by the GUI without requiring it to duplicate simulator catalogs.
 - **Parents:** STK-001, STK-002
-- **Acceptance criterion:** The GUI renders and submits each advertised input kind from returned metadata, including distinct finite floating and JavaScript-safe integer state parameters, distinguishes required values from optional keyword omission, and resolves direct, copied, and generated catalog-backed assignments through current metadata; missing or malformed metadata, unavailable constructor catalogs before transport, unsupported or non-advertised types, unsafe or fractional integer-state values, omitted required fields, invalid placement, and explicit descriptor/value contradictions are rejected without changing the design or dispatching simulation; explicit allowlists do not silently expand with dependency internals.
+- **Acceptance criterion:** The GUI renders and submits each advertised input kind from returned metadata, including stable `DataType` named-tag descriptors and distinct finite floating and JavaScript-safe integer state parameters, distinguishes required values from optional constructor-keyword omission, keeps every Variable on a concrete non-null branch, and resolves direct, copied, and generated catalog-backed assignments through current metadata; missing or malformed metadata, unavailable constructor catalogs before transport, unsupported or non-advertised types, unsafe or fractional integer-state values, omitted required fields, legacy Default/null Variables or descriptor aliases, invalid placement, and explicit descriptor/value contradictions are rejected without changing the design or dispatching simulation; explicit allowlists do not silently expand with dependency internals.
 - **Verification:** SYSV-004 (test)
 - **Origin / risk:** Released metadata-driven inputs; medium dependency-compatibility risk
 - **Context:** [Constructor and tag metadata](../../context/backend/constructor-and-tag-metadata.md)
@@ -69,9 +69,9 @@ actions.
 
 ## SYS-017 — Enforce the current project schema
 
-- **Normative statement:** The product shall admit only documents carrying exact integer schema version 2 and satisfying the co-shipped closed version-2 JSON Schema, and shall refuse every other marker or shape before hydration or decode side effects.
+- **Normative statement:** The product shall admit only documents carrying exact integer schema version 2, satisfying the co-shipped closed version-2 JSON Schema, and satisfying catalog-independent durable branch/reference invariants before normalization, hydration, or I/O.
 - **Parents:** STK-010
-- **Acceptance criterion:** The current encoder emits documents valid against the co-shipped version-2 schema; that contract closes every application-owned object boundary and exposes no extension point unless it names one explicitly; older, newer, negative, missing, non-integer, malformed, or unsupported-field inputs return structured expected/actual/path diagnostics without modifying or deleting the input.
+- **Acceptance criterion:** The current encoder emits structurally and semantically admissible version-2 documents; the schema closes every application-owned object boundary and names each extension point, while semantic admission rejects contradictory `type`/`selectedType`/value branches, duplicate Variables, and dangling or incompatible Variable references; structural and semantic failures return structured expected/actual/path diagnostics without modifying the input or starting hydration, platform lookup, or storage effects.
 - **Verification:** SYSV-018 (test)
 - **Origin / risk:** Maintainer-approved release-2.0 breaking schema contract; high compatibility/data-loss risk
 - **Context:** [Project documents](../../context/frontend/project-documents.md)

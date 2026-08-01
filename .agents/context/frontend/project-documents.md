@@ -10,15 +10,11 @@
 - **Review when:** A durable field, schema version, admission rule, normalization,
   projection, storage key, or project-transition phase changes.
 
-Normative release-2.0 behavior is defined by
-[SYS-017](../../v-model/02-system-requirements/gui-and-simulation.md#sys-017--enforce-the-current-project-schema),
+Normative behavior: [SYS-017](../../v-model/02-system-requirements/gui-and-simulation.md#sys-017--enforce-the-current-project-schema),
 [SYS-018](../../v-model/02-system-requirements/operations-and-deployment.md#sys-018--commit-project-replacement-only-after-candidate-preparation),
 [CMP-014](../../v-model/04-component-contracts/projects-platform.md#cmp-014--strict-project-codec-admission),
-and
-[CMP-015](../../v-model/04-component-contracts/projects-platform.md#cmp-015--candidate-first-project-session-transaction).
-The strict-schema and candidate-first transaction chains through CMP-015 are
-implemented, but need a current frontend execution record after the platform-information
-boundary correction; the exhaustive candidate-first browser-system matrix remains
+and [CMP-015](../../v-model/04-component-contracts/projects-platform.md#cmp-015--candidate-first-project-session-transaction).
+Durable component artifacts exist; combined admission and browser-session matrices remain
 incomplete.
 
 ## Canonical shapes
@@ -33,38 +29,32 @@ use IDs and plain data. `projectCodec.js` is the current translation boundary.
 | Simulation payload | Exact `name`/`variables`/representation-config/`net` projection and all resolved physical values | Storage/UI state, descriptions, annotations, run timing |
 | Script-export payload | Fresh clone of the simulation projection plus positive `time`/`timeStep` | Frontend-only presentation data and undeclared caller fields |
 
-Encoding and projection helpers must not mutate their input. In memory, edges retain
-`Node` references; durable documents store endpoint IDs and hydrate references on decode.
-Project admission rejects duplicate node, edge, globally scoped slot, or globally scoped
-protocol IDs before hydration so references and by-ID operations remain unambiguous.
-The codec emits explicit declared-field projections and does not preserve undeclared
-additive fields. The schema names two extension points: recursive, untagged `Any`
-parameter values for simulator-owned opaque data, and the numeric parameter map owned
-by a selected StatesZoo state family. Objects with a `kind` discriminator remain
-governed by closed tagged-value definitions.
+Encoding/projection never mutates input. Memory edges hold `Node` references; documents
+store endpoint IDs and hydrate them on decode. Admission rejects duplicate node, edge,
+global slot, or global protocol IDs before hydration. Declared-field projections drop
+extras. The only schema extension points are recursive untagged `Any` parameter data and
+a selected StatesZoo family's numeric map; `kind` objects remain closed tags.
 
-API projection is stricter than editable-state normalization. It requires explicit
-qubit and qumode representations and never supplies a backend default. Script export
-does not merge an override object into the simulation configuration: it carries those
-representation choices from the simulation payload and accepts only the two positive
-timing values from the export panel.
+API projection requires explicit qubit/qumode representations and supplies no backend
+default. Export reuses them and accepts only the panel's two positive timing values.
 
-`contracts/project/v2.schema.json` is the sole canonical durable field authority. The
-co-shipped JSON Schema closes every application-owned object boundary with
-`additionalProperties: false`; no nested map is extensible unless the schema explicitly
-names that extension point. Numeric constructor and Variable branches store scalars as
-finite JSON numbers and vectors as JSON-number arrays (integral for integer branches),
-while Boolean, string, and intrinsic branches retain exact JSON/sentinel types.
-Constructor Variable references are tagged objects. Numeric strings and
-Function/Lambda Default aliases are invalid.
+`contracts/project/v2.schema.json` owns durable fields and closes every owned object.
+After structural validation, `projectCodec` enforces exact
+`type`/`selectedType`/value agreement, safe integer members, unique Variable IDs/names,
+and compatible resolvable references. Numeric branches contain finite JSON numbers;
+integers are integral and JavaScript-safe. Other branches retain exact JSON/sentinels.
+Scalar and union-array descriptors use the same co-shipped canonical type vocabulary;
+new simulator descriptor types require a deliberate code/schema update.
+Variables are concrete/non-null and references are closed tags. Numeric strings, legacy
+Default Variables, and Function/Lambda Default aliases are invalid.
+Durable parameters do not retain live-catalog requiredness, so this independent pass
+validates the exact Default/null omission representation but not field optionality;
+catalog-backed authoring and backend admission own that decision.
 
-Platform information has two deliberately different wire shapes. The private backend
-DTO is closed and snake-cased, including `versions.quantumsavory`, detailed top-level
-`quantumsavory` metadata, and capabilities. Durable schema-v2 documents retain only the
-closed version record and intentionally spell `versions.quantumSavory` in camel case.
-`projectPlatformInfoFromBackend` is the sole conversion owner. The project encoder
-accepts the exact durable record only; it does not fill missing keys, consume the raw
-backend object, or recognize spelling aliases.
+Platform shapes differ deliberately: the closed private DTO is snake-cased with details
+and capabilities; durable v2 keeps only closed versions and camel-case
+`versions.quantumSavory`. `projectPlatformInfoFromBackend` alone converts them. Encoding
+accepts no missing keys, raw DTO, or spelling alias.
 
 ## Current strict-schema behavior
 

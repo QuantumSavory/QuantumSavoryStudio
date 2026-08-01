@@ -121,12 +121,11 @@ their status.
 - **Procedure:** Install dependencies, build, launch the integrated production application, and complete the primary model/save/Play workflow.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** The exact supported matrix entry installs, starts the production bundle, and completes the workflow without an environment-specific failure.
-- **Status:** blocked
+- **Status:** implemented
 - **Evidence:** [`Project.toml`](../../../Project.toml),
   [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** As of 2026-07-31, pinned QuantumSavory commit
-  `0851ab9ade45f37e278a11846fbec9d8f522dabe` is absent from declared upstream
-  refs, blocking clean installation. Publish it or pin a reachable equivalent; the
-  action still omits save/reopen and lacks durable run evidence.
+- **Nonconformance:** The projects select reachable QuantumSavory commit
+  `b7d3de510e7fec103dfcb2b516782bcc253f2a93`, but the maintained action omits the
+  save/reopen segment and does not retain one full supported-environment run artifact.

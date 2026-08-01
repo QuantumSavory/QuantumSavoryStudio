@@ -10,99 +10,85 @@
 
 ## Atomic design operations
 
-`DesignCommandService` owns the transport-neutral operation registry used by MCP and
-migrated GUI actions. Commands execute on an isolated candidate, validate, then
-reconcile atomically while retained durable entities preserve identity.
+`DesignCommandService` owns the operation registry used by MCP and GUI actions. Commands
+validate an isolated candidate, then reconcile atomically while retained entities
+preserve identity. The browser assigns durable IDs and transaction-local `client_ref`
+aliases; callers cannot choose them, and failed candidates change nothing.
 
-The browser assigns new durable IDs and resolves transaction-local `client_ref` aliases;
-MCP callers cannot choose them. A failed candidate must not partially change the project.
-
-Simulation-affecting operations are rejected while editing is locked. A transaction
-containing any such operation is rejected as a whole. Descriptions and annotations
-remain editable because their project projections do not affect simulation.
-
-The prospective shared-handler rule is defined by
+When editing is locked, a transaction containing simulation-affecting work fails as a
+whole; descriptions and annotations remain editable. See
 [SUB-003](../../v-model/03-subsystem-contracts/core-application.md#sub-003--shared-atomic-authoring-boundary).
-Current migration remains incomplete; do not use the old router's universal claim that
-all historical GUI mutations already use the service.
 
 ## Constructor descriptors
 
 Editable protocol parameters, background-noise parameters, and Variables use explicit
-descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector offers Default only for optional fields; it clears the value and omits the
-keyword. Required fields have no Default branch, and required Booleans remain unresolved
-until `true` or `false` is chosen. Durable numeric scalars are finite JSON numbers;
-vectors are arrays of finite numbers. Integers are integral and Booleans are not
-numbers. Editors may parse draft text, but codecs and backend reject numeric strings.
-Empty arrays remain valid without an advertised nonempty constraint.
+descriptors with ID, label, input kind, wire type, and enabled state. Default exists only
+for optional constructor fields and omits the keyword. Required fields and Variables
+have no Default branch. Every Variable
+has one concrete non-null semantic type/value branch; intrinsic `Nothing` uses the exact
+`"nothing"` sentinel. Required Booleans remain unresolved until `true` or `false` is
+chosen. Numeric scalars/vectors contain finite JSON numbers. Integers are integral,
+JavaScript-safe, and never Booleans. Editors may parse drafts; commands, codecs, and
+backend reject numeric strings. Empty arrays remain valid unless metadata says otherwise.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
 value and transient validation state.
 
-Constructor member metadata from the backend is authoritative for:
-
-- protocol placement and virtual-edge eligibility;
-- required versus optional keyword construction;
-- nullable unions and named-tag semantics;
-- field-compatible Variable assignment;
-- bounds and target types.
+Backend constructor metadata owns placement/virtual eligibility, requiredness,
+nullability/named tags, Variable compatibility, bounds, and target types.
 
 Never infer named-tag behavior from saved type strings or create a frontend-only protocol
 catalog.
 
-`ConstructorForm` is the shared descriptor/validation/Variable-assignment core for
-protocols and background noise; its thin wrappers differ only in identity, lookup, and
-injected fields. `validateConstructorDraft` is shared by authoring and readiness. A
-required linked Variable must exist, be compatible and complete, and not use Default;
-resolution stays live while the editor is open.
+`ConstructorForm` is the shared protocol/background descriptor and Variable-assignment
+core; wrappers differ only in identity, lookup, and injected fields.
+`validateConstructorDraft` serves authoring and readiness. Linked Variables must exist,
+be concrete, compatible, and complete, with live resolution while editing.
 
 `ProtocolsManager` keeps a required-field addition as a local pending draft. The command
 service creates it once, only after completion; cancellation or incompleteness leaves the
 design unchanged. Optional-only protocols retain immediate creation. Runtime metadata
 is not copied into project documents.
 
-Every background assignment, including Web `default`, and every slot type resolves an
-exact entry in its nonempty live catalog. Slot IDs use the shared object-catalog
-projection; string and literal fallbacks are removed. Missing or unknown metadata aborts
-the candidate. Background parameters use shared constructor validation. Installed
-expressions receive node context; generator templates defer it, then
-`DesignCommandService` revalidates every clone at its final node atomically.
+Every background assignment (including Web `default`) and slot type resolves an exact
+live-catalog entry; no string/literal fallback exists. Missing metadata aborts the
+candidate. Installed expressions receive node context; generator templates defer it,
+then the command service revalidates each clone at its final node.
 
-Network-generator options are not an authority for protocol definitions. After topology
-stabilizes, the command service scans the whole candidate network and resolves every new
-or changed protocol—including tracker protocols added to pre-existing endpoints—by its
-exact type and placement in the live protocol catalog. It applies virtual-edge policy
-and rebuilds parameters from that live definition before commit. Unchanged existing
-protocols are deliberately not reprocessed.
+Generator options are not protocol authority. After topology stabilizes, the command
+service resolves every new/changed protocol (including trackers on existing endpoints)
+by exact live-catalog type and placement, applies virtual-edge policy, and rebuilds its
+parameters. Unchanged protocols are not reprocessed.
 
 Schema-v2 durable parameters carry `selectedType`. An explicit current branch is
 authoritative and must agree with intrinsic `nothing` or `Wildcard` wire values and with
 the referenced Variable's branch. Transport authoring may omit `selectedType`; only
 that omission permits inference. Updates record current catalog types/descriptors and
-drop unknown seeded fields. Default has exactly one durable form: constructor parameters
-use `selectedType: "default", value: null`, while Variables additionally use
-`type: "default"`. Empty strings, string `"default"` sentinels, case variants, and
-Function/Lambda aliases are not Default. Only JSON null omits a constructor keyword;
-blank strings never do. No older-schema migration exists. Variable branch changes
-update every linked descriptor atomically or reject the candidate.
+drop unknown seeded fields. Default has exactly one durable form: an optional constructor
+parameter uses `selectedType: "default", value: null`. Variables never use Default or
+JSON null. Empty strings, string `"default"` sentinels, case variants, and Function/Lambda
+aliases are not Default. Only JSON null omits a constructor keyword; blank strings never
+do. No older-schema migration exists. Variable branch changes update every linked
+descriptor atomically or reject the candidate.
 
-Before transport, `App` injects one protocol/background catalog bundle into the GUI/MCP
-validator. Missing or malformed catalogs produce `CONSTRUCTOR_CATALOG_UNAVAILABLE`;
-invalid constructors produce catalog-backed issues, with no dispatch. Omission is
-reserved for topology-only utility use.
+`App` injects one protocol/background catalog bundle into GUI/MCP validation. Missing or
+malformed catalogs produce `CONSTRUCTOR_CATALOG_UNAVAILABLE`; invalid constructors yield
+catalog-backed issues without dispatch. Omission is topology-utility-only.
 
 ## Draft and validation state
 
 Explicit literal, function, tag, symbolic, or numeric-expression modes begin empty and
 can commit only when complete. `parameter.error` is the shared submission blocker for
 dirty, blank, pending, disabled, missing-context, transport, bound, and source failures.
-Draft text, preview values/errors, requests, and open/collapsed presentation state are
-editor-owned rather than intended project data. Current protocol/background
-normalization nevertheless preserves string `latex`, and codec normalization clones
-additive fields; imported preview/error fields may therefore round-trip as a documented
-conformance gap.
+Drafts, previews/errors, requests, and presentation state are editor-owned. Current
+protocol/background normalization still preserves string `latex` and additive fields,
+so imported preview/error fields may round-trip as a documented gap.
+
+`TypedValueInput` owns raw scalar lexemes until they validate, so unsafe integer text is
+never rounded through a JavaScript `Number` into a command. Its `Any` textarea parses
+JSON on commit, recursively rejects nonfinite values and every object containing
+`kind`, and retains malformed text locally without replacing the last valid model value.
 
 Numeric expressions persist only `{kind:"numeric_expression", source:"..."}` while
 retaining the declared numeric type. Linked Variables validate against each assignment
@@ -110,13 +96,10 @@ without writing transient state back to the shared Variable. See
 [backend source evaluation](../backend/source-evaluation.md) for language and lexical
 semantics.
 
-The shared `.expression-editor` shell keeps fresh or failed manual inputs open; a
-successful validation commits and collapses to a source/result summary.
-`NumericExpressionInput` starts loaded durable source compact, refreshes its preview
-automatically, and reopens on failed revalidation. A linked numeric expression stays
-read-only and reports the assignment-specific result; its validation error belongs to
-the consuming parameter. Editor-open state, requests, previews, and deferred markers
-remain local to that editor lifecycle.
+The `.expression-editor` keeps fresh/failed input open and collapses after commit.
+`NumericExpressionInput` loads durable source compact, refreshes previews, and reopens on
+failure. Linked expressions are read-only and report assignment results/errors; editor
+state remains local.
 
 ## Tags and runtime metadata
 

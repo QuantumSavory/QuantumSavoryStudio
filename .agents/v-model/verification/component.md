@@ -4,14 +4,13 @@
 
 - **Covers:** CMP-002
 - **Method:** test
-- **Procedure:** Run valid and invalid create/update/delete commands, mixed transactions, ID collisions, transaction-local aliases, asynchronous validation, and retained-reference cases; exercise direct GUI/MCP, template-copy, generated slot/background/protocol admission (including a protocol added to an existing generator endpoint), and exact floating/integer state metadata plus required, optional, contradictory, omitted, Boolean, and linked-Variable descriptor branches.
+- **Procedure:** Run valid and invalid create/update/delete commands, mixed transactions, ID collisions, transaction-local aliases, asynchronous validation, and retained-reference cases; exercise already-typed command values separately from UI text drafts; cover direct GUI/MCP, template-copy, generated slot/background/protocol admission (including a protocol added to an existing generator endpoint), and exact floating/integer state metadata plus required, optional, opaque, contradictory, omitted, Boolean, canonical Wildcard, and concrete/null/legacy-Default linked-Variable descriptor branches.
 - **Environment / configuration:** Node Vitest/jsdom
-- **Pass criterion:** Every invalid candidate, including an unsafe or fractional integer-state input, leaves source, selection, retained identities, and commit hooks unchanged; every valid candidate allocates fresh IDs, resolves aliases, distinguishes JavaScript-safe integers from floating state values and required values from optional omission, normalizes constructors from live metadata, preserves each asserted live identity, and updates every retained reference exactly once.
+- **Pass criterion:** Every coercible string/stringified vector and every invalid candidate, including an unsafe or fractional integer, null/Default Variable, or short Wildcard alias, leaves source, selection, retained identities, and commit hooks unchanged; UI integer drafts reject unsafe decimal lexemes before numeric conversion, while already-typed commands accept only finite numbers/arrays. Every valid candidate allocates fresh IDs, resolves aliases, distinguishes JavaScript-safe integers from floating values and concrete Variables from optional constructor omission, preserves exact opaque JSON, normalizes constructors from live metadata, preserves each asserted live identity, and updates every retained reference exactly once.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/stateParameterBounds.test.js`](../../../gui/tests/unit/stateParameterBounds.test.js), [`gui/tests/unit/apiConnector.test.js`](../../../gui/tests/unit/apiConnector.test.js), [`gui/tests/unit/nodePanelBackgroundInputs.test.js`](../../../gui/tests/unit/nodePanelBackgroundInputs.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), [`gui/tests/unit/projectHelpers.test.js`](../../../gui/tests/unit/projectHelpers.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
-- **Nonconformance:** No current supported-environment execution record exists, and no
-  fixture starts with an existing generated ID that collides with the allocator's next
-  candidate.
+- **Nonconformance:** No fixture starts with an existing generated ID that collides with
+  the allocator's next candidate.
 
 ## UNITV-003 — Verify asymmetric topology and edge-role mapping
 

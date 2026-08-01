@@ -1,7 +1,5 @@
 # Component Verification Follow-ups
 
-These actions cover release-2.0 verification gaps.
-
 ## UNITV-010 — Verify reordered-node runtime/export mapping
 
 - **Covers:** CMP-003
@@ -75,34 +73,34 @@ These actions cover release-2.0 verification gaps.
 
 - **Covers:** CMP-013
 - **Method:** test
-- **Procedure:** Feed validation, policy, missing, cleanup, unexpected, network, malformed-success, malformed-error, invalid-JSON, and cancellation fixtures with distinct nested canaries through the JSON reader, API methods, controllers, polling, and log normalization.
+- **Procedure:** Feed classified HTTP, network, malformed, and cancellation canaries through JSON reading, APIs, controllers, polling, and log normalization.
 - **Environment / configuration:** Node 24 Vitest/jsdom frontend utilities and composables
-- **Pass criterion:** Code/classification, message, status, details, method, URL, cause, and diagnostic values reach the specified Log record unchanged; cancellation passes through; no legacy envelope is guessed and no failure becomes message-only, `undefined`, a fallback success, or a swallowed polling result.
+- **Pass criterion:** Classification, message, status, details, request, cause, and diagnostics reach the Log unchanged; cancellation passes through; no legacy guess, message-only error, fallback success, or swallowed poll occurs.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/apiConnector.test.js`](../../../gui/tests/unit/apiConnector.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`gui/tests/unit/simulationLifecycle.test.js`](../../../gui/tests/unit/simulationLifecycle.test.js)
-- **Nonconformance:** The component harness covers canonical 400/403/404/500 parsing, network/malformed/cancellation branches, lifecycle not-found, status-log handoff, and log-poll retry/deduplication. Cleanup-specific and real-browser visible-log discrimination remain at INTV-009/SYSV-008.
+- **Nonconformance:** Cleanup-specific and browser-visible discrimination remain at INTV-009/SYSV-008.
 
 ## UNITV-019 — Verify strict project-codec admission
 
 - **Covers:** CMP-014
 - **Method:** test
-- **Procedure:** Validate and encode/decode schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field fixtures at every application-owned object boundary, plus hydration, cloning, and source-nonmutation fixtures.
+- **Procedure:** Encode/decode valid v2; invalid version/shape/extra-field fixtures at each owned boundary; invalid branch/reference fixtures including Default/null Variables and named-tag aliases; exact-object and safe-integer canaries; hydration, cloning, and source immutability.
 - **Environment / configuration:** Node Vitest/jsdom with the co-shipped `contracts/project/v2.schema.json`
-- **Pass criterion:** Encoding emits schema-valid version 2; every application-owned object is closed with no implicit extension point; only schema-valid input reaches normalization/hydration, every other class returns stable expected/actual/path diagnostics before side effects, and admitted output is independent.
+- **Pass criterion:** Encoding emits admissible closed v2; only structurally and semantically admitted input reaches normalization/hydration. Variables are concrete/non-null, tags use `DataType`, and durable constructor omission uses only Default/null. The catalog-independent codec does not infer optionality from data it does not persist; catalog-backed authoring/backend evidence owns that check. Contradictory branches, unsafe integers, duplicate Variables, bad references, and structural failures return stable diagnostics before I/O; output is independent.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** Current frontend execution is pending after the platform-information correction.
+- **Nonconformance:** Separate matrices exist; no table spans every boundary and semantic failure with diagnostics and source identity.
 
 ## UNITV-020 — Verify candidate-first project-session transaction
 
 - **Covers:** CMP-015
 - **Method:** test
-- **Procedure:** From a populated session, run every replacement class through preparation and commit; delay version confirmation, collaboration release, and target cleanup; inject schema, platform, name, and conflict rejection, cancellation, supersession, disposal, and a post-install exception; and observe stored documents, the recent-project navigation pointer, exact cleanup target, queue, and active owners.
+- **Procedure:** Run every replacement through preparation/commit with delayed preflight and cleanup; inject validation, cancellation, supersession, disposal, and post-install failure; observe storage, recent pointer, cleanup target, queue, and owners.
 - **Environment / configuration:** Node Vitest/jsdom project-session harness with controllable promises/storage
-- **Pass criterion:** Old active state and stored documents remain throughout candidate preparation; rejected/stale/disposed preparation persists no candidate; schema admission precedes platform I/O; only failed bootstrap automatic-open may clear a stale recent-project navigation pointer; disposal blocks later mutations while an acquired owner completes; acquired cancellation/exception causes no rollback and releases queued work; and one latest error-free candidate performs applicable target cleanup, teardown, persistence, and installation exactly once.
+- **Pass criterion:** Preparation preserves active/stored state; rejected/stale/disposed work persists nothing; admission precedes platform I/O; only failed bootstrap may clear its stale pointer. Disposal blocks new work, acquired work finishes without rollback, waiters release, and the latest valid candidate commits once.
 - **Status:** implemented
 - **Evidence:** [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js), [`gui/tests/unit/importExport.test.js`](../../../gui/tests/unit/importExport.test.js), [`ci/frontend-build.sh`](../../../ci/frontend-build.sh)
-- **Nonconformance:** Current frontend execution is pending after the platform-information correction.
+- **Nonconformance:** No browser table combines every replacement and late-failure branch.
 
 ## UNITV-021 — Verify revision-guarded readback recovery
 

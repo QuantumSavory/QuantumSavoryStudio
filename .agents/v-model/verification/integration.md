@@ -38,26 +38,23 @@
 
 - **Covers:** SUB-004
 - **Method:** test
-- **Procedure:** Validate/build exact request trees with asymmetric endpoints, both edge roles, reversed physical duplicates, repeated IDs, missing required and complete catalog constructors, field mutations, tagged/opaque values, resolved physical values, and placement-gated protocols through HTTP.
+- **Procedure:** Validate/build request trees covering asymmetric roles, duplicate IDs/pairs, required/complete constructors, concrete versus Default/null Variables, field mutations, `DataType` tags, tagged/opaque values, physical values, and placement through HTTP; compare validation/runtime with construction/evaluation canaries.
 - **Environment / configuration:** Backend unit and HTTP integration environments
-- **Pass criterion:** Roles persist; only physical edges enter the graph and carry all five resolved fields; permitted virtual protocols lack physical fields; identities remain unambiguous; required constructor omission fails before construction while a complete catalog constructor builds; exact tags, opaque values, and every owned malformed fixture follow their declared branches.
+- **Pass criterion:** Roles persist; physical edges alone enter the graph with five resolved fields; virtual protocols lack them; IDs stay unambiguous. Shared construction-free admission rejects required omission and invalid Variables/values; complete constructors build. Variables are concrete, tags use `DataType`, and exact tagged/opaque branches admit without validation-time evaluation.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`ci/backend-unit.sh`](../../../ci/backend-unit.sh), [`ci/backend-integration.sh`](../../../ci/backend-integration.sh)
-- **Nonconformance:** The exact-string and global-identity regressions and corrected backend suites
-  have not executed, and reordered-node discrimination remains planned under UNITV-010.
+- **Nonconformance:** UNITV-010 still covers reordered nodes; no live-HTTP fixture combines every malformed branch with the constructor canary.
 
 ## INTV-005 — Verify metadata-to-input semantics
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Exercise direct/copied/generated inputs across missing or malformed catalogs, including existing-owner protocol, state kinds, requiredness, placement, bounds, unknown IDs, conflicts, Variables, and keyword construction.
+- **Procedure:** Exercise direct/copied/generated inputs across catalog failure, existing-owner protocols, states, requiredness, `DataType` tags, attachments/roles, placement, bounds, IDs, conflicts, Variables, and keyword construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** Paths match type, placement, requiredness, nullability, numeric kind, bounds, and resolution; finite reals construct floating states; unsafe or fractional browser integers fail; false differs from omission; values use catalog keywords; invalid metadata, values, placement, and descriptors preserve design.
+- **Pass criterion:** Paths match type, placement, requiredness, nullability, bounds, and resolution; tags use `DataType` plus kind/nullability. Attachments map to floating/node/edge ownership, bound roles are injected, and configurable roles stay explicit. Valid numerics construct; unsafe/fractional integers, aliases, and Default/null Variables fail; false/concrete Variables differ from optional omission; invalid input preserves design.
 - **Status:** planned
 - **Evidence:** [`Project.toml`](../../../Project.toml), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
-- **Nonconformance:** Artifacts encode requiredness and SimpleSwitch
-  construction. The upstream pin is unreachable; no real-stack run covers
-  catalog/failure matrix.
+- **Nonconformance:** No real-stack action combines the complete catalog/failure matrix.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
 
@@ -90,8 +87,7 @@
 - **Pass criterion:** Exact configuration is required; required fields emit explicit keywords, optional omissions remain omitted, output is stable and valid, mappings run, and omissions are disclosed.
 - **Status:** implemented
 - **Evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/e2e/export-script.spec.js`](../../../gui/tests/e2e/export-script.spec.js), [`gui/tests/e2e/background-noise-inputs.spec.js`](../../../gui/tests/e2e/background-noise-inputs.spec.js)
-- **Nonconformance:** The corrected backend/frontend cases have not executed; the panel
-  mocks its route and no exhaustive feature/help inventory exists.
+- **Nonconformance:** The panel mocks its route and no exhaustive feature/help inventory exists.
 
 ## INTV-009 — Verify private route/error/log handoff
 
@@ -102,9 +98,8 @@
 - **Pass criterion:** Active schemas match handlers including endpoint-specific configuration and all nested request definitions; routes use canonical errors; generated callers resolve operation IDs; Log diagnostics equal transmitted values.
 - **Status:** implemented
 - **Evidence:** [`contracts/http/openapi.json`](../../../contracts/http/openapi.json), [`test/test_http_contract.jl`](../../../test/test_http_contract.jl), [`test/test_integration.jl`](../../../test/test_integration.jl), [`gui/tests/unit/httpClient.test.js`](../../../gui/tests/unit/httpClient.test.js), [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js), [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl)
-- **Nonconformance:** Corrected exact lifecycle-request cases have not executed in the
-  named environment. Separate artifacts omit one real-browser cleanup/failure matrix
-  in the visible Log; SYSV-008 retains it.
+- **Nonconformance:** Separate artifacts omit a real-browser cleanup/failure matrix in
+  the visible Log; SYSV-008 retains it.
 
 ## INTV-010 — Verify local source admission and public denial
 

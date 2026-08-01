@@ -1,7 +1,6 @@
 # Acceptance Actions
 
-Maintainers own acceptance. Actions remain planned pending durable 2.0
-acceptance, except ACC-012 is blocked as recorded below.
+Maintainers own acceptance. Actions remain planned pending durable 2.0 acceptance.
 
 ## ACC-001 — Validate interactive network modeling
 
@@ -96,14 +95,13 @@ acceptance, except ACC-012 is blocked as recorded below.
 
 - **Covers:** STK-010
 - **Method:** demonstration
-- **Procedure:** Open/import schema-valid version-2, older, newer, negative, missing, non-integer, malformed, and undeclared-field documents while preserving copies of every input.
+- **Procedure:** Open/import valid v2; invalid version/shape/extra-field; and structurally valid but invalid branch/reference documents, including Default/null Variables and named-tag aliases, while preserving every input.
 - **Environment / configuration:** Supported desktop browser with warning/error observer and Tools Log
-- **Pass criterion:** The schema-valid document opens; every other class fails with a structured visible reason; no rejected document is rewritten or deleted, and no undeclared application-owned field is treated as an implicit extension.
+- **Pass criterion:** Admissible input opens with concrete Variables, `DataType` tags, and only the Default/null durable omission representation; live-catalog authoring/backend admission separately proves that an omitted field is optional. Every rejection is structured and visible before hydration/I/O; no rejected input is rewritten/deleted and no owned extra becomes an extension.
 - **Status:** planned
 - **Evidence:** None
-- **Nonconformance:** Strict version-2 admission has unit, integration, and focused
-  browser evidence, but no maintainer acceptance record demonstrates every input class,
-  visible reason, and rejected-document preservation outcome.
+- **Nonconformance:** Automated evidence exists, but no maintainer record demonstrates
+  every class, visible reason, and rejected-input preservation outcome.
 
 ## ACC-011 — Validate candidate-first project replacement
 
@@ -125,12 +123,10 @@ acceptance, except ACC-012 is blocked as recorded below.
 - **Procedure:** Prepare a checkout, start production, and complete the primary model/save/Play workflow.
 - **Environment / configuration:** Ubuntu 24.04 x86_64, Julia 1.12.x, Node 24.x, release-lock-selected Chromium
 - **Pass criterion:** Installation, startup, modeling, save/reopen, and Play complete without an environment-specific blocker.
-- **Status:** blocked
+- **Status:** planned
 - **Evidence:** [`Project.toml`](../../../Project.toml),
   [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml),
   [`ci/browser-production.sh`](../../../ci/browser-production.sh),
   [`gui/tests/e2e/main.spec.js`](../../../gui/tests/e2e/main.spec.js)
-- **Nonconformance:** As of 2026-07-31, pinned QuantumSavory commit
-  `0851ab9ade45f37e278a11846fbec9d8f522dabe` is absent from declared upstream
-  refs, blocking preparation. Publish it or pin a reachable equivalent; save/reopen
-  coverage and maintainer acceptance then remain required.
+- **Nonconformance:** The QuantumSavory pin is reachable; save/reopen coverage and a
+  maintainer record for the full matrix remain absent.
