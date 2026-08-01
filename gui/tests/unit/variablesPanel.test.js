@@ -12,16 +12,8 @@ afterEach(() => {
 })
 
 describe('VariablesPanel', () => {
-  it('hides the value editor for the Default option', () => {
+  it('creates a concrete Variable instead of a Default placeholder', async () => {
     const project = createEmptyProject('Variables')
-    project.variables.push(new Variable({
-      id: 'variable_default',
-      name: 'default_value',
-      type: 'default',
-      selectedType: 'default',
-      value: null,
-    }))
-
     const wrapper = shallowMount(VariablesPanel, {
       props: {
         variables: project.variables,
@@ -29,8 +21,16 @@ describe('VariablesPanel', () => {
       },
     })
 
-    expect(wrapper.findComponent(TypedValueInput).exists()).toBe(false)
-    expect(wrapper.get('.variable-value-input').text()).toBe('')
+    await wrapper.get('.add-variable-button').trigger('click')
+    expect(wrapper.emitted('designOperations')[0][0]).toEqual([{
+      kind: 'variables.create',
+      value: {
+        name: 'variable_1',
+        type: 'Float64',
+        selectedType: 'Float64',
+        value: 0,
+      },
+    }])
   })
 
   it('keeps an explicit String default literal on the String branch', () => {

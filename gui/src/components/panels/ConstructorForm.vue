@@ -370,15 +370,11 @@ function assignedVariable(param) {
 }
 
 function variableIsCompatible(param, variable) {
-  if (
-    runtimeParameterDefinition(param)?.required === true
-    && (variable?.selectedType === 'default' || variable?.type === 'default')
-  ) return false
   return runtimeParameterDefinition(param)?.kind !== 'named_tag_type'
     && !!variable
     && parameterTypeSupportsVariableType(
       declaredParameterType(param),
-      variable.selectedType === 'default' ? 'default' : variable.type,
+      variable.type,
     )
 }
 

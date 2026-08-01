@@ -100,6 +100,19 @@ describe('DesignCommandService', () => {
     expect(committed).not.toBe(settings)
     expect(committed.nested).not.toBe(settings.nested)
 
+    await service.execute({
+      operations: [{
+        kind: 'protocols.update',
+        placement: 'node',
+        owner_id: 'node_a',
+        protocol_id: project.net.nodes[0].data.protocols[0].id,
+        value: {
+          parameters: [{ name: 'settings', selectedType: 'Any', value: '' }],
+        },
+      }],
+    })
+    expect(project.net.nodes[0].data.protocols[0].parameters[0].value).toBe('')
+
     const before = encodeDesignDocument(project)
     await expect(service.execute({
       operations: [{
@@ -1450,13 +1463,12 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
 
-    await service.execute({
+    await expect(service.execute({
       operations: [{
         kind: 'variables.create',
         value: { name: 'optional_rate', type: 'Float64', value: null },
       }],
-    })
-    expect(project.variables[0]).toMatchObject({ name: 'optional_rate', value: null })
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
 
     await expect(service.execute({
       operations: [{
@@ -1466,7 +1478,7 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
     expect(project.net.nodes[0].data.slots).toHaveLength(1)
     expect(project.net.nodes[0].data.protocols).toHaveLength(1)
-    expect(project.variables).toHaveLength(1)
+    expect(project.variables).toHaveLength(0)
   })
 
   it('admits required constructor fields atomically across direct and Variable inputs', async () => {
@@ -1476,13 +1488,6 @@ describe('DesignCommandService', () => {
       name: 'Switch',
       position: [0, 0],
       data: { slots: [], protocols: [] },
-    }))
-    project.variables.push(new Variable({
-      id: 'constructor_default',
-      name: 'constructor default',
-      type: 'default',
-      selectedType: 'default',
-      value: null,
     }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
@@ -1525,26 +1530,21 @@ describe('DesignCommandService', () => {
 
     await expect(service.execute({
       operations: [{
-        kind: 'protocols.create',
-        placement: 'node',
-        owner_id: 'switch',
+        kind: 'variables.create',
         value: {
-          type: 'SimpleSwitchDiscreteProt',
-          parameters: [{
-            name: 'clientnodes',
-            selectedType: 'Vector{Int64}',
-            value: new VariableReference('constructor_default'),
-          }, {
-            name: 'success_probs',
-            selectedType: 'Vector{Float64}',
-            value: [0.5],
-          }],
+          name: 'legacy_default',
+          type: 'default',
+          selectedType: 'default',
+          value: null,
         },
       }],
-    })).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Required parameter clientnodes cannot use a Default Variable.',
-    })
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        value: { name: 'legacy_default_unselected', type: 'default', value: 1 },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
     expect(project.net.nodes[0].data.protocols).toEqual([])
 
     await service.execute({

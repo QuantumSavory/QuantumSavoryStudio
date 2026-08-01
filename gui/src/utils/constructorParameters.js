@@ -18,12 +18,7 @@ function strictVariableReference(value) {
 
 function constructorOptionForVariable(options, definition, variable) {
   if (!variable) return null
-  const semanticType = variable.selectedType === 'default'
-    ? 'default'
-    : variable.type
-  if (semanticType === 'default') {
-    return options.find(option => option.inputKind === 'default') || null
-  }
+  const semanticType = variable.type
   if (!Object.hasOwn(variable, 'selectedType')) {
     const inferred = inferParameterInputOption(options, variable)
     if (
@@ -133,7 +128,7 @@ export function validateConstructorDraft(
       if (typeof resolveVariable !== 'function') continue
       const variable = resolveVariable(parameter.value.id)
       const option = constructorOptionForVariable(options, parameterDefinition, variable)
-      if (!variable || !option || (parameterDefinition.required && option.inputKind === 'default')) {
+      if (!variable || !option) {
         rejectConstructor(
           parameterDefinition.required
             ? 'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING'

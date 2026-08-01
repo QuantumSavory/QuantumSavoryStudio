@@ -1093,7 +1093,6 @@ function _script_variable_bindings(
       used,
       "variable_$(item.index)",
     )
-    uses_default = variable.type == "default" && variable.value === nothing
     self_dependent = special_type in ("Function", "Lambda") && any(
       first(pair) == strip(string(variable.value)) for pair in SELF_COMPARISON_OPERATORS
     )
@@ -1103,7 +1102,7 @@ function _script_variable_bindings(
         "Variable '$(_script_comment(variable.name))'",
       )
       _script_assignment_context_references(parsed)
-    elseif special_type == "Lambda" && !uses_default && !self_dependent
+    elseif special_type == "Lambda" && !self_dependent
       variable.value isa AbstractString || throw(validation_error(
         "Variable '$(_script_comment(variable.name))' must be a function name or Julia function expression",
         Dict{String,Any}("received_type" => string(typeof(variable.value))),
@@ -1131,7 +1130,6 @@ function _script_variable_bindings(
       variable=variable,
       per_assignment=per_assignment,
       fresh_wildcard=fresh_wildcard,
-      uses_default=uses_default,
     )
   end
 
@@ -1164,15 +1162,6 @@ function _script_variable_bindings(
         lines,
         "$(binding.name), $(companion_binding.name) = $expression" *
         "  # GUI variable IDs: $(_script_comment(variable.id)), $(_script_comment(companion_id))",
-      )
-      continue
-    end
-
-    if binding.uses_default
-      push!(
-        lines,
-        "$(binding.name) = nothing" *
-        "  # GUI variable \"$(_script_comment(variable.name))\": constructor default",
       )
       continue
     end
@@ -1212,7 +1201,9 @@ function _script_variable_bindings(
         imports,
       )
     end
-    expression === nothing && throw(validation_error("Variable '$(_script_comment(variable.name))' cannot use a constructor default here"))
+    expression === nothing && throw(validation_error(
+      "Variable '$(_script_comment(variable.name))' has no script expression",
+    ))
     push!(
       lines,
       "$(binding.name) = $expression  # GUI variable ID: $(_script_comment(variable.id))",

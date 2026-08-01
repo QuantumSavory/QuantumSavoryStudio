@@ -52,7 +52,8 @@ describe('parameter input descriptors', () => {
       .toThrow('Boolean required field')
   })
 
-  it('never maps a Default Variable onto a required concrete branch', () => {
+  it('offers only concrete Variable branches and never maps a legacy Default Variable', () => {
+    expect(buildVariableInputOptions().some(option => option.id === 'default')).toBe(false)
     const variable = {
       type: 'default',
       selectedType: 'default',
@@ -62,7 +63,7 @@ describe('parameter input descriptors', () => {
       'Vector{Int64}',
       { required: false },
       variable,
-    )?.id).toBe('default')
+    )).toBeNull()
     expect(parameterInputOptionForVariable(
       'Vector{Int64}',
       { required: true },

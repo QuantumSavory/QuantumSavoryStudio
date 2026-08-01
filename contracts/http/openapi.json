@@ -1884,6 +1884,19 @@
           }
         ]
       },
+      "NonNullOpaqueSimulatorValue": {
+        "description": "A simulator-owned opaque JSON value that cannot request constructor omission.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OpaqueSimulatorValue"
+          },
+          {
+            "not": {
+              "type": "null"
+            }
+          }
+        ]
+      },
       "ConstructorParameterValue": {
         "oneOf": [
           {
@@ -1909,7 +1922,7 @@
             "$ref": "#/components/schemas/StatesZooValue"
           },
           {
-            "$ref": "#/components/schemas/OpaqueSimulatorValue"
+            "$ref": "#/components/schemas/NonNullOpaqueSimulatorValue"
           }
         ]
       },
@@ -2331,6 +2344,22 @@
           }
         }
       },
+      "SimulationVariableType": {
+        "type": "string",
+        "enum": [
+          "Int64",
+          "Float64",
+          "String",
+          "Bool",
+          "Nothing",
+          "QuantumSavory.Wildcard",
+          "Vector{Int64}",
+          "Vector{Float64}",
+          "Function",
+          "Lambda",
+          "Symbolic"
+        ]
+      },
       "SimulationVariable": {
         "type": "object",
         "additionalProperties": false,
@@ -2352,9 +2381,7 @@
             "pattern": "\\S"
           },
           "type": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
+            "$ref": "#/components/schemas/SimulationVariableType"
           },
           "value": {
             "$ref": "#/components/schemas/VariableDefinitionValue"

@@ -120,13 +120,13 @@ describe('simulation payload validation', () => {
     })
 
     payload.variables = [{
-      id: 'constructor-default',
-      type: 'default',
-      value: null,
+      id: 'incompatible-rate',
+      type: 'Float64',
+      value: 0.5,
     }]
     protocol.parameters[0].value = {
       kind: 'variable',
-      id: 'constructor-default',
+      id: 'incompatible-rate',
     }
     expect(validatePayload(payload, catalogs).issues[0]).toMatchObject({
       code: 'CONSTRUCTOR_REQUIRED_PARAMETER_MISSING',

@@ -669,20 +669,6 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     if (typeof explicitSelection !== 'string' || !explicitSelection) {
       throw new Error(`${context} selectedType must be a nonempty string`)
     }
-    if (explicitSelection === 'default') {
-      if (type !== 'default' || value !== null) {
-        throw new Error(`${context} Default requires type default and a null value`)
-      }
-      return {
-        ...variable,
-        type: 'default',
-        selectedType: 'default',
-        value: null,
-      }
-    }
-    if (type === 'default') {
-      throw new Error(`${context} type default requires the Default selection`)
-    }
     const selectedOption = buildVariableInputOptions()
       .find(option => option.id === explicitSelection && option.enabled)
     if (!selectedOption || selectedOption.wireType !== type) {
@@ -692,15 +678,6 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     }
     if (value == null || value === '') {
       throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
-    }
-  }
-
-  if (!hasExplicitSelection && value === null) {
-    return {
-      ...variable,
-      type: 'default',
-      selectedType: 'default',
-      value: null,
     }
   }
 
@@ -749,12 +726,7 @@ function projectSemanticCheck(path, check) {
 }
 
 function expectedVariableSelection(parameter, variable, context) {
-  const variableType = variable.selectedType === 'default'
-    ? 'default'
-    : variable.type
-  if (variableType === 'default') {
-    throw new Error(`${context} cannot reference a Default Variable`)
-  }
+  const variableType = variable.type
   if (!parameterTypeSupportsVariableType(parameter.type, variableType)) {
     throw new Error(
       `${context} references Variable ${variable.id} with incompatible type ${variableType}`,

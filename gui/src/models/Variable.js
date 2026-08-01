@@ -9,8 +9,8 @@ export default class Variable {
     id = generateUUid('variable'),
     name = '',
     type = 'Float64',
-    value = null,
-    selectedType = value == null ? 'default' : type,
+    value = 0,
+    selectedType = type,
     statesZooTraceSourceId = null
   } = {}) {
     this.id = id

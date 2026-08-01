@@ -25,7 +25,6 @@ export const KNOWN_PARAMETER_TYPES = [
 ]
 
 export const VARIABLE_PARAMETER_TYPES = [
-  'default',
   'Int64',
   'Float64',
   'Bool',
@@ -181,7 +180,7 @@ export function buildConstructorParameterInputOptions(
 }
 
 export function buildVariableInputOptions() {
-  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES)
+  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES, {}, { includeDefault: false })
 }
 
 export function findParameterInputOption(inputType, metadata, id) {
@@ -198,13 +197,14 @@ export function findParameterInputOption(inputType, metadata, id) {
 export function parameterInputOptionForVariable(inputType, metadata, variable) {
   const options = buildConstructorParameterInputOptions(inputType, metadata)
   const selectedType = variable?.selectedType || variable?.type
+  const semanticType = variable?.type
   const exact = options.find(option => option.id === selectedType && option.enabled)
-  if (exact) return exact
+  if (
+    exact
+    && exact.inputKind !== 'default'
+    && parameterTypeSupportsVariableType(exact.wireType, semanticType)
+  ) return exact
 
-  const semanticType = variable?.selectedType === 'default'
-    ? 'default'
-    : variable?.type
-  if (semanticType === 'default') return null
   return options.find(option => (
     option.enabled
     && option.inputKind !== 'default'
@@ -495,7 +495,6 @@ export function parameterTypeIsKnown(type) {
  */
 export function parameterTypeSupportsVariableType(parameterType, variableType) {
   if (typeof variableType !== 'string' || variableType.length === 0) return false
-  if (variableType === 'default') return true
 
   const declaredTypes = Array.isArray(parameterType) ? parameterType : [parameterType]
   return declaredTypes.some(declaredType => {

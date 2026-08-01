@@ -2,6 +2,7 @@ import { webcrypto } from 'node:crypto'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { McpEditorBridge } from '../../src/features/mcp/McpEditorBridge'
+import { DesignCommandService } from '../../src/domain/design/DesignCommandService.js'
 import Variable, { STATES_ZOO_VALUE_KIND } from '../../src/models/Variable'
 import {
   PROJECT_SCHEMA_VERSION,
@@ -64,14 +65,16 @@ function bridgeFixture(overrides = {}) {
     reset: vi.fn(async () => true),
     ...overrides.simulationController,
   }
-  const designCommands = {
-    runExclusive: vi.fn(async work => work()),
-    executeToolNow: vi.fn(async () => ({
-      summary: 'Agent changed the design.',
-      affected_ids: ['node-1'],
-    })),
-    ...overrides.designCommands,
-  }
+  const designCommands = overrides.realDesignCommands
+    ? new DesignCommandService({ getProject: () => project })
+    : {
+        runExclusive: vi.fn(async work => work()),
+        executeToolNow: vi.fn(async () => ({
+          summary: 'Agent changed the design.',
+          affected_ids: ['node-1'],
+        })),
+        ...overrides.designCommands,
+      }
   const flushEditors = overrides.flushEditors || vi.fn(async () => ({ valid: true }))
   const bridge = new McpEditorBridge({
     client,
@@ -372,6 +375,42 @@ describe('McpEditorBridge', () => {
         code: 'EDITOR_HAS_INVALID_DRAFT',
         details: { editor: 'protocol-form' },
       }),
+    }))
+  })
+
+  it('rejects a legacy Default Variable atomically through the real command service', async () => {
+    const { bridge, client, project } = bridgeFixture({ realDesignCommands: true })
+    await bridge.initialize()
+
+    await bridge.handleCommand({
+      command_id: 'command-default-variable',
+      base_revision: 0,
+      payload: {
+        type: 'design_command',
+        tool: 'design_transaction',
+        arguments: {
+          operations: [{
+            kind: 'design.update',
+            value: { description: 'candidate only' },
+          }, {
+            kind: 'variables.create',
+            value: {
+              name: 'legacy_default',
+              type: 'default',
+              selectedType: 'default',
+              value: null,
+            },
+          }],
+        },
+      },
+    })
+
+    expect(project.description).toBe('')
+    expect(project.variables).toEqual([])
+    expect(client.commit).toHaveBeenCalledWith(expect.objectContaining({
+      command_id: 'command-default-variable',
+      success: false,
+      document_changed: false,
     }))
   })
 })

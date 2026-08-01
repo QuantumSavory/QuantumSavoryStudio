@@ -236,12 +236,6 @@
           "parameters" => Dict("ηᵈ" => 1, "ηᵗ" => 1, "N" => 0.1),
         ),
       ),
-      Dict(
-        "id" => "default-function-variable",
-        "name" => "default chooser",
-        "type" => "default",
-        "value" => nothing,
-      ),
     ]
 
     payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = Dict(
@@ -258,8 +252,6 @@
     parameter_by_name["pairstate"]["value"] = Dict("kind" => "variable", "id" => "state-variable")
     parameter_by_name["success_prob"]["value"] =
       Dict("kind" => "variable", "id" => "weighted-state-variable_tr")
-    parameter_by_name["chooseslotA"]["value"] =
-      Dict("kind" => "variable", "id" => "default-function-variable")
 
     state_names_before = Set(keys(WebQuantumSavory.STATE))
     script = WebQuantumSavory.generate_julia_script(payload)
@@ -3011,12 +3003,6 @@
           "type" => "Float64",
           "value" => 0.75,
         ),
-        Dict(
-          "id" => "variable_default",
-          "name" => "use default",
-          "type" => "default",
-          "value" => nothing,
-        ),
       ]
       retention_parameter(payload) = only(filter(
         parameter -> parameter["name"] == "retention_time",
@@ -3094,6 +3080,15 @@
       null_typed_value = variable_validation_error(payload -> (payload["variables"][1]["value"] = nothing))
       @test null_typed_value isa WebQuantumSavory.APIError
       @test occursin("does not match declared type", null_typed_value.message)
+
+      legacy_default = variable_validation_error(payload -> push!(payload["variables"], Dict(
+        "id" => "legacy-default",
+        "name" => "legacy default",
+        "type" => "default",
+        "value" => nothing,
+      )))
+      @test legacy_default isa WebQuantumSavory.APIError
+      @test occursin("unsupported type 'default'", legacy_default.message)
 
       invalid_unused_literal = variable_validation_error(payload -> begin
         push!(payload["variables"], Dict(
@@ -3207,7 +3202,6 @@
       runtime_payload["variables"] = [
         Dict("id" => "probability", "name" => "probability", "type" => "Float64", "value" => 0.25),
         Dict("id" => "no_retry", "name" => "no retry", "type" => "Nothing", "value" => "nothing"),
-        Dict("id" => "protocol_default", "name" => "protocol default", "type" => "default", "value" => nothing),
         Dict(
           "id" => "contextual_lambda",
           "name" => "contextual lambda",
@@ -3220,7 +3214,6 @@
       parameter_by_name(name) = only(filter(p -> p["name"] == name, protocol_definition["parameters"]))
       parameter_by_name("success_prob")["value"] = Dict("kind" => "variable", "id" => "probability")
       parameter_by_name("retry_lock_time")["value"] = Dict("kind" => "variable", "id" => "no_retry")
-      parameter_by_name("attempt_time")["value"] = Dict("kind" => "variable", "id" => "protocol_default")
 
       contextual_protocol_definition = Dict(
         "id" => "runtime-contextual-swapper",

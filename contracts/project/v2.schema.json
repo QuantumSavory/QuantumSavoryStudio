@@ -586,13 +586,6 @@
       "oneOf": [
         {
           "properties": {
-            "type": { "const": "default" },
-            "selectedType": { "const": "default" },
-            "value": { "type": "null" }
-          }
-        },
-        {
-          "properties": {
             "type": { "const": "Int64" },
             "selectedType": { "const": "Int64" },
             "value": { "$ref": "#/$defs/safeInteger" }

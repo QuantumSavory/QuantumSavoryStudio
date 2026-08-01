@@ -26,7 +26,6 @@ const _SUPPORTED_VARIABLE_TYPES = Set((
   "Function",
   "Lambda",
   "Symbolic",
-  "default",
 ))
 
 _is_constructor_default_source_alias(value) =
@@ -445,11 +444,6 @@ function _parse_variables(payload)
       Dict{String,Any}("variable_name" => name),
     ))
 
-    lowercase(strip(variable_type)) == "default" && variable_type != "default" &&
-      throw(validation_error(
-        "$context type 'default' is case-sensitive",
-        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-      ))
     variable_type in _SUPPORTED_VARIABLE_TYPES || throw(validation_error(
       "$context has unsupported type '$variable_type'",
       Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
@@ -625,15 +619,6 @@ function _admit_constructor_parameters(
           "parameter_name" => original_name,
         ),
       ))
-      if _variable_uses_constructor_default(variable)
-        _reject_required_constructor_omission(
-          required_names,
-          original_name,
-          parameter_context,
-          constructor_type,
-        )
-        continue
-      end
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $context",
@@ -933,13 +918,6 @@ function _classify_declared_wire_value(
   field_schema=nothing,
   context::String="Declared value",
 )
-  if declared_type == "default"
-    value === nothing || throw(validation_error(
-      "$context default branch must use exact JSON null",
-    ))
-    return nothing
-  end
-
   handling_type = if selected_type === nothing
     declared_type isa AbstractString ? String(declared_type) :
       _declared_parameter_value_type(declared_type, value)
@@ -1060,7 +1038,6 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
   variable_type isa AbstractString || return false
   variable_name = String(variable_type)
   isempty(variable_name) && return false
-  variable_name == "default" && return true
   members = try
     Base.uniontypes(declared_type)
   catch
@@ -1088,11 +1065,6 @@ function _transport_type_supports_variable_type(transport_type, variable_type)
   transport = String(transport_type)
   variable = String(variable_type)
   return transport == variable
-end
-
-"""Whether a Variable requests omission of its assigned constructor keyword."""
-function _variable_uses_constructor_default(variable)
-  return variable.type == "default" && variable.value === nothing
 end
 
 """Choose a value-compatible member while staying inside an authoritative union type."""

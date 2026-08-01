@@ -1182,44 +1182,24 @@ describe('encodeStoredProject', () => {
 })
 
 describe('backend payload codecs', () => {
-  it('infers Default only when selectedType is omitted and preserves its canonical form', () => {
-    const project = createEmptyProject('Default Variables')
-    project.variables = [
-      {
-        id: 'default-empty',
-        name: 'default_empty',
-        type: 'Float64',
-        value: null,
-      },
-      {
-        id: 'default-canonical',
-        name: 'default_canonical',
-        type: 'default',
-        selectedType: 'default',
-        value: null,
-      },
-    ]
-
-    const document = encodeStoredProject(project)
-    const decoded = decodeStoredProject(document, { storageName: project.name }).project
-    expect(decoded.variables[0]).toMatchObject({
+  it('rejects null and legacy Default Variables', () => {
+    for (const variable of [{
+      id: 'null-value',
+      name: 'null_value',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: null,
+    }, {
+      id: 'legacy-default',
+      name: 'legacy_default',
       type: 'default',
       selectedType: 'default',
       value: null,
-    })
-    expect(toSimulationPayload(decoded).variables[0]).toMatchObject({
-      type: 'default',
-      value: null,
-    })
-    expect(decoded.variables[1]).toMatchObject({
-      type: 'default',
-      selectedType: 'default',
-      value: null,
-    })
-    expect(toSimulationPayload(decoded).variables[1]).toMatchObject({
-      type: 'default',
-      value: null,
-    })
+    }]) {
+      const project = createEmptyProject('Concrete Variables')
+      project.variables = [variable]
+      expect(() => encodeStoredProject(project)).toThrow()
+    }
   })
 
   it('round-trips exact numeric values and expression tags', () => {

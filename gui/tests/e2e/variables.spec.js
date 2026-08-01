@@ -364,7 +364,6 @@ test.describe('Global protocol variables', () => {
     const variableRow = variablesPanel.locator('.variable-row')
     const typeSelect = variableRow.locator('.variable-type-select')
     await expect(typeSelect.locator('option')).toHaveText([
-      'Default',
       'Int64',
       'Int64 Expression',
       'Float64',
@@ -395,9 +394,6 @@ test.describe('Global protocol variables', () => {
 
     await typeSelect.selectOption('QuantumSavory.Wildcard')
     await expect(variableRow.locator('.variable-value-input')).toHaveText('Wildcard')
-
-    await typeSelect.selectOption('default')
-    await expect(variableRow.locator('.variable-value-input')).toBeEmpty()
 
     await typeSelect.selectOption('Vector{Int64}')
     await expect(variableRow.locator('.variable-value-input input[type="text"]')).toBeVisible()

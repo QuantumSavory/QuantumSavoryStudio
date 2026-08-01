@@ -316,12 +316,31 @@
   @test document["components"]["schemas"]["SimulationVariable"]["properties"][
     "value"
   ]["\$ref"] == "#/components/schemas/VariableDefinitionValue"
+  @test document["components"]["schemas"]["SimulationVariable"]["properties"][
+    "type"
+  ]["\$ref"] == "#/components/schemas/SimulationVariableType"
+  @test Set(document["components"]["schemas"]["SimulationVariableType"]["enum"]) ==
+    Set([
+      "Int64", "Float64", "String", "Bool", "Nothing",
+      "QuantumSavory.Wildcard", "Vector{Int64}", "Vector{Float64}",
+      "Function", "Lambda", "Symbolic",
+    ])
   opaque_value = document["components"]["schemas"]["OpaqueSimulatorValue"]
   @test length(opaque_value["oneOf"]) == 6
   @test opaque_value["oneOf"][5]["items"]["\$ref"] ==
     "#/components/schemas/OpaqueSimulatorValue"
   @test opaque_value["oneOf"][6]["not"]["required"] == ["kind"]
   @test opaque_value["oneOf"][6]["additionalProperties"]["\$ref"] ==
+    "#/components/schemas/OpaqueSimulatorValue"
+  nonnull_opaque = document["components"]["schemas"]["NonNullOpaqueSimulatorValue"]
+  @test nonnull_opaque["allOf"][1]["\$ref"] ==
+    "#/components/schemas/OpaqueSimulatorValue"
+  @test nonnull_opaque["allOf"][2]["not"] == Dict("type" => "null")
+  variable_value = document["components"]["schemas"]["VariableDefinitionValue"]
+  @test variable_value["oneOf"][3]["\$ref"] ==
+    "#/components/schemas/NonNullOpaqueSimulatorValue"
+  constructor_value = document["components"]["schemas"]["ConstructorParameterValue"]
+  @test constructor_value["oneOf"][4]["\$ref"] ==
     "#/components/schemas/OpaqueSimulatorValue"
   @test states_zoo["properties"]["parameters"] ==
     Dict("type" => "object", "additionalProperties" => Dict("type" => "number"))

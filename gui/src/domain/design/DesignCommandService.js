@@ -1579,18 +1579,7 @@ export class DesignCommandService {
       if (isVariableReference(suppliedParameter.value)) {
         const variable = byId(project.variables, suppliedParameter.value.id, 'Variable')
         const declaredType = parameterDefinition.type
-        const assignmentType = variable.selectedType === 'default'
-          ? 'default'
-          : variable.type
-        if (
-          parameterDefinition.required
-          && assignmentType === 'default'
-        ) {
-          throw new DesignCommandError(
-            'VALIDATION_FAILED',
-            `Required parameter ${parameterName} cannot use a Default Variable.`,
-          )
-        }
+        const assignmentType = variable.type
         if (!parameterTypeSupportsVariableType(declaredType, assignmentType)) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',
@@ -1712,8 +1701,6 @@ export class DesignCommandService {
         candidate.inputKind === 'numeric-expression'
         && candidate.wireType === value.type
       ))
-    } else if (value.value === null) {
-      option = options[0]
     } else {
       option = options.find(candidate => candidate.id === value.type)
         || inferParameterInputOption(options, value)
@@ -1722,11 +1709,10 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', 'Variable input type is unsupported.')
     }
 
-    const semanticType = option.wireType || 'default'
+    const semanticType = option.wireType
     if (
       Object.hasOwn(value, 'type')
       && value.type !== semanticType
-      && (Object.hasOwn(value, 'selectedType') || option.inputKind !== 'default')
     ) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1743,7 +1729,7 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
     const option = this.effectiveVariableDescriptor(value)
-    const type = option.wireType || 'default'
+    const type = option.wireType
     const variableValue = await this.requireTypedValue(
       option,
       Object.hasOwn(value, 'value') ? value.value : null,
@@ -1801,7 +1787,7 @@ export class DesignCommandService {
           : {}),
       }
       const option = this.effectiveVariableDescriptor(proposed)
-      variable.type = option.wireType || 'default'
+      variable.type = option.wireType
       variable.selectedType = option.id
       variable.value = await this.requireTypedValue(
         option,

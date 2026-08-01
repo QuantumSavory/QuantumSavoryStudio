@@ -416,6 +416,24 @@
       )]
       push!(invalid_nested_payloads, unknown_value_kind)
 
+      null_typed_variable = deepcopy(test_payload)
+      null_typed_variable["variables"] = [Dict(
+        "id" => "null-rate",
+        "name" => "null rate",
+        "type" => "Float64",
+        "value" => nothing,
+      )]
+      push!(invalid_nested_payloads, null_typed_variable)
+
+      legacy_default_variable = deepcopy(test_payload)
+      legacy_default_variable["variables"] = [Dict(
+        "id" => "legacy-default",
+        "name" => "legacy default",
+        "type" => "default",
+        "value" => nothing,
+      )]
+      push!(invalid_nested_payloads, legacy_default_variable)
+
       for payload in invalid_nested_payloads
         response = make_request("POST", "/parse_network_graph"; body=payload)
         @test response.status == 400
