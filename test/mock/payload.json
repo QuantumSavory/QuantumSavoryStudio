@@ -68,12 +68,12 @@
                 {
                   "name": "rounds",
                   "type": "Int64",
-                  "value": "2"
+                  "value": 2
                 },
                 {
                   "name": "agelimit",
                   "type": "Union{Nothing, Float64}",
-                  "value": "3"
+                  "value": 3
                 }
               ]
             }

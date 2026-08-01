@@ -804,20 +804,21 @@ function _script_regular_expression(
   context::String;
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
-  if any(type_name in ("Wildcard", "QuantumSavory.Wildcard") for type_name in _script_declared_types(raw_type))
-    wildcard = _script_reference(imports, QuantumSavory.Wildcard)
-    return "$wildcard()"
-  end
   declared_type = _script_declared_type(raw_type)
   converted, converted_value = _convert_parameter_value(declared_type, value)
-  converted && return _script_literal(converted_value, context)
+  if converted
+    if converted_value isa QuantumSavory.Wildcard
+      wildcard = _script_reference(imports, QuantumSavory.Wildcard)
+      return "$wildcard()"
+    end
+    return _script_literal(converted_value, context)
+  end
 
-  # Scalar numeric Julia source is represented only by the explicit tagged
-  # contract. Untagged strings remain literals and must parse as such.
-  declared_types = _script_declared_types(raw_type)
-  if any(type_name -> type_name in NUMERIC_EXPRESSION_TARGETS, declared_types)
+  # Exact schema-v2 values never fall through to the complex Julia-source
+  # extension point. Numeric source uses its explicit tagged representation.
+  if _is_exact_parameter_value_type(declared_type)
     throw(validation_error(
-      "$context is not a valid numeric literal for declared type '$declared_type'",
+      "$context is not a valid literal for declared type '$declared_type'",
     ))
   end
 

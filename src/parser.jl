@@ -4,115 +4,113 @@
 using Dates
 using .Logger: @log_event
 
-"""Convert a raw parameter value to a target primitive, Wildcard, or simple Union type.
+const _NULLABLE_PARAMETER_SCALAR_TYPES = (
+  "Int",
+  "Int64",
+  "Float64",
+  "Float32",
+  "String",
+  "Bool",
+)
+const _EXACT_PARAMETER_SCALAR_TYPES = (_NULLABLE_PARAMETER_SCALAR_TYPES..., "Nothing")
+const _EXACT_PARAMETER_VECTOR_TYPES = ("Vector{Int64}", "Vector{Float64}")
+const _EXACT_PARAMETER_WILDCARD_TYPES = ("Wildcard", "QuantumSavory.Wildcard")
 
-Supported target strings: "Int", "Int64", "Float64", "Float32", "String", "Nothing", "Bool",
-numeric vectors, "Wildcard", "QuantumSavory.Wildcard", and Union types that
-include Nothing and one of the supported scalar types. Wildcard targets produce
-a fresh `QuantumSavory.Wildcard()` and do not use the supplied value.
+"""Return the scalar member of a supported nullable parameter type."""
+function _nullable_parameter_scalar_type(ptype::AbstractString)
+  union_match = match(
+    r"^Union\{\s*([^,{}]+)\s*,\s*([^,{}]+)\s*\}$",
+    String(ptype),
+  )
+  union_match === nothing && return nothing
+  first_member, second_member = strip.(union_match.captures)
+  if first_member == "Nothing" && second_member in _NULLABLE_PARAMETER_SCALAR_TYPES
+    return second_member
+  elseif second_member == "Nothing" && first_member in _NULLABLE_PARAMETER_SCALAR_TYPES
+    return first_member
+  end
+  return nothing
+end
+
+"""Return whether a declared type uses the exact schema-v2 literal contract."""
+function _is_exact_parameter_value_type(ptype::AbstractString)
+  ts = String(ptype)
+  return ts in _EXACT_PARAMETER_SCALAR_TYPES ||
+    ts in _EXACT_PARAMETER_VECTOR_TYPES ||
+    ts in _EXACT_PARAMETER_WILDCARD_TYPES ||
+    _nullable_parameter_scalar_type(ts) !== nothing
+end
+
+"""Convert one exact schema-v2 constructor value to its declared Julia type.
+
+Strings and Booleans retain their JSON types. Numeric scalars and vectors accept
+only finite real numbers other than Booleans; integer targets additionally
+require integral, representable values. Exact null/`"nothing"` and
+null/`"Wildcard"` wire sentinels construct their corresponding Julia values.
+Nullable unions use the same rules as their scalar member.
 
 Returns a `Pair{Bool,Any}` whose first value indicates success. Failure returns
 `false => nothing`; callers must reject the supplied value or handle that
 failure explicitly.
 """
 function _convert_parameter_value(ptype::AbstractString, value)
-  # Normalize ptype string
   ts = String(ptype)
 
-  if ts in ("Wildcard", "QuantumSavory.Wildcard")
+  if ts in _EXACT_PARAMETER_WILDCARD_TYPES
+    value === nothing || (value isa AbstractString && value == "Wildcard") ||
+      return false => nothing
     return true => QuantumSavory.Wildcard()
   end
 
-  vector_match = match(r"^Vector\{(Int64|Float64)\}$", ts)
-  if vector_match !== nothing
+  nullable_member = _nullable_parameter_scalar_type(ts)
+  if nullable_member !== nothing
+    if value === nothing || (value isa AbstractString && value == "nothing")
+      return true => nothing
+    end
+    return _convert_parameter_value(nullable_member, value)
+  end
+
+  if ts in _EXACT_PARAMETER_VECTOR_TYPES
     value isa AbstractVector || return false => nothing
-    element_type = only(vector_match.captures)
+    element_type = ts == "Vector{Int64}" ? "Int64" : "Float64"
     converted = element_type == "Int64" ? Int64[] : Float64[]
     for element in value
-      element isa Bool && return false => nothing
       ok, converted_element = _convert_parameter_value(element_type, element)
       ok || return false => nothing
-      converted_element isa AbstractFloat && !isfinite(converted_element) &&
-        return false => nothing
       push!(converted, converted_element)
     end
     return true => converted
   end
 
-  # Direct primitives
-  try
-    if ts in ("Int", "Int64")
-      if isa(value, Integer)
-        return true => Int(value)
-      elseif isa(value, AbstractFloat)
-        if isinteger(value)
-          return true => Int(trunc(value))
-        else
-          return false => nothing
-        end
-      else
-        return true => parse(Int, string(value))
+  if ts in ("Int", "Int64", "Float64", "Float32")
+    value isa Real && !(value isa Bool) || return false => nothing
+    try
+      isfinite(value) || return false => nothing
+      if ts in ("Int", "Int64")
+        isinteger(value) || return false => nothing
+        target_type = ts == "Int" ? Int : Int64
+        return true => target_type(value)
       end
-    elseif ts in ("Float64", "Float32")
-      if isa(value, Number)
-        return true => Float64(value)
-      else
-        return true => parse(Float64, string(value))
-      end
-    elseif ts == "String"
-      return true => (value isa AbstractString ? String(value) : string(value))
-    elseif ts == "Nothing"
-      if value === nothing || (value isa AbstractString && lowercase(strip(value)) == "nothing")
-        return true => nothing
-      end
-      return false => nothing
-    elseif ts == "Bool"
-      if isa(value, Bool)
-        return true => value
-      elseif isa(value, String)
-        lv = lowercase(value)
-        if lv in ("true", "1", "yes", "on")
-          return true => true
-        elseif lv in ("false", "0", "no", "off")
-          return true => false
-        else
-          return false => nothing
-        end
-      elseif isa(value, Number)
-        return true => (value != 0)
-      else
-        return false => nothing
-      end
-    end
-  catch
-    return false => nothing
-  end
-
-  # Union types with Nothing and a simple member
-  try
-    if occursin(r"Union\{.*Nothing.*\}", ts)
-      if isa(value, String) && lowercase(value) == "nothing"
-        return true => nothing
-      end
-      if occursin(r"Float\d+", ts)
-        return true => parse(Float64, string(value))
-      elseif occursin(r"Int\d*", ts)
-        return true => parse(Int, string(value))
-      elseif occursin(r"String", ts)
-        return true => string(value)
-      elseif occursin(r"Bool", ts)
-        # Delegate to Bool path by recursion
-        ok, v = _convert_parameter_value("Bool", value)
-        return ok => v
-      end
-      # Unsupported union member: let caller handle
+      target_type = ts == "Float64" ? Float64 : Float32
+      converted = target_type(value)
+      isfinite(converted) || return false => nothing
+      return true => converted
+    catch
       return false => nothing
     end
-  catch
+  elseif ts == "String"
+    value isa AbstractString || return false => nothing
+    return true => String(value)
+  elseif ts == "Nothing"
+    if value === nothing || (value isa AbstractString && value == "nothing")
+      return true => nothing
+    end
     return false => nothing
+  elseif ts == "Bool"
+    value isa Bool || return false => nothing
+    return true => value
   end
 
-  # No conversion performed
   return false => nothing
 end
 
@@ -1919,28 +1917,13 @@ function _handle_numeric_expression_parameter!(
   end
 end
 
-"""
-Handle regular parameter conversion
-"""
+"""Assign an exact supported constructor value, returning false on mismatch."""
 function _handle_regular_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, ptype::String, value)
   ok, converted = _convert_parameter_value(ptype, value)
   if ok
     kwargs[name] = converted
     return true
   end
-
-  # Numeric Julia source is accepted only through the explicit tagged
-  # representation. Untagged strings remain numeric literals and are never
-  # evaluated as source.
-  if ptype in NUMERIC_EXPRESSION_TARGETS || (
-    startswith(ptype, "Union{") &&
-    occursin(r"(^|[,{ ])(Float64|Int64)([}, ]|$)", ptype)
-  )
-    return false
-  end
-  
-  # Complex values require an explicit tagged representation with a dedicated
-  # decoder. Never interpolate untagged data or declared type text into Julia.
   return false
 end
 
@@ -1999,7 +1982,8 @@ function _handle_typed_parameter!(
       )
     end
 
-    if p_raw_type isa Type && value isa p_raw_type
+    if p_raw_type isa Type && value isa p_raw_type &&
+       !_is_exact_parameter_value_type(string(p_raw_type))
       kwargs[name] = value
       return true
     end

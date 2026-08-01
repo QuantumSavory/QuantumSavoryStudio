@@ -361,6 +361,18 @@
     @test !occursin("attempt_time = \"0.125\"", tagged_script)
     @test Meta.parseall(tagged_script) isa Expr
 
+    string_numeric_payload = deepcopy(tagged_payload)
+    string_numeric_parameters =
+      string_numeric_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
+    string_numeric_attempt_time = only(
+      parameter for parameter in string_numeric_parameters
+      if parameter["name"] == "attempt_time"
+    )
+    string_numeric_attempt_time["value"] = "0.125"
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+      string_numeric_payload,
+    )
+
     symbolic_payload = deepcopy(tagged_payload)
     symbolic_parameters =
       symbolic_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
@@ -1027,6 +1039,17 @@
     @test occursin("variable_any_remote_node = (() -> Wildcard())", wildcard_script)
     @test length(findall("variable_any_remote_node()", wildcard_script)) == 1
     @test occursin("nodeH = Wildcard()", wildcard_script)
+    invalid_wildcard_payload = deepcopy(wildcard_payload)
+    invalid_wildcard_parameters =
+      invalid_wildcard_payload["net"]["nodes"][1]["data"]["protocols"][end]["parameters"]
+    invalid_wildcard_node = only(
+      parameter for parameter in invalid_wildcard_parameters
+      if parameter["name"] == "nodeH"
+    )
+    invalid_wildcard_node["value"] = "wildcard"
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+      invalid_wildcard_payload,
+    )
     paused_wildcard_script = replace(
       wildcard_script,
       "\nrun(sim, simulation_duration)\n" =>
@@ -3084,7 +3107,7 @@
         # Literal parameters use the authoritative constructor field type, not
         # a stale or forged client snapshot.
         literal_protocol_definition = deepcopy(incompatible_protocol_definition)
-        literal_protocol_definition["parameters"][1]["value"] = "0.25"
+        literal_protocol_definition["parameters"][1]["value"] = 0.25
         literal_protocol_definition["parameters"][1]["type"] = "String"
         literal_protocol = WebQuantumSavory._instantiate_protocol(
           literal_protocol_definition,
@@ -3122,6 +3145,18 @@
           ),
         ],
       )
+      function node_protocol_parameter(request, protocol_id, parameter_name)
+        protocol = only([
+          protocol
+          for node in request["net"]["nodes"]
+          for protocol in node["data"]["protocols"]
+          if protocol["id"] == protocol_id
+        ])
+        return only(
+          parameter for parameter in protocol["parameters"]
+          if parameter["name"] == parameter_name
+        )
+      end
       push!(payload["net"]["nodes"][1]["data"]["protocols"], switch_definition)
 
       try
@@ -3161,6 +3196,36 @@
         Dict("kind" => "variable", "id" => "constructor-default")
       @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(defaulted)
 
+      string_scalar = deepcopy(payload)
+      node_protocol_parameter(
+        string_scalar,
+        "floatprot_0_1",
+        "retention_time",
+      )["value"] = "0.15"
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
+        WebQuantumSavory.validate_payload(string_scalar),
+      )
+
+      string_bool = deepcopy(payload)
+      node_protocol_parameter(
+        string_bool,
+        "floatprot_0_1",
+        "announce",
+      )["value"] = "true"
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
+        WebQuantumSavory.validate_payload(string_bool),
+      )
+
+      string_vector = deepcopy(payload)
+      node_protocol_parameter(
+        string_vector,
+        "required-switch",
+        "success_probs",
+      )["value"] = Any["0.75"]
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
+        WebQuantumSavory.validate_payload(string_vector),
+      )
+
       export_payload = deepcopy(payload)
       merge!(
         export_payload["simulationConfig"],
@@ -3175,6 +3240,15 @@
       )
       @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
         missing_export,
+      )
+      string_vector_export = deepcopy(export_payload)
+      node_protocol_parameter(
+        string_vector_export,
+        "required-switch",
+        "success_probs",
+      )["value"] = Any["0.75"]
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+        string_vector_export,
       )
   end
 
@@ -3779,37 +3853,54 @@
   end
 
   @testset "Parameter Conversion Utility" begin
-    # Wildcard selections carry no user-entered value, but the UI sends the
-    # selected entry name so the backend can construct the sentinel.
+    # Wildcard selections use one exact wire sentinel.
     for wildcard_type in ("Wildcard", "QuantumSavory.Wildcard")
       ok, wildcard = WebQuantumSavory._convert_parameter_value(wildcard_type, "Wildcard")
       @test ok
       @test wildcard isa QuantumSavory.Wildcard
+      ok, wildcard = WebQuantumSavory._convert_parameter_value(wildcard_type, nothing)
+      @test ok
+      @test wildcard isa QuantumSavory.Wildcard
+      @test !first(WebQuantumSavory._convert_parameter_value(wildcard_type, "wildcard"))
     end
 
-    # Int conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Int", "42")
+    # Integer targets accept only finite, integral real numbers.
+    ok, v = WebQuantumSavory._convert_parameter_value("Int", 42)
     @test ok && v == 42
     ok, v = WebQuantumSavory._convert_parameter_value("Int64", 7.0)
-    @test ok && v == 7
+    @test ok && v isa Int64 && v == 7
+    for value in ("42", true, 1.5, Inf, NaN)
+      @test !first(WebQuantumSavory._convert_parameter_value("Int64", value))
+    end
 
-    # Float conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Float64", "3.14")
-    @test ok && v ≈ 3.14
+    # Floating-point targets accept only finite real numbers and preserve the
+    # declared target type.
+    ok, v = WebQuantumSavory._convert_parameter_value("Float64", 3)
+    @test ok && v isa Float64 && v == 3.0
     ok, v = WebQuantumSavory._convert_parameter_value("Float32", 2)
-    @test ok && v == 2.0
+    @test ok && v isa Float32 && v == 2.0f0
+    for value in ("3.14", true, Inf, NaN)
+      @test !first(WebQuantumSavory._convert_parameter_value("Float64", value))
+    end
+    @test !first(WebQuantumSavory._convert_parameter_value("Float32", 1.0e100))
 
-    # Numeric vectors are converted element-wise from JSON-compatible arrays.
+    # Numeric vectors apply the exact scalar rules element-wise.
     ok, v = WebQuantumSavory._convert_parameter_value(
       "Vector{Int64}",
-      Any[1, 2.0, "3"],
+      Any[1, 2.0, 3],
     )
     @test ok && v == Int64[1, 2, 3]
     ok, v = WebQuantumSavory._convert_parameter_value(
       "Vector{Float64}",
-      Any[0.25, 1, "2.5"],
+      Any[0.25, 1, 2.5],
     )
     @test ok && v == [0.25, 1.0, 2.5]
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Int64}", Any[1, "2"]),
+    ) === false
+    @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Float64}", Any[0.5, "1.0"]),
+    ) === false
     @test first(
       WebQuantumSavory._convert_parameter_value("Vector{Int64}", [1.5]),
     ) === false
@@ -3825,6 +3916,16 @@
     @test first(
       WebQuantumSavory._convert_parameter_value("Vector{Float64}", "[1.0]"),
     ) === false
+
+    typed_numeric_kwargs = Dict{Symbol,Any}()
+    @test !WebQuantumSavory._handle_typed_parameter!(
+      typed_numeric_kwargs,
+      :value,
+      Float64,
+      Inf,
+      Dict{Symbol,Any}(),
+    )
+    @test isempty(typed_numeric_kwargs)
 
     switch_type = QuantumSavory.ProtocolZoo.SimpleSwitchDiscreteProt
     switch_parameters = Any[
@@ -3863,6 +3964,14 @@
       Dict{Symbol,Any}();
       parameter_context="switch parameter",
     )
+    nonfinite_required = deepcopy(switch_parameters)
+    nonfinite_required[2]["value"] = [Inf]
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
+      nonfinite_required,
+      switch_type,
+      Dict{Symbol,Any}();
+      parameter_context="switch parameter",
+    )
     default_required = deepcopy(switch_parameters)
     default_required[1]["value"] = Dict("kind" => "variable", "id" => "default")
     @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
@@ -3880,31 +3989,68 @@
       parameter_context="switch parameter",
     )
 
-    # Strings and explicit Nothing values do not require Julia evaluation.
-    ok, v = WebQuantumSavory._convert_parameter_value("String", 123)
-    @test ok && v == "123"
+    # Strings and sentinels retain their exact wire representations.
+    ok, v = WebQuantumSavory._convert_parameter_value(
+      "String",
+      SubString("hello!", 1, 5),
+    )
+    @test ok && v isa String && v == "hello"
+    @test !first(WebQuantumSavory._convert_parameter_value("String", 123))
     ok, v = WebQuantumSavory._convert_parameter_value("Nothing", nothing)
     @test ok && v === nothing
+    ok, v = WebQuantumSavory._convert_parameter_value("Nothing", "nothing")
+    @test ok && v === nothing
+    @test !first(WebQuantumSavory._convert_parameter_value("Nothing", "Nothing"))
+    @test !first(WebQuantumSavory._convert_parameter_value("Nothing", " nothing"))
 
-    # Bool conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", "true")
+    # Booleans do not accept string or numeric aliases.
+    ok, v = WebQuantumSavory._convert_parameter_value("Bool", true)
     @test ok && v === true
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", "off")
+    ok, v = WebQuantumSavory._convert_parameter_value("Bool", false)
     @test ok && v === false
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", 0)
-    @test ok && v === false
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", :nope)
-    @test !ok
+    for value in ("true", "off", 0, 1, :nope)
+      @test !first(WebQuantumSavory._convert_parameter_value("Bool", value))
+    end
 
-    # Union with Nothing
+    # Nullable unions apply the same exact rules as their scalar member.
     ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Int64}", "nothing")
     @test ok && v === nothing
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Float64}", "2.5")
+    ok, v = WebQuantumSavory._convert_parameter_value("Union{Int64, Nothing}", 2.0)
+    @test ok && v isa Int64 && v == 2
+    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Float64}", 2.5)
     @test ok && v == 2.5
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, String}", 123)
-    @test ok && v == "123"
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Bool}", "yes")
+    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, String}", "value")
+    @test ok && v == "value"
+    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Bool}", true)
     @test ok && v === true
+    @test !first(WebQuantumSavory._convert_parameter_value(
+      "Union{Nothing, Float64}",
+      "2.5",
+    ))
+    @test !first(WebQuantumSavory._convert_parameter_value(
+      "Union{Nothing, String}",
+      123,
+    ))
+    @test !first(WebQuantumSavory._convert_parameter_value(
+      "Union{Nothing, Bool}",
+      "yes",
+    ))
+    @test !first(WebQuantumSavory._convert_parameter_value(
+      "Union{Nothing, Int64}",
+      "Nothing",
+    ))
+
+    # Script export must not reinterpret invalid exact literals as Julia source.
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._script_regular_expression(
+      "Bool",
+      "true",
+      "Boolean parameter",
+    )
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._script_regular_expression(
+      "String",
+      123,
+      "String parameter",
+    )
   end
 
   @testset "Unsafe Evaluation Policy" begin
@@ -4184,14 +4330,14 @@
       @test safe_function_kwargs[:filter] === identity
 
       safe_primitive_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :rounds, "Int64", "3")
+      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :rounds, "Int64", 3)
       @test safe_primitive_kwargs[:rounds] == 3
       @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :label, "String", "hello")
       @test safe_primitive_kwargs[:label] == "hello"
 
       safe_noise = WebQuantumSavory._instantiate_noise(Dict(
         "type" => "AmplitudeDamping",
-        "parameters" => [Dict("name" => "τ", "value" => "2.0")],
+        "parameters" => [Dict("name" => "τ", "value" => 2.0)],
       ))
       @test safe_noise isa QuantumSavory.AmplitudeDamping
 
@@ -6214,7 +6360,7 @@
     unsupported_complex_error = capture_error(() ->
       instantiate_contextual_background([Dict(
           "name" => "values",
-          "value" => Any[1, 2],
+          "value" => Any[1, Dict("nested" => 2)],
         )]))
     @test unsupported_complex_error isa WebQuantumSavory.APIError
     if unsupported_complex_error isa WebQuantumSavory.APIError
