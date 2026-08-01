@@ -5158,6 +5158,15 @@
       end
     end
 
+    aliased_datatype = deepcopy(datatype_spec)
+    aliased_datatype["head"]["value"] = "Int64"
+    error = captured_error(() -> WebQuantumSavory.preview_tag_payload(
+      Dict("tag" => aliased_datatype),
+    ))
+    @test error isa WebQuantumSavory.APIError
+    @test error.status_code == 400
+    @test occursin("advertised DataType", error.message)
+
     unadvertised_tag_id = WebQuantumSavory._qualified_tag_type_id(TagSchemaProbe)
     unadvertised_protocol_error = captured_error(() ->
       WebQuantumSavory._resolve_named_abstract_tag_type(
@@ -5188,6 +5197,15 @@
     mismatched_general = deepcopy(symbol_int_spec)
     mismatched_general["fields"][1]["type"] = "Float64"
     error = captured_error(() -> WebQuantumSavory.preview_tag_payload(Dict("tag" => mismatched_general)))
+    @test error isa WebQuantumSavory.APIError
+    @test error.status_code == 400
+    @test occursin("does not match", error.message)
+
+    qualified_general_field = deepcopy(symbol_int_spec)
+    qualified_general_field["fields"][1]["type"] = "Core.Int64"
+    error = captured_error(() -> WebQuantumSavory.preview_tag_payload(
+      Dict("tag" => qualified_general_field),
+    ))
     @test error isa WebQuantumSavory.APIError
     @test error.status_code == 400
     @test occursin("does not match", error.message)

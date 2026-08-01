@@ -283,18 +283,10 @@ function _resolve_allowed_data_type(value, catalog; context::AbstractString)
   value isa AbstractString || _conversion_error(context, DataType, value)
   type_id = String(value)
   type = get(catalog.allowed_by_id, type_id, nothing)
-  if type === nothing
-    # Display names are accepted only when unique in the advertised catalog.
-    candidates = unique(DataType[
-      candidate for candidate in values(catalog.allowed_by_id)
-      if string(nameof(candidate)) == type_id
-    ])
-    length(candidates) == 1 && return only(candidates)
-    throw(validation_error(
-      "$context is not an advertised DataType",
-      Dict{String,Any}("context" => String(context), "type_id" => type_id),
-    ))
-  end
+  type === nothing && throw(validation_error(
+    "$context is not an advertised DataType",
+    Dict{String,Any}("context" => String(context), "type_id" => type_id),
+  ))
   return type
 end
 
@@ -345,7 +337,7 @@ function _validate_general_field_annotations(
     field_context = "general $operation field $position"
     _require_tag_object(raw_field, field_context)
     supplied_type = _require_tag_string(raw_field, "type"; context=field_context)
-    supplied_type in (_tag_type_name(expected), _qualified_tag_type_id(expected)) ||
+    supplied_type == _tag_type_name(expected) ||
       throw(validation_error(
         "General $operation field $position does not match the selected signature",
         Dict{String,Any}(

@@ -269,6 +269,22 @@ describe('progressive tag constructor', () => {
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('serializes a unique friendly DataType search as its advertised ID', async () => {
+    const wrapper = mountConstructor({ query: true })
+    const combobox = await typeHead(wrapper, 'Int64')
+
+    expect(wrapper.get('.tag-option').text()).toContain('General Tag: DataType')
+    await combobox.trigger('keydown', { key: 'Enter' })
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.emitted('submit')?.at(-1)?.[0]).toEqual({
+      kind: 'general',
+      signature_id: 'datatype-empty',
+      head: { type: 'DataType', value: 'Core.Int64' },
+      fields: []
+    })
+  })
+
   it('narrows general signatures by prefix, allows only final-field backtracking, and submits only complete signatures', async () => {
     const wrapper = mountConstructor({ query: true, actionLabel: 'Run query' })
     const combobox = await typeHead(wrapper, ':priority')
