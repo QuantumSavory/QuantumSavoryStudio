@@ -313,9 +313,9 @@ simulator and script-export payloads resolve `distanceMeters`,
 `propagationDelaySeconds` is a nonnegative number and the other four may be
 their bounded numeric value or `null`. Virtual-edge data contains none of them.
 
-### Protocol Inputs and Numeric Expressions
+### Constructor Inputs and Numeric Expressions
 
-Protocol constructor inputs follow one metadata-driven pipeline:
+Protocol and background-noise constructor inputs follow one metadata-driven pipeline:
 
 ```text
 QuantumSavory constructor metadata
@@ -331,6 +331,10 @@ have no Default branch. Catalog `defaultValue` metadata is help text only; a new
 does not copy it into the draft. Choosing an explicit literal, function, tag, opaque
 JSON, or expression starts an editor draft and requires a valid value before commit;
 invalid draft text never enters the durable model.
+
+Every retained protocol or background-noise assignment crosses the minimized API as
+the same exact `{name,type,value}` object. Union choices and linked Variables emit their
+selected base wire type; `selectedType` remains project-only.
 
 `Float64` and `Int64` parameters and Variables can use a Julia numeric
 expression. The declared type remains `Float64` or `Int64`; project JSON stores

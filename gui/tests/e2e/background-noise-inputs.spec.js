@@ -251,6 +251,7 @@ test.describe('Background-noise constructor inputs', () => {
       type: 'T1Decay',
       parameters: [{
         name: 't1',
+        type: 'Float64',
         value: { kind: 'variable', id: variableId },
       }],
     })

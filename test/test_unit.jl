@@ -48,6 +48,23 @@
         ),
       )
 
+    Base.@kwdef struct UnionDiscriminatorBackground
+      choice::Union{Int64,Float64} = 1
+    end
+    QuantumSavory.constructor_schema(::Type{UnionDiscriminatorBackground}) =
+      QuantumSavory.ConstructorSchema(
+        UnionDiscriminatorBackground,
+        "A test-only background with an exact union discriminator.",
+        (
+          QuantumSavory.ConstructorFieldSchema(
+            :choice,
+            Union{Int64,Float64},
+            "A discriminated numeric choice.";
+            required=false,
+          ),
+        ),
+      )
+
     const CONSTRUCTION_FREE_CANARY_CALLS = Ref(0)
     struct ConstructionFreeAdmissionCanary
       count::Int64
@@ -240,7 +257,7 @@
 
     payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = Dict(
       "type" => "T2Dephasing",
-      "parameters" => [Dict("name" => "t2", "value" => 5)],
+      "parameters" => [Dict("name" => "t2", "type" => "Float64", "value" => 5)],
     )
     payload["net"]["edges"][1]["data"]["distanceMeters"] = 12_500.0
     payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = 0.125
@@ -2878,6 +2895,7 @@
         payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"]["parameters"][1]
       for mutate! in (
         payload -> (background_parameter(payload)["legacy"] = true),
+        payload -> delete!(background_parameter(payload), "type"),
         payload -> delete!(background_parameter(payload), "value"),
       )
         @test occursin("fields do not match", rejected_payload_shape(mutate!).message)
@@ -3418,20 +3436,6 @@
           ConstructionFreeAdmissionCanary,
         )
       end
-      @test isempty(WebQuantumSavory._admit_constructor_parameters(
-        [Dict("name" => "label", "type" => "String", "value" => nothing)],
-        ContextualIntegerBackground,
-      ))
-      for invalid_omission_type in ("default", "Float32", "Int64")
-        @test_throws WebQuantumSavory.APIError WebQuantumSavory._admit_constructor_parameters(
-          [Dict(
-            "name" => "label",
-            "type" => invalid_omission_type,
-            "value" => nothing,
-          )],
-          ContextualIntegerBackground,
-        )
-      end
       @test CONSTRUCTION_FREE_CANARY_CALLS[] == 0
   end
 
@@ -3700,7 +3704,7 @@
       default_noise_payload = current_simulation_payload()
       default_noise_payload["net"]["nodes"][1]["data"]["slots"][2]["backgroundNoise"] = Dict(
         "type" => "T1Decay",
-        "parameters" => [Dict("name" => "t1", "value" => 5.0)],
+        "parameters" => [Dict("name" => "t1", "type" => "Float64", "value" => 5.0)],
       )
       for slot in default_noise_payload["net"]["nodes"][2]["data"]["slots"]
         slot["backgroundNoise"] = Dict("type" => "default", "parameters" => Any[])
@@ -4468,7 +4472,7 @@
         "String parameter",
       )
       @test_throws WebQuantumSavory.APIError instantiate_contextual_background([
-        Dict("name" => "label", "value" => blank),
+        Dict("name" => "label", "type" => "String", "value" => blank),
       ])
     end
 
@@ -4786,7 +4790,7 @@
 
       safe_noise = WebQuantumSavory._instantiate_noise(Dict(
         "type" => "AmplitudeDamping",
-        "parameters" => [Dict("name" => "τ", "value" => 2.0)],
+        "parameters" => [Dict("name" => "τ", "type" => "Float64", "value" => 2.0)],
       ))
       @test safe_noise isa QuantumSavory.AmplitudeDamping
 
@@ -4818,6 +4822,7 @@
         "type" => "AmplitudeDamping",
         "parameters" => [Dict(
           "name" => "τ",
+          "type" => "Float64",
           "value" => Dict(
             "kind" => "numeric_expression",
             "source" => "begin error(\"must not execute\"); 2.0 end",
@@ -6569,6 +6574,7 @@
       "type" => "AmplitudeDamping",
       "parameters" => [Dict(
         "name" => "τ",
+        "type" => "Float64",
         "value" => expression("self + nodeid(\"Alice\")"),
       )],
     )
@@ -6592,6 +6598,7 @@
           "type" => "AmplitudeDamping",
           "parameters" => [Dict(
             "name" => "τ",
+            "type" => "Float64",
             "value" => Dict("kind" => "variable", "id" => "noise-rate"),
           )],
         ),
@@ -6610,6 +6617,7 @@
       integer_noise = instantiate_contextual_background(
         [Dict(
           "name" => "count",
+          "type" => "Int64",
           "value" => expression("self + 1"),
         )],
         noise_context,
@@ -6626,6 +6634,7 @@
       variable_integer_noise = instantiate_contextual_background(
         [Dict(
           "name" => "count",
+          "type" => "Int64",
           "value" => Dict("kind" => "variable", "id" => "integer-count"),
         )],
         noise_context;
@@ -6660,6 +6669,7 @@
     integer_entry = only(WebQuantumSavory._admit_constructor_parameters(
       [Dict(
         "name" => "count",
+        "type" => "Int64",
         "value" => Dict("kind" => "variable", "id" => "integer-count"),
       )],
       ContextualIntegerBackground;
@@ -6711,6 +6721,7 @@
           "type" => "AmplitudeDamping",
           "parameters" => [Dict(
             "name" => "τ",
+            "type" => "Float64",
             "value" => expression("open(\"forbidden\", \"w\")"),
           )],
         ),
@@ -6724,6 +6735,7 @@
       "type" => "ContextualIntegerBackground",
       "parameters" => [Dict(
         "name" => "label",
+        "type" => "String",
         "value" => expression("1"),
       )],
     )
@@ -6743,6 +6755,51 @@
       return capture_error(() -> WebQuantumSavory.validate_payload(payload))
     end
 
+    union_variable = WebQuantumSavory.Variable(
+      "union-choice",
+      "union choice",
+      "Float64",
+      0.5,
+    )
+    union_entry = only(WebQuantumSavory._admit_constructor_parameters(
+      [Dict(
+        "name" => "choice",
+        "type" => "Float64",
+        "value" => Dict("kind" => "variable", "id" => union_variable.id),
+      )],
+      UnionDiscriminatorBackground;
+      variables=Dict(union_variable.id => union_variable),
+      parameter_context="Test union background parameter",
+    ))
+    @test union_entry.handling_type === Float64
+    @test union_entry.variable.id == union_variable.id
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._admit_constructor_parameters(
+      [Dict(
+        "name" => "choice",
+        "type" => "Int64",
+        "value" => Dict("kind" => "variable", "id" => union_variable.id),
+      )],
+      UnionDiscriminatorBackground;
+      variables=Dict(union_variable.id => union_variable),
+      parameter_context="Test union background parameter",
+    )
+    @test isempty(WebQuantumSavory._admit_constructor_parameters(
+      [Dict("name" => "choice", "type" => "Float64", "value" => nothing)],
+      UnionDiscriminatorBackground;
+      parameter_context="Test union background parameter",
+    ))
+    for invalid_omission in (
+      Dict("name" => "choice", "value" => nothing),
+      Dict("name" => "choice", "type" => "default", "value" => nothing),
+      Dict("name" => "choice", "type" => "String", "value" => nothing),
+    )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._admit_constructor_parameters(
+        [invalid_omission],
+        UnionDiscriminatorBackground;
+        parameter_context="Test union background parameter",
+      )
+    end
+
     valid_background_payload = deepcopy(test_payload)
     valid_background_payload["variables"] = [Dict(
       "id" => "contextual-rate",
@@ -6755,6 +6812,7 @@
         "type" => "T1Decay",
         "parameters" => [Dict(
           "name" => "t1",
+          "type" => "Float64",
           "value" => Dict("kind" => "variable", "id" => "contextual-rate"),
         )],
       )
@@ -6764,6 +6822,7 @@
       "type" => "T1Decay",
       "parameters" => [Dict(
         "name" => "t1",
+        "type" => "Float64",
         "value" => Dict("kind" => "variable", "id" => "missing"),
       )],
     ))
@@ -6775,6 +6834,7 @@
         "type" => "T1Decay",
         "parameters" => [Dict(
           "name" => "t1",
+          "type" => "Float64",
           "value" => Dict("kind" => "variable", "id" => "label"),
         )],
       );
@@ -6797,7 +6857,11 @@
 
     wrong_background_literal = background_validation_error(Dict(
       "type" => "T1Decay",
-      "parameters" => [Dict("name" => "t1", "value" => "2.0")],
+      "parameters" => [Dict(
+        "name" => "t1",
+        "type" => "Float64",
+        "value" => "2.0",
+      )],
     ))
     @test wrong_background_literal isa WebQuantumSavory.APIError
     @test occursin("does not match declared type", wrong_background_literal.message)
@@ -6805,6 +6869,7 @@
     unsupported_complex_error = capture_error(() ->
       instantiate_contextual_background([Dict(
           "name" => "values",
+          "type" => "Vector{Int64}",
           "value" => Any[1, Dict("nested" => 2)],
         )]))
     @test unsupported_complex_error isa WebQuantumSavory.APIError
@@ -6884,6 +6949,7 @@
         "type" => "T1Decay",
         "parameters" => [Dict(
           "name" => "t1",
+          "type" => "Float64",
           "value" => Dict("kind" => "variable", "id" => "background-rate"),
         )],
       )
@@ -6891,6 +6957,7 @@
         "type" => "T1Decay",
         "parameters" => [Dict(
           "name" => "t1",
+          "type" => "Float64",
           "value" => expression("10 * self + nodeid(\"Cambridge\")"),
         )],
       )

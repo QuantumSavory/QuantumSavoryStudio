@@ -31,7 +31,8 @@ chosen. Numeric scalars/vectors contain finite JSON numbers. Integers are integr
 JavaScript-safe, and never Booleans. Editors may parse drafts; commands, codecs, and
 backend reject numeric strings. Empty arrays remain valid unless metadata says otherwise.
 
-`selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
+`selectedType` stores a frontend descriptor ID; minimized protocol and background-noise
+assignments both use the exact `{name,type,value}` shape with its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
 value and transient validation state.
 
@@ -68,8 +69,9 @@ that omission permits inference. Updates record current catalog types/descriptor
 drop unknown seeded fields. Default has exactly one durable form: an optional constructor
 parameter uses `selectedType: "default", value: null`. Variables never use Default or
 JSON null. Empty strings, string `"default"` sentinels, case variants, and Function/Lambda
-aliases are not Default. Only JSON null omits a constructor keyword; blank strings never
-do. No older-schema migration exists. Variable branch changes update every linked
+aliases are not Default. Within a durable parameter object, only JSON null selects
+omission; minimized projection drops that object, and blank strings never omit. No
+older-schema migration exists. Variable branch changes update every linked
 descriptor atomically or reject the candidate.
 
 `App` injects one protocol/background catalog bundle into GUI/MCP validation. Missing or

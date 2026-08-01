@@ -928,7 +928,7 @@ function plainSlot(slot) {
   }
 }
 
-function plainNode(node) {
+function plainNode(node, projectProtocol = plainProtocol) {
   const source = isRecord(node) ? node : {}
   const sourceData = isRecord(source.data) ? source.data : {}
   return {
@@ -943,7 +943,7 @@ function plainNode(node) {
         ? sourceData.slots.map(plainSlot)
         : [],
       protocols: Array.isArray(sourceData.protocols)
-        ? sourceData.protocols.map(plainProtocol)
+        ? sourceData.protocols.map(protocol => projectProtocol(protocol))
         : [],
     },
   }
@@ -953,7 +953,7 @@ function endpointId(endpoint) {
   return isRecord(endpoint) ? endpoint.id : endpoint
 }
 
-function plainEdge(edge) {
+function plainEdge(edge, projectProtocol = plainProtocol) {
   const source = isRecord(edge) ? edge : {}
   const sourceData = isRecord(source.data) ? source.data : {}
   const isLogic = source.isLogic === true
@@ -962,7 +962,7 @@ function plainEdge(edge) {
       ? { type: sourceData.type }
       : {}),
     protocols: Array.isArray(sourceData.protocols)
-      ? sourceData.protocols.map(plainProtocol)
+      ? sourceData.protocols.map(protocol => projectProtocol(protocol))
       : [],
   }
   if (!isLogic) {
@@ -1120,11 +1120,11 @@ export function encodeStoredProject(project, context = {}) {
     ...(platformInfo == null ? {} : { platformInfo: cloneValue(platformInfo) }),
     net: {
       nodes: Array.isArray(sourceNet.nodes)
-        ? sourceNet.nodes.map(plainNode)
+        ? sourceNet.nodes.map(node => plainNode(node))
         : [],
-      edges: Array.isArray(sourceNet.edges) ? sourceNet.edges.map(plainEdge) : [],
+      edges: Array.isArray(sourceNet.edges) ? sourceNet.edges.map(edge => plainEdge(edge)) : [],
       protocols: Array.isArray(sourceNet.protocols)
-        ? sourceNet.protocols.map(plainProtocol)
+        ? sourceNet.protocols.map(protocol => plainProtocol(protocol))
         : [],
       physicalConfig: normalizePhysicalConfig(sourceNet.physicalConfig),
     },
@@ -1173,20 +1173,28 @@ function parameterWireType(parameter) {
   return selectedType ?? parameter?.type
 }
 
+function cleanConstructorParameter(parameter, name = parameter.name) {
+  return {
+    name,
+    type: parameterWireType(parameter),
+    value: cloneValue(parameter.value),
+  }
+}
+
 function cleanProtocol(protocol, excludedParameterNames) {
-  const plain = plainProtocol(protocol)
+  const source = isRecord(protocol) ? protocol : {}
+  const plain = plainProtocol({
+    id: source.id,
+    type: source.type,
+    parameters: Array.isArray(source.parameters)
+      ? source.parameters.filter(parameter => !excludedParameterNames.has(parameter?.name))
+      : [],
+  })
   return {
     ...plain,
     parameters: plain.parameters
-      .filter(parameter => (
-        !excludedParameterNames.has(parameter?.name) && hasValue(parameter)
-      ))
-      .map(parameter => {
-        const cleaned = cloneValue(parameter)
-        cleaned.type = parameterWireType(cleaned)
-        delete cleaned.selectedType
-        return cleaned
-      }),
+      .filter(hasValue)
+      .map(parameter => cleanConstructorParameter(parameter)),
   }
 }
 
@@ -1195,10 +1203,7 @@ function cleanBackgroundNoise(value) {
     type: value.type,
     parameters: value.parameters
       .filter(hasValue)
-      .map(parameter => ({
-        name: parameter.field,
-        value: cloneValue(parameter.value),
-      })),
+      .map(parameter => cleanConstructorParameter(parameter, parameter.field)),
   }
 }
 
@@ -1233,7 +1238,10 @@ export function toSimulationPayload(project) {
     net: {
       nodes: Array.isArray(sourceNet.nodes)
         ? sourceNet.nodes.map(node => {
-            const plain = plainNode(node)
+            const plain = plainNode(
+              node,
+              protocol => cleanProtocol(protocol, nodeExclusions),
+            )
             const sourceData = isRecord(plain.data) ? plain.data : {}
             return {
               ...plain,
@@ -1244,15 +1252,16 @@ export function toSimulationPayload(project) {
                   cleaned.backgroundNoise = cleanBackgroundNoise(cleaned.backgroundNoise)
                   return cleaned
                 }),
-                protocols: (sourceData.protocols || [])
-                  .map(protocol => cleanProtocol(protocol, nodeExclusions)),
               },
             }
           })
         : [],
       edges: Array.isArray(sourceNet.edges)
         ? sourceNet.edges.map(edge => {
-            const plain = plainEdge(edge)
+            const plain = plainEdge(
+              edge,
+              protocol => cleanProtocol(protocol, edgeExclusions),
+            )
             const resolvedPhysical = resolveEdgePhysicalProperties(edge, physicalConfig)
             const payloadData = omitFields(
               plain.data,
@@ -1275,8 +1284,6 @@ export function toSimulationPayload(project) {
                       transmissivity: resolvedPhysical.transmissivity,
                     }
                   : {}),
-                protocols: (payloadData.protocols || [])
-                  .map(protocol => cleanProtocol(protocol, edgeExclusions)),
               },
             }
           })

@@ -371,8 +371,22 @@
       extra_background_parameter_field = deepcopy(test_payload)
       extra_background_parameter_field["net"]["nodes"][1]["data"]["slots"][1][
         "backgroundNoise"
-      ]["parameters"] = [Dict("name" => "t1", "value" => 1.0, "legacy" => true)]
+      ]["parameters"] = [Dict(
+        "name" => "t1",
+        "type" => "Float64",
+        "value" => 1.0,
+        "legacy" => true,
+      )]
       push!(invalid_nested_payloads, extra_background_parameter_field)
+
+      missing_background_parameter_type = deepcopy(test_payload)
+      delete!(
+        missing_background_parameter_type["net"]["nodes"][1]["data"]["slots"][1][
+          "backgroundNoise"
+        ]["parameters"][1],
+        "type",
+      )
+      push!(invalid_nested_payloads, missing_background_parameter_type)
 
       extra_protocol_field = deepcopy(test_payload)
       extra_protocol_field["net"]["edges"][1]["data"]["protocols"][1]["legacy"] = true
@@ -1350,11 +1364,14 @@
       ]["items"]["\$ref"] == "#/components/schemas/SimulationSlot"
       @test contract["components"]["schemas"]["SimulationProtocol"]["properties"][
         "parameters"
-      ]["items"]["\$ref"] == "#/components/schemas/ProtocolParameter"
-      @test contract["components"]["schemas"]["ProtocolParameter"]["properties"][
+      ]["items"]["\$ref"] == "#/components/schemas/ConstructorParameter"
+      @test contract["components"]["schemas"]["SimulationBackgroundNoise"]["properties"][
+        "parameters"
+      ]["items"]["\$ref"] == "#/components/schemas/ConstructorParameter"
+      @test contract["components"]["schemas"]["ConstructorParameter"]["properties"][
         "value"
       ]["\$ref"] == "#/components/schemas/ConstructorParameterValue"
-      @test contract["components"]["schemas"]["ProtocolParameter"]["properties"][
+      @test contract["components"]["schemas"]["ConstructorParameter"]["properties"][
         "type"
       ]["type"] == "string"
       @test contract["components"]["schemas"]["SimulationVariable"]["properties"][

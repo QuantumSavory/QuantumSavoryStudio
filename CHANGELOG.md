@@ -27,6 +27,10 @@
   authoring, MCP commands, backend admission, and script export. Variables now require
   one concrete non-null typed value; exact JSON null remains only the omission form for
   an optional constructor keyword, with no migration or compatibility adapter.
+- Unified minimized protocol and background-noise parameters as exact
+  `{name,type,value}` constructor assignments. Default drafts are omitted, retained
+  union/Variable branches emit their canonical base type, and direct optional-null
+  omissions reject missing, legacy, or contradictory type discriminators.
 - Split project admission into the co-shipped schema's closed structural field boundary
   and a catalog-independent semantic pass for exact branches, safe integers, duplicate
   Variables, and dangling or incompatible references.

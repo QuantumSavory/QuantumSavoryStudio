@@ -265,17 +265,15 @@
   node_data = document["components"]["schemas"]["SimulationNodeData"]
   slot = document["components"]["schemas"]["SimulationSlot"]
   background = document["components"]["schemas"]["SimulationBackgroundNoise"]
-  background_parameter =
-    document["components"]["schemas"]["BackgroundNoiseParameter"]
   protocol = document["components"]["schemas"]["SimulationProtocol"]
-  protocol_parameter = document["components"]["schemas"]["ProtocolParameter"]
+  constructor_parameter =
+    document["components"]["schemas"]["ConstructorParameter"]
   for schema in (
     node_data,
     slot,
     background,
-    background_parameter,
     protocol,
-    protocol_parameter,
+    constructor_parameter,
   )
     @test schema["additionalProperties"] == false
   end
@@ -286,17 +284,18 @@
     "#/components/schemas/SimulationBackgroundNoise"
   @test Set(background["required"]) == Set(["type", "parameters"])
   @test background["properties"]["parameters"]["items"]["\$ref"] ==
-    "#/components/schemas/BackgroundNoiseParameter"
-  @test Set(background_parameter["required"]) == Set(["name", "value"])
+    "#/components/schemas/ConstructorParameter"
   @test Set(protocol["required"]) == Set(["id", "type", "parameters"])
   @test protocol["properties"]["parameters"]["items"]["\$ref"] ==
-    "#/components/schemas/ProtocolParameter"
-  @test Set(protocol_parameter["required"]) == Set(["name", "type", "value"])
-  @test protocol_parameter["properties"]["type"] == Dict(
+    "#/components/schemas/ConstructorParameter"
+  @test Set(constructor_parameter["required"]) == Set(["name", "type", "value"])
+  @test constructor_parameter["properties"]["type"] == Dict(
     "type" => "string",
     "minLength" => 1,
     "pattern" => "\\S",
   )
+  @test !haskey(document["components"]["schemas"], "ProtocolParameter")
+  @test !haskey(document["components"]["schemas"], "BackgroundNoiseParameter")
   @test !haskey(document["components"]["schemas"], "EdgeProtocol")
 
   variable_reference =
@@ -311,7 +310,7 @@
   @test Set(numeric_expression["required"]) == Set(["kind", "source"])
   @test Set(states_zoo["required"]) ==
     Set(["kind", "state_type", "parameters"])
-  @test protocol_parameter["properties"]["value"]["\$ref"] ==
+  @test constructor_parameter["properties"]["value"]["\$ref"] ==
     "#/components/schemas/ConstructorParameterValue"
   @test document["components"]["schemas"]["SimulationVariable"]["properties"][
     "value"

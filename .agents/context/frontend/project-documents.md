@@ -37,6 +37,9 @@ a selected StatesZoo family's numeric map; `kind` objects remain closed tags.
 
 API projection requires explicit qubit/qumode representations and supplies no backend
 default. Export reuses them and accepts only the panel's two positive timing values.
+Both protocol and background-noise assignments minimize through one constructor shape:
+retained fields emit exact `{name,type,value}` objects with the selected base wire type,
+while Default/null fields are absent.
 
 `contracts/project/v2.schema.json` owns durable fields and closes every owned object.
 After structural validation, `projectCodec` enforces exact

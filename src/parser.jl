@@ -580,8 +580,8 @@ function _admit_constructor_parameters(
     context = "$parameter_context '$original_name'"
     declared_type = declared_parameter_types[original_name]
     field_schema = get(constructor_fields_by_name, original_name, nothing)
-    transport_type = get(parameter, "type", nothing)
-    transport_type === nothing || _constructor_parameter_selected_type(
+    transport_type = _required_nonempty_string(parameter, "type", context)
+    _constructor_parameter_selected_type(
       declared_type,
       transport_type;
       context,
@@ -628,8 +628,7 @@ function _admit_constructor_parameters(
             "parameter_name" => original_name,
           ),
         ))
-      transport_type === nothing ||
-        _transport_type_supports_variable_type(transport_type, variable.type) ||
+      _transport_type_supports_variable_type(transport_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' branch does not match $context transport type",
           Dict{String,Any}(
@@ -640,7 +639,7 @@ function _admit_constructor_parameters(
           ),
         ))
       raw_value = variable.value
-      selected_type = transport_type === nothing ? variable.type : transport_type
+      selected_type = transport_type
     end
 
     classified = _classify_declared_wire_value(
@@ -1319,7 +1318,7 @@ function _claim_unique_payload_id!(seen::Set{String}, id::String, kind::String)
   return id
 end
 
-function _validate_protocol_parameter(parameter, context::String)
+function _validate_constructor_parameter(parameter, context::String)
   _require_exact_object_fields(
     parameter,
     ("name", "type", "value");
@@ -1354,7 +1353,7 @@ function _validate_protocol_definition(
     "$context parameters must be an array",
   ))
   for (index, parameter) in enumerate(parameters)
-    _validate_protocol_parameter(parameter, "$context parameter $index")
+    _validate_constructor_parameter(parameter, "$context parameter $index")
   end
   return protocol
 end
@@ -1389,18 +1388,7 @@ function _validate_background_noise(background, context::String)
     "$context parameters must be an array",
   ))
   for (index, parameter) in enumerate(parameters)
-    parameter_context = "$context parameter $index"
-    _require_exact_object_fields(
-      parameter,
-      ("name", "value");
-      context=parameter_context,
-    )
-    _required_nonempty_string(parameter, "name", parameter_context)
-    _validate_wire_value(
-      parameter["value"];
-      allow_variable_reference=true,
-      context="$parameter_context value",
-    )
+    _validate_constructor_parameter(parameter, "$context parameter $index")
   end
   return background
 end

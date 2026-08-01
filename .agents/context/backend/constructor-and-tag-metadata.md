@@ -50,9 +50,10 @@ construction, and script export share the required-field contract. Numeric scala
 finite JSON numbers and numeric vectors are JSON-number arrays; integer targets require
 integral values and Booleans are rejected as numbers. Booleans and nonblank strings
 retain their JSON types, and intrinsic branches use exact `nothing` or `Wildcard`
-sentinels. Numeric strings are not a wire form. Only JSON null omits a constructor
-keyword, and Function/Lambda text matching `default` after case-folding and trimming is
-invalid.
+sentinels. Numeric strings are not a wire form. An explicit parameter object can request
+keyword omission only with JSON null and a canonical declared type; absent optional
+fields remain absent. Function/Lambda text matching `default` after case-folding and
+trimming is invalid.
 
 `_admit_constructor_parameters` is the pure shared classifier for preflight, runtime,
 and script export.
@@ -73,9 +74,12 @@ catalog is unavailable. The closed OpenAPI catalog schemas include `required`; `
 continues to render generated Swagger UI from the active OpenAPI document, and generated
 operation paths remain derived rather than hand-edited.
 
-Each emitted protocol parameter is the exact object `{name, type, value}`. Web-owned
-values with `kind` are closed variable-reference, numeric-expression, or States Zoo
-recipes. Untagged JSON values may be recursively shaped for simulator-owned
+Each retained protocol or background-noise parameter is the same exact minimized object
+`{name, type, value}`; optional Default/null drafts are omitted entirely. The `type`
+discriminator must be a canonical member of the live declaration even when a direct API
+caller explicitly sends an optional null omission. Web-owned values with `kind` are
+closed variable-reference, numeric-expression, or States Zoo recipes. Untagged JSON
+values may be recursively shaped for simulator-owned
 constructors, but no nested object may introduce `kind`; unknown discriminators are
 validation errors rather than forward-compatible fallbacks. States Zoo recipe parameter
 names and numeric ranges come from the selected simulator catalog entry. OpenAPI closes

@@ -114,14 +114,19 @@ describe('collaborative design codec', () => {
             doc: 'Contextual noise.',
             parameters: [{
               field: 'rate',
-              type: 'Float64',
+              type: ['Int64', 'Float64'],
               selectedType: 'expression:Float64',
               value: new VariableReference('variable_rate'),
             }, {
               field: 'count',
-              type: 'Int64',
+              type: ['Float64', 'Int64'],
               selectedType: 'expression:Int64',
               value: { kind: 'numeric_expression', source: 'self + 1' },
+            }, {
+              field: 'omitted',
+              type: ['Float64', 'Int64'],
+              selectedType: 'default',
+              value: null,
             }],
           },
         }],
@@ -138,9 +143,11 @@ describe('collaborative design codec', () => {
         type: 'ContextNoise',
         parameters: [{
           name: 'rate',
+          type: 'Float64',
           value: { kind: 'variable', id: 'variable_rate' },
         }, {
           name: 'count',
+          type: 'Int64',
           value: { kind: 'numeric_expression', source: 'self + 1' },
         }],
       })
@@ -1508,14 +1515,25 @@ describe('backend payload codecs', () => {
       doc: 'Editor documentation',
       futureNoiseField: true,
       parameters: [
-        { field: 'rate', value: 0.25, doc: 'Rate' },
-        { field: 'unused', value: '' },
+        {
+          field: 'rate',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 0.25,
+          doc: 'Rate',
+        },
+        { field: 'retained', type: 'String', selectedType: 'String', value: 'kept' },
       ],
     }
     project.net.nodes[0].data.protocols[0].parameters = [
-      { name: 'sim', type: 'ConcurrentSim.Simulation' },
+      {
+        name: 'sim',
+        type: 'Int64',
+        selectedType: 'String',
+        value: 'excluded before admission',
+      },
       { name: 'node', type: 'Int64', value: 1 },
-      { name: 'kept', type: 'Union', selectedType: 'Float64', value: 0.5 },
+      { name: 'kept', type: ['Int64', 'Float64'], selectedType: 'Float64', value: 0.5 },
       { name: 'unset', type: 'Float64', value: null },
     ]
     project.net.edges[0].data.protocols[0].parameters = [
@@ -1551,11 +1569,15 @@ describe('backend payload codecs', () => {
       backgroundNoise: {
         type: 'NoiseType',
         parameters: [
-          { name: 'rate', value: 0.25 },
-          { name: 'unused', value: '' },
+          { name: 'rate', type: 'Float64', value: 0.25 },
+          { name: 'retained', type: 'String', value: 'kept' },
         ],
       },
     })
+    expect(payload.net.nodes[0].data.slots[0].backgroundNoise.parameters).toEqual([
+      { name: 'rate', type: 'Float64', value: 0.25 },
+      { name: 'retained', type: 'String', value: 'kept' },
+    ])
     for (const field of TRANSIENT_SLOT_FIELDS) {
       expect(payload.net.nodes[0].data.slots[0]).not.toHaveProperty(field)
     }

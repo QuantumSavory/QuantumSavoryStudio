@@ -1697,12 +1697,12 @@
           "parameters": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProtocolParameter"
+              "$ref": "#/components/schemas/ConstructorParameter"
             }
           }
         }
       },
-      "ProtocolParameter": {
+      "ConstructorParameter": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -1766,26 +1766,8 @@
           "parameters": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/BackgroundNoiseParameter"
+              "$ref": "#/components/schemas/ConstructorParameter"
             }
-          }
-        }
-      },
-      "BackgroundNoiseParameter": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "name",
-          "value"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "value": {
-            "$ref": "#/components/schemas/ConstructorParameterValue"
           }
         }
       },
