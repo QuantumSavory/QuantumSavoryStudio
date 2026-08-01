@@ -16,8 +16,7 @@ const protocolDefinition = {
   type: PROTOCOL_TYPE,
   group: 'node',
   parameters: [
-    { field: 'sim', type: 'Any', doc: 'Injected simulation.', required: false },
-    { field: 'node', type: 'Int64', doc: 'Injected node.', required: false },
+    { field: 'node', type: 'Int64', doc: 'A user-configurable node.', required: false },
     {
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
@@ -72,22 +71,25 @@ afterAll(() => {
 })
 
 describe('ProtocolConstructorForm', () => {
-  it('filters injected constructor arguments and retains documentation tooltips', () => {
+  it('renders every user-configurable field returned by the protocol schema', () => {
     const protocol = {
       type: PROTOCOL_TYPE,
       parameters: [
-        { name: 'sim', type: 'Any' },
-        { name: 'node', type: 'Int64' },
+        { name: 'node', type: 'Int64', value: 2 },
         { name: 'rounds', type: 'Int64', value: 3 }
       ]
     }
     const wrapper = mountForm({ protocol, category: 'node' })
 
-    expect(wrapper.findAll('.param-item')).toHaveLength(1)
-    expect(wrapper.get('.param-name').text()).toContain('rounds')
-    expect(wrapper.get('.param-name').attributes('data-tooltip')).toBe('Number of rounds.')
-    expect(wrapper.get('input[type="number"]').element.value).toBe('3')
-    expect(wrapper.get('input[type="number"]').attributes('step')).toBe('1')
+    expect(wrapper.findAll('.param-item')).toHaveLength(2)
+    const labels = wrapper.findAll('.param-name').map(parameter => parameter.text())
+    expect(labels[0]).toContain('node')
+    expect(labels[1]).toContain('rounds')
+    expect(wrapper.findAll('.param-name')[0].attributes('data-tooltip'))
+      .toBe('A user-configurable node.')
+    expect(wrapper.findAll('input[type="number"]').map(input => input.element.value))
+      .toEqual(['2', '3'])
+    expect(wrapper.findAll('input[type="number"]')[1].attributes('step')).toBe('1')
   })
 
   it('adds unsupported parameter types to documentation as Markdown', () => {
@@ -103,11 +105,11 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.find('.unknown-type-indicator').exists()).toBe(false)
   })
 
-  it('renders an explicit empty constructor panel when no configurable fields remain', () => {
+  it('renders an explicit empty constructor panel when the schema has no fields', () => {
     const wrapper = mountForm({
       protocol: {
         type: PROTOCOL_TYPE,
-        parameters: [{ name: 'sim', type: 'Any' }, { name: 'node', type: 'Int64' }]
+        parameters: []
       },
       category: 'node',
       emptyText: 'This protocol has no configurable constructor parameters.'

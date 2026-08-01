@@ -1398,6 +1398,23 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.protocols[0].parameters)
       .toContainEqual(expect.objectContaining({ name: 'rounds', value: null }))
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'node_a',
+        value: {
+          type: 'Example.Protocol',
+          parameters: [{ name: 'sim', type: 'Any', value: {} }],
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Unknown protocol parameter for Example.Protocol: sim',
+    })
+    expect(project.net.nodes[0].data.protocols).toHaveLength(1)
+
     project.net.nodes[0].data.protocols[0].parameters
       .find(parameter => parameter.name === 'tag').type = 'Any'
 

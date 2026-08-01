@@ -43,7 +43,9 @@ Never infer named-tag behavior from saved type strings or create a frontend-only
 catalog.
 
 `ConstructorForm` is the shared protocol/background descriptor and Variable-assignment
-core; wrappers differ only in identity, lookup, and injected fields.
+core; wrappers differ only in parameter identity and metadata lookup. Protocol forms
+render every user-configurable field supplied by the QuantumSavory protocol schema;
+they do not maintain a second list of placement-injected constructor names.
 `validateConstructorDraft` serves authoring and readiness. Linked Variables must exist,
 be concrete, compatible, and complete, with live resolution while editing.
 
@@ -83,9 +85,10 @@ catalog-backed issues without dispatch. Omission is topology-utility-only.
 Explicit literal, function, tag, symbolic, or numeric-expression modes begin empty and
 can commit only when complete. `parameter.error` is the shared submission blocker for
 dirty, blank, pending, disabled, missing-context, transport, bound, and source failures.
-Drafts, previews/errors, requests, and presentation state are editor-owned. Current
-protocol/background normalization still preserves string `latex` and additive fields,
-so imported preview/error fields may round-trip as a documented gap.
+Drafts, previews/errors, requests, and presentation state are editor-owned. Project
+encoding retains only each constructor parameter's identity, declared type, selected
+type, and value, so `latex`, error, preview, and other additive editor fields do not
+round-trip.
 
 `TypedValueInput` owns raw scalar lexemes until they validate, so unsafe integer text is
 never rounded through a JavaScript `Number` into a command. Its `Any` textarea parses

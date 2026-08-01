@@ -665,24 +665,27 @@
     @test variable_tag_error isa WebQuantumSavory.APIError
     @test occursin("cannot use variable", variable_tag_error.message)
 
-    unknown_export_parameter = deepcopy(tagged_payload)
-    unknown_parameters = unknown_export_parameter["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    push!(unknown_parameters, Dict(
-      "name" => "forged_parameter",
-      "type" => "Float64",
-      "value" => 0.5,
-    ))
-    unknown_export_error = try
-      WebQuantumSavory.generate_julia_script(unknown_export_parameter)
-      nothing
-    catch error
-      error
+    for unknown_name in ("sim", "nodeA", "future_catalog_field")
+      unknown_export_parameter = deepcopy(tagged_payload)
+      unknown_parameters =
+        unknown_export_parameter["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
+      push!(unknown_parameters, Dict(
+        "name" => unknown_name,
+        "type" => "Float64",
+        "value" => 0.5,
+      ))
+      unknown_export_error = try
+        WebQuantumSavory.generate_julia_script(unknown_export_parameter)
+        nothing
+      catch error
+        error
+      end
+      @test unknown_export_error isa WebQuantumSavory.APIError
+      @test occursin(
+        "unknown protocol parameter '$(lowercase(unknown_name))'",
+        lowercase(unknown_export_error.message),
+      )
     end
-    @test unknown_export_error isa WebQuantumSavory.APIError
-    @test occursin(
-      "unknown protocol parameter 'forged_parameter'",
-      lowercase(unknown_export_error.message),
-    )
 
     diagnostic_payload = deepcopy(payload)
     diagnostic_payload["net"]["protocols"] = Any[

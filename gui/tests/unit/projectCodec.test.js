@@ -1528,11 +1528,17 @@ describe('backend payload codecs', () => {
     project.net.nodes[0].data.protocols[0].parameters = [
       {
         name: 'sim',
-        type: 'Int64',
+        type: 'String',
         selectedType: 'String',
-        value: 'excluded before admission',
+        value: 'preserved for catalog admission',
       },
       { name: 'node', type: 'Int64', value: 1 },
+      {
+        name: 'future_catalog_field',
+        type: 'Bool',
+        selectedType: 'Bool',
+        value: false,
+      },
       { name: 'kept', type: ['Int64', 'Float64'], selectedType: 'Float64', value: 0.5 },
       { name: 'unset', type: 'Float64', value: null },
     ]
@@ -1583,9 +1589,13 @@ describe('backend payload codecs', () => {
     }
     expect(payload.net.nodes[0].data.slots[0].backgroundNoise).not.toHaveProperty('doc')
     expect(payload.net.nodes[0].data.protocols[0].parameters).toEqual([
+      { name: 'sim', type: 'String', value: 'preserved for catalog admission' },
+      { name: 'node', type: 'Int64', value: 1 },
+      { name: 'future_catalog_field', type: 'Bool', value: false },
       { name: 'kept', type: 'Float64', value: 0.5 },
     ])
     expect(payload.net.edges[0].data.protocols[0].parameters).toEqual([
+      { name: 'nodeA', type: 'Int64', value: 1 },
       {
         name: 'value',
         type: 'Symbolic',
@@ -1652,7 +1662,7 @@ describe('backend payload codecs', () => {
 
     expect(slot.isLocked).toBe(true)
     expect(slot.backgroundNoise.doc).toBe('Editor documentation')
-    expect(project.net.nodes[0].data.protocols[0].parameters[2].selectedType).toBe('Float64')
+    expect(project.net.nodes[0].data.protocols[0].parameters[3].selectedType).toBe('Float64')
   })
 
   it('serializes nullable named-tag union choices with their established wire values', () => {

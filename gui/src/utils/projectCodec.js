@@ -1181,13 +1181,13 @@ function cleanConstructorParameter(parameter, name = parameter.name) {
   }
 }
 
-function cleanProtocol(protocol, excludedParameterNames) {
+function cleanProtocol(protocol) {
   const source = isRecord(protocol) ? protocol : {}
   const plain = plainProtocol({
     id: source.id,
     type: source.type,
     parameters: Array.isArray(source.parameters)
-      ? source.parameters.filter(parameter => !excludedParameterNames.has(parameter?.name))
+      ? source.parameters
       : [],
   })
   return {
@@ -1213,8 +1213,6 @@ function cleanBackgroundNoise(value) {
 export function toSimulationPayload(project) {
   const source = isRecord(project) ? project : createEmptyProject()
   const sourceNet = isRecord(source.net) ? source.net : {}
-  const nodeExclusions = new Set(['sim', 'net', 'node'])
-  const edgeExclusions = new Set(['sim', 'net', 'nodeA', 'nodeB'])
   const physicalConfig = normalizePhysicalConfig(sourceNet.physicalConfig)
 
   return {
@@ -1240,7 +1238,7 @@ export function toSimulationPayload(project) {
         ? sourceNet.nodes.map(node => {
             const plain = plainNode(
               node,
-              protocol => cleanProtocol(protocol, nodeExclusions),
+              protocol => cleanProtocol(protocol),
             )
             const sourceData = isRecord(plain.data) ? plain.data : {}
             return {
@@ -1260,7 +1258,7 @@ export function toSimulationPayload(project) {
         ? sourceNet.edges.map(edge => {
             const plain = plainEdge(
               edge,
-              protocol => cleanProtocol(protocol, edgeExclusions),
+              protocol => cleanProtocol(protocol),
             )
             const resolvedPhysical = resolveEdgePhysicalProperties(edge, physicalConfig)
             const payloadData = omitFields(
@@ -1289,7 +1287,7 @@ export function toSimulationPayload(project) {
           })
         : [],
       protocols: Array.isArray(sourceNet.protocols)
-        ? sourceNet.protocols.map(protocol => cleanProtocol(protocol, edgeExclusions))
+        ? sourceNet.protocols.map(protocol => cleanProtocol(protocol))
         : [],
     },
   }
