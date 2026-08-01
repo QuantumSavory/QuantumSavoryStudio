@@ -18,12 +18,13 @@ Web-only display labels may fall back to the projected family name and do not ga
 admission.
 
 The current built-in catalog exposes concrete `Float64` and machine-`Int` parameter
-types. Its Web projection retains the exact type name and derives one `integer` Boolean
-from the simulator schema, so browser behavior does not infer semantics from Julia type
-spelling. Backend admission converts any finite real numeric value to the declared
-concrete floating type before applying the simulator-owned interval and constructor. An
-`Int` parameter accepts only a machine integer; a fractional value, numeric string,
-Boolean, or non-finite value is never coerced.
+types. Its Web projection retains concrete floating names, uses the stable `Int` label
+for machine integers, and derives one `integer` Boolean from the simulator schema, so
+browser behavior does not infer semantics from Julia type spelling. Backend admission
+converts any finite real numeric value to the declared concrete floating type before
+applying the simulator-owned interval and constructor. An `Int` parameter accepts only
+a machine integer; a fractional value, numeric string, Boolean, or non-finite value is
+never coerced.
 
 Adding a supported family requires an intentional upstream catalog change and a pinned
 dependency update. Within one pin, custom families and unrelated loaded packages do not

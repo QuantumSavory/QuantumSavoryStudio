@@ -4,7 +4,7 @@
 
 - **Normative statement:** A design command shall run serially on an isolated candidate, validate exact live-catalog inputs before commit, allocate browser-owned durable IDs, resolve transaction-local aliases, and preserve retained live object identities during atomic reconciliation.
 - **Parents:** SUB-003, SUB-005
-- **Acceptance criterion:** Unavailable or malformed catalogs, unknown slot/background/protocol/state types, inexact advertised integer-state values, omitted required fields, invalid protocol placement, and descriptor/value/reference conflicts leave direct, copied, or generated source design, selection, identities, and hooks unchanged. Valid candidates distinguish floating from exactly representable integer state values, required values from optional omission, normalize constructors from live metadata, allocate distinct IDs, resolve aliases, and update every retained reference once.
+- **Acceptance criterion:** Unavailable or malformed catalogs, unknown slot/background/protocol/state types, unsafe or fractional advertised integer-state values, omitted required fields, invalid protocol placement, and descriptor/value/reference conflicts leave direct, copied, or generated source design, selection, identities, and hooks unchanged. Valid candidates distinguish floating from JavaScript-safe integer state values, required values from optional omission, normalize constructors from live metadata, allocate distinct IDs, resolve aliases, and update every retained reference once.
 - **Verification:** UNITV-002 (test)
 - **Origin / risk:** Design-command implementation and discriminating tests; high graph-integrity risk
 - **Context:** [Authoring and inputs](../../context/frontend/authoring-and-inputs.md)

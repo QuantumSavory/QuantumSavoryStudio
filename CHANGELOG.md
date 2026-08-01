@@ -17,8 +17,9 @@
   subtype discovery and duplicate metadata tables are no longer supported.
 - Made States Zoo numeric metadata exact across the backend and browser. Continuous
   built-in parameters construct as `Float64`, Barrett–Kok exposes its required parity
-  bit as `Int`, inexact integer values fail, and the editor derives validation and
-  input steps from backend-projected integrality instead of Julia type-name inference.
+  bit as `Int`, unsafe or fractional browser integer values fail, and the editor derives
+  validation and input steps from backend-projected integrality instead of Julia
+  type-name inference.
 - Made live simulator catalogs the admission boundary for direct, copied, and generated
   authoring. Unknown IDs, invalid placement, contradictory descriptors, incompatible
   Variables, and unavailable or malformed catalogs leave the design unchanged.

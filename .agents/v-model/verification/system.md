@@ -36,7 +36,7 @@ gaps recorded below.
 - **Method:** test
 - **Procedure:** Fetch real catalogs, render every input kind including floating and integer state controls, exercise direct/copied/generated assignments (including an existing-endpoint protocol), and submit required/optional, fractional/unsafe-integer, malformed/missing-metadata, unsupported, invalid-placement, and contradictory explicit values.
 - **Environment / configuration:** Real browser/backend with no intercepted catalog routes
-- **Pass criterion:** Choices, numeric kinds, bounds, and requiredness derive from current metadata or explicit allowlists; floating values, safe integers, required values, and optional omission round-trip, while inexact integers, malformed/missing metadata, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
+- **Pass criterion:** Choices, numeric kinds, bounds, and requiredness derive from current metadata or explicit allowlists; floating values, JavaScript-safe integers, required values, and optional omission round-trip, while unsafe or fractional integers, malformed/missing metadata, unsupported/omitted-required values, invalid placement, and descriptor contradictions preserve the visible design.
 - **Status:** planned
 - **Evidence:** Automated precursors in [`test/test_unit.jl`](../../../test/test_unit.jl), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), [`gui/tests/unit/protocolsManager.test.js`](../../../gui/tests/unit/protocolsManager.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
 - **Nonconformance:** No current supported real-browser/backend action exercises the

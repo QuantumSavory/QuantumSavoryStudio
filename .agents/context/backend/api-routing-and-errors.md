@@ -102,8 +102,9 @@ from two distinct closed schemas. An ordinary event contains exactly `id`, `time
 `source`, `severity`, `message`, and object `details`; a panic contains exactly `id`,
 `timestamp`, `source`, `severity`, `summary`, `exception_type`, `message`, and
 `stacktrace`. Serialized state reuses that same panic schema for `simulation_panic`.
-The served OpenAPI document and generated `/docs` retain these exact definitions rather
-than documenting a permissive common record.
+The served OpenAPI document and generated `/docs` retain these definitions.
+`/states_zoo_types` likewise closes family and numeric-descriptor records with
+`type`/`integer` agreement.
 
 The top-level serialized `status` is a coarse created/prepared/complete value, not the
 complete execution phase. Running, pause acknowledgement, progress, and errors are in
