@@ -518,6 +518,29 @@ describe('project schema v2 admission', () => {
     }
   })
 
+  it('closes no background noise to the exact empty-parameter record', () => {
+    const valid = storedProject()
+    const background = valid.net.nodes[0].data.slots[0].backgroundNoise
+    background.type = 'default'
+    expect(admitProjectDocument(valid)).toBe(valid)
+
+    const invalid = structuredClone(valid)
+    invalid.net.nodes[0].data.slots[0].backgroundNoise.parameters.push({
+      field: 'ignored',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: 0.5,
+    })
+    const original = structuredClone(invalid)
+    expect(() => admitProjectDocument(invalid)).toThrow(ProjectSchemaError)
+    try {
+      admitProjectDocument(invalid)
+    } catch (error) {
+      expect(error.path).toContain('/backgroundNoise/parameters')
+    }
+    expect(invalid).toEqual(original)
+  })
+
   it('rejects undeclared fields at every application-owned object boundary', () => {
     const cases = [
       ['/unexpected', project => { project.unexpected = true }],
@@ -1189,6 +1212,22 @@ describe('encodeStoredProject', () => {
 })
 
 describe('backend payload codecs', () => {
+  it('rejects parameterized no-noise records before projection', () => {
+    const { project } = decodeStoredProject(storedProject())
+    project.net.nodes[0].data.slots[0].backgroundNoise = {
+      type: 'default',
+      parameters: [{
+        field: 'ignored',
+        type: 'Float64',
+        selectedType: 'Float64',
+        value: 0.5,
+      }],
+    }
+
+    expect(() => toSimulationPayload(project))
+      .toThrow('no-noise selection requires an empty parameters array')
+  })
+
   it('rejects null and legacy Default Variables', () => {
     for (const variable of [{
       id: 'null-value',

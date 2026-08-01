@@ -151,7 +151,6 @@ describe('layout tools physical settings', () => {
         type: 'Qubit',
         backgroundNoise: {
           type: 'default',
-          doc: 'No background noise',
           parameters: [],
         },
       },

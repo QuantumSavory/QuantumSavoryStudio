@@ -1313,6 +1313,15 @@ export class DesignCommandService {
         'Background noise parameters must be an array.',
       )
     }
+    if (type === 'default') {
+      if (noise.parameters.length !== 0) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          'No background noise requires an empty parameters array.',
+        )
+      }
+      return { type: 'default', parameters: [] }
+    }
 
     const parameters = await this.constructorParameters(
       project,

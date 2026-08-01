@@ -1769,7 +1769,30 @@
               "$ref": "#/components/schemas/ConstructorParameter"
             }
           }
-        }
+        },
+        "oneOf": [
+          {
+            "title": "No background noise",
+            "properties": {
+              "type": {
+                "const": "default"
+              },
+              "parameters": {
+                "maxItems": 0
+              }
+            }
+          },
+          {
+            "title": "Catalog background noise",
+            "properties": {
+              "type": {
+                "not": {
+                  "const": "default"
+                }
+              }
+            }
+          }
+        ]
       },
       "VariableReferenceValue": {
         "type": "object",

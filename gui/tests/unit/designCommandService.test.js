@@ -1269,6 +1269,10 @@ describe('DesignCommandService', () => {
     }))
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
+        type: 'default',
+        doc: 'Display-only catalog metadata',
+        parameters: [],
+      }, {
         type: 'ThermalNoise',
         parameters: [{
           field: 'rate',
@@ -1298,6 +1302,37 @@ describe('DesignCommandService', () => {
       }),
       validateNumericExpressionValue,
     })
+
+    await expect(service.requireBackgroundNoise({
+      type: 'default',
+      parameters: [{ name: 'ignored', type: 'Float64', value: 0.5 }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'No background noise requires an empty parameters array.',
+    })
+    expect(await service.requireBackgroundNoise({
+      type: 'default',
+      parameters: [],
+    })).toEqual({ type: 'default', parameters: [] })
+
+    const beforeInvalidNoNoise = encodeDesignDocument(project)
+    await expect(service.execute({
+      operations: [{
+        kind: 'design.update',
+        value: { description: 'must not commit' },
+      }, {
+        kind: 'slots.create',
+        node_id: 'node_a',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: {
+            type: 'default',
+            parameters: [{ name: 'ignored', type: 'Float64', value: 0.5 }],
+          },
+        },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    expect(encodeDesignDocument(project)).toEqual(beforeInvalidNoNoise)
 
     await expect(service.requireBackgroundNoise({
       type: 'UnknownNoise',

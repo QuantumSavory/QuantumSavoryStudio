@@ -285,6 +285,16 @@
   @test Set(background["required"]) == Set(["type", "parameters"])
   @test background["properties"]["parameters"]["items"]["\$ref"] ==
     "#/components/schemas/ConstructorParameter"
+  no_noise_branch = only(filter(
+    branch -> get(branch["properties"]["type"], "const", nothing) == "default",
+    background["oneOf"],
+  ))
+  catalog_noise_branch = only(filter(
+    branch -> haskey(branch["properties"]["type"], "not"),
+    background["oneOf"],
+  ))
+  @test no_noise_branch["properties"]["parameters"]["maxItems"] == 0
+  @test catalog_noise_branch["properties"]["type"]["not"]["const"] == "default"
   @test Set(protocol["required"]) == Set(["id", "type", "parameters"])
   @test protocol["properties"]["parameters"]["items"]["\$ref"] ==
     "#/components/schemas/ConstructorParameter"

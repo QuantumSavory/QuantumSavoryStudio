@@ -2894,6 +2894,17 @@
         @test occursin("must be an object", wrong_background.message)
       end
 
+      parameterized_no_noise = rejected_payload_shape(payload ->
+        payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = Dict(
+          "type" => "default",
+          "parameters" => [Dict(
+            "name" => "ignored",
+            "type" => "Float64",
+            "value" => 0.5,
+          )],
+        ))
+      @test occursin("requires an empty parameters array", parameterized_no_noise.message)
+
       background_parameter(payload) =
         payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"]["parameters"][1]
       for mutate! in (
@@ -6584,6 +6595,28 @@
     noise_context = Dict{Symbol,Any}(
       :node => 2,
       WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => Dict("Alice" => 1),
+    )
+    parameterized_no_noise = Dict(
+      "type" => "default",
+      "parameters" => [Dict(
+        "name" => "ignored",
+        "type" => "Float64",
+        "value" => 0.5,
+      )],
+    )
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_noise(
+      parameterized_no_noise,
+    )
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._script_noise_expression(
+      parameterized_no_noise,
+      "Test no-noise export",
+    )
+    invalid_no_noise_payload = deepcopy(test_payload)
+    invalid_no_noise_payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] =
+      parameterized_no_noise
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._validate_constructor_parameters(
+      invalid_no_noise_payload,
+      WebQuantumSavory._parse_variables(invalid_no_noise_payload),
     )
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       default_noise = WebQuantumSavory._instantiate_noise(Dict(

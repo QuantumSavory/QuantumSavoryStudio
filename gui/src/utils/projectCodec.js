@@ -422,6 +422,7 @@ function normalizeBackgroundNoise(value) {
   if (!Array.isArray(value.parameters)) {
     throw new Error(`Background ${value.type} parameters must be an array`)
   }
+  requireExactNoNoiseParameters(value.type, value.parameters, `Background ${value.type}`)
   return {
     type: value.type,
     parameters: value.parameters.map((parameter, index) => (
@@ -430,6 +431,12 @@ function normalizeBackgroundNoise(value) {
         `Background ${value.type} parameter ${index + 1}`,
       )
     )),
+  }
+}
+
+function requireExactNoNoiseParameters(type, parameters, context) {
+  if (type === 'default' && parameters.length !== 0) {
+    throw new Error(`${context} no-noise selection requires an empty parameters array`)
   }
 }
 
@@ -801,6 +808,13 @@ function validateProjectWireSemantics(document) {
     })
   }
   const validateSlot = (slot, path) => {
+    projectSemanticCheck(`${path}/backgroundNoise/parameters`, () => (
+      requireExactNoNoiseParameters(
+        slot.backgroundNoise.type,
+        slot.backgroundNoise.parameters,
+        `Background ${slot.backgroundNoise.type}`,
+      )
+    ))
     slot.backgroundNoise.parameters.forEach((parameter, index) => {
       validateParameter(
         parameter,
@@ -1199,9 +1213,10 @@ function cleanProtocol(protocol) {
 }
 
 function cleanBackgroundNoise(value) {
+  const source = normalizeBackgroundNoise(value)
   return {
-    type: value.type,
-    parameters: value.parameters
+    type: source.type,
+    parameters: source.parameters
       .filter(hasValue)
       .map(parameter => cleanConstructorParameter(parameter, parameter.field)),
   }

@@ -1021,7 +1021,14 @@ function _script_noise_expression(
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
   type_name = noise_definition["type"]
-  type_name == "default" && return "nothing"
+  if type_name == "default"
+    _require_exact_no_noise_parameters(
+      type_name,
+      get(noise_definition, "parameters", nothing),
+      context,
+    )
+    return "nothing"
+  end
   parameters = noise_definition["parameters"]
   parameters isa AbstractVector || throw(validation_error(
     "$context parameters must be an array",

@@ -704,6 +704,11 @@ function _validate_constructor_parameters(payload, variables)
 
     raw_type = _required_nonempty_string(definition, "type", location)
     if kind === :background && raw_type == "default"
+      _require_exact_no_noise_parameters(
+        raw_type,
+        get(definition, "parameters", nothing),
+        location,
+      )
       continue
     end
     constructor_type = kind === :protocol ?
@@ -1387,10 +1392,22 @@ function _validate_background_noise(background, context::String)
   parameters isa AbstractVector || throw(validation_error(
     "$context parameters must be an array",
   ))
+  _require_exact_no_noise_parameters(background["type"], parameters, context)
   for (index, parameter) in enumerate(parameters)
     _validate_constructor_parameter(parameter, "$context parameter $index")
   end
   return background
+end
+
+function _require_exact_no_noise_parameters(type_name, parameters, context::String)
+  type_name == "default" || return nothing
+  parameters isa AbstractVector || throw(validation_error(
+    "$context type 'default' requires a parameters array",
+  ))
+  isempty(parameters) || throw(validation_error(
+    "$context type 'default' requires an empty parameters array",
+  ))
+  return nothing
 end
 
 function _validate_slot(slot, context::String, slot_ids::Set{String})
@@ -1826,7 +1843,14 @@ function _instantiate_noise(
   variables=Dict{String,Variable}(),
 )
   type_name = noise_def["type"]
-  type_name == "default" && return nothing
+  if type_name == "default"
+    _require_exact_no_noise_parameters(
+      type_name,
+      get(noise_def, "parameters", nothing),
+      "Background noise",
+    )
+    return nothing
+  end
 
   noise_type = _resolve_type_from_string(type_name, :noise)
   noise_type === nothing && error("Unknown background noise type: $(type_name)")

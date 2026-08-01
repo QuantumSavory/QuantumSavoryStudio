@@ -52,6 +52,15 @@ describe('ApiConnector project namespaces', () => {
     )
   })
 
+  it('owns one exact no-noise record', () => {
+    const connector = new ApiConnector('http://api.test')
+
+    expect(connector.getDefaultBgNoise()).toEqual({
+      type: 'default',
+      parameters: [],
+    })
+  })
+
   it('rejects slot metadata that omits the canonical catalog', async () => {
     globalThis.fetch = vi.fn(async url => {
       const pathname = new URL(url).pathname

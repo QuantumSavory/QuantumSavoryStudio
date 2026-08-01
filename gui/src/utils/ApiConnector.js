@@ -474,7 +474,6 @@ export class ApiConnector {
   getDefaultBgNoise(){
     return {
       type: 'default',
-      doc: 'No background noise',
       parameters: []
     }
   }

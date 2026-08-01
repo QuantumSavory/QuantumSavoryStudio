@@ -319,6 +319,33 @@
       @test response.status == 400
       @test parse_response(response)["error"]["code"] == "VALIDATION_ERROR"
 
+      parameterized_no_noise = deepcopy(test_payload)
+      parameterized_no_noise["name"] = "invalid-no-noise-$(getpid())"
+      parameterized_no_noise["net"]["nodes"][1]["data"]["slots"][1][
+        "backgroundNoise"
+      ] = Dict(
+        "type" => "default",
+        "parameters" => [Dict(
+          "name" => "ignored",
+          "type" => "Float64",
+          "value" => 0.5,
+        )],
+      )
+      response = make_request(
+        "POST",
+        "/parse_network_graph";
+        body=parameterized_no_noise,
+      )
+      @test response.status == 400
+      error = parse_response(response)["error"]
+      @test error["code"] == "VALIDATION_ERROR"
+      @test occursin("requires an empty parameters array", error["message"])
+      simulations = parse_response(make_request("GET", "/simulations"))["simulations"]
+      @test all(
+        simulation -> simulation["name"] != parameterized_no_noise["name"],
+        simulations,
+      )
+
       for field in (
         "distanceMeters",
         "propagationDelaySeconds",
@@ -1368,6 +1395,11 @@
       @test contract["components"]["schemas"]["SimulationBackgroundNoise"]["properties"][
         "parameters"
       ]["items"]["\$ref"] == "#/components/schemas/ConstructorParameter"
+      no_noise_schema = only(filter(
+        branch -> get(branch["properties"]["type"], "const", nothing) == "default",
+        contract["components"]["schemas"]["SimulationBackgroundNoise"]["oneOf"],
+      ))
+      @test no_noise_schema["properties"]["parameters"]["maxItems"] == 0
       @test contract["components"]["schemas"]["ConstructorParameter"]["properties"][
         "value"
       ]["\$ref"] == "#/components/schemas/ConstructorParameterValue"
