@@ -428,7 +428,21 @@ function _parse_variables(payload)
       Dict{String,Any}("variable_name" => name),
     ))
 
-    permits_null = lowercase(variable_type) == "default" ||
+    lowercase(strip(variable_type)) == "default" && variable_type != "default" &&
+      throw(validation_error(
+        "$context type 'default' is case-sensitive",
+        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
+      ))
+    variable_type == "default" && value !== nothing && throw(validation_error(
+      "$context type 'default' requires a null value",
+      Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
+    ))
+    variable_type == "Function" && value isa AbstractString &&
+      lowercase(strip(String(value))) == "default" && throw(validation_error(
+        "$context Function value cannot use a Default alias",
+        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
+      ))
+    permits_null = variable_type == "default" ||
       variable_type in ("Nothing", "Wildcard", "QuantumSavory.Wildcard")
     value === nothing && !permits_null && throw(validation_error(
       "$context field 'value' must not be null for type '$variable_type'",
@@ -855,7 +869,7 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
   variable_type isa AbstractString || return false
   variable_name = String(variable_type)
   isempty(variable_name) && return false
-  lowercase(variable_name) == "default" && return true
+  variable_name == "default" && return true
 
   members = try
     Base.uniontypes(declared_type)
@@ -880,12 +894,7 @@ end
 
 """Whether a Variable requests omission of its assigned constructor keyword."""
 function _variable_uses_constructor_default(variable)
-  variable_type = lowercase(strip(String(variable.type)))
-  return variable_type == "default" || (
-    variable_type == "function" &&
-    variable.value isa AbstractString &&
-    lowercase(strip(String(variable.value))) == "default"
-  )
+  return variable.type == "default" && variable.value === nothing
 end
 
 """Choose a value-compatible member while staying inside an authoritative union type."""

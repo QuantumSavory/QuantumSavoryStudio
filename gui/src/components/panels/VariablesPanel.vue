@@ -203,6 +203,8 @@ function draftFor(variable) {
 }
 
 function initialSelectedType(variable) {
+  const selected = variableInputOptions.find(option => option.id === variable.selectedType)
+  if (selected) return selected.id
   if (isNumericExpressionValue(variable.value)) {
     const expression = variableInputOptions.find(option => (
       option.inputKind === 'numeric-expression' && option.wireType === variable.type
@@ -212,8 +214,6 @@ function initialSelectedType(variable) {
   if (variable.value == null || variable.value === '' || variable.value === 'default') {
     return 'default'
   }
-  const selected = variableInputOptions.find(option => option.id === variable.selectedType)
-  if (selected) return selected.id
   const semantic = variableInputOptions.find(option => option.id === variable.type)
   return semantic?.id || inferParameterInputOption(variableInputOptions, variable).id
 }

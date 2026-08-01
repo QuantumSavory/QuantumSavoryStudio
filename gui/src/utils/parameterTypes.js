@@ -199,7 +199,7 @@ export function parameterInputOptionForVariable(inputType, metadata, variable) {
   const semanticType = variable?.selectedType === 'default'
     ? 'default'
     : variable?.type
-  if (String(semanticType).toLowerCase() === 'default') return null
+  if (semanticType === 'default') return null
   return options.find(option => (
     option.enabled
     && option.inputKind !== 'default'
@@ -443,7 +443,7 @@ export function parameterTypeIsKnown(type) {
  */
 export function parameterTypeSupportsVariableType(parameterType, variableType) {
   if (typeof variableType !== 'string' || variableType.length === 0) return false
-  if (variableType.toLowerCase() === 'default') return true
+  if (variableType === 'default') return true
 
   const declaredTypes = Array.isArray(parameterType) ? parameterType : [parameterType]
   return declaredTypes.some(declaredType => {

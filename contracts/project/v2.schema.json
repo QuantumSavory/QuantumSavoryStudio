@@ -288,6 +288,16 @@
     "protocolParameter": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "default" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "null" } } },
+          "else": { "properties": { "value": { "not": { "type": "null" } } } }
+        }
+      ],
       "required": [
         "name",
         "type",
@@ -312,6 +322,16 @@
     "backgroundParameter": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "default" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "null" } } },
+          "else": { "properties": { "value": { "not": { "type": "null" } } } }
+        }
+      ],
       "required": [
         "field",
         "type",
@@ -823,6 +843,26 @@
     "variable": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "default" } },
+            "required": ["selectedType"]
+          },
+          "then": {
+            "properties": {
+              "type": { "const": "default" },
+              "value": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "type": { "not": { "const": "default" } },
+              "value": { "not": { "type": "null" } }
+            }
+          }
+        }
+      ],
       "required": [
         "id",
         "name",

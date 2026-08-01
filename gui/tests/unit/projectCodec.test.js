@@ -947,7 +947,7 @@ describe('encodeStoredProject', () => {
 })
 
 describe('backend payload codecs', () => {
-  it('normalizes empty Variables to a backend-safe Default choice', () => {
+  it('infers Default only when selectedType is omitted and preserves its canonical form', () => {
     const project = createEmptyProject('Default Variables')
     project.variables = [
       {
@@ -957,11 +957,11 @@ describe('backend payload codecs', () => {
         value: null,
       },
       {
-        id: 'default-sentinel',
-        name: 'default_sentinel',
+        id: 'default-canonical',
+        name: 'default_canonical',
         type: 'default',
         selectedType: 'default',
-        value: 'default',
+        value: null,
       },
     ]
 
@@ -1046,25 +1046,87 @@ describe('backend payload codecs', () => {
     ])
   })
 
-  it('normalizes the protocol default sentinel to keyword omission', () => {
-    const project = createEmptyProject('Protocol default')
+  it.each(['default', 'Default', 'DEFAULT'])(
+    'rejects the legacy Function Default alias %s',
+    value => {
+      const project = createEmptyProject('Protocol default')
+      project.net.protocols.push(new FloatingProtocol({
+        id: 'protocol-default',
+        type: 'Example.Protocol',
+        parameters: [{
+          name: 'tag_or_function',
+          type: 'Function',
+          selectedType: 'Function',
+          value,
+        }],
+      }))
+      const original = structuredClone(project)
+
+      expect(() => encodeStoredProject(project)).toThrow(/cannot use a Default alias/)
+      expect(() => toSimulationPayload(project)).toThrow(/cannot use a Default alias/)
+      expect(project).toEqual(original)
+    },
+  )
+
+  it('keeps an explicit String default literal and rejects explicit null branches', () => {
+    const project = createEmptyProject('Authoritative branches')
+    project.variables.push(new Variable({
+      id: 'string-default',
+      name: 'string_default',
+      type: 'String',
+      selectedType: 'String',
+      value: 'default',
+    }))
     project.net.protocols.push(new FloatingProtocol({
-      id: 'protocol-default',
+      id: 'string-protocol',
       type: 'Example.Protocol',
       parameters: [{
-        name: 'tag_or_function',
-        type: 'Function',
-        selectedType: 'Function',
+        name: 'label',
+        type: 'String',
+        selectedType: 'String',
         value: 'default',
       }],
     }))
 
     const stored = encodeStoredProject(project)
-    expect(stored.net.protocols[0].parameters[0]).toMatchObject({
-      selectedType: 'default',
-      value: null,
+    expect(stored.variables[0]).toMatchObject({
+      type: 'String',
+      selectedType: 'String',
+      value: 'default',
     })
-    expect(toSimulationPayload(project).net.protocols[0].parameters).toEqual([])
+    expect(stored.net.protocols[0].parameters[0]).toMatchObject({
+      selectedType: 'String',
+      value: 'default',
+    })
+    expect(toSimulationPayload(project)).toMatchObject({
+      variables: [{ type: 'String', value: 'default' }],
+      net: {
+        protocols: [{ parameters: [{ type: 'String', value: 'default' }] }],
+      },
+    })
+
+    const contradictory = storedProject()
+    contradictory.variables[0] = {
+      id: 'float-null',
+      name: 'float_null',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: null,
+    }
+    const original = structuredClone(contradictory)
+    expect(() => decodeStoredProject(contradictory)).toThrow(ProjectSchemaError)
+    expect(contradictory).toEqual(original)
+
+    const contradictoryParameter = storedProject()
+    contradictoryParameter.net.nodes[0].data.protocols[0].parameters = [{
+      name: 'rate',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: null,
+    }]
+    const originalParameter = structuredClone(contradictoryParameter)
+    expect(() => decodeStoredProject(contradictoryParameter)).toThrow(ProjectSchemaError)
+    expect(contradictoryParameter).toEqual(originalParameter)
   })
 
   it('rejects malformed numeric-expression tags instead of persisting preview state', () => {

@@ -24,6 +24,7 @@ import {
 } from './physicalParameters'
 import {
   buildParameterInputOptions,
+  buildVariableInputOptions,
   findParameterInputOption,
   inferParameterInputOption,
 } from './parameterTypes'
@@ -423,20 +424,43 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
   if (!isRecord(rawParameter)) throw new Error(`${context} must be an object`)
   const parameter = cloneValue(rawParameter)
   const value = normalizeNumericExpressionValue(parameter.value, context)
+  const hasExplicitSelection = Object.hasOwn(parameter, 'selectedType')
+  const explicitSelection = parameter.selectedType
 
-  if (value == null || value === '' || value === 'default') {
-    return {
-      ...parameter,
-      selectedType: 'default',
-      value: null,
+  if (hasExplicitSelection) {
+    if (typeof explicitSelection !== 'string' || !explicitSelection) {
+      throw new Error(`${context} selectedType must be a nonempty string`)
+    }
+    if (explicitSelection === 'default') {
+      if (value !== null) {
+        throw new Error(`${context} Default selection requires a null value`)
+      }
+      return {
+        ...parameter,
+        selectedType: 'default',
+        value: null,
+      }
+    }
+    const selectedOption = buildParameterInputOptions(parameter.type, parameter)
+      .find(option => option.id === explicitSelection && option.enabled)
+    const declaredTypes = Array.isArray(parameter.type) ? parameter.type : [parameter.type]
+    const opaqueAnySelection = explicitSelection === 'Any' && declaredTypes.includes('Any')
+    if (!selectedOption && !opaqueAnySelection) {
+      throw new Error(`${context} selectedType ${explicitSelection} is not declared`)
+    }
+    if (value == null || value === '') {
+      throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
+    }
+    if (
+      explicitSelection === 'Function'
+      && typeof value === 'string'
+      && value.trim().toLowerCase() === 'default'
+    ) {
+      throw new Error(`${context} Function selection cannot use a Default alias`)
     }
   }
 
-  if (
-    parameter.selectedType === 'Function'
-    && typeof value === 'string'
-    && value.trim().toLowerCase() === 'default'
-  ) {
+  if (!hasExplicitSelection && (value == null || value === '' || value === 'default')) {
     return {
       ...parameter,
       selectedType: 'default',
@@ -447,8 +471,7 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
   if (
     isRecord(value)
     && value.kind === 'variable'
-    && typeof parameter.selectedType === 'string'
-    && parameter.selectedType
+    && hasExplicitSelection
   ) {
     return {
       ...parameter,
@@ -460,9 +483,11 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
   if (isNumericExpressionValue(value)) {
     const declaredTypes = (Array.isArray(parameter.type) ? parameter.type : [parameter.type])
       .filter(type => typeof type === 'string' && type)
-    const selectedNumericType = typeof parameter.selectedType === 'string'
-      && parameter.selectedType.startsWith('expression:')
-      ? parameter.selectedType.slice('expression:'.length)
+    if (hasExplicitSelection && !explicitSelection.startsWith('expression:')) {
+      throw new Error(`${context} numeric-expression value does not match ${explicitSelection}`)
+    }
+    const selectedNumericType = hasExplicitSelection
+      ? explicitSelection.slice('expression:'.length)
       : declaredTypes.find(type => ['Float64', 'Int64'].includes(type))
     if (
       !['Float64', 'Int64'].includes(selectedNumericType)
@@ -477,16 +502,14 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
     }
   }
   if (
-    typeof parameter.selectedType === 'string'
-    && parameter.selectedType.startsWith('expression:')
+    hasExplicitSelection
+    && explicitSelection.startsWith('expression:')
   ) {
     throw new Error(`${context} expression selection requires a numeric-expression value`)
   }
 
-  const selectedType = typeof parameter.selectedType === 'string'
-    && parameter.selectedType
-    && parameter.selectedType !== 'default'
-    ? parameter.selectedType
+  const selectedType = hasExplicitSelection
+    ? explicitSelection
     : inferParameterInputOption(
         buildParameterInputOptions(parameter.type, parameter),
         { ...parameter, value, selectedType: undefined },
@@ -506,33 +529,47 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     throw new Error(`${context} requires a type`)
   }
   const type = variable.type
+  const hasExplicitSelection = Object.hasOwn(variable, 'selectedType')
+  const explicitSelection = variable.selectedType
 
-  if (
-    value === 'default'
-    && (type.toLowerCase() === 'default' || variable.selectedType === 'default')
-  ) {
-    return {
-      ...variable,
-      type: 'default',
-      selectedType: 'default',
-      value: null,
+  if (hasExplicitSelection) {
+    if (typeof explicitSelection !== 'string' || !explicitSelection) {
+      throw new Error(`${context} selectedType must be a nonempty string`)
+    }
+    if (explicitSelection === 'default') {
+      if (type !== 'default' || value !== null) {
+        throw new Error(`${context} Default requires type default and a null value`)
+      }
+      return {
+        ...variable,
+        type: 'default',
+        selectedType: 'default',
+        value: null,
+      }
+    }
+    if (type === 'default') {
+      throw new Error(`${context} type default requires the Default selection`)
+    }
+    const selectedOption = buildVariableInputOptions()
+      .find(option => option.id === explicitSelection && option.enabled)
+    if (!selectedOption || selectedOption.wireType !== type) {
+      throw new Error(
+        `${context} selectedType ${explicitSelection} does not match type ${type}`,
+      )
+    }
+    if (value == null || value === '') {
+      throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
+    }
+    if (
+      explicitSelection === 'Function'
+      && typeof value === 'string'
+      && value.trim().toLowerCase() === 'default'
+    ) {
+      throw new Error(`${context} Function selection cannot use a Default alias`)
     }
   }
 
-  if (
-    type === 'Function'
-    && typeof value === 'string'
-    && value.trim().toLowerCase() === 'default'
-  ) {
-    return {
-      ...variable,
-      type: 'default',
-      selectedType: 'default',
-      value: null,
-    }
-  }
-
-  if (value == null || value === '') {
+  if (!hasExplicitSelection && (value == null || value === '' || value === 'default')) {
     return {
       ...variable,
       type: 'default',
@@ -546,9 +583,8 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
       throw new Error(`${context} numeric expression requires type Float64 or Int64`)
     }
     if (
-      typeof variable.selectedType === 'string'
-      && variable.selectedType.startsWith('expression:')
-      && variable.selectedType !== `expression:${type}`
+      hasExplicitSelection
+      && explicitSelection !== `expression:${type}`
     ) {
       throw new Error(`${context} numeric expression selection does not match type ${type}`)
     }
@@ -560,8 +596,8 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     }
   }
   if (
-    typeof variable.selectedType === 'string'
-    && variable.selectedType.startsWith('expression:')
+    hasExplicitSelection
+    && explicitSelection.startsWith('expression:')
   ) {
     throw new Error(`${context} expression selection requires a numeric-expression value`)
   }
@@ -569,11 +605,7 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
   return {
     ...variable,
     type,
-    selectedType: typeof variable.selectedType === 'string'
-      && variable.selectedType
-      && variable.selectedType !== 'default'
-      ? variable.selectedType
-      : type,
+    selectedType: hasExplicitSelection ? explicitSelection : type,
     value,
   }
 }
@@ -907,7 +939,6 @@ export function decodeDesignDocument(document, context = {}) {
 function hasValue(parameter) {
   return parameter?.selectedType !== 'default'
     && parameter?.value != null
-    && parameter.value !== ''
 }
 
 function parameterWireType(parameter) {

@@ -1097,11 +1097,7 @@ function _script_variable_bindings(
       used,
       "variable_$(item.index)",
     )
-    uses_default = lowercase(variable.type) == "default" || (
-      variable.type == "Function" &&
-      variable.value isa AbstractString &&
-      lowercase(strip(String(variable.value))) == "default"
-    )
+    uses_default = variable.type == "default" && variable.value === nothing
     self_dependent = special_type in ("Function", "Lambda") && any(
       first(pair) == strip(string(variable.value)) for pair in SELF_COMPARISON_OPERATORS
     )

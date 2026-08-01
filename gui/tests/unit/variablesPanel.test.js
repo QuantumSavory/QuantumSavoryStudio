@@ -33,6 +33,28 @@ describe('VariablesPanel', () => {
     expect(wrapper.get('.variable-value-input').text()).toBe('')
   })
 
+  it('keeps an explicit String default literal on the String branch', () => {
+    const project = createEmptyProject('Variables')
+    project.variables.push(new Variable({
+      id: 'variable_string',
+      name: 'string_value',
+      type: 'String',
+      selectedType: 'String',
+      value: 'default',
+    }))
+
+    const wrapper = shallowMount(VariablesPanel, {
+      props: {
+        variables: project.variables,
+        projectData: project,
+      },
+    })
+
+    expect(wrapper.get('[data-testid="variable-option-selector"]').element.value)
+      .toBe('String')
+    expect(wrapper.findComponent(TypedValueInput).exists()).toBe(true)
+  })
+
   it('validates custom functions with deferred assignment context', () => {
     const project = createEmptyProject('Variables')
     project.variables.push(new Variable({

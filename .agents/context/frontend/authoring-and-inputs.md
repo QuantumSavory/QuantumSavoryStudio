@@ -82,8 +82,11 @@ Schema-v2 durable parameters carry `selectedType`. An explicit current branch is
 authoritative and must agree with intrinsic `nothing` or `Wildcard` wire values and with
 the referenced Variable's branch. Transport authoring may omit `selectedType`; only
 that omission permits inference. Updates record current catalog types/descriptors and
-drop unknown seeded fields. No older-schema migration exists. Variable branch changes
-update all linked descriptors atomically or reject the candidate.
+drop unknown seeded fields. Default has exactly one durable form: constructor parameters
+use `selectedType: "default", value: null`, while Variables additionally use
+`type: "default"`. Empty strings, string `"default"` sentinels, case variants, and
+Function aliases are not Default. No older-schema migration exists. Variable branch
+changes update all linked descriptors atomically or reject the candidate.
 
 Before transport, `App` injects one protocol/background catalog bundle into the GUI/MCP
 validator. Missing or malformed catalogs produce `CONSTRUCTOR_CATALOG_UNAVAILABLE`;

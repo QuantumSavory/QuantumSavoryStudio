@@ -2894,6 +2894,37 @@
       null_typed_value = variable_validation_error(payload -> (payload["variables"][1]["value"] = nothing))
       @test null_typed_value isa WebQuantumSavory.APIError
       @test occursin("must not be null", null_typed_value.message)
+
+      for alias in ("default", "Default", " DEFAULT ")
+        function_default_alias = variable_validation_error(payload -> begin
+          payload["variables"][1]["type"] = "Function"
+          payload["variables"][1]["value"] = alias
+        end)
+        @test function_default_alias isa WebQuantumSavory.APIError
+        @test occursin("cannot use a Default alias", function_default_alias.message)
+      end
+
+      case_variant_default = variable_validation_error(payload -> begin
+        payload["variables"][1]["type"] = "Default"
+        payload["variables"][1]["value"] = nothing
+      end)
+      @test case_variant_default isa WebQuantumSavory.APIError
+      @test occursin("case-sensitive", case_variant_default.message)
+
+      function_default_script = deepcopy(variable_payload)
+      function_default_script["variables"][1]["type"] = "Function"
+      function_default_script["variables"][1]["value"] = "DEFAULT"
+      function_default_export_error = try
+        WebQuantumSavory.generate_julia_script(function_default_script)
+        nothing
+      catch error
+        error
+      end
+      @test function_default_export_error isa WebQuantumSavory.APIError
+      @test occursin(
+        "cannot use a Default alias",
+        function_default_export_error.message,
+      )
   end
 
   @testset "Variable-backed Protocol Parameters" begin
@@ -2903,7 +2934,7 @@
       runtime_payload["variables"] = [
         Dict("id" => "probability", "name" => "probability", "type" => "Float64", "value" => 0.25),
         Dict("id" => "no_retry", "name" => "no retry", "type" => "Nothing", "value" => nothing),
-        Dict("id" => "protocol_default", "name" => "protocol default", "type" => "Function", "value" => "default"),
+        Dict("id" => "protocol_default", "name" => "protocol default", "type" => "default", "value" => nothing),
         Dict(
           "id" => "contextual_lambda",
           "name" => "contextual lambda",

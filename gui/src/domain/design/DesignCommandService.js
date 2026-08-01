@@ -1089,11 +1089,11 @@ export class DesignCommandService {
         }
     const type = option.wireType ?? option.id
     if (type === 'default') {
-      if (value == null || value === '') return null
+      if (value === null) return null
       throw new DesignCommandError('VALIDATION_FAILED', `${label} must use its default value.`)
     }
     if (option.inputKind === 'default') {
-      if (value == null || value === '') return null
+      if (value === null) return null
       throw new DesignCommandError('VALIDATION_FAILED', `${label} must use its default value.`)
     }
     if (option.inputKind === 'numeric-expression') {
@@ -1549,7 +1549,7 @@ export class DesignCommandService {
           : variable.type
         if (
           parameterDefinition.required
-          && String(assignmentType).toLowerCase() === 'default'
+          && assignmentType === 'default'
         ) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',

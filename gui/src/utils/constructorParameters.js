@@ -21,7 +21,7 @@ function constructorOptionForVariable(options, definition, variable) {
   const semanticType = variable.selectedType === 'default'
     ? 'default'
     : variable.type
-  if (String(semanticType).toLowerCase() === 'default') {
+  if (semanticType === 'default') {
     return options.find(option => option.inputKind === 'default') || null
   }
   if (!Object.hasOwn(variable, 'selectedType')) {
