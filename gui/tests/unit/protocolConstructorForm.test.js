@@ -831,17 +831,14 @@ describe('TypedValueInput disabled code values', () => {
     const input = wrapper.get('input[type="text"]')
 
     await input.setValue('[1, 2]')
-    await input.trigger('change')
     expect(parameter.value).toEqual([1, 2])
     expect(wrapper.emitted('commit')).toHaveLength(1)
 
     await input.setValue('[]')
-    await input.trigger('change')
     expect(parameter.value).toEqual([])
     expect(wrapper.emitted('commit')).toHaveLength(2)
 
     await input.setValue('[1.5]')
-    await input.trigger('change')
     expect(parameter.value).toBe('[1.5]')
     expect(parameter.error).toContain('JSON array of integers')
     expect(wrapper.emitted('commit')).toHaveLength(2)
