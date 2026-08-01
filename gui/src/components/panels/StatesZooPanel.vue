@@ -258,14 +258,12 @@ let isUnmounted = false
 
 const zooVariables = computed(() => props.variables.filter(isStatesZooVariable))
 
-function normalizeStateType(type) {
+function stateTypeView(type) {
   return {
-    id: String(type.id),
-    displayName: type.display_name || type.id,
-    weighted: type.weighted === true,
-    parameters: Array.isArray(type.parameters)
-      ? type.parameters.map(parameter => ({ ...parameter }))
-      : []
+    id: type.id,
+    displayName: type.display_name,
+    weighted: type.weighted,
+    parameters: type.parameters.map(parameter => ({ ...parameter }))
   }
 }
 
@@ -731,7 +729,7 @@ async function loadStatesZooTypes() {
       force: true
     })
     if (isUnmounted || catalogController !== controller) return
-    statesZooTypes.value = types.map(normalizeStateType)
+    statesZooTypes.value = types.map(stateTypeView)
     zooVariables.value.forEach(variable => schedulePreview(variable, 0))
   } catch (error) {
     if (error?.name === 'AbortError' || isUnmounted) return

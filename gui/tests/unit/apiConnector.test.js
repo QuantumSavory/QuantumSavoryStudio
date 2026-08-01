@@ -133,6 +133,8 @@ describe('ApiConnector project namespaces', () => {
     for (const invalidParameter of [
       { ...parameter, type: '' },
       { ...parameter, integer: 'true' },
+      { ...parameter, integer: false },
+      { ...parameter, type: 'Float64' },
       { ...parameter, good: 0.5 },
       { ...parameter, max: Number.MAX_SAFE_INTEGER + 1 },
       { ...parameter, min_inclusive: 'true' },

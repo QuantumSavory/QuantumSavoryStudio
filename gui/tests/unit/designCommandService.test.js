@@ -2095,6 +2095,67 @@ describe('DesignCommandService', () => {
       .toThrowError(/must be exactly/)
   })
 
+  it('rejects fractional state commands without exposing candidate changes', async () => {
+    const project = createEmptyProject('Atomic integer state')
+    const retainedNode = new Node({
+      id: 'node_a',
+      name: 'A',
+      position: [0, 0],
+    })
+    project.net.nodes.push(retainedNode)
+    const before = encodeDesignDocument(project)
+    const markDirty = vi.fn()
+    const clearDeletedSelection = vi.fn()
+    const onCommitted = vi.fn()
+    const service = serviceFor(project, {
+      statesCatalog: () => [{
+        id: 'BarrettKokBellPair',
+        weighted: false,
+        parameters: [{
+          name: 'm',
+          type: 'Int',
+          integer: true,
+          doc: 'Detector-click parity.',
+          min: 0,
+          max: 1,
+          minInclusive: true,
+          maxInclusive: true,
+          good: 0,
+        }],
+      }],
+      markDirty,
+      clearDeletedSelection,
+      onCommitted,
+    })
+
+    await expect(service.execute({
+      operations: [
+        {
+          kind: 'design.update',
+          value: { description: 'Candidate-only change' },
+        },
+        {
+          kind: 'states.create',
+          id: 'state_a',
+          value: {
+            name: 'rho',
+            state_type: 'BarrettKokBellPair',
+            parameters: { m: 0.5 },
+          },
+        },
+      ],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'm must be a safe integer in [0, 1].',
+    })
+
+    expect(encodeDesignDocument(project)).toEqual(before)
+    expect(project.net.nodes[0]).toBe(retainedNode)
+    expect(markDirty).not.toHaveBeenCalled()
+    expect(clearDeletedSelection).not.toHaveBeenCalled()
+    expect(onCommitted).not.toHaveBeenCalled()
+  })
+
   it('synchronizes weighted States Zoo trace companions atomically', async () => {
     const project = createEmptyProject('States')
     const previewState = vi.fn(async () => ({ trace: -0.25 }))

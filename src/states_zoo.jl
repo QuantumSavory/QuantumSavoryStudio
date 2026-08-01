@@ -74,6 +74,10 @@ function _states_zoo_parameter_value(parameter, value)
   return isfinite(converted) ? converted : nothing
 end
 
+"""Return the stable Web API label for one simulator state parameter type."""
+_states_zoo_parameter_type_name(value_type) =
+  value_type === Int ? "Int" : string(value_type)
+
 """Project the simulator's ordered StatesZoo schemas into the Web API."""
 function get_states_zoo_types()
   return [
@@ -87,7 +91,7 @@ function get_states_zoo_types()
         "parameters" => [
           Dict{String,Any}(
             "name" => string(parameter.name),
-            "type" => string(parameter.value_type),
+            "type" => _states_zoo_parameter_type_name(parameter.value_type),
             "integer" => parameter.value_type === Int,
             "doc" => parameter.doc,
             "min" => parameter.minimum,
@@ -156,7 +160,7 @@ function construct_states_zoo_state(state_type, parameters)
           "parameter" => name,
           "value" => value,
           "received_type" => string(typeof(value)),
-          "declared_type" => string(parameter.value_type),
+          "declared_type" => _states_zoo_parameter_type_name(parameter.value_type),
           "min" => parameter.minimum,
           "max" => parameter.maximum,
           "min_inclusive" => parameter.minimum_inclusive,

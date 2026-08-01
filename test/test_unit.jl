@@ -2087,6 +2087,8 @@
         "Genqo Unheralded SPDC Bell Pair (weighted)",
       ]
       @test [entry["weighted"] for entry in catalog] == [false, true, false, true, true]
+      @test WebQuantumSavory._states_zoo_parameter_type_name(Int) == "Int"
+      @test WebQuantumSavory._states_zoo_parameter_type_name(Float64) == "Float64"
 
       for (catalog_entry, schema) in zip(catalog, schemas)
         id = string(nameof(schema.family))
@@ -2094,7 +2096,9 @@
         expected_metadata = [
           Dict{String,Any}(
             "name" => string(parameter.name),
-            "type" => string(parameter.value_type),
+            "type" => WebQuantumSavory._states_zoo_parameter_type_name(
+              parameter.value_type,
+            ),
             "integer" => parameter.value_type === Int,
             "doc" => parameter.doc,
             "min" => parameter.minimum,

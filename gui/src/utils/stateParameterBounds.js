@@ -16,6 +16,9 @@ export function normalizeStateParameter(parameter, context = 'States Zoo paramet
     throw new TypeError(`${context}.type must be a nonempty string`)
   }
   const integer = requireBoolean(parameter.integer, `${context}.integer`)
+  if (integer !== (parameter.type === 'Int')) {
+    throw new TypeError(`${context}.integer must be true exactly when type is Int`)
+  }
   if (typeof parameter.doc !== 'string') {
     throw new TypeError(`${context}.doc must be a string`)
   }
