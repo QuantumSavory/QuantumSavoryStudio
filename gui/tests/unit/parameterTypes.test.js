@@ -227,6 +227,10 @@ describe('numeric vector parameter parsing', () => {
 
   it.each([
     ['Vector{Int64}', '[1.5]'],
+    ['Vector{Int64}', '[9007199254740992]'],
+    ['Vector{Int64}', '[-9007199254740992]'],
+    ['Vector{Int64}', '[9007199254740993]'],
+    ['Vector{Int64}', '[9007199254740991.1]'],
     ['Vector{Float64}', '[null]'],
     ['Vector{Float64}', '["1"]'],
     ['Vector{Float64}', 'not json'],
@@ -246,6 +250,16 @@ describe('numeric parameter parsing', () => {
     ['Float64', '', {}, { valid: true, empty: true, value: null }],
     ['Float64', '0.25', {}, { valid: true, empty: false, value: 0.25 }],
     ['Int64', '3', {}, { valid: true, empty: false, value: 3 }],
+    ['Int64', '9007199254740991', {}, {
+      valid: true,
+      empty: false,
+      value: 9007199254740991,
+    }],
+    ['Int64', '-9007199254740991', {}, {
+      valid: true,
+      empty: false,
+      value: -9007199254740991,
+    }],
     ['Float64', '0', { min: 0 }, { valid: true, empty: false, value: 0 }],
     ['Float64', '1', { max: 1 }, { valid: true, empty: false, value: 1 }],
   ])('normalizes valid %s value %#', (type, rawValue, parameter, expected) => {
@@ -255,6 +269,10 @@ describe('numeric parameter parsing', () => {
   it.each([
     ['Int', 1.5, {}],
     ['Int64', '1.5', {}],
+    ['Int64', '9007199254740992', {}],
+    ['Int64', '-9007199254740992', {}],
+    ['Int64', '9007199254740993', {}],
+    ['Int64', '9007199254740991.1', {}],
     ['Float64', Number.NaN, {}],
     ['Float64', Number.POSITIVE_INFINITY, {}],
     ['Float64', -0.1, { min: 0 }],

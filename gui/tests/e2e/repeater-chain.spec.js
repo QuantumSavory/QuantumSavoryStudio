@@ -773,7 +773,7 @@ test.describe('Layout Tools repeater chain generator', () => {
             ...definition,
             parameters: [...definition.parameters, constructorField({
               field: 'tag',
-              type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+              type: ['Nothing', 'DataType'],
               kind: 'named_tag_type',
               nullable: true,
               doc: 'Named tag head.',

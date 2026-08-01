@@ -90,7 +90,7 @@ const ENTANGLER_TYPE = {
     doc: 'Optional delay before retrying.',
   }), constructorField({
     field: 'tag',
-    type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+    type: ['Nothing', 'DataType'],
     kind: 'named_tag_type',
     nullable: true,
     doc: 'Named tag head for generated entanglement.',
@@ -104,7 +104,7 @@ const CONSUMER_TYPE = {
   virtual: false,
   parameters: [constructorField({
     field: 'tag',
-    type: 'Type{<:QuantumSavory.AbstractTag}',
+    type: 'DataType',
     kind: 'named_tag_type',
     nullable: false,
     doc: 'Named tag head to consume.',

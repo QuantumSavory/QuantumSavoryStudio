@@ -405,7 +405,7 @@ describe('RepeaterChainDialog protocol automation', () => {
         ...ENTANGLER_DEFINITION.parameters,
         constructorField({
           field: 'tag',
-          type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+          type: ['Nothing', 'DataType'],
           kind: 'named_tag_type',
           nullable: true,
           doc: 'Named tag head.'

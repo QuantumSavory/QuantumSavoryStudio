@@ -442,7 +442,7 @@ describe('ProtocolConstructorForm', () => {
           group: 'edge',
           parameters: [{
             field: 'tag',
-            type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+            type: ['Nothing', 'DataType'],
             kind: 'named_tag_type',
             nullable: true,
             doc: 'Tag head used for generated entanglement.',
@@ -513,7 +513,7 @@ describe('ProtocolConstructorForm', () => {
           group: 'edge',
           parameters: [{
             field: 'tag',
-            type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+            type: ['Nothing', 'DataType'],
             kind: 'named_tag_type',
             nullable: true,
             required: false,
@@ -543,7 +543,7 @@ describe('ProtocolConstructorForm', () => {
     const otherProtocolType = 'Example.OtherTagProtocol'
     const nullableTagParameter = {
       field: 'tag',
-      type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+      type: ['Nothing', 'DataType'],
       kind: 'named_tag_type',
       nullable: true,
       required: false,
@@ -600,7 +600,7 @@ describe('ProtocolConstructorForm', () => {
           group: 'edge',
           parameters: [{
             field: 'tag',
-            type: 'Type{<:QuantumSavory.AbstractTag}',
+            type: 'DataType',
             kind: 'named_tag_type',
             nullable: false,
             doc: 'Tag head to consume.',
@@ -650,7 +650,7 @@ describe('ProtocolConstructorForm', () => {
         type: ENTANGLER_TYPE,
         parameters: [{
           name: 'tag',
-          type: 'Type{<:QuantumSavory.AbstractTag}',
+          type: 'DataType',
           kind: 'named_tag_type',
           nullable: true,
           value: NAMED_TAG_ID
@@ -675,7 +675,7 @@ describe('ProtocolConstructorForm', () => {
           group: 'edge',
           parameters: [{
             field: 'tag',
-            type: 'Type{<:QuantumSavory.AbstractTag}',
+            type: 'DataType',
             kind: 'named_tag_type',
             nullable: true,
             required: false,
@@ -840,8 +840,54 @@ describe('TypedValueInput disabled code values', () => {
 
     await input.setValue('[1.5]')
     expect(parameter.value).toBe('[1.5]')
-    expect(parameter.error).toContain('JSON array of integers')
+    expect(parameter.error).toContain('JSON array of JavaScript-safe integers')
     expect(wrapper.emitted('commit')).toHaveLength(2)
+
+    await input.setValue('[9007199254740992]')
+    expect(parameter.value).toBe('[9007199254740992]')
+    expect(parameter.error).toContain('JavaScript-safe integers')
+    expect(wrapper.emitted('commit')).toHaveLength(2)
+
+    for (const roundedLexeme of [
+      '[9007199254740993]',
+      '[9007199254740991.1]',
+    ]) {
+      await input.setValue(roundedLexeme)
+      expect(parameter.value).toBe(roundedLexeme)
+      expect(parameter.error).toContain('JavaScript-safe integers')
+      expect(wrapper.emitted('commit')).toHaveLength(2)
+    }
+  })
+
+  it('commits exact opaque JSON drafts without exposing invalid intermediate text', async () => {
+    const original = { retained: true }
+    const parameter = { name: 'settings', value: original }
+    const wrapper = mount(TypedValueInput, {
+      props: { parameter, type: 'Any' },
+    })
+    const input = wrapper.get('textarea.opaque-json-input')
+
+    for (const invalid of ['{', '{"kind":"variable"}', '1e400', 'null']) {
+      await input.setValue(invalid)
+      await input.trigger('change')
+      expect(parameter.value).toBe(original)
+    }
+    expect(wrapper.emitted('commit')).toBeUndefined()
+
+    const values = [
+      ['{"nested":[true,1]}', { nested: [true, 1] }],
+      ['[false,2]', [false, 2]],
+      ['true', true],
+      ['0.25', 0.25],
+      ['"text"', 'text'],
+      ['""', ''],
+    ]
+    for (const [draft, expected] of values) {
+      await input.setValue(draft)
+      await input.trigger('change')
+      expect(parameter.value).toEqual(expected)
+    }
+    expect(wrapper.emitted('commit')).toHaveLength(values.length)
   })
 
   it('does not commit empty explicit literal inputs', async () => {
@@ -889,6 +935,29 @@ describe('TypedValueInput disabled code values', () => {
     expect(input.attributes('aria-invalid')).toBe('false')
     await input.setValue('4')
     expect(input.attributes('aria-invalid')).toBe('true')
+  })
+
+  it('constrains integer editors to the exact JavaScript-safe wire range', async () => {
+    const parameter = { name: 'rounds', value: 9_007_199_254_740_991 }
+    const wrapper = mount(TypedValueInput, {
+      props: { parameter, type: 'Int64', category: 'edge' }
+    })
+    const input = wrapper.get('input[type="number"]')
+
+    expect(input.attributes('min')).toBe('-9007199254740991')
+    expect(input.attributes('max')).toBe('9007199254740991')
+    expect(input.attributes('aria-invalid')).toBe('false')
+    await input.setValue('9007199254740992')
+    expect(input.attributes('aria-invalid')).toBe('true')
+    await input.trigger('change')
+    expect(wrapper.emitted('commit')).toBeUndefined()
+    for (const roundedLexeme of ['9007199254740993', '9007199254740991.1']) {
+      await input.setValue(roundedLexeme)
+      expect(parameter.value).toBe(roundedLexeme)
+      expect(input.attributes('aria-invalid')).toBe('true')
+      await input.trigger('change')
+      expect(wrapper.emitted('commit')).toBeUndefined()
+    }
   })
 
   it('does not open or overwrite a collapsed Lambda while disabled', async () => {

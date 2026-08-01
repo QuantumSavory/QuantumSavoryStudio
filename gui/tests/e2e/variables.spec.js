@@ -138,9 +138,13 @@ test.describe('Protocol variable type compatibility', () => {
     expect(parameterTypeSupportsVariableType('Function', 'Lambda')).toBe(true)
     expect(parameterTypeSupportsVariableType('Lambda', 'Function')).toBe(false)
     expect(parameterTypeSupportsVariableType('Symbolic', 'Symbolic')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Wildcard', 'QuantumSavory.Wildcard')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Any', 'Bool')).toBe(true)
-    expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(true)
+    expect(parameterTypeSupportsVariableType('Wildcard', 'QuantumSavory.Wildcard')).toBe(false)
+    expect(parameterTypeSupportsVariableType(
+      'QuantumSavory.Wildcard',
+      'QuantumSavory.Wildcard',
+    )).toBe(true)
+    expect(parameterTypeSupportsVariableType('Any', 'Bool')).toBe(false)
+    expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(false)
   })
 })
 

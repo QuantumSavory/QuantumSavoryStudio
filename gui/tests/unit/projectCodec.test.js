@@ -181,6 +181,33 @@ describe('collaborative design codec', () => {
     )
     expect(document).toEqual(original)
   })
+
+  it('rejects unsafe integer and malformed opaque values before projection', () => {
+    const safe = discriminatingStoredProject()
+    const parameter = safe.net.nodes[0].data.protocols[0].parameters[0]
+    Object.assign(parameter, {
+      type: 'Int64',
+      selectedType: 'Int64',
+      value: 9_007_199_254_740_991,
+    })
+    expect(encodeStoredProject(safe).net.nodes[0].data.protocols[0].parameters[0].value)
+      .toBe(9_007_199_254_740_991)
+
+    parameter.value = 9_007_199_254_740_992
+    expect(() => encodeStoredProject(safe)).toThrow(/safe JSON integer/)
+
+    Object.assign(parameter, {
+      type: 'Any',
+      selectedType: 'Any',
+      value: { nested: { kind: 'variable', id: 'hidden' } },
+    })
+    expect(() => encodeStoredProject(safe)).toThrow(/opaque JSON object/)
+
+    const cycle = {}
+    cycle.self = cycle
+    parameter.value = cycle
+    expect(() => encodeStoredProject(safe)).toThrow(/acyclic JSON value/)
+  })
 })
 
 const DEFAULT_NOISE = {
@@ -1442,6 +1469,35 @@ describe('backend payload codecs', () => {
         value: 'QuantumSavory.EntanglementCounterpart',
       },
     ])
+  })
+
+  it('admits and decodes durable named-tag branches after runtime metadata is stripped', () => {
+    const project = createEmptyProject('Durable named tag')
+    project.net.protocols.push(new FloatingProtocol({
+      id: 'protocol_durable_tag',
+      type: 'Example.TagProtocol',
+      parameters: [{
+        name: 'tag',
+        type: ['Nothing', 'DataType'],
+        kind: 'named_tag_type',
+        nullable: true,
+        required: false,
+        selectedType: 'DataType',
+        value: 'QuantumSavory.EntanglementCounterpart',
+      }],
+    }))
+
+    const encoded = encodeStoredProject(project)
+    const encodedParameter = encoded.net.protocols[0].parameters[0]
+    expect(encodedParameter).toEqual({
+      name: 'tag',
+      type: ['Nothing', 'DataType'],
+      selectedType: 'DataType',
+      value: 'QuantumSavory.EntanglementCounterpart',
+    })
+    expect(() => admitProjectDocument(encoded)).not.toThrow()
+    expect(decodeStoredProject(encoded).project.net.protocols[0].parameters[0])
+      .toEqual(encodedParameter)
   })
 
   it('projects only declared script-export fields without mutating its input', () => {

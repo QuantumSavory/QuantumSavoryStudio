@@ -34,8 +34,6 @@ import {
   parameterInputOptionForVariable,
   parameterTypeIsNumber,
   parameterTypeSupportsVariableType,
-  parseNumericParameterValue,
-  parseNumericVectorParameterValue,
   resolveParameterInputOption,
 } from '../../utils/parameterTypes.js'
 import {
@@ -57,6 +55,7 @@ import {
   stateParameterValueIsValid,
 } from '../../utils/stateParameterBounds.js'
 import { slotTypeIds } from '../../utils/runtimeCatalogs.js'
+import { cloneExactOpaqueJsonValue } from '../../utils/exactWireValues.js'
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
 const RUNTIME_SLOT_FIELDS = new Set(TRANSIENT_SLOT_FIELDS)
@@ -1143,8 +1142,17 @@ export class DesignCommandService {
       }
       return deepClone(value)
     }
-    if (type === 'Any') return deepClone(value)
-    if (parameter.kind === 'named_tag_type' || type === 'Type{<:AbstractTag}') {
+    if (type === 'Any') {
+      try {
+        return cloneExactOpaqueJsonValue(value)
+      } catch (error) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `${label} must be recursively untagged exact JSON: ${error.message}`,
+        )
+      }
+    }
+    if (parameter.kind === 'named_tag_type') {
       if (parameter.nullable === true && value === 'nothing') return value
       if (typeof value === 'string' && value.trim()) return value
       throw new DesignCommandError(
@@ -1193,14 +1201,27 @@ export class DesignCommandService {
       return value
     }
     if (parameterTypeIsNumber(type)) {
-      const numeric = parseNumericParameterValue(type, value, parameter)
-      if (!numeric.valid) {
+      const integer = type === 'Int64'
+      const valid = typeof value === 'number'
+        && Number.isFinite(value)
+        && (!integer || (Number.isInteger(value) && Number.isSafeInteger(value)))
+        && (
+          typeof parameter.min !== 'number'
+          || !Number.isFinite(parameter.min)
+          || value >= parameter.min
+        )
+        && (
+          typeof parameter.max !== 'number'
+          || !Number.isFinite(parameter.max)
+          || value <= parameter.max
+        )
+      if (!valid) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
-          `${label} is not a valid ${type} value.`,
+          `${label} must be an exact${integer ? ' safe-integer' : ' finite-number'} ${type} value.`,
         )
       }
-      return numeric.value
+      return value
     }
     if (type === 'Bool') {
       if (typeof value !== 'boolean') {
@@ -1240,11 +1261,16 @@ export class DesignCommandService {
       return value
     }
     if (type === 'Vector{Int64}' || type === 'Vector{Float64}') {
-      const vector = parseNumericVectorParameterValue(type, value)
-      if (!vector.valid || vector.empty) {
+      const integer = type === 'Vector{Int64}'
+      const valid = Array.isArray(value) && value.every(item => (
+        typeof item === 'number'
+        && Number.isFinite(item)
+        && (!integer || (Number.isInteger(item) && Number.isSafeInteger(item)))
+      ))
+      if (!valid) {
         throw new DesignCommandError('VALIDATION_FAILED', `${label} is not a valid ${type}.`)
       }
-      return vector.value
+      return [...value]
     }
     throw new DesignCommandError(
       'VALIDATION_FAILED',

@@ -39,6 +39,118 @@ function serviceFor(project, options = {}) {
 }
 
 describe('DesignCommandService', () => {
+  it('admits Any values only through the shared recursively untagged JSON contract', async () => {
+    const service = serviceFor(createEmptyProject('Opaque values'))
+    const source = { nested: [1, true, null, { text: 'value' }] }
+    const admitted = await service.requireTypedValue('Any', source, 'Opaque parameter')
+    expect(admitted).toEqual(source)
+    expect(admitted).not.toBe(source)
+    expect(admitted.nested).not.toBe(source.nested)
+
+    const cycle = {}
+    cycle.self = cycle
+    for (const malformed of [
+      { nested: Number.POSITIVE_INFINITY },
+      { nested: undefined },
+      { nested: () => true },
+      { nested: Symbol('opaque') },
+      { kind: 'numeric_expression', source: '1' },
+      { nested: { kind: 'variable', id: 'v' } },
+      new Date(),
+      cycle,
+    ]) {
+      await expect(service.requireTypedValue('Any', malformed, 'Opaque parameter'))
+        .rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    }
+  })
+
+  it('admits opaque Any protocol values through live metadata and rejects them atomically', async () => {
+    const project = createEmptyProject('Opaque protocol values')
+    project.net.nodes.push(new Node({
+      id: 'node_a',
+      name: 'A',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const service = serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{
+          type: 'Example.OpaqueProtocol',
+          parameters: [{ field: 'settings', type: 'Any', required: true }],
+        }],
+        edge: [],
+        floating: [],
+      }),
+    })
+    const settings = { nested: [{ enabled: true }] }
+
+    await service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'node_a',
+        value: {
+          type: 'Example.OpaqueProtocol',
+          parameters: [{ name: 'settings', selectedType: 'Any', value: settings }],
+        },
+      }],
+    })
+    const committed = project.net.nodes[0].data.protocols[0].parameters[0].value
+    expect(committed).toEqual(settings)
+    expect(committed).not.toBe(settings)
+    expect(committed.nested).not.toBe(settings.nested)
+
+    const before = encodeDesignDocument(project)
+    await expect(service.execute({
+      operations: [{
+        kind: 'design.update',
+        value: { description: 'candidate only' },
+      }, {
+        kind: 'protocols.update',
+        placement: 'node',
+        owner_id: 'node_a',
+        protocol_id: project.net.nodes[0].data.protocols[0].id,
+        value: {
+          parameters: [{
+            name: 'settings',
+            selectedType: 'Any',
+            value: { nested: { kind: 'variable', id: 'hidden' } },
+          }],
+        },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    expect(encodeDesignDocument(project)).toEqual(before)
+  })
+
+  it('rejects coercible numeric command values and preserves transaction atomicity', async () => {
+    const project = createEmptyProject('Exact command numerics')
+    const service = serviceFor(project)
+
+    for (const value of [true, [1], '1']) {
+      await expect(service.requireTypedValue('Float64', value, 'rate'))
+        .rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+      await expect(service.requireTypedValue('Int64', value, 'rounds'))
+        .rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    }
+    await expect(service.requireTypedValue('Vector{Int64}', '[1, 2]', 'rounds'))
+      .rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    await expect(service.requireTypedValue('Vector{Float64}', '[0.5]', 'rates'))
+      .rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        id: 'accepted-first',
+        value: { name: 'accepted_first', type: 'Int64', value: 1 },
+      }, {
+        kind: 'variables.create',
+        id: 'coercible-second',
+        value: { name: 'coercible_second', type: 'Float64', value: true },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    expect(project.variables).toEqual([])
+  })
+
   it('compiles specialist and transaction calls to the same operations', () => {
     const operations = [{
       kind: 'topology.create_node',
@@ -1161,7 +1273,7 @@ describe('DesignCommandService', () => {
             { field: 'rounds', type: 'Int64', required: false },
             {
               field: 'tag',
-              type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+              type: ['Nothing', 'DataType'],
               kind: 'named_tag_type',
               nullable: true,
               required: false,
@@ -1302,7 +1414,7 @@ describe('DesignCommandService', () => {
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
         expect.objectContaining({
           name: 'tag',
-          type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+          type: ['Nothing', 'DataType'],
           selectedType: 'Nothing',
           value: 'nothing',
         }),

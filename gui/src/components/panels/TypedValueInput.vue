@@ -16,15 +16,16 @@
   <input
     v-else-if="parameterTypeIsNumber(type)"
     type="number"
-    v-model="parameter.value"
-    :min="numericMinimum ?? parameter.min"
-    :max="numericMaximum ?? parameter.max"
+    :value="parameter.value ?? ''"
+    :min="effectiveNumericMinimum"
+    :max="effectiveNumericMaximum"
     :step="numberInputStep"
     :placeholder="placeholder"
     :aria-label="valueInputLabel"
     :aria-describedby="ariaDescribedby"
     :aria-invalid="numericValueInvalid"
     :disabled="disabled"
+    @input="updateNumericLiteralDraft"
     @change="commitNumericLiteral"
   />
   <input
@@ -37,6 +38,18 @@
     :aria-invalid="numericVectorValueInvalid"
     :disabled="disabled"
     @change="commitNumericVector"
+  />
+  <textarea
+    v-else-if="type === 'Any'"
+    class="opaque-json-input"
+    :value="opaqueJsonDraft"
+    placeholder="JSON value"
+    :aria-label="valueInputLabel"
+    :aria-describedby="ariaDescribedby"
+    :aria-invalid="opaqueJsonDraftInvalid"
+    :disabled="disabled"
+    @input="updateOpaqueJsonDraft"
+    @change="commitOpaqueJsonDraft"
   />
   <select
     v-else-if="type === 'Bool' && requiredInput"
@@ -121,6 +134,10 @@ import { Check } from '@lucide/vue'
 import { api } from '../../utils/ApiConnector'
 import { markdownCodeBlock } from '../../utils/markdown.js'
 import {
+  MAX_SAFE_JSON_INTEGER,
+  cloneExactOpaqueJsonValue,
+} from '../../utils/exactWireValues.js'
+import {
   isNumericExpressionOptionId,
   isNumericVectorType,
   isCodeType,
@@ -195,21 +212,44 @@ const valueInputLabel = computed(() => (
   `${props.parameterName || props.parameter.name || props.parameter.field || 'Parameter'} value`
 ))
 const numberInputStep = computed(() => {
-  const normalizedType = String(props.type || '').toLowerCase()
-  return normalizedType === 'int' || normalizedType === 'int64' ? 1 : 'any'
+  return props.type === 'Int64' ? 1 : 'any'
 })
+const integerInput = computed(() => props.type === 'Int64')
+const declaredNumericMinimum = computed(() => props.numericMinimum ?? props.parameter.min)
+const declaredNumericMaximum = computed(() => props.numericMaximum ?? props.parameter.max)
+const finiteNumericBound = (value, fallback) => (
+  value != null && Number.isFinite(Number(value)) ? Number(value) : fallback
+)
+const effectiveNumericMinimum = computed(() => (
+  integerInput.value
+    ? Math.max(
+        finiteNumericBound(declaredNumericMinimum.value, -MAX_SAFE_JSON_INTEGER),
+        -MAX_SAFE_JSON_INTEGER,
+      )
+    : declaredNumericMinimum.value
+))
+const effectiveNumericMaximum = computed(() => (
+  integerInput.value
+    ? Math.min(
+        finiteNumericBound(declaredNumericMaximum.value, MAX_SAFE_JSON_INTEGER),
+        MAX_SAFE_JSON_INTEGER,
+      )
+    : declaredNumericMaximum.value
+))
 const selectableFunctions = computed(() => api.getKnownFunctions().filter(func => (
   ['node', 'variable'].includes(props.category) || !func.endsWith('(self)')
 )))
 const codeEditorOpen = ref(false)
+const opaqueJsonDraft = ref('')
+const opaqueJsonDirty = ref(false)
 let codeValidationGeneration = 0
 const numericValueInvalid = computed(() => !parseNumericParameterValue(
   props.type,
   props.parameter.value,
   {
     ...props.parameter,
-    min: props.numericMinimum ?? props.parameter.min,
-    max: props.numericMaximum ?? props.parameter.max,
+    min: effectiveNumericMinimum.value,
+    max: effectiveNumericMaximum.value,
   },
 ).valid)
 const numericVectorInputValue = computed(() => (
@@ -227,6 +267,27 @@ const requiredBooleanInputValue = computed(() => {
   return ''
 })
 const codeDraftInvalid = computed(() => Boolean(props.parameter.error))
+const parseOpaqueJsonDraft = rawValue => {
+  if (typeof rawValue !== 'string' || !rawValue.trim()) return null
+  try {
+    const parsed = JSON.parse(rawValue)
+    if (parsed === null) return null
+    return cloneExactOpaqueJsonValue(parsed)
+  } catch {
+    return null
+  }
+}
+const opaqueJsonDraftInvalid = computed(() => (
+  parseOpaqueJsonDraft(opaqueJsonDraft.value) === null
+))
+
+function formatOpaqueJsonDraft(value) {
+  try {
+    return JSON.stringify(cloneExactOpaqueJsonValue(value)) ?? ''
+  } catch {
+    return ''
+  }
+}
 
 watch(
   () => props.type,
@@ -237,6 +298,9 @@ watch(
       props.parameter.value = 'Wildcard'
     } else if (type === 'Nothing') {
       props.parameter.value = 'nothing'
+    } else if (type === 'Any') {
+      opaqueJsonDraft.value = formatOpaqueJsonDraft(props.parameter.value)
+      opaqueJsonDirty.value = false
     } else if (
       (isWildcardType(previousType) && props.parameter.value === 'Wildcard')
       || (previousType === 'Nothing' && props.parameter.value === 'nothing')
@@ -257,6 +321,16 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => props.parameter.value,
+  value => {
+    if (props.type === 'Any' && !opaqueJsonDirty.value) {
+      opaqueJsonDraft.value = formatOpaqueJsonDraft(value)
+    }
+  },
+  { deep: true },
+)
+
 function onCodeEditorValueChanged(value) {
   if (props.disabled) return
   props.parameter.value = value
@@ -268,13 +342,32 @@ function openCodeEditor() {
   if (!props.disabled && isCodeType(props.type)) codeEditorOpen.value = true
 }
 
-function commitNumericLiteral() {
-  const parsed = parseNumericParameterValue(props.type, props.parameter.value, {
+function parseNumericLiteral(rawValue) {
+  return parseNumericParameterValue(props.type, rawValue, {
     ...props.parameter,
-    min: props.numericMinimum ?? props.parameter.min,
-    max: props.numericMaximum ?? props.parameter.max,
+    min: effectiveNumericMinimum.value,
+    max: effectiveNumericMaximum.value,
   })
-  if (parsed.valid && !parsed.empty) emit('commit')
+}
+
+function updateNumericLiteralDraft(event) {
+  const rawValue = event.target.value
+  const parsed = parseNumericLiteral(rawValue)
+  props.parameter.value = parsed.valid && !parsed.empty
+    ? parsed.value
+    : (parsed.empty ? null : rawValue)
+}
+
+function commitNumericLiteral(event) {
+  const rawValue = event.target.value
+  const parsed = parseNumericLiteral(rawValue)
+  if (parsed.valid && !parsed.empty) {
+    props.parameter.value = parsed.value
+    delete props.parameter.error
+    emit('commit')
+    return
+  }
+  props.parameter.value = parsed.empty ? null : rawValue
 }
 
 function commitNumericVector(event) {
@@ -288,8 +381,26 @@ function commitNumericVector(event) {
   }
   props.parameter.value = parsed.empty ? null : rawValue
   props.parameter.error = `Enter a JSON array of ${props.type === 'Vector{Int64}'
-    ? 'integers'
+    ? 'JavaScript-safe integers'
     : 'finite numbers'}.`
+}
+
+function updateOpaqueJsonDraft(event) {
+  opaqueJsonDraft.value = event.target.value
+  opaqueJsonDirty.value = true
+  props.parameter.error = 'Commit a valid recursively untagged JSON value.'
+}
+
+function commitOpaqueJsonDraft() {
+  const parsed = parseOpaqueJsonDraft(opaqueJsonDraft.value)
+  if (parsed === null) {
+    props.parameter.error = 'Enter a non-null recursively untagged exact JSON value.'
+    return
+  }
+  props.parameter.value = parsed
+  opaqueJsonDirty.value = false
+  delete props.parameter.error
+  emit('commit')
 }
 
 function commitRequiredBoolean(event) {

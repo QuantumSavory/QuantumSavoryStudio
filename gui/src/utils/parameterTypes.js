@@ -2,12 +2,15 @@ import {
   createNumericExpressionValue,
   isNumericExpressionValue,
 } from '../models/Variable.js'
+import {
+  MAX_SAFE_JSON_INTEGER,
+  cloneExactOpaqueJsonValue,
+} from './exactWireValues.js'
 
 export { createNumericExpressionValue, isNumericExpressionValue }
 
 export const KNOWN_PARAMETER_TYPES = [
   'Float64',
-  'Int',
   'Int64',
   'Bool',
   'String',
@@ -17,6 +20,7 @@ export const KNOWN_PARAMETER_TYPES = [
   'Vector{Int64}',
   'Vector{Float64}',
   'Lambda',
+  'Any',
   'default'
 ]
 
@@ -66,6 +70,7 @@ function inputKindForType(type) {
   if (type === 'Function') return 'predefined-function'
   if (isCodeType(type)) return 'code'
   if (type === 'Nothing' || isWildcardType(type)) return 'intrinsic'
+  if (type === 'Any') return 'opaque-json'
   if (type === 'String') return 'text'
   return parameterTypeIsKnown(type) ? 'text' : 'unsupported'
 }
@@ -215,7 +220,7 @@ export function getTypeOptionLabel(type) {
 }
 
 export function isWildcardType(type) {
-  return type === 'Wildcard' || type === 'QuantumSavory.Wildcard'
+  return type === 'QuantumSavory.Wildcard'
 }
 
 export function isSymbolicType(type) {
@@ -234,8 +239,7 @@ export function parameterTypeIsNumber(typeOrParameter) {
     : typeOrParameter
   if (typeof originalType !== 'string') return false
 
-  const lower = originalType.toLowerCase()
-  return lower === 'int' || lower === 'int64' || lower.startsWith('float')
+  return originalType === 'Int64' || originalType === 'Float64'
 }
 
 export function numericExpressionOptionId(targetType) {
@@ -279,7 +283,7 @@ export function inferParameterInputOption(options, parameter = {}) {
   }
   if (typeof value === 'number') {
     if (Number.isInteger(value)) {
-      const integer = options.find(option => ['Int', 'Int64'].includes(option.id))
+      const integer = options.find(option => option.id === 'Int64')
       if (integer) return integer
     }
     return options.find(option => (
@@ -361,6 +365,15 @@ export function parameterInputIsComplete(option, parameter = {}) {
     const parsed = parseNumericVectorParameterValue(option.wireType, value)
     return parsed.valid && !parsed.empty
   }
+  if (option.inputKind === 'opaque-json') {
+    if (value === null) return false
+    try {
+      cloneExactOpaqueJsonValue(value)
+      return true
+    } catch {
+      return false
+    }
+  }
   if (option.inputKind === 'boolean') return typeof value === 'boolean'
   if (option.inputKind === 'intrinsic') {
     return option.id === 'Nothing'
@@ -377,19 +390,33 @@ export function parameterInputIsComplete(option, parameter = {}) {
 }
 
 export function parseNumericParameterValue(type, rawValue, parameter = {}) {
+  if (type !== 'Int64' && type !== 'Float64') {
+    return { valid: false, empty: false, value: null }
+  }
   if (rawValue == null || rawValue === '') {
     return { valid: true, empty: true, value: null }
   }
 
-  const value = Number(rawValue)
-  const normalizedType = String(type || '').toLowerCase()
+  const integer = type === 'Int64'
+  let value = null
+  if (integer && typeof rawValue === 'string') {
+    if (!/^-?(?:0|[1-9]\d*)$/.test(rawValue)) {
+      return { valid: false, empty: false, value: null }
+    }
+    const exact = BigInt(rawValue)
+    if (exact < -BigInt(MAX_SAFE_JSON_INTEGER) || exact > BigInt(MAX_SAFE_JSON_INTEGER)) {
+      return { valid: false, empty: false, value: null }
+    }
+    value = Number(exact)
+  } else if (typeof rawValue === 'number') {
+    value = rawValue
+  } else if (!integer && typeof rawValue === 'string') {
+    value = Number(rawValue)
+  }
   const minimum = Number(parameter.min)
   const maximum = Number(parameter.max)
   const valid = Number.isFinite(value)
-    && (
-      (normalizedType !== 'int' && normalizedType !== 'int64')
-      || Number.isInteger(value)
-    )
+    && (!integer || Number.isSafeInteger(value))
     && (!Number.isFinite(minimum) || value >= minimum)
     && (!Number.isFinite(maximum) || value <= maximum)
 
@@ -416,16 +443,41 @@ export function parseNumericVectorParameterValue(type, rawValue) {
   let value = rawValue
   if (typeof rawValue === 'string') {
     if (!rawValue.trim()) return { valid: true, empty: true, value: null }
-    try {
-      value = JSON.parse(rawValue)
-    } catch {
-      return { valid: false, empty: false, value: null }
+    if (type === 'Vector{Int64}') {
+      const source = rawValue.trim()
+      if (!source.startsWith('[') || !source.endsWith(']')) {
+        return { valid: false, empty: false, value: null }
+      }
+      const body = source.slice(1, -1).trim()
+      if (!body) {
+        value = []
+      } else {
+        const parsed = body.split(',').map(item => (
+          parseNumericParameterValue('Int64', item.trim())
+        ))
+        if (parsed.some(item => !item.valid || item.empty)) {
+          return { valid: false, empty: false, value: null }
+        }
+        value = parsed.map(item => item.value)
+      }
+    } else {
+      try {
+        value = JSON.parse(rawValue)
+      } catch {
+        return { valid: false, empty: false, value: null }
+      }
     }
   }
   const valid = Array.isArray(value) && value.every(item => (
     typeof item === 'number'
     && Number.isFinite(item)
-    && (type !== 'Vector{Int64}' || Number.isInteger(item))
+    && (
+      type !== 'Vector{Int64}'
+      || (
+        Number.isInteger(item)
+        && Math.abs(item) <= MAX_SAFE_JSON_INTEGER
+      )
+    )
   ))
   return {
     valid,
@@ -448,13 +500,12 @@ export function parameterTypeSupportsVariableType(parameterType, variableType) {
   const declaredTypes = Array.isArray(parameterType) ? parameterType : [parameterType]
   return declaredTypes.some(declaredType => {
     if (typeof declaredType !== 'string') return false
-    if (declaredType === 'Any') return true
+    if (declaredType === 'Any') return false
     if (declaredType === 'Function') {
       return variableType === 'Function' || variableType === 'Lambda'
     }
     if (isWildcardType(declaredType)) return isWildcardType(variableType)
-    if (declaredType === 'Int') return variableType === 'Int' || variableType === 'Int64'
-    if (declaredType === 'Int64') return variableType === 'Int' || variableType === 'Int64'
+    if (declaredType === 'Int64') return variableType === 'Int64'
     return declaredType === variableType
   })
 }

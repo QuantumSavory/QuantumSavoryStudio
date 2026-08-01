@@ -33,6 +33,10 @@ import {
   requireRepresentationConfig,
 } from './representations'
 import { assertBackendPlatformInfo } from './platformInfo.js'
+import {
+  MAX_SAFE_JSON_INTEGER,
+  cloneExactOpaqueJsonValue,
+} from './exactWireValues.js'
 
 const projectDocumentValidator = new Ajv2020({
   allErrors: true,
@@ -415,11 +419,21 @@ function normalizeNumericExpressionValue(value, context) {
 }
 
 const EXACT_INTEGER_TYPES = new Set(['Int', 'Int64'])
-const EXACT_FLOAT_TYPES = new Set(['Float64', 'Float32'])
+const EXACT_FLOAT_TYPES = new Set(['Float64'])
 const EXACT_NUMERIC_VECTOR_TYPES = new Set(['Vector{Int64}', 'Vector{Float64}'])
 
 function isDefaultSourceAlias(value) {
   return typeof value === 'string' && value.trim().toLowerCase() === 'default'
+}
+
+function constructorSelectionIsDeclared(declaredTypes, selectedType) {
+  if (declaredTypes.includes(selectedType)) return true
+  if (selectedType === 'Lambda') return declaredTypes.includes('Function')
+  if (selectedType.startsWith('expression:')) {
+    const numericType = selectedType.slice('expression:'.length)
+    return ['Float64', 'Int64'].includes(numericType) && declaredTypes.includes(numericType)
+  }
+  return false
 }
 
 function requireExactLiteralWireValue(
@@ -436,8 +450,13 @@ function requireExactLiteralWireValue(
   }
 
   if (EXACT_INTEGER_TYPES.has(selectedType)) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
-      throw new Error(`${context} ${selectedType} value must be an exact finite JSON integer`)
+    if (
+      typeof value !== 'number'
+      || !Number.isFinite(value)
+      || !Number.isInteger(value)
+      || Math.abs(value) > MAX_SAFE_JSON_INTEGER
+    ) {
+      throw new Error(`${context} ${selectedType} value must be an exact safe JSON integer`)
     }
     return
   }
@@ -454,7 +473,10 @@ function requireExactLiteralWireValue(
       || !value.every(item => (
         typeof item === 'number'
         && Number.isFinite(item)
-        && (!integral || Number.isInteger(item))
+        && (
+          !integral
+          || (Number.isInteger(item) && Math.abs(item) <= MAX_SAFE_JSON_INTEGER)
+        )
       ))
     ) {
       throw new Error(`${context} ${selectedType} value must be an exact finite JSON-number array`)
@@ -484,6 +506,9 @@ function requireExactLiteralWireValue(
       throw new Error(`${context} ${selectedType} selection cannot use a Default alias`)
     }
   }
+  if (selectedType === 'DataType' && (typeof value !== 'string' || !value.trim())) {
+    throw new Error(`${context} DataType value must be an exact nonblank string`)
+  }
 }
 
 /**
@@ -494,7 +519,17 @@ function requireExactLiteralWireValue(
  */
 function normalizeConstructorParameter(rawParameter, context = 'Constructor parameter') {
   if (!isRecord(rawParameter)) throw new Error(`${context} must be an object`)
-  const parameter = cloneValue(rawParameter)
+  const rawVariableReference = isRecord(rawParameter.value)
+    && rawParameter.value.kind === 'variable'
+  const rawDeclaredTypes = Array.isArray(rawParameter.type)
+    ? rawParameter.type
+    : [rawParameter.type]
+  const rawMayBeOpaque = rawParameter.selectedType === 'Any'
+    || (!Object.hasOwn(rawParameter, 'selectedType') && rawDeclaredTypes.includes('Any'))
+  const rawValue = rawMayBeOpaque && !rawVariableReference
+    ? cloneExactOpaqueJsonValue(rawParameter.value, { path: '/value' })
+    : rawParameter.value
+  const parameter = cloneValue({ ...rawParameter, value: rawValue })
   const value = normalizeNumericExpressionValue(parameter.value, context)
   const hasExplicitSelection = Object.hasOwn(parameter, 'selectedType')
   const explicitSelection = parameter.selectedType
@@ -513,11 +548,8 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
         value: null,
       }
     }
-    const selectedOption = buildParameterInputOptions(parameter.type, parameter)
-      .find(option => option.id === explicitSelection && option.enabled)
     const declaredTypes = Array.isArray(parameter.type) ? parameter.type : [parameter.type]
-    const opaqueAnySelection = explicitSelection === 'Any' && declaredTypes.includes('Any')
-    if (!selectedOption && !opaqueAnySelection) {
+    if (!constructorSelectionIsDeclared(declaredTypes, explicitSelection)) {
       throw new Error(`${context} selectedType ${explicitSelection} is not declared`)
     }
     if (value == null || value === '') {
@@ -579,13 +611,16 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
         buildParameterInputOptions(parameter.type, parameter),
         { ...parameter, value, selectedType: undefined },
       ).id
-  requireExactLiteralWireValue(selectedType, value, context, {
+  const exactValue = selectedType === 'Any'
+    ? cloneExactOpaqueJsonValue(value, { path: '/value' })
+    : value
+  requireExactLiteralWireValue(selectedType, exactValue, context, {
     allowVariableReference: true,
   })
   return {
     ...parameter,
     selectedType,
-    value,
+    value: exactValue,
   }
 }
 
