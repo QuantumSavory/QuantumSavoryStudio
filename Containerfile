@@ -3,11 +3,10 @@ FROM docker.io/library/node:24-bookworm-slim AS frontend
 WORKDIR /build
 COPY Project.toml CHANGELOG.md ./
 COPY public/robots.txt public/robots.txt
-COPY gui/package.json gui/package-lock.json gui/
-RUN npm --prefix gui ci --include=dev
 COPY contracts contracts
 COPY gui gui
-RUN npm --prefix gui run build
+RUN npm --prefix gui ci --include=dev \
+    && npm --prefix gui run build
 
 FROM docker.io/library/julia:1.12.6-bookworm AS application
 
