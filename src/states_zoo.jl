@@ -57,6 +57,23 @@ function _validate_states_zoo_object_keys(object, expected, context::String)
   return nothing
 end
 
+"""Convert one JSON numeric value to its simulator-declared state parameter type."""
+function _states_zoo_parameter_value(parameter, value)
+  value isa Bool && return nothing
+
+  if parameter.value_type === Int
+    return value isa Int ? value : nothing
+  end
+
+  (value isa Int || value isa AbstractFloat) && isfinite(value) || return nothing
+  converted = try
+    convert(parameter.value_type, value)
+  catch
+    return nothing
+  end
+  return isfinite(converted) ? converted : nothing
+end
+
 """Project the simulator's ordered StatesZoo schemas into the Web API."""
 function get_states_zoo_types()
   return [
@@ -71,6 +88,7 @@ function get_states_zoo_types()
           Dict{String,Any}(
             "name" => string(parameter.name),
             "type" => string(parameter.value_type),
+            "integer" => parameter.value_type === Int,
             "doc" => parameter.doc,
             "min" => parameter.minimum,
             "max" => parameter.maximum,
@@ -128,8 +146,9 @@ function construct_states_zoo_state(state_type, parameters)
   for parameter in parameter_schemas
     name = string(parameter.name)
     value = parameters[name]
+    converted = _states_zoo_parameter_value(parameter, value)
 
-    if !(value in parameter)
+    if converted === nothing || !(converted in parameter)
       throw(validation_error(
         "States Zoo parameter '$name' is outside its declared type or range",
         Dict{String,Any}(
@@ -146,7 +165,7 @@ function construct_states_zoo_state(state_type, parameters)
       ))
     end
 
-    push!(values, value)
+    push!(values, converted)
   end
 
   try

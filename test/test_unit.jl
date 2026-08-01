@@ -158,7 +158,14 @@
         "value" => Dict(
           "kind" => "states_zoo",
           "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+          "parameters" => Dict(
+            "ηᴬ" => 1,
+            "ηᴮ" => 1,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+            "m" => 0,
+          ),
         ),
       ),
       Dict(
@@ -238,7 +245,7 @@
     @test occursin("variable_pair_fidelity_2 = 0.8", script)
     @test occursin("variable_weighted_pair, variable_weighted_pair_tr = (let", script)
     @test occursin(
-      "normalized = normalized_state_and_weight(BarrettKokBellPairW(1, 1, 0, 1, 1))",
+      "normalized = normalized_state_and_weight(BarrettKokBellPairW(1, 1, 0, 1, 1, 0))",
       script,
     )
     @test occursin("(normalized.state, normalized.weight)", script)
@@ -2088,6 +2095,7 @@
           Dict{String,Any}(
             "name" => string(parameter.name),
             "type" => string(parameter.value_type),
+            "integer" => parameter.value_type === Int,
             "doc" => parameter.doc,
             "min" => parameter.minimum,
             "max" => parameter.maximum,
@@ -2120,18 +2128,39 @@
         end
       end
 
-      barrett_weighted_parameters =
-        Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1)
+      barrett_weighted_parameters = Dict(
+        "ηᴬ" => 1,
+        "ηᴮ" => 1,
+        "Pᵈ" => 0,
+        "ηᵈ" => 1,
+        "𝒱" => 1,
+        "m" => 0,
+      )
       barrett_weighted = WebQuantumSavory.construct_states_zoo_state(
         "BarrettKokBellPairW",
         barrett_weighted_parameters,
       )
       @test QuantumSavory.StatesZoo.state_weight(barrett_weighted) ≈ 0.5
+      @test barrett_weighted.bkbp.ηᴬ === 1.0
+      @test barrett_weighted.bkbp.m === 0
+
+      depolarized_from_json_integer = WebQuantumSavory.construct_states_zoo_state(
+        "DepolarizedBellPair",
+        Dict("p" => 1),
+      )
+      @test depolarized_from_json_integer.p === 1.0
 
       zero_trace_recipe = Dict(
         "kind" => "states_zoo",
         "state_type" => "BarrettKokBellPairW",
-        "parameters" => Dict("ηᴬ" => 0, "ηᴮ" => 0, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+        "parameters" => Dict(
+          "ηᴬ" => 0,
+          "ηᴮ" => 0,
+          "Pᵈ" => 0,
+          "ηᵈ" => 1,
+          "𝒱" => 1,
+          "m" => 0,
+        ),
       )
       zero_trace_error = try
         WebQuantumSavory.construct_states_zoo_recipe(zero_trace_recipe)
@@ -2167,7 +2196,7 @@
       @test extra isa WebQuantumSavory.APIError
       @test extra.details["extra"] == ["other"]
 
-      for invalid_value in ("0.5", true, NaN, Inf, -Inf)
+      for invalid_value in ("0.5", true, 1 // 2, NaN, Inf, -Inf)
         invalid = states_zoo_error("DepolarizedBellPair", Dict("p" => invalid_value))
         @test invalid isa WebQuantumSavory.APIError
         @test occursin("outside its declared type or range", invalid.message)
@@ -2177,6 +2206,15 @@
         invalid = states_zoo_error("DepolarizedBellPair", Dict("p" => invalid_value))
         @test invalid isa WebQuantumSavory.APIError
         @test occursin("outside its declared type or range", invalid.message)
+      end
+
+      for invalid_value in (0.0, true, "0")
+        invalid_parameters = copy(barrett_weighted_parameters)
+        invalid_parameters["m"] = invalid_value
+        invalid = states_zoo_error("BarrettKokBellPairW", invalid_parameters)
+        @test invalid isa WebQuantumSavory.APIError
+        @test invalid.details["parameter"] == "m"
+        @test invalid.details["declared_type"] == "Int"
       end
 
       tagged_recipe = Dict(
@@ -2220,7 +2258,14 @@
 
       weighted = WebQuantumSavory.construct_states_zoo_state(
         "BarrettKokBellPairW",
-        Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+        Dict(
+          "ηᴬ" => 1,
+          "ηᴮ" => 1,
+          "Pᵈ" => 0,
+          "ηᵈ" => 1,
+          "𝒱" => 1,
+          "m" => 0,
+        ),
       )
       density_operator, original_trace =
         WebQuantumSavory._states_zoo_preview_density_operator("BarrettKokBellPairW", weighted)

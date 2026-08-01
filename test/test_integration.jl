@@ -728,7 +728,8 @@
       ))
       depolarized_parameter = only(depolarized["parameters"])
       @test depolarized_parameter["name"] == "p"
-      @test depolarized_parameter["type"] == "Real"
+      @test depolarized_parameter["type"] == "Float64"
+      @test depolarized_parameter["integer"] === false
       @test depolarized_parameter["doc"] isa String
       @test !isempty(depolarized_parameter["doc"])
       @test depolarized_parameter["min"] == 0
@@ -736,6 +737,20 @@
       @test depolarized_parameter["min_inclusive"] === true
       @test depolarized_parameter["max_inclusive"] === true
       @test depolarized_parameter["good"] == 1
+
+      barrett = only(filter(
+        entry -> entry["id"] == "BarrettKokBellPair",
+        types_data["states_zoo_types"],
+      ))
+      parity_parameter = only(filter(
+        parameter -> parameter["name"] == "m",
+        barrett["parameters"],
+      ))
+      @test parity_parameter["type"] == "Int"
+      @test parity_parameter["integer"] === true
+      @test parity_parameter["min"] == 0
+      @test parity_parameter["max"] == 1
+      @test parity_parameter["good"] == 0
 
       preview_response = make_request(
         "POST",
@@ -759,7 +774,14 @@
         "/states_zoo_preview";
         body=Dict(
           "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+          "parameters" => Dict(
+            "ηᴬ" => 1,
+            "ηᴮ" => 1,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+            "m" => 0,
+          ),
         ),
       )
       @test weighted_preview_response.status == 200
@@ -771,7 +793,14 @@
         "/states_zoo_preview";
         body=Dict(
           "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 0, "ηᴮ" => 0, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+          "parameters" => Dict(
+            "ηᴬ" => 0,
+            "ηᴮ" => 0,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+            "m" => 0,
+          ),
         ),
       )
       @test zero_trace_response.status == 400
@@ -805,6 +834,26 @@
       @test invalid_response.status == 400
       invalid_data = parse_response(invalid_response)
       @test invalid_data["error"]["code"] == "VALIDATION_ERROR"
+
+      fractional_parity_response = make_request(
+        "POST",
+        "/states_zoo_preview";
+        body=Dict(
+          "state_type" => "BarrettKokBellPairW",
+          "parameters" => Dict(
+            "ηᴬ" => 1,
+            "ηᴮ" => 1,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+            "m" => 0.5,
+          ),
+        ),
+      )
+      @test fractional_parity_response.status == 400
+      fractional_parity_data = parse_response(fractional_parity_response)
+      @test fractional_parity_data["error"]["details"]["parameter"] == "m"
+      @test fractional_parity_data["error"]["details"]["declared_type"] == "Int"
   end
 
   @testset "Parse Network Graph - Success" begin
@@ -845,7 +894,14 @@
         "value" => Dict(
           "kind" => "states_zoo",
           "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+          "parameters" => Dict(
+            "ηᴬ" => 1,
+            "ηᴮ" => 1,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+            "m" => 0,
+          ),
         ),
       )]
 
