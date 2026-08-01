@@ -84,9 +84,10 @@ Real HTTP/GUI failure injection remains an integration-level verification gap.
 ## Logs, panic, and live metadata
 
 Starting a new target clears captured logs; resuming a paused target preserves them.
-HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Live tags,
-queries, slots, and protocol rendering require a retained register/network and become
-unavailable after blocking or destruction.
+HTTP log reads purge by default and accept only exact `true` or `false` query values,
+while MCP reads are bounded and nonpurging. Live tags, queries, slots, and protocol
+rendering require a retained register/network and become unavailable after blocking or
+destruction.
 
 Ordinary captured events are closed records containing exactly `id`, `timestamp`,
 `source`, `severity`, `message`, and object `details`. Logger metadata and arbitrary

@@ -1870,13 +1870,15 @@
       @test haskey(logs_data_purge, "logs")
       @test haskey(logs_data_purge, "count")
 
-      # Test various purge parameter values
-      purge_values = ["1", "yes", "on", "0", "no", "off"]
-      for purge_val in purge_values
+      # Reject legacy aliases and malformed Boolean query values.
+      invalid_purge_values = ["1", "yes", "on", "0", "no", "off", "TRUE", "garbage"]
+      for purge_val in invalid_purge_values
           purge_response = make_request("GET", "/logs/$logs_test_name", query=Dict("purge" => purge_val))
-          @test purge_response.status == 200
+          @test purge_response.status == 400
           purge_data = parse_response(purge_response)
-          @test purge_data["success"] == true
+          @test purge_data["success"] == false
+          @test purge_data["error"]["code"] == "VALIDATION_ERROR"
+          @test purge_data["error"]["message"] == "purge must be 'true' or 'false'"
       end
 
       # Clean up

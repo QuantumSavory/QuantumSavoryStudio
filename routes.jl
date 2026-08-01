@@ -459,7 +459,15 @@ operation_route("getSimulationLogs") do
   simulation_name = string(params(:name))
 
   purge_raw = Genie.Requests.getpayload(:purge, "true")
-  purge = purge_raw isa Bool ? purge_raw : (lowercase(string(purge_raw)) in ("true", "1", "yes", "on"))
+  purge = if purge_raw isa Bool
+    purge_raw
+  elseif purge_raw == "true"
+    true
+  elseif purge_raw == "false"
+    false
+  else
+    throw(validation_error("purge must be 'true' or 'false'"))
+  end
 
   logs = WebQuantumSavory.simulation_logs(simulation_name; purge, limit=nothing)
 
