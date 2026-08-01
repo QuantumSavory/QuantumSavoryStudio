@@ -189,7 +189,7 @@ jobs:
           - windows-2025
           - macos-15-intel
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
