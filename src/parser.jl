@@ -1001,14 +1001,7 @@ end
 function get_protocol_types()
   result = []
   for schema in QuantumSavory.ProtocolZoo.protocol_schemas()
-    placement = schema.placement
-    group = if placement === QuantumSavory.ProtocolZoo.NodeProtocolPlacement
-      "node"
-    elseif placement === QuantumSavory.ProtocolZoo.EdgeProtocolPlacement
-      "edge"
-    else
-      "floating"
-    end
+    group = _protocol_web_group(schema)
     push!(result, Dict(
       "type" => string(schema.constructor.constructor),
       "doc" => schema.constructor.doc,
@@ -1030,6 +1023,20 @@ function get_protocol_types()
   end
 
   result
+end
+
+function _protocol_web_group(schema)
+  attachment = schema.attachment
+  attachment === QuantumSavory.ProtocolZoo.NetworkAttachment && return "floating"
+  attachment === QuantumSavory.ProtocolZoo.NodeAttachment && return "node"
+  attachment === QuantumSavory.ProtocolZoo.EdgeAttachment && return "edge"
+  throw(server_error(
+    "Unsupported simulator protocol attachment",
+    Dict{String,Any}(
+      "protocol_type" => string(schema.constructor.constructor),
+      "attachment" => string(attachment),
+    ),
+  ))
 end
 
 function extract_payload(payload = nothing, raw_payload = nothing)
@@ -2231,35 +2238,41 @@ function _constructor_parameter_kwargs(
   return kwargs, variable_assignments
 end
 
-function _protocol_placement_kwargs(schema, ctx::Dict{Symbol,Any})
-  placement = schema.placement
-  fields = schema.placement_fields
+function _protocol_attachment_kwargs(schema, ctx::Dict{Symbol,Any})
+  attachment = schema.attachment
+  attachment_roles = filter(
+    role -> role.binding === QuantumSavory.ProtocolZoo.AttachmentBound,
+    schema.node_roles,
+  )
   has_node = haskey(ctx, :node)
   has_edge = haskey(ctx, :nodeA) || haskey(ctx, :nodeB)
 
-  if placement === QuantumSavory.ProtocolZoo.FloatingProtocolPlacement
+  if attachment === QuantumSavory.ProtocolZoo.NetworkAttachment
     (has_node || has_edge) && throw(validation_error(
-      "Protocol '$(schema.constructor.constructor)' requires floating placement",
+      "Protocol '$(schema.constructor.constructor)' requires network placement",
     ))
     return ()
-  elseif placement === QuantumSavory.ProtocolZoo.NodeProtocolPlacement
+  elseif attachment === QuantumSavory.ProtocolZoo.NodeAttachment
     (has_node && !has_edge) || throw(validation_error(
       "Protocol '$(schema.constructor.constructor)' requires node placement",
     ))
-    return (only(fields) => ctx[:node],)
-  elseif placement === QuantumSavory.ProtocolZoo.EdgeProtocolPlacement
+    return (only(attachment_roles).name => ctx[:node],)
+  elseif attachment === QuantumSavory.ProtocolZoo.EdgeAttachment
     (!has_node && haskey(ctx, :nodeA) && haskey(ctx, :nodeB)) ||
       throw(validation_error(
       "Protocol '$(schema.constructor.constructor)' requires edge placement",
       ))
-    return (fields[1] => ctx[:nodeA], fields[2] => ctx[:nodeB])
+    return (
+      attachment_roles[1].name => ctx[:nodeA],
+      attachment_roles[2].name => ctx[:nodeB],
+    )
   end
 
   throw(server_error(
-    "Unsupported simulator protocol placement",
+    "Unsupported simulator protocol attachment",
     Dict{String,Any}(
       "protocol_type" => string(schema.constructor.constructor),
-      "placement" => string(placement),
+      "attachment" => string(attachment),
     ),
   ))
 end
@@ -2288,7 +2301,7 @@ function _instantiate_protocol(
   # Add sim, net, and node(s) as keyword arguments
   kwargs[:sim] = ctx[:sim]
   kwargs[:net] = ctx[:net]
-  for (field, value) in _protocol_placement_kwargs(schema, ctx)
+  for (field, value) in _protocol_attachment_kwargs(schema, ctx)
     kwargs[field] = value
   end
 

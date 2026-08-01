@@ -1762,6 +1762,17 @@
       @test all(haskey(pt, "parameters") for pt in protocol_types)
       @test all(haskey(pt, "virtual") for pt in protocol_types)
       @test all(pt["group"] in ["node", "edge", "floating"] for pt in protocol_types)
+      @test length(protocol_types) == length(QuantumSavory.ProtocolZoo.protocol_schemas())
+
+      expected_groups = Dict(
+        QuantumSavory.ProtocolZoo.NetworkAttachment => "floating",
+        QuantumSavory.ProtocolZoo.NodeAttachment => "node",
+        QuantumSavory.ProtocolZoo.EdgeAttachment => "edge",
+      )
+      @test Dict(protocol["type"] => protocol["group"] for protocol in protocol_types) == Dict(
+        string(schema.constructor.constructor) => expected_groups[schema.attachment]
+        for schema in QuantumSavory.ProtocolZoo.protocol_schemas()
+      )
 
       required_parameters = Set(
         (protocol["type"], string(parameter.field))
@@ -1774,10 +1785,12 @@
         for protocol in protocol_types
         for parameter in protocol["parameters"]
       )
-      @test required_parameters == Set([
-        ("SimpleSwitchDiscreteProt", "clientnodes"),
-        ("SimpleSwitchDiscreteProt", "success_probs"),
-      ])
+      @test required_parameters == Set(
+        (string(schema.constructor.constructor), string(field.name))
+        for schema in QuantumSavory.ProtocolZoo.protocol_schemas()
+        for field in schema.constructor.fields
+        if field.required
+      )
 
       protocol_types_by_name = Dict(pt["type"] => pt for pt in protocol_types)
       virtual_protocol = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglementConsumer)]
@@ -3448,30 +3461,49 @@
       @test protocol_type === nothing
   end
 
-  @testset "Protocol Schema Placement" begin
+  @testset "Protocol Schema Attachment" begin
       node_schema = QuantumSavory.ProtocolZoo.protocol_schema(
         QuantumSavory.ProtocolZoo.CutoffProt,
       )
       edge_schema = QuantumSavory.ProtocolZoo.protocol_schema(
         QuantumSavory.ProtocolZoo.EntanglerProt,
       )
-      @test WebQuantumSavory._protocol_placement_kwargs(
+      network_schema = QuantumSavory.ProtocolZoo.protocol_schema(
+        QuantumSavory.ProtocolZoo.GraphStateConstructor,
+      )
+      node_roles = filter(
+        role -> role.binding === QuantumSavory.ProtocolZoo.AttachmentBound,
+        node_schema.node_roles,
+      )
+      edge_roles = filter(
+        role -> role.binding === QuantumSavory.ProtocolZoo.AttachmentBound,
+        edge_schema.node_roles,
+      )
+      @test WebQuantumSavory._protocol_attachment_kwargs(
         node_schema,
         Dict{Symbol,Any}(:node => 1),
-      ) == (only(node_schema.placement_fields) => 1,)
-      @test WebQuantumSavory._protocol_placement_kwargs(
+      ) == (only(node_roles).name => 1,)
+      @test WebQuantumSavory._protocol_attachment_kwargs(
         edge_schema,
         Dict{Symbol,Any}(:nodeA => 1, :nodeB => 2),
       ) == (
-        edge_schema.placement_fields[1] => 1,
-        edge_schema.placement_fields[2] => 2,
+        edge_roles[1].name => 1,
+        edge_roles[2].name => 2,
       )
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory._protocol_placement_kwargs(
+      @test WebQuantumSavory._protocol_attachment_kwargs(
+        network_schema,
+        Dict{Symbol,Any}(),
+      ) == ()
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._protocol_attachment_kwargs(
         node_schema,
         Dict{Symbol,Any}(:nodeA => 1, :nodeB => 2),
       )
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory._protocol_placement_kwargs(
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._protocol_attachment_kwargs(
         edge_schema,
+        Dict{Symbol,Any}(:node => 1),
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._protocol_attachment_kwargs(
+        network_schema,
         Dict{Symbol,Any}(:node => 1),
       )
   end

@@ -1361,7 +1361,7 @@ function _script_protocol!(
     placement_context[:nodeA] = node_a
     placement_context[:nodeB] = node_b
   end
-  for (field, value) in _protocol_placement_kwargs(schema, placement_context)
+  for (field, value) in _protocol_attachment_kwargs(schema, placement_context)
     push!(keywords, "$(field) = $value")
   end
 

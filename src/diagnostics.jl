@@ -8,7 +8,7 @@ function mock_broken_protocol_enabled(;
 end
 
 """
-Diagnostic-only floating protocol used to verify simulator panic reporting.
+Diagnostic-only network-attached protocol used to verify simulator panic reporting.
 
 The process deliberately indexes beyond a three-element vector after it has
 been scheduled. It is never placed in the public catalog unless the matching
@@ -22,9 +22,9 @@ end
 const MOCK_BROKEN_PROTOCOL_SCHEMA = QuantumSavory.ProtocolZoo.ProtocolSchema(
   QuantumSavory.ConstructorSchema(
     MockBrokenProtocol,
-    "Diagnostic-only floating protocol that intentionally crashes during simulation stepping.",
+    "Diagnostic-only network protocol that intentionally crashes during simulation stepping.",
   ),
-  QuantumSavory.ProtocolZoo.FloatingProtocolPlacement,
+  QuantumSavory.ProtocolZoo.NetworkAttachment,
   (),
 )
 
