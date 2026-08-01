@@ -157,7 +157,11 @@ describe('log record boundaries', () => {
     expect(() => assertBackendLogResponse({ ...response, count: -1 })).toThrow(/count/)
     expect(() => assertBackendLogResponse({ ...response, count: 1 })).toThrow(/count/)
     expect(() => assertBackendLogResponse({ ...response, extra: true })).toThrow(/exactly/)
-    expect(() => assertBackendLogResponse({ ...response, logs: [{ ...backendEvent(), msg: 'x' }] }))
+    expect(() => assertBackendLogResponse({
+      ...response,
+      logs: [{ ...backendEvent(), msg: 'x' }],
+      count: 1,
+    }))
       .toThrow(/canonical/)
   })
 
