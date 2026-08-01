@@ -1,4 +1,7 @@
-import { config } from '@vue/test-utils'
+import { afterEach } from 'vitest'
+import { config, enableAutoUnmount } from '@vue/test-utils'
+
+enableAutoUnmount(afterEach)
 
 config.global.directives.tooltip = {
   beforeMount() {},
