@@ -46,7 +46,7 @@ end
 
 """Convert one exact schema-v2 constructor value to its declared Julia type.
 
-Strings and Booleans retain their JSON types. Numeric scalars and vectors accept
+Nonblank strings and Booleans retain their JSON types. Numeric scalars and vectors accept
 only finite real numbers other than Booleans; integer targets additionally
 require integral, representable values. Exact null/`"nothing"` and
 null/`"Wildcard"` wire sentinels construct their corresponding Julia values.
@@ -103,7 +103,9 @@ function _convert_parameter_value(ptype::AbstractString, value)
     end
   elseif ts == "String"
     value isa AbstractString || return false => nothing
-    return true => String(value)
+    converted = String(value)
+    isempty(strip(converted)) && return false => nothing
+    return true => converted
   elseif ts == "Nothing"
     if value === nothing || (value isa AbstractString && value == "nothing")
       return true => nothing

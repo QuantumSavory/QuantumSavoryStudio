@@ -4088,15 +4088,16 @@
       123,
       "String parameter",
     )
-    @test WebQuantumSavory._script_regular_expression(
-      "String",
-      "",
-      "String parameter",
-    ) == "\"\""
-    blank_string_background = instantiate_contextual_background([
-      Dict("name" => "label", "value" => ""),
-    ])
-    @test blank_string_background.label == ""
+    for blank in ("", "   ")
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._script_regular_expression(
+        "String",
+        blank,
+        "String parameter",
+      )
+      @test_throws WebQuantumSavory.APIError instantiate_contextual_background([
+        Dict("name" => "label", "value" => blank),
+      ])
+    end
 
     for special_type in ("Function", "Lambda")
       for alias in ("default", "Default", " DEFAULT ")

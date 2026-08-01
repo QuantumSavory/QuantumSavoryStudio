@@ -48,10 +48,11 @@ QuantumSavory owns keyword construction and hidden runtime state. In particular,
 arguments; Web neither advertises nor persists that field. Backend parsing, runtime
 construction, and script export share the required-field contract. Numeric scalars are
 finite JSON numbers and numeric vectors are JSON-number arrays; integer targets require
-integral values and Booleans are rejected as numbers. Booleans and strings retain their
-JSON types, and intrinsic branches use exact `nothing` or `Wildcard` sentinels. Numeric
-strings are not a wire form. Only JSON null omits a constructor keyword, and
-Function/Lambda text matching `default` after case-folding and trimming is invalid.
+integral values and Booleans are rejected as numbers. Booleans and nonblank strings
+retain their JSON types, and intrinsic branches use exact `nothing` or `Wildcard`
+sentinels. Numeric strings are not a wire form. Only JSON null omits a constructor
+keyword, and Function/Lambda text matching `default` after case-folding and trimming is
+invalid.
 
 The browser validates the complete protocol/background catalog response before
 publishing either half. Authoring removes `Default` from required fields, treats a
