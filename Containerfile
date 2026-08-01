@@ -43,6 +43,10 @@ USER 10001:10001
 RUN julia --startup-file=no --project=/app -e \
     'using Pkg; Pkg.instantiate(); Pkg.precompile(); using WebQuantumSavory'
 
+# Keep installed packages read-only at runtime while allowing Julia and Genie to
+# write ephemeral usage bookkeeping beneath the public profile's /tmp mount.
+ENV JULIA_DEPOT_PATH=/tmp/webquantumsavory-depot:/opt/webquantumsavory/depot
+
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD curl --fail --silent --show-error http://127.0.0.1:8000/status >/dev/null

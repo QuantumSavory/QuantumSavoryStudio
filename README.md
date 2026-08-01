@@ -78,6 +78,8 @@ podman run --rm -p 127.0.0.1:8000:8000 \
 `./ci/public-container.sh` builds and probes this profile with Podman, including public
 source denial and loss of process-local simulation state after restart. Saved projects
 remain browser-local; the image contains no account or server-side project database.
+The installed Julia depot stays read-only, while runtime package bookkeeping uses the
+ephemeral `/tmp` mount.
 
 ## UI Access
 
