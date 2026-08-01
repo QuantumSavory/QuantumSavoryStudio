@@ -285,10 +285,217 @@
         "$ref": "#/$defs/opaqueParameterValue"
       }
     },
+    "exactIntegerOrVariable": {
+      "anyOf": [
+        { "type": "integer" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactNumberOrVariable": {
+      "anyOf": [
+        { "type": "number" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactIntegerVectorOrVariable": {
+      "anyOf": [
+        { "type": "array", "items": { "type": "integer" } },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactNumberVectorOrVariable": {
+      "anyOf": [
+        { "type": "array", "items": { "type": "number" } },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactBooleanOrVariable": {
+      "anyOf": [
+        { "type": "boolean" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactStringOrVariable": {
+      "anyOf": [
+        { "$ref": "#/$defs/nonBlankString" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactNothingOrVariable": {
+      "anyOf": [
+        { "const": "nothing" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactWildcardOrVariable": {
+      "anyOf": [
+        { "const": "Wildcard" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "nonDefaultSourceOrVariable": {
+      "anyOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nonBlankString" },
+            { "not": { "type": "string", "pattern": "^\\s*[dD][eE][fF][aA][uU][lL][tT]\\s*$" } }
+          ]
+        },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "exactConstructorParameterBranches": {
+      "allOf": [
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Int", "Int64"] } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactIntegerOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Float64", "Float32"] } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactNumberOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Vector{Int64}" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactIntegerVectorOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Vector{Float64}" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactNumberVectorOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Bool" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactBooleanOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "String" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactStringOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Nothing" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactNothingOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "selectedType": { "enum": ["Wildcard", "QuantumSavory.Wildcard"] }
+            },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/exactWildcardOrVariable" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Function", "Lambda"] } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/nonDefaultSourceOrVariable" } } }
+        }
+      ]
+    },
+    "exactVariableBranches": {
+      "allOf": [
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Int", "Int64"] } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "integer" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Float64", "Float32"] } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "number" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Vector{Int64}" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "array", "items": { "type": "integer" } } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Vector{Float64}" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "array", "items": { "type": "number" } } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Bool" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "type": "boolean" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "String" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "$ref": "#/$defs/nonBlankString" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "const": "Nothing" } },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "const": "nothing" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "selectedType": { "enum": ["Wildcard", "QuantumSavory.Wildcard"] }
+            },
+            "required": ["selectedType"]
+          },
+          "then": { "properties": { "value": { "const": "Wildcard" } } }
+        },
+        {
+          "if": {
+            "properties": { "selectedType": { "enum": ["Function", "Lambda"] } },
+            "required": ["selectedType"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "allOf": [
+                  { "$ref": "#/$defs/nonBlankString" },
+                  { "not": { "type": "string", "pattern": "^\\s*[dD][eE][fF][aA][uU][lL][tT]\\s*$" } }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
     "protocolParameter": {
       "type": "object",
       "additionalProperties": false,
       "allOf": [
+        { "$ref": "#/$defs/exactConstructorParameterBranches" },
         {
           "if": {
             "properties": { "selectedType": { "const": "default" } },
@@ -323,6 +530,7 @@
       "type": "object",
       "additionalProperties": false,
       "allOf": [
+        { "$ref": "#/$defs/exactConstructorParameterBranches" },
         {
           "if": {
             "properties": { "selectedType": { "const": "default" } },
@@ -844,6 +1052,7 @@
       "type": "object",
       "additionalProperties": false,
       "allOf": [
+        { "$ref": "#/$defs/exactVariableBranches" },
         {
           "if": {
             "properties": { "selectedType": { "const": "default" } },

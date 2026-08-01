@@ -16,6 +16,9 @@ const _EXACT_PARAMETER_SCALAR_TYPES = (_NULLABLE_PARAMETER_SCALAR_TYPES..., "Not
 const _EXACT_PARAMETER_VECTOR_TYPES = ("Vector{Int64}", "Vector{Float64}")
 const _EXACT_PARAMETER_WILDCARD_TYPES = ("Wildcard", "QuantumSavory.Wildcard")
 
+_is_constructor_default_source_alias(value) =
+  value isa AbstractString && lowercase(strip(String(value))) == "default"
+
 """Return the scalar member of a supported nullable parameter type."""
 function _nullable_parameter_scalar_type(ptype::AbstractString)
   union_match = match(
@@ -435,9 +438,9 @@ function _parse_variables(payload)
       "$context type 'default' requires a null value",
       Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
     ))
-    variable_type == "Function" && value isa AbstractString &&
-      lowercase(strip(String(value))) == "default" && throw(validation_error(
-        "$context Function value cannot use a Default alias",
+    variable_type in ("Function", "Lambda") &&
+      _is_constructor_default_source_alias(value) && throw(validation_error(
+        "$context $variable_type value cannot use a Default alias",
         Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
       ))
     permits_null = variable_type == "default" ||
@@ -794,8 +797,7 @@ function _required_constructor_parameter_names(fields_by_name)
   )
 end
 
-_constructor_parameter_is_omitted(value) =
-  value === nothing || (value isa AbstractString && isempty(strip(String(value))))
+_constructor_parameter_is_omitted(value) = value === nothing
 
 function _reject_required_constructor_omission(
   required_names,
@@ -1790,6 +1792,9 @@ function _handle_function_lambda_parameter!(
   node_name_to_index::Dict{String,Int}=Dict{String,Int}(),
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
 )
+  _is_constructor_default_source_alias(value) && throw(validation_error(
+    "Parameter '$(name)' cannot use a Default alias for $special_type",
+  ))
   if isa(value, Function)
     kwargs[name] = value
     return true

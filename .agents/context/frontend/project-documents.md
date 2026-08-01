@@ -52,7 +52,11 @@ timing values from the export panel.
 `contracts/project/v2.schema.json` is the sole canonical durable field authority. The
 co-shipped JSON Schema closes every application-owned object boundary with
 `additionalProperties: false`; no nested map is extensible unless the schema explicitly
-names that extension point.
+names that extension point. Numeric constructor and Variable branches store scalars as
+finite JSON numbers and vectors as JSON-number arrays (integral for integer branches),
+while Boolean, string, and intrinsic branches retain exact JSON/sentinel types.
+Constructor Variable references are tagged objects. Numeric strings and
+Function/Lambda Default aliases are invalid.
 
 Platform information has two deliberately different wire shapes. The private backend
 DTO is closed and snake-cased, including `versions.quantumsavory`, detailed top-level

@@ -414,6 +414,78 @@ function normalizeNumericExpressionValue(value, context) {
   }
 }
 
+const EXACT_INTEGER_TYPES = new Set(['Int', 'Int64'])
+const EXACT_FLOAT_TYPES = new Set(['Float64', 'Float32'])
+const EXACT_NUMERIC_VECTOR_TYPES = new Set(['Vector{Int64}', 'Vector{Float64}'])
+
+function isDefaultSourceAlias(value) {
+  return typeof value === 'string' && value.trim().toLowerCase() === 'default'
+}
+
+function requireExactLiteralWireValue(
+  selectedType,
+  value,
+  context,
+  { allowVariableReference = false } = {},
+) {
+  if (allowVariableReference && isRecord(value) && value.kind === 'variable') return
+
+  if (selectedType === 'default') {
+    if (value !== null) throw new Error(`${context} Default value must be exact JSON null`)
+    return
+  }
+
+  if (EXACT_INTEGER_TYPES.has(selectedType)) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new Error(`${context} ${selectedType} value must be an exact finite JSON integer`)
+    }
+    return
+  }
+  if (EXACT_FLOAT_TYPES.has(selectedType)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`${context} ${selectedType} value must be an exact finite JSON number`)
+    }
+    return
+  }
+  if (EXACT_NUMERIC_VECTOR_TYPES.has(selectedType)) {
+    const integral = selectedType === 'Vector{Int64}'
+    if (
+      !Array.isArray(value)
+      || !value.every(item => (
+        typeof item === 'number'
+        && Number.isFinite(item)
+        && (!integral || Number.isInteger(item))
+      ))
+    ) {
+      throw new Error(`${context} ${selectedType} value must be an exact finite JSON-number array`)
+    }
+    return
+  }
+  if (selectedType === 'Bool' && typeof value !== 'boolean') {
+    throw new Error(`${context} Bool value must be an exact JSON Boolean`)
+  }
+  if (selectedType === 'String' && (typeof value !== 'string' || !value.trim())) {
+    throw new Error(`${context} String value must be an exact nonblank JSON string`)
+  }
+  if (selectedType === 'Nothing' && value !== 'nothing') {
+    throw new Error(`${context} Nothing value must use the exact nothing sentinel`)
+  }
+  if (
+    ['Wildcard', 'QuantumSavory.Wildcard'].includes(selectedType)
+    && value !== 'Wildcard'
+  ) {
+    throw new Error(`${context} Wildcard value must use the exact Wildcard sentinel`)
+  }
+  if (['Function', 'Lambda'].includes(selectedType)) {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`${context} ${selectedType} value must be an exact nonblank string`)
+    }
+    if (isDefaultSourceAlias(value)) {
+      throw new Error(`${context} ${selectedType} selection cannot use a Default alias`)
+    }
+  }
+}
+
 /**
  * Canonicalize a live constructor parameter into the durable descriptor form.
  *
@@ -451,16 +523,9 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
     if (value == null || value === '') {
       throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
     }
-    if (
-      explicitSelection === 'Function'
-      && typeof value === 'string'
-      && value.trim().toLowerCase() === 'default'
-    ) {
-      throw new Error(`${context} Function selection cannot use a Default alias`)
-    }
   }
 
-  if (!hasExplicitSelection && (value == null || value === '' || value === 'default')) {
+  if (!hasExplicitSelection && value === null) {
     return {
       ...parameter,
       selectedType: 'default',
@@ -514,6 +579,9 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
         buildParameterInputOptions(parameter.type, parameter),
         { ...parameter, value, selectedType: undefined },
       ).id
+  requireExactLiteralWireValue(selectedType, value, context, {
+    allowVariableReference: true,
+  })
   return {
     ...parameter,
     selectedType,
@@ -560,16 +628,9 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     if (value == null || value === '') {
       throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
     }
-    if (
-      explicitSelection === 'Function'
-      && typeof value === 'string'
-      && value.trim().toLowerCase() === 'default'
-    ) {
-      throw new Error(`${context} Function selection cannot use a Default alias`)
-    }
   }
 
-  if (!hasExplicitSelection && (value == null || value === '' || value === 'default')) {
+  if (!hasExplicitSelection && value === null) {
     return {
       ...variable,
       type: 'default',
@@ -602,10 +663,13 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     throw new Error(`${context} expression selection requires a numeric-expression value`)
   }
 
+  const selectedType = hasExplicitSelection ? explicitSelection : type
+  requireExactLiteralWireValue(selectedType, value, context)
+
   return {
     ...variable,
     type,
-    selectedType: hasExplicitSelection ? explicitSelection : type,
+    selectedType,
     value,
   }
 }

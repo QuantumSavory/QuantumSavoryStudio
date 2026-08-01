@@ -211,7 +211,7 @@ function initialSelectedType(variable) {
     ))
     if (expression) return expression.id
   }
-  if (variable.value == null || variable.value === '' || variable.value === 'default') {
+  if (variable.value === null) {
     return 'default'
   }
   const semantic = variableInputOptions.find(option => option.id === variable.type)

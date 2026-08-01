@@ -1145,7 +1145,6 @@ export class DesignCommandService {
     }
     if (type === 'Any') return deepClone(value)
     if (parameter.kind === 'named_tag_type' || type === 'Type{<:AbstractTag}') {
-      if (value == null || value === '') return null
       if (parameter.nullable === true && value === 'nothing') return value
       if (typeof value === 'string' && value.trim()) return value
       throw new DesignCommandError(
@@ -1161,6 +1160,16 @@ export class DesignCommandService {
         throw new DesignCommandError('VALIDATION_FAILED', `${label} must be a nonempty string.`)
       }
       return value
+    }
+    if (
+      ['Function', 'Lambda'].includes(type)
+      && typeof value === 'string'
+      && value.trim().toLowerCase() === 'default'
+    ) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `${label} cannot use a Default alias.`,
+      )
     }
     if (isCodeType(type)) {
       if (typeof value !== 'string' || !value.trim()) {
@@ -1677,7 +1686,7 @@ export class DesignCommandService {
         candidate.inputKind === 'numeric-expression'
         && candidate.wireType === value.type
       ))
-    } else if (value.value == null || value.value === '' || value.value === 'default') {
+    } else if (value.value === null) {
       option = options[0]
     } else {
       option = options.find(candidate => candidate.id === value.type)

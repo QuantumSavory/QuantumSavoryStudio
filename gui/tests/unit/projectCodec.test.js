@@ -987,7 +987,7 @@ describe('backend payload codecs', () => {
     })
   })
 
-  it('normalizes numeric drafts and round-trips exact expression tags', () => {
+  it('round-trips exact numeric values and expression tags', () => {
     const project = createEmptyProject('Numeric expressions')
     project.variables.push(new Variable({
       id: 'variable_delay',
@@ -1006,7 +1006,7 @@ describe('backend payload codecs', () => {
           selectedType: 'expression:Float64',
           value: { kind: 'numeric_expression', source: '1 // 4' },
         },
-        { name: 'direct_string', type: 'Float64', value: '0.5' },
+        { name: 'direct_number', type: 'Float64', value: 0.5 },
         { name: 'metadata_default', type: 'Int64', value: null },
       ],
     }))
@@ -1042,21 +1042,99 @@ describe('backend payload codecs', () => {
         type: 'Float64',
         value: { kind: 'numeric_expression', source: '1 // 4' },
       },
-      { name: 'direct_string', type: 'Float64', value: '0.5' },
+      { name: 'direct_number', type: 'Float64', value: 0.5 },
     ])
   })
 
-  it.each(['default', 'Default', 'DEFAULT'])(
-    'rejects the legacy Function Default alias %s',
-    value => {
+  it('rejects nonnumeric wire values for numeric scalar and vector branches', () => {
+    const project = createEmptyProject('Exact numbers')
+    project.variables.push(new Variable({
+      id: 'numeric-variable',
+      name: 'numeric_variable',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: '0.5',
+    }))
+    expect(() => encodeStoredProject(project)).toThrow(/exact finite JSON number/)
+    expect(() => toSimulationPayload(project)).toThrow(/exact finite JSON number/)
+    project.variables[0].value = true
+    expect(() => encodeStoredProject(project)).toThrow(/exact finite JSON number/)
+
+    project.variables[0] = new Variable({
+      id: 'vector-variable',
+      name: 'vector_variable',
+      type: 'Vector{Int64}',
+      selectedType: 'Vector{Int64}',
+      value: '[1, 2]',
+    })
+    expect(() => encodeStoredProject(project)).toThrow(/JSON-number array/)
+    project.variables[0].value = [1, true]
+    expect(() => encodeStoredProject(project)).toThrow(/JSON-number array/)
+
+    const stored = discriminatingStoredProject()
+    stored.net.nodes[0].data.protocols[0].parameters[0] = {
+      name: 'rounds',
+      type: 'Int64',
+      selectedType: 'Int64',
+      value: '2',
+    }
+    expect(() => decodeStoredProject(stored)).toThrow(ProjectSchemaError)
+
+    stored.net.nodes[0].data.protocols[0].parameters[0].value = {
+      kind: 'variable',
+      id: 'variable_state',
+    }
+    expect(() => decodeStoredProject(stored)).not.toThrow()
+
+    stored.variables[0] = {
+      id: 'variable_state',
+      name: 'numeric_state',
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: '0.5',
+    }
+    expect(() => decodeStoredProject(stored)).toThrow(ProjectSchemaError)
+  })
+
+  it.each([
+    ['Bool', 'true'],
+    ['String', 123],
+    ['Nothing', 'Nothing'],
+    ['QuantumSavory.Wildcard', 'wildcard'],
+  ])('rejects a non-exact %s intrinsic value', (selectedType, value) => {
+    const document = storedProject()
+    document.net.nodes[0].data.protocols[0].parameters = [{
+      name: 'value',
+      type: selectedType,
+      selectedType,
+      value,
+    }]
+    expect(() => decodeStoredProject(document)).toThrow(ProjectSchemaError)
+
+    const project = createEmptyProject('Exact intrinsic')
+    project.net.protocols.push(new FloatingProtocol({
+      id: 'intrinsic-protocol',
+      type: 'Example.Protocol',
+      parameters: document.net.nodes[0].data.protocols[0].parameters,
+    }))
+    expect(() => toSimulationPayload(project)).toThrow(/exact|sentinel/)
+  })
+
+  it.each([
+    ['Function', 'default'],
+    ['Function', 'Default'],
+    ['Lambda', ' DEFAULT '],
+  ])(
+    'rejects the %s Default alias %s',
+    (selectedType, value) => {
       const project = createEmptyProject('Protocol default')
       project.net.protocols.push(new FloatingProtocol({
         id: 'protocol-default',
         type: 'Example.Protocol',
         parameters: [{
           name: 'tag_or_function',
-          type: 'Function',
-          selectedType: 'Function',
+          type: selectedType === 'Lambda' ? 'Lambda' : 'Function',
+          selectedType,
           value,
         }],
       }))
@@ -1065,6 +1143,15 @@ describe('backend payload codecs', () => {
       expect(() => encodeStoredProject(project)).toThrow(/cannot use a Default alias/)
       expect(() => toSimulationPayload(project)).toThrow(/cannot use a Default alias/)
       expect(project).toEqual(original)
+
+      const document = storedProject()
+      document.net.nodes[0].data.protocols[0].parameters = [{
+        name: 'callback',
+        type: selectedType,
+        selectedType,
+        value,
+      }]
+      expect(() => decodeStoredProject(document)).toThrow(ProjectSchemaError)
     },
   )
 
@@ -1248,7 +1335,10 @@ describe('backend payload codecs', () => {
       id: 'slot_b',
       backgroundNoise: {
         type: 'NoiseType',
-        parameters: [{ name: 'rate', value: 0.25 }],
+        parameters: [
+          { name: 'rate', value: 0.25 },
+          { name: 'unused', value: '' },
+        ],
       },
     })
     for (const field of TRANSIENT_SLOT_FIELDS) {

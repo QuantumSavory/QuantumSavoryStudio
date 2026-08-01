@@ -11,13 +11,11 @@
 ## Atomic design operations
 
 `DesignCommandService` owns the transport-neutral operation registry used by MCP and
-migrated GUI actions. Commands are serialized, applied to an isolated candidate,
-validated, then reconciled atomically into the live graph. Retained durable entities
-preserve object identity.
+migrated GUI actions. Commands execute on an isolated candidate, validate, then
+reconcile atomically while retained durable entities preserve identity.
 
-MCP callers cannot choose durable IDs for newly created objects. The browser allocates
-them and resolves transaction-local `client_ref` aliases. A failed candidate must not
-partially change the live project.
+The browser assigns new durable IDs and resolves transaction-local `client_ref` aliases;
+MCP callers cannot choose them. A failed candidate must not partially change the project.
 
 Simulation-affecting operations are rejected while editing is locked. A transaction
 containing any such operation is rejected as a whole. Descriptions and annotations
@@ -34,9 +32,10 @@ Editable protocol parameters, background-noise parameters, and Variables use exp
 descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
 selector offers Default only for optional fields; it clears the value and omits the
 keyword. Required fields have no Default branch, and required Booleans remain unresolved
-until `true` or `false` is chosen. Numeric vectors use one JSON-array parser: members are
-finite, integer members are integral, and Booleans are rejected. Empty arrays remain
-valid without an advertised nonempty constraint.
+until `true` or `false` is chosen. Durable numeric scalars are finite JSON numbers;
+vectors are arrays of finite numbers. Integers are integral and Booleans are not
+numbers. Editors may parse draft text, but codecs and backend reject numeric strings.
+Empty arrays remain valid without an advertised nonempty constraint.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
@@ -85,8 +84,9 @@ that omission permits inference. Updates record current catalog types/descriptor
 drop unknown seeded fields. Default has exactly one durable form: constructor parameters
 use `selectedType: "default", value: null`, while Variables additionally use
 `type: "default"`. Empty strings, string `"default"` sentinels, case variants, and
-Function aliases are not Default. No older-schema migration exists. Variable branch
-changes update all linked descriptors atomically or reject the candidate.
+Function/Lambda aliases are not Default. Only JSON null omits a constructor keyword;
+blank strings never do. No older-schema migration exists. Variable branch changes
+update every linked descriptor atomically or reject the candidate.
 
 Before transport, `App` injects one protocol/background catalog bundle into the GUI/MCP
 validator. Missing or malformed catalogs produce `CONSTRUCTOR_CATALOG_UNAVAILABLE`;

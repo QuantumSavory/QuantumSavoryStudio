@@ -271,7 +271,7 @@ export function inferParameterInputOption(options, parameter = {}) {
     ))
     if (expressionOption) return expressionOption
   }
-  if (value == null || value === '' || value === 'default') return options[0]
+  if (value === null) return options[0]
   const intrinsic = intrinsicParameterInputOption(options, value)
   if (intrinsic) return intrinsic
   if (typeof value === 'boolean') {
@@ -299,7 +299,7 @@ export function inferParameterInputOption(options, parameter = {}) {
     const namedTag = options.find(option => option.inputKind === 'named-tag')
     if (namedTag && value.trim()) return namedTag
     const predefined = options.find(option => option.id === 'Function')
-    if (predefined && value !== 'default') return predefined
+    if (predefined) return predefined
     return options.find(option => option.id === 'String')
       || options.find(option => option.id === 'Lambda')
       || options.find(option => isSymbolicType(option.id))

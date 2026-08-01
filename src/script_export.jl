@@ -687,7 +687,9 @@ function _script_function_expression(
   ))
   source = strip(String(value))
 
-  source == "default" && return nothing
+  _is_constructor_default_source_alias(source) && throw(validation_error(
+    "$context cannot use a Default alias",
+  ))
   resolve_function_reference(source) !== nothing && return source
 
   self_function = _script_self_function(source, node_index, context)
@@ -1035,8 +1037,7 @@ function _script_noise_expression(
     haskey(declared_parameter_types, name) ||
       throw(validation_error("$context has unknown parameter '$name'"))
     value = get(parameter, "value", nothing)
-    if value === nothing ||
-        (value isa AbstractString && isempty(strip(String(value))))
+    if _constructor_parameter_is_omitted(value)
       continue
     end
     _, expression = _script_constructor_parameter_expression(
@@ -1117,7 +1118,7 @@ function _script_variable_bindings(
       isempty(source) && throw(validation_error(
         "Variable '$(_script_comment(variable.name))' must not be blank",
       ))
-      if source == "default" || resolve_function_reference(source) !== nothing
+      if resolve_function_reference(source) !== nothing
         Set{Symbol}()
       else
         parsed = _script_validate_source(
@@ -1242,8 +1243,7 @@ function _script_constructor_parameter_expression(
     _required_nonempty_string(parameter, "field", "$context parameter")
   end
   value = get(parameter, "value", nothing)
-  value === nothing && return name, nothing
-  value isa AbstractString && isempty(strip(String(value))) && return name, nothing
+  _constructor_parameter_is_omitted(value) && return name, nothing
 
   named_tag_semantics = _named_tag_parameter_semantics(declared_type)
   if named_tag_semantics !== nothing
@@ -1376,7 +1376,7 @@ function _script_protocol!(
       ),
     ))
     value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(String(value))))
+    if _constructor_parameter_is_omitted(value)
       continue
     end
     name, expression = _script_constructor_parameter_expression(

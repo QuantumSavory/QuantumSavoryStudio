@@ -2931,13 +2931,15 @@
       @test null_typed_value isa WebQuantumSavory.APIError
       @test occursin("must not be null", null_typed_value.message)
 
-      for alias in ("default", "Default", " DEFAULT ")
-        function_default_alias = variable_validation_error(payload -> begin
-          payload["variables"][1]["type"] = "Function"
-          payload["variables"][1]["value"] = alias
-        end)
-        @test function_default_alias isa WebQuantumSavory.APIError
-        @test occursin("cannot use a Default alias", function_default_alias.message)
+      for variable_type in ("Function", "Lambda")
+        for alias in ("default", "Default", " DEFAULT ")
+          function_default_alias = variable_validation_error(payload -> begin
+            payload["variables"][1]["type"] = variable_type
+            payload["variables"][1]["value"] = alias
+          end)
+          @test function_default_alias isa WebQuantumSavory.APIError
+          @test occursin("cannot use a Default alias", function_default_alias.message)
+        end
       end
 
       case_variant_default = variable_validation_error(payload -> begin
@@ -3934,6 +3936,9 @@
       WebQuantumSavory._convert_parameter_value("Vector{Float64}", Any[0.5, "1.0"]),
     ) === false
     @test first(
+      WebQuantumSavory._convert_parameter_value("Vector{Float64}", Any[0.5, true]),
+    ) === false
+    @test first(
       WebQuantumSavory._convert_parameter_value("Vector{Int64}", [1.5]),
     ) === false
     @test first(
@@ -4083,6 +4088,32 @@
       123,
       "String parameter",
     )
+    @test WebQuantumSavory._script_regular_expression(
+      "String",
+      "",
+      "String parameter",
+    ) == "\"\""
+    blank_string_background = instantiate_contextual_background([
+      Dict("name" => "label", "value" => ""),
+    ])
+    @test blank_string_background.label == ""
+
+    for special_type in ("Function", "Lambda")
+      for alias in ("default", "Default", " DEFAULT ")
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._script_function_expression(
+          alias,
+          special_type,
+          nothing,
+          "$special_type parameter",
+        )
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._handle_function_lambda_parameter!(
+          Dict{Symbol,Any}(),
+          :callback,
+          special_type,
+          alias,
+        )
+      end
+    end
   end
 
   @testset "Unsafe Evaluation Policy" begin
