@@ -2041,10 +2041,13 @@ describe('DesignCommandService', () => {
       weighted: true,
       parameters: [{
         name: 'η',
+        type: 'Float64',
+        integer: false,
+        doc: 'Detector efficiency.',
         min: 0,
         max: 1,
-        min_inclusive: false,
-        max_inclusive: true,
+        minInclusive: false,
+        maxInclusive: true,
         good: 0.5,
       }],
     }
@@ -2064,6 +2067,24 @@ describe('DesignCommandService', () => {
     expect(() => service.stateParameters(definition, { η: 0.5, extra: 1 }))
       .toThrowError(/must be exactly/)
 
+    const integerDefinition = {
+      id: 'BarrettKokBellPair',
+      parameters: [{
+        name: 'm',
+        type: 'Int',
+        integer: true,
+        doc: 'Detector-click parity.',
+        min: 0,
+        max: 1,
+        minInclusive: true,
+        maxInclusive: true,
+        good: 0,
+      }],
+    }
+    expect(service.stateParameters(integerDefinition, { m: 1 })).toEqual({ m: 1 })
+    expect(() => service.stateParameters(integerDefinition, { m: 0.5 }))
+      .toThrowError(/finite integer/)
+
     const noParameters = { id: 'NoParameters', parameters: [] }
     expect(service.stateParameters(noParameters)).toEqual({})
     expect(() => service.stateParameters(noParameters, { extra: 1 }))
@@ -2079,10 +2100,13 @@ describe('DesignCommandService', () => {
         weighted: true,
         parameters: [{
           name: 'visibility',
+          type: 'Float64',
+          integer: false,
+          doc: 'State visibility.',
           min: 0,
           max: 1,
-          min_inclusive: true,
-          max_inclusive: true,
+          minInclusive: true,
+          maxInclusive: true,
           good: 1,
         }],
       }],

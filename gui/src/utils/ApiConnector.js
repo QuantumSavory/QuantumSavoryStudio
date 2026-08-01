@@ -5,6 +5,10 @@ import { requestJson } from './httpClient.js'
 import { httpOperation, httpOperationPath } from './httpOperations.js'
 import { snapshotBackendPlatformInfo } from './platformInfo.js'
 import { assertBackendLogResponse } from './logRecords.js'
+import {
+  normalizeStateParameter,
+  stateParameterValueIsValid,
+} from './stateParameterBounds.js'
 
 function normalizeBaseUrl(baseUrl) {
   return baseUrl.replace(/\/$/, '')
@@ -149,9 +153,65 @@ function validateKnownFunctions(value) {
   return [...value]
 }
 
-function validateStatesZooTypes(value) {
+function validateStatesZooParameter(parameter, context) {
+  if (!isRecord(parameter)) throw new Error(`${context} must be an object`)
+  requireExactCatalogKeys(
+    parameter,
+    [
+      'name',
+      'type',
+      'integer',
+      'doc',
+      'min',
+      'max',
+      'min_inclusive',
+      'max_inclusive',
+      'good',
+    ],
+    context,
+  )
+  const normalized = normalizeStateParameter(parameter, context)
+  if (!stateParameterValueIsValid(normalized.good, normalized)) {
+    throw new Error(`${context}.good must satisfy its declared type and range`)
+  }
+  return normalized
+}
+
+export function validateStatesZooTypes(value) {
   if (!Array.isArray(value)) throw new Error('States Zoo types response is invalid')
-  return [...value]
+  const typeIds = new Set()
+  return value.map((definition, index) => {
+    const context = `states_zoo_types[${index}]`
+    if (!isRecord(definition)) throw new Error(`${context} must be an object`)
+    requireExactCatalogKeys(
+      definition,
+      ['id', 'display_name', 'weighted', 'parameters'],
+      context,
+    )
+    requireCatalogString(definition.id, `${context}.id`)
+    requireCatalogString(definition.display_name, `${context}.display_name`)
+    if (typeIds.has(definition.id)) {
+      throw new Error(`${context}.id must be unique`)
+    }
+    typeIds.add(definition.id)
+    if (typeof definition.weighted !== 'boolean') {
+      throw new Error(`${context}.weighted must be a Boolean`)
+    }
+    if (!Array.isArray(definition.parameters)) {
+      throw new Error(`${context}.parameters must be an array`)
+    }
+    const parameterNames = new Set()
+    const parameters = definition.parameters.map((parameter, parameterIndex) => {
+      const parameterContext = `${context}.parameters[${parameterIndex}]`
+      const validated = validateStatesZooParameter(parameter, parameterContext)
+      if (parameterNames.has(validated.name)) {
+        throw new Error(`${parameterContext}.name must be unique`)
+      }
+      parameterNames.add(validated.name)
+      return validated
+    })
+    return { ...definition, parameters }
+  })
 }
 
 const TAG_TARGET_KINDS = new Set(['register', 'slot', 'message_buffer'])

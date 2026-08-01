@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiConnector,
   validateConstructorParameterMetadata,
+  validateStatesZooTypes,
 } from '../../src/utils/ApiConnector'
 import { backendPlatformInfo } from '../platformInfoFixtures.js'
 
@@ -94,6 +95,69 @@ describe('ApiConnector project namespaces', () => {
     delete missing.required
     expect(() => validateConstructorParameterMetadata(missing, 'parameter'))
       .toThrow('invalid shape')
+  })
+
+  it('admits only exact typed States Zoo catalogs', () => {
+    const parameter = {
+      name: 'm',
+      type: 'Int',
+      integer: true,
+      doc: 'Detector-click parity.',
+      min: 0,
+      max: 1,
+      min_inclusive: true,
+      max_inclusive: true,
+      good: 0,
+    }
+    const catalog = [{
+      id: 'BarrettKokBellPair',
+      display_name: 'Barrett-Kok Bell Pair',
+      weighted: false,
+      parameters: [parameter],
+    }]
+
+    expect(validateStatesZooTypes(catalog)).toEqual([{
+      ...catalog[0],
+      parameters: [{
+        name: 'm',
+        type: 'Int',
+        integer: true,
+        doc: 'Detector-click parity.',
+        min: 0,
+        max: 1,
+        minInclusive: true,
+        maxInclusive: true,
+        good: 0,
+      }],
+    }])
+    for (const invalidParameter of [
+      { ...parameter, type: '' },
+      { ...parameter, integer: 'true' },
+      { ...parameter, good: 0.5 },
+      { ...parameter, min_inclusive: 'true' },
+      { ...parameter, extra: null },
+    ]) {
+      expect(() => validateStatesZooTypes([{
+        ...catalog[0],
+        parameters: [invalidParameter],
+      }])).toThrow()
+    }
+    expect(() => validateStatesZooTypes([catalog[0], catalog[0]]))
+      .toThrow('id must be unique')
+    expect(() => validateStatesZooTypes([{
+      ...catalog[0],
+      parameters: [parameter, parameter],
+    }])).toThrow('name must be unique')
+
+    const float32 = {
+      ...parameter,
+      name: 'p',
+      type: 'Float32',
+      integer: false,
+      good: 0.5,
+    }
+    expect(validateStatesZooTypes([{ ...catalog[0], parameters: [float32] }])[0]
+      .parameters[0]).toMatchObject({ type: 'Float32', integer: false })
   })
 
   it('caches constructor catalogs atomically after complete validation', async () => {

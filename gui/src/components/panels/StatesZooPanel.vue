@@ -119,7 +119,7 @@
                   class="states-zoo-parameter-range"
                   :min="parameter.min"
                   :max="parameter.max"
-                  step="any"
+                  :step="parameter.integer ? 1 : 'any'"
                   :value="stateDraft(variable).value.parameters[parameter.name]"
                   :aria-label="`${parameter.name} range for ${variable.name || variable.id}`"
                   :aria-invalid="parameterValueInvalid(variable, parameter)"
@@ -131,7 +131,7 @@
                   class="states-zoo-parameter-input"
                   :min="parameter.min"
                   :max="parameter.max"
-                  step="any"
+                  :step="parameter.integer ? 1 : 'any'"
                   :value="stateDraft(variable).value.parameters[parameter.name]"
                   :aria-label="`${parameter.name} value for ${variable.name || variable.id}`"
                   :aria-invalid="parameterValueInvalid(variable, parameter)"
@@ -219,7 +219,6 @@ import { api } from '../../utils/ApiConnector'
 import { watermarkGeneratedPng } from '../../utils/pngWatermark'
 import {
   formatStateParameterRange,
-  normalizeStateParameter,
   stateParameterValueIsValid,
 } from '../../utils/stateParameterBounds'
 import { generateUUid } from '../../utils/Utils'
@@ -265,7 +264,7 @@ function normalizeStateType(type) {
     displayName: type.display_name || type.id,
     weighted: type.weighted === true,
     parameters: Array.isArray(type.parameters)
-      ? type.parameters.map(normalizeStateParameter)
+      ? type.parameters.map(parameter => ({ ...parameter }))
       : []
   }
 }

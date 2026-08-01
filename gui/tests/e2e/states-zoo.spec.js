@@ -15,10 +15,18 @@ function stateParameter(
   min,
   max,
   good,
-  { minInclusive = true, maxInclusive = true } = {},
+  {
+    type = 'Float64',
+    integer = false,
+    minInclusive = true,
+    maxInclusive = true,
+  } = {},
 ) {
   return {
     name,
+    type,
+    integer,
+    doc: `${name} parameter.`,
     min,
     max,
     good,
@@ -38,6 +46,7 @@ const STATES_ZOO_TYPES = [
       stateParameter('Pᵈ', 0, 1, 0, { maxInclusive: false }),
       stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
       stateParameter('𝒱', 0, 1, 1),
+      stateParameter('m', 0, 1, 0, { type: 'Int', integer: true }),
     ],
   },
   {
@@ -50,6 +59,7 @@ const STATES_ZOO_TYPES = [
       stateParameter('Pᵈ', 0, 1, 0, { maxInclusive: false }),
       stateParameter('ηᵈ', 0, 1, 1, { minInclusive: false }),
       stateParameter('𝒱', 0, 1, 1),
+      stateParameter('m', 0, 1, 0, { type: 'Int', integer: true }),
     ],
   },
   {
@@ -324,7 +334,7 @@ test.describe('States Zoo variables', () => {
     const typeSelect = row.locator('.states-zoo-type-select')
     await expect(typeSelect).toHaveValue('BarrettKokBellPair')
     await expect(typeSelect.locator('option')).toHaveText(STATES_ZOO_TYPES.map(type => type.display_name))
-    await expect(row.locator('.states-zoo-parameter-control')).toHaveCount(5)
+    await expect(row.locator('.states-zoo-parameter-control')).toHaveCount(6)
 
     for (const parameter of STATES_ZOO_TYPES[0].parameters) {
       const control = row.locator(
@@ -336,11 +346,14 @@ test.describe('States Zoo variables', () => {
       await expect(range).toHaveAttribute('max', String(parameter.max))
       await expect(range).toHaveValue(String(parameter.good))
       await expect(number).toHaveValue(String(parameter.good))
+      const expectedStep = parameter.integer ? '1' : 'any'
+      await expect(range).toHaveAttribute('step', expectedStep)
+      await expect(number).toHaveAttribute('step', expectedStep)
     }
 
     expect(previewRequests[0]).toEqual({
       state_type: 'BarrettKokBellPair',
-      parameters: { ηᴬ: 1, ηᴮ: 1, Pᵈ: 0, ηᵈ: 1, 𝒱: 1 },
+      parameters: { ηᴬ: 1, ηᴮ: 1, Pᵈ: 0, ηᵈ: 1, 𝒱: 1, m: 0 },
     })
 
     const nameBox = await row.locator('.states-zoo-name-input').boundingBox()

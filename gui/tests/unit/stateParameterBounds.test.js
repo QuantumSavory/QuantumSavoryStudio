@@ -10,6 +10,9 @@ import {
 
 const genqoEta = {
   name: 'η',
+  type: 'Float64',
+  integer: false,
+  doc: 'Detector efficiency.',
   min: 0,
   max: 1,
   min_inclusive: false,
@@ -19,38 +22,91 @@ const genqoEta = {
 
 describe('States Zoo parameter bounds', () => {
   it('preserves inclusive flags and rejects a Genqo open endpoint', () => {
-    expect(normalizeStateParameter(genqoEta)).toEqual({
+    const normalized = normalizeStateParameter(genqoEta)
+    expect(normalized).toEqual({
       name: 'η',
+      type: 'Float64',
+      integer: false,
+      doc: 'Detector efficiency.',
       min: 0,
       max: 1,
       minInclusive: false,
       maxInclusive: true,
       good: 0.5,
     })
-    expect(formatStateParameterRange(genqoEta)).toBe('(0, 1]')
-    expect(stateParameterValueIsValid(0, genqoEta)).toBe(false)
-    expect(stateParameterValueIsValid(Number.MIN_VALUE, genqoEta)).toBe(true)
-    expect(stateParameterValueIsValid(1, genqoEta)).toBe(true)
+    expect(formatStateParameterRange(normalized)).toBe('(0, 1]')
+    expect(stateParameterValueIsValid(0, normalized)).toBe(false)
+    expect(stateParameterValueIsValid(Number.MIN_VALUE, normalized)).toBe(true)
+    expect(stateParameterValueIsValid(1, normalized)).toBe(true)
   })
 
   it('applies closed lower and open upper bounds', () => {
     const upperOpen = {
       name: 'p',
+      type: 'Float64',
+      integer: false,
+      doc: 'Noise probability.',
       min: 0,
       max: 1,
       min_inclusive: true,
       max_inclusive: false,
       good: 0.5,
     }
-    expect(formatStateParameterRange(upperOpen)).toBe('[0, 1)')
-    expect(stateParameterValueIsValid(0, upperOpen)).toBe(true)
-    expect(stateParameterValueIsValid(1, upperOpen)).toBe(false)
-    expect(stateParameterValueIsValid(0.5, upperOpen)).toBe(true)
+    const normalized = normalizeStateParameter(upperOpen)
+    expect(formatStateParameterRange(normalized)).toBe('[0, 1)')
+    expect(stateParameterValueIsValid(0, normalized)).toBe(true)
+    expect(stateParameterValueIsValid(1, normalized)).toBe(false)
+    expect(stateParameterValueIsValid(0.5, normalized)).toBe(true)
   })
 
   it('rejects coercible non-number JSON values', () => {
+    const normalized = normalizeStateParameter(genqoEta)
     for (const value of ['0.5', true, [0.5], null]) {
-      expect(stateParameterValueIsValid(value, genqoEta)).toBe(false)
+      expect(stateParameterValueIsValid(value, normalized)).toBe(false)
     }
+  })
+
+  it('requires exact integer values for Int metadata', () => {
+    const parity = {
+      name: 'm',
+      type: 'Int',
+      integer: true,
+      doc: 'Detector-click parity.',
+      min: 0,
+      max: 1,
+      min_inclusive: true,
+      max_inclusive: true,
+      good: 0,
+    }
+    const normalized = normalizeStateParameter(parity)
+
+    expect(stateParameterValueIsValid(0, normalized)).toBe(true)
+    expect(stateParameterValueIsValid(1, normalized)).toBe(true)
+    for (const value of [0.5, 1.5, true, '1', Number.NaN]) {
+      expect(stateParameterValueIsValid(value, normalized)).toBe(false)
+    }
+  })
+
+  it('rejects malformed or unsupported parameter metadata', () => {
+    expect(() => normalizeStateParameter({ ...genqoEta, type: '' }))
+      .toThrow('type must be a nonempty string')
+    expect(() => normalizeStateParameter({ ...genqoEta, integer: 'false' }))
+      .toThrow('integer must be a Boolean')
+    expect(() => normalizeStateParameter({ ...genqoEta, min_inclusive: 'false' }))
+      .toThrow('min_inclusive must be a Boolean')
+    expect(() => normalizeStateParameter({ ...genqoEta, good: Number.POSITIVE_INFINITY }))
+      .toThrow('good must be a finite number')
+  })
+
+  it('accepts backend-declared concrete floating types without a name allowlist', () => {
+    const float32 = normalizeStateParameter({
+      ...genqoEta,
+      type: 'Float32',
+      good: 0.5,
+    })
+
+    expect(float32.type).toBe('Float32')
+    expect(float32.integer).toBe(false)
+    expect(stateParameterValueIsValid(0.25, float32)).toBe(true)
   })
 })
