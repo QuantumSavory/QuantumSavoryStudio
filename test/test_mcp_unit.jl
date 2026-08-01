@@ -127,6 +127,8 @@
   @testset "resource registry is the backend authority" begin
     registry = WebQuantumSavory.MCP_RESOURCE_REGISTRY
     @test registry.version == WebQuantumSavory.MCP_CONTRACT_VERSION == 2
+    @test registry.tool_names == WebQuantumSavory.MCP_BACKEND_TOOL_NAMES
+    @test length(registry.tool_names) == 23
     @test Set(keys(registry.resources_by_id)) ==
       Set(["design_current", "simulation_state"])
     @test Set(keys(registry.result_templates_by_kind)) ==

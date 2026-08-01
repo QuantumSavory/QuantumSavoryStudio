@@ -18,6 +18,29 @@ const MCP_SIMULATION_LIFECYCLE_TOOLS = Dict(
   "simulation_reset" => "reset",
 )
 
+const MCP_DIRECT_BACKEND_TOOLS = Set([
+  "design_get",
+  "design_validate",
+  "catalog_list",
+  "catalog_get",
+  "simulation_status",
+  "simulation_results",
+  "simulation_slot_result",
+  "simulation_protocol_result",
+  "simulation_logs",
+])
+
+const MCP_BACKEND_TOOL_NAMES = union(
+  MCP_DIRECT_BACKEND_TOOLS,
+  MCP_DESIGN_MUTATION_TOOLS,
+  Set(keys(MCP_SIMULATION_LIFECYCLE_TOOLS)),
+)
+
+MCP_BACKEND_TOOL_NAMES == MCP_RESOURCE_REGISTRY.tool_names ||
+  throw(ArgumentError(
+    "MCP contract tools and backend dispatch inventory must match exactly",
+  ))
+
 function _bound_simulation_context(
   hub::CollaborationHub;
   require_quiescent::Bool=false,

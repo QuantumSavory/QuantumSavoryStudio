@@ -3,6 +3,7 @@ using HTTP
 using JSON3
 using Logging
 using ModelContextProtocol
+using TOML
 
 include(joinpath(@__DIR__, "src", "single_session_http_transport.jl"))
 include(joinpath(@__DIR__, "..", "src", "mcp_contract_registry.jl"))
@@ -12,6 +13,10 @@ const CONTRACT_FILE = normpath(
 )
 const HTTP_CONTRACT_FILE = normpath(
   joinpath(@__DIR__, "..", "contracts", "http", "openapi.json"),
+)
+const SIDECAR_PROJECT_FILE = joinpath(@__DIR__, "Project.toml")
+const SIDECAR_VERSION = VersionNumber(
+  TOML.parsefile(SIDECAR_PROJECT_FILE)["version"],
 )
 const SIDECAR_BRIDGE_OPERATION_IDS = Set([
   "invokeMcpTool",
@@ -710,7 +715,7 @@ function main()
   static_resources, resource_templates = resources(configuration)
   server = mcp_server(
     name="webquantumsavory",
-    version="2.0.0",
+    version=string(SIDECAR_VERSION),
     title="WebQuantumSavory local collaboration",
     description="Local browser-mediated quantum-network design and simulation tools.",
     tools=tools,

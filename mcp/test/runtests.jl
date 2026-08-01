@@ -5,6 +5,9 @@ include(joinpath(@__DIR__, "..", "main.jl"))
 
 @testset "MCP transport dependency and lifecycle signal" begin
     @test pkgversion(ModelContextProtocol) == v"0.6.0"
+    @test SIDECAR_VERSION == VersionNumber(
+        TOML.parsefile(SIDECAR_PROJECT_FILE)["version"],
+    )
 
     transport = SingleSessionHttpTransport(HttpTransport())
     waiter = @async wait_for_session_initialization(transport)

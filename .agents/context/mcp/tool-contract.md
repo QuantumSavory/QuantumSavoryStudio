@@ -23,8 +23,11 @@ no v1 registry, adapter, or migration path remains. The sidecar derives its adve
 tools, static resources, resource templates, result-tool associations, URIs, and MIME
 types from this file. The backend derives result URI construction/parsing and resource
 MIME types from the same registry, while the frontend consumes the same operation and
-resource definitions. Version 2 advertises 23 tools, two static resources, and five
-resource templates.
+resource definitions. Backend dispatch remains explicit application code because each
+tool has a distinct owner and lifecycle, while module loading and tests require its
+tool-name inventory to match the registry exactly. The sidecar server version is read
+from `mcp/Project.toml`, not repeated in runtime code. Version 2 advertises 23 tools,
+two static resources, and five resource templates.
 
 The current recovery rules are:
 

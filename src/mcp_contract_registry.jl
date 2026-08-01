@@ -59,6 +59,7 @@ end
 
 struct MCPContractRegistry
   version::Int
+  tool_names::Set{String}
   resources::Vector{MCPResourceDefinition}
   resource_templates::Vector{MCPResourceTemplateDefinition}
   resources_by_id::Dict{String,MCPResourceDefinition}
@@ -285,7 +286,7 @@ function _mcp_result_tool_kinds(contract, result_templates_by_kind)
   end
   Set(values(result_tool_kinds)) == Set(keys(result_templates_by_kind)) ||
     _mcp_contract_error("each result kind must have exactly one result tool")
-  return result_tool_kinds
+  return (; result_tool_kinds, tool_names=names)
 end
 
 """
@@ -357,11 +358,12 @@ function load_mcp_contract_registry(contract_value)
     )
   result_templates_by_kind =
     _mcp_result_template_groups(result_templates)
-  result_tool_kinds =
+  tool_registry =
     _mcp_result_tool_kinds(contract, result_templates_by_kind)
 
   return MCPContractRegistry(
     Int(version),
+    tool_registry.tool_names,
     resources,
     templates,
     Dict(resource.id => resource for resource in resources),
@@ -369,7 +371,7 @@ function load_mcp_contract_registry(contract_value)
     Dict(template.id => template for template in templates),
     result_templates,
     result_templates_by_kind,
-    result_tool_kinds,
+    tool_registry.result_tool_kinds,
   )
 end
 

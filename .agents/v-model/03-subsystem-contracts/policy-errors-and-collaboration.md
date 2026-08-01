@@ -50,9 +50,9 @@ active-project replacement.
 
 ## SUB-013 — MCP tool, run, resource, and transport boundary
 
-- **Normative statement:** One co-shipped versioned contract shall drive MCP metadata and dispatch; browser lifecycle shall reuse GUI readiness/Play semantics; every successful slot or protocol result shall expose readable HTML and PNG resources; annotations shall describe intrinsic repeat safety.
+- **Normative statement:** One co-shipped versioned contract shall drive MCP metadata and remain in exact, mechanically checked parity with the explicit backend dispatch inventory; browser lifecycle shall reuse GUI readiness/Play semantics; every successful slot or protocol result shall expose readable HTML and PNG resources; annotations shall describe intrinsic repeat safety.
 - **Parents:** SYS-012
-- **Acceptance criterion:** Tool groups reach their declared owner; Run returns actionable GUI preflight results and records the prepared revision; every advertised HTML/PNG resource reads nonempty content with structured malformed/not-found failures; mutation and lifecycle tools do not claim intrinsic idempotence.
+- **Acceptance criterion:** Advertised tool names equal the backend dispatch inventory, every tool group reaches its declared owner, and the sidecar reports its project version; Run returns actionable GUI preflight results and records the prepared revision; every advertised HTML/PNG resource reads nonempty content with structured malformed/not-found failures; mutation and lifecycle tools do not claim intrinsic idempotence.
 - **Verification:** INTV-013 (test)
 - **Origin / risk:** Maintainer-confirmed MCP contract; remaining provider-error and end-to-end evidence gaps; high interface risk
 - **Context:** [MCP tool contract](../../context/mcp/tool-contract.md)
