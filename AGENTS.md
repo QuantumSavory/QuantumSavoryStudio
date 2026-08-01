@@ -16,7 +16,6 @@ root tests, and CI.
   needed leaf. Never preload `.agents/`.
 - Open [the V-model](.agents/v-model/index.md) for observable behavior, interfaces,
   compatibility, acceptance criteria, or evidence.
-- Treat `_docs_/` and `_tests_/` as historical material, not maintained code roots.
 
 ## Primary commands
 
