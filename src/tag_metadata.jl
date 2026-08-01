@@ -180,7 +180,7 @@ function _resolve_named_abstract_tag_type(
   context::AbstractString,
   catalog=_tag_catalog(),
 )
-  if value isa AbstractString && strip(value) == "nothing"
+  if value isa AbstractString && String(value) == "nothing"
     nullable || throw(validation_error(
       "$context does not accept nothing",
       Dict{String,Any}("context" => String(context)),

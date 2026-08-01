@@ -292,6 +292,11 @@
   @test protocol["properties"]["parameters"]["items"]["\$ref"] ==
     "#/components/schemas/ProtocolParameter"
   @test Set(protocol_parameter["required"]) == Set(["name", "type", "value"])
+  @test protocol_parameter["properties"]["type"] == Dict(
+    "type" => "string",
+    "minLength" => 1,
+    "pattern" => "\\S",
+  )
   @test !haskey(document["components"]["schemas"], "EdgeProtocol")
 
   variable_reference =

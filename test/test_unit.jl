@@ -47,6 +47,30 @@
           ),
         ),
       )
+
+    const CONSTRUCTION_FREE_CANARY_CALLS = Ref(0)
+    struct ConstructionFreeAdmissionCanary
+      count::Int64
+    end
+    function ConstructionFreeAdmissionCanary(; count)
+      CONSTRUCTION_FREE_CANARY_CALLS[] += 1
+      return ConstructionFreeAdmissionCanary(count)
+    end
+    QuantumSavory.constructor_schema(::Type{ConstructionFreeAdmissionCanary}) =
+      QuantumSavory.ConstructorSchema(
+        ConstructionFreeAdmissionCanary,
+        "A construction-free admission canary.",
+        (
+          QuantumSavory.ConstructorFieldSchema(
+            :count,
+            Int64,
+            "A required count.";
+            required=true,
+            minimum=-9_007_199_254_740_991,
+            maximum=9_007_199_254_740_991,
+          ),
+        ),
+      )
   end
 
   function instantiate_contextual_background(
@@ -62,6 +86,40 @@
       parameter_context="test background parameter",
     )
     return ContextualIntegerBackground(; kwargs...)
+  end
+
+  function materialize_declared_test_parameter!(
+    kwargs,
+    name,
+    declared_type,
+    value,
+    context=Dict{Symbol,Any}();
+    selected_type=nothing,
+    field_schema=nothing,
+  )
+    classified = WebQuantumSavory._classify_declared_wire_value(
+      declared_type,
+      value;
+      selected_type,
+      field_schema,
+      context="Test parameter '$(name)'",
+    )
+    entry = (
+      name,
+      original_name=string(name),
+      raw_value=value,
+      admitted_value=classified.value,
+      branch=classified.branch,
+      minimum=classified.minimum,
+      maximum=classified.maximum,
+      handling_type=classified.handling_type,
+      variable=nothing,
+    )
+    return WebQuantumSavory._materialize_admitted_constructor_parameter!(
+      kwargs,
+      entry,
+      context,
+    )
   end
 
   # Load test data
@@ -80,22 +138,22 @@
       Dict{String,Any}("name" => "attempt_time", "type" => "Float64", "value" => nothing),
       Dict{String,Any}(
         "name" => "retry_lock_time",
-        "type" => ["Nothing", "Float64"],
+        "type" => "Nothing",
         "value" => nothing,
       ),
       Dict{String,Any}(
         "name" => "chooseslotA",
-        "type" => ["Int64", "Function"],
+        "type" => "Function",
         "value" => nothing,
       ),
       Dict{String,Any}(
         "name" => "chooseslotB",
-        "type" => ["Int64", "Function"],
+        "type" => "Function",
         "value" => nothing,
       ),
       Dict{String,Any}(
         "name" => "tag",
-        "type" => ["Nothing", "DataType"],
+        "type" => "Nothing",
         "value" => nothing,
       ),
     ]
@@ -181,8 +239,8 @@
       Dict(
         "id" => "default-function-variable",
         "name" => "default chooser",
-        "type" => "Function",
-        "value" => "default",
+        "type" => "default",
+        "value" => nothing,
       ),
     ]
 
@@ -255,7 +313,6 @@
     )
     @test !occursin("variable_weighted_pair_tr = 0.123", script)
     @test occursin("success_prob = variable_weighted_pair_tr", script)
-    @test occursin("variable_default_chooser = nothing", script)
     @test occursin("T2Dephasing(; t2 = 5.0)", script)
     @test occursin("# Registers", script)
     @test occursin(
@@ -349,11 +406,10 @@
     tagged_payload = deepcopy(payload)
     tagged_parameters = tagged_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
     tagged_by_name = Dict(parameter["name"] => parameter for parameter in tagged_parameters)
-    # Simulator metadata, not a forged client annotation, drives safe source
-    # generation.
-    tagged_by_name["tag"]["type"] = "Float64"
+    # Minimized descriptors identify one exact simulator-declared branch.
+    tagged_by_name["tag"]["type"] = "DataType"
     tagged_by_name["tag"]["value"] = counterpart_id
-    tagged_by_name["attempt_time"]["type"] = "String"
+    tagged_by_name["attempt_time"]["type"] = "Float64"
     tagged_by_name["attempt_time"]["value"] = 0.125
     tagged_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
       WebQuantumSavory.generate_julia_script(tagged_payload)
@@ -386,7 +442,7 @@
     symbolic_pairstate = only(
       parameter for parameter in symbolic_parameters if parameter["name"] == "pairstate"
     )
-    symbolic_pairstate["type"] = "Float64"
+    symbolic_pairstate["type"] = "Symbolic"
     symbolic_pairstate["value"] = Dict(
       "kind" => "states_zoo",
       "state_type" => "DepolarizedBellPair",
@@ -563,16 +619,21 @@
     )
     forged_lambda_success["type"] = "Lambda"
     forged_lambda_success["value"] = 0.375
-    forged_lambda_script = WebQuantumSavory.generate_julia_script(forged_lambda_payload)
-    @test occursin("success_prob = 0.375", forged_lambda_script)
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+      forged_lambda_payload,
+    )
 
     no_tag_payload = deepcopy(tagged_payload)
     no_tag_parameters = no_tag_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    only(parameter for parameter in no_tag_parameters if parameter["name"] == "tag")["value"] = "nothing"
+    no_tag_parameter = only(
+      parameter for parameter in no_tag_parameters if parameter["name"] == "tag"
+    )
+    no_tag_parameter["type"] = "Nothing"
+    no_tag_parameter["value"] = "nothing"
     no_tag_script = WebQuantumSavory.generate_julia_script(no_tag_payload)
     @test occursin("tag = nothing", no_tag_script)
 
-    function tag_export_error(value; client_type="Type{<:AbstractTag}")
+    function tag_export_error(value; client_type="DataType")
       invalid_payload = deepcopy(tagged_payload)
       invalid_parameters = invalid_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
       tag_parameter = only(parameter for parameter in invalid_parameters if parameter["name"] == "tag")
@@ -587,7 +648,7 @@
     end
 
     for invalid_id in ("EntanglementCounterpart", "Main.UnknownTag", "Core.Int64")
-      error = tag_export_error(invalid_id; client_type="Float64")
+      error = tag_export_error(invalid_id)
       @test error isa WebQuantumSavory.APIError
       @test occursin("not an advertised named AbstractTag type", error.message)
     end
@@ -730,7 +791,7 @@
         "parameters" => Any[
           Dict(
             "name" => "chooseL",
-            "type" => "Function",
+            "type" => "Lambda",
             "value" => Dict("kind" => "variable", "id" => "node-context-function"),
           ),
           Dict("name" => "chooseH", "type" => "Lambda", "value" => named_node_function),
@@ -738,6 +799,14 @@
         ],
       ))
     end
+
+    mismatched_contextual_payload = deepcopy(contextual_payload)
+    mismatched_contextual_payload["net"]["nodes"][1]["data"]["protocols"][1][
+      "parameters"
+    ][1]["type"] = "Function"
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.generate_julia_script(
+      mismatched_contextual_payload,
+    )
 
     contextual_script = WebQuantumSavory.generate_julia_script(contextual_payload)
     @test Meta.parseall(contextual_script) isa Expr
@@ -788,7 +857,7 @@
       error
     end
     @test lambda_default_error isa WebQuantumSavory.APIError
-    @test occursin("cannot use a constructor default", lambda_default_error.message)
+    @test occursin("Lambda value cannot use a Default alias", lambda_default_error.message)
 
     unused_nonstring_lambda_payload = deepcopy(contextual_payload)
     unused_nonstring_lambda_payload["variables"][1]["value"] = 42
@@ -1019,7 +1088,7 @@
       "id" => "wildcard-variable",
       "name" => "any remote node",
       "type" => "QuantumSavory.Wildcard",
-      "value" => nothing,
+      "value" => "Wildcard",
     ))
     push!(wildcard_payload["net"]["nodes"][1]["data"]["protocols"], Dict(
       "id" => "wildcard-swapper",
@@ -1027,7 +1096,7 @@
       "parameters" => [
         Dict(
           "name" => "nodeL",
-          "type" => ["QuantumSavory.Wildcard", "Int64", "Function"],
+          "type" => "QuantumSavory.Wildcard",
           "value" => Dict("kind" => "variable", "id" => "wildcard-variable"),
         ),
         Dict(
@@ -1262,10 +1331,10 @@
       end
 
       rejected_kwargs = Dict{Symbol,Any}()
-      @test !WebQuantumSavory._handle_function_lambda_parameter!(
+      @test !materialize_declared_test_parameter!(
         rejected_kwargs,
         :filter,
-        "Function",
+        Function,
         "exit",
       )
       @test !haskey(rejected_kwargs, :filter)
@@ -1289,12 +1358,12 @@
       @test WebQuantumSavory.resolve_self_comparison_reference("==(self)", nothing) === nothing
 
       node_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
+      @test materialize_declared_test_parameter!(
         node_kwargs,
         :chooseslot,
-        "Function",
-        "==(self)";
-        self_node_index=2,
+        Function,
+        "==(self)",
+        Dict{Symbol,Any}(:node => 2),
       )
       @test haskey(node_kwargs, :chooseslot)
       if haskey(node_kwargs, :chooseslot)
@@ -1302,22 +1371,21 @@
       end
 
       non_node_kwargs = Dict{Symbol,Any}()
-      @test !WebQuantumSavory._handle_function_lambda_parameter!(
+      @test !materialize_declared_test_parameter!(
         non_node_kwargs,
         :chooseslot,
-        "Function",
+        Function,
         "==(self)",
       )
       @test !haskey(non_node_kwargs, :chooseslot)
 
-      # The optional positional state argument remains backwards compatible.
+      # A known safe reference resolves through the classified materializer.
       ordinary_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
+      @test materialize_declared_test_parameter!(
         ordinary_kwargs,
         :filter,
-        "Function",
+        Function,
         "identity",
-        nothing,
       )
       @test haskey(ordinary_kwargs, :filter)
       if haskey(ordinary_kwargs, :filter)
@@ -1527,7 +1595,7 @@
           :node => 2,
           WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
         )
-        @test WebQuantumSavory._handle_typed_parameter!(
+        @test materialize_declared_test_parameter!(
           literal_kwargs,
           :selector,
           "Lambda",
@@ -1552,7 +1620,7 @@
             :node => node_index,
             WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
           )
-          @test WebQuantumSavory._handle_typed_parameter!(
+          @test materialize_declared_test_parameter!(
             kwargs,
             :selector,
             lambda_variable.type,
@@ -1582,7 +1650,7 @@
           WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY => physical_edge_context,
         )
         edge_kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_typed_parameter!(
+        @test materialize_declared_test_parameter!(
           edge_kwargs,
           :selector,
           "Lambda",
@@ -1629,7 +1697,7 @@
           ),
         )
           kwargs = Dict{Symbol,Any}()
-          @test WebQuantumSavory._handle_typed_parameter!(
+          @test materialize_declared_test_parameter!(
             kwargs,
             :selector,
             "Lambda",
@@ -1639,7 +1707,7 @@
           @test kwargs[:selector](2)
 
           invalid_kwargs = Dict{Symbol,Any}()
-          @test WebQuantumSavory._handle_typed_parameter!(
+          @test materialize_declared_test_parameter!(
             invalid_kwargs,
             :selector,
             "Lambda",
@@ -1816,13 +1884,13 @@
       @test pairstate.type == "Symbolic"
 
       entangler_tag = only(filter(parameter -> string(parameter.field) == "tag", entangler_parameters))
-      @test entangler_tag.type == ["Nothing", "Type{<:AbstractTag}"]
+      @test entangler_tag.type == ["Nothing", "DataType"]
       @test entangler_tag.kind == WebQuantumSavory.NAMED_TAG_PARAMETER_KIND
       @test entangler_tag.nullable === true
 
       consumer_parameters = virtual_protocol["parameters"]
       consumer_tag = only(filter(parameter -> string(parameter.field) == "tag", consumer_parameters))
-      @test consumer_tag.type == "Type{<:AbstractTag}"
+      @test consumer_tag.type == "DataType"
       @test consumer_tag.kind == WebQuantumSavory.NAMED_TAG_PARAMETER_KIND
       @test consumer_tag.nullable === false
 
@@ -1839,16 +1907,16 @@
       @test WebQuantumSavory._named_tag_parameter_semantics(
         Union{Nothing,Float64,Type{<:QuantumSavory.AbstractTag}},
       ) === nothing
-      @test WebQuantumSavory._protocol_parameter_handling_type(
+      @test WebQuantumSavory._classify_declared_wire_value(
         Union{Int64,Function},
-        "Int64",
-        "1",
-      ) === Int64
-      @test WebQuantumSavory._protocol_parameter_handling_type(
+        1;
+        selected_type="Int64",
+      ).handling_type === Int64
+      @test WebQuantumSavory._classify_declared_wire_value(
         Union{Int64,Function},
-        "Lambda",
-        "slots -> first(slots)",
-      ) == "Lambda"
+        "slots -> first(slots)";
+        selected_type="Lambda",
+      ).handling_type == "Lambda"
       @test WebQuantumSavory._is_symbolic_parameter_type(QuantumSavory.SymQObj)
       @test WebQuantumSavory._is_symbolic_parameter_type(typeof(QuantumSavory.X))
       @test all(
@@ -1860,11 +1928,11 @@
           "SymbolicUtils.Symbolic{Real}",
         ),
       )
-      @test WebQuantumSavory._protocol_parameter_handling_type(
+      @test WebQuantumSavory._classify_declared_wire_value(
         QuantumSavory.SymQObj,
-        "Symbolic",
-        Dict("kind" => "states_zoo"),
-      ) === QuantumSavory.SymQObj
+        "Z₁";
+        selected_type="Symbolic",
+      ).handling_type === QuantumSavory.SymQObj
       consumer_declared_types = WebQuantumSavory._constructor_parameter_types(
         QuantumSavory.ProtocolZoo.EntanglementConsumer,
       )
@@ -1885,7 +1953,7 @@
     )
     counterpart_id = "QuantumSavory.ProtocolZoo.EntanglementCounterpart"
 
-    protocol_definition(T, value; client_type="Any") = Dict(
+    protocol_definition(T, value; client_type="DataType") = Dict(
       "type" => string(T),
       "parameters" => [Dict(
         "name" => "tag",
@@ -1903,13 +1971,11 @@
 
     try
       withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-        # Client-supplied type annotations are deliberately forged. The
-        # simulator-owned constructor schema remains authoritative.
         entangler = WebQuantumSavory._instantiate_protocol(
           protocol_definition(
             QuantumSavory.ProtocolZoo.EntanglerProt,
             counterpart_id;
-            client_type=["Nothing", "DataType"],
+            client_type="DataType",
           ),
           context,
         )
@@ -1919,7 +1985,7 @@
           protocol_definition(
             QuantumSavory.ProtocolZoo.EntanglementConsumer,
             counterpart_id;
-            client_type="Any",
+            client_type="DataType",
           ),
           context,
         )
@@ -1929,29 +1995,35 @@
           protocol_definition(
             QuantumSavory.ProtocolZoo.EntanglerProt,
             "nothing";
-            client_type="Float64",
+            client_type="Nothing",
           ),
           context,
         )
         @test no_tag.tag === nothing
-
-        forged_ordinary_types = Dict(
-          "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
-          "parameters" => Any[
-            Dict("name" => "success_prob", "type" => "String", "value" => 0.25),
-            Dict("name" => "chooseslotA", "type" => "String", "value" => 1),
-            Dict("name" => "chooseslotB", "type" => "Float64", "value" => "minimum"),
-          ],
-        )
-        authoritative_protocol = WebQuantumSavory._instantiate_protocol(
-          forged_ordinary_types,
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
+          protocol_definition(
+            QuantumSavory.ProtocolZoo.EntanglerProt,
+            " nothing ";
+            client_type="Nothing",
+          ),
           context,
         )
-        @test authoritative_protocol.success_prob == 0.25
-        @test authoritative_protocol.chooseslotA == 1
-        @test authoritative_protocol.chooseslotB === minimum
 
-        authoritative_symbolic = WebQuantumSavory._instantiate_protocol(
+        for forged_parameter in Any[
+          Dict("name" => "success_prob", "type" => "String", "value" => 0.25),
+          Dict("name" => "chooseslotA", "type" => "String", "value" => 1),
+          Dict("name" => "chooseslotB", "type" => "Float64", "value" => "minimum"),
+        ]
+          @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
+            Dict(
+              "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
+              "parameters" => Any[forged_parameter],
+            ),
+            context,
+          )
+        end
+
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
           Dict(
             "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
             "parameters" => [Dict(
@@ -1966,10 +2038,18 @@
           ),
           context,
         )
-        @test authoritative_symbolic.pairstate isa QuantumSavory.SymQObj
 
-        for blank in (nothing, "", "  ")
-          default_entangler = WebQuantumSavory._instantiate_protocol(
+        default_entangler = WebQuantumSavory._instantiate_protocol(
+          protocol_definition(
+            QuantumSavory.ProtocolZoo.EntanglerProt,
+            nothing;
+            client_type="DataType",
+          ),
+          context,
+        )
+        @test default_entangler.tag === QuantumSavory.ProtocolZoo.EntanglementCounterpart
+        for blank in ("", "  ")
+          @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
             protocol_definition(
               QuantumSavory.ProtocolZoo.EntanglerProt,
               blank;
@@ -1977,7 +2057,6 @@
             ),
             context,
           )
-          @test default_entangler.tag === QuantumSavory.ProtocolZoo.EntanglementCounterpart
         end
 
         invalid_values = Any[
@@ -1993,7 +2072,7 @@
             QuantumSavory.ProtocolZoo.EntanglementConsumer :
             QuantumSavory.ProtocolZoo.EntanglerProt
           error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
-            protocol_definition(T, value; client_type="Type{<:AbstractTag}"),
+            protocol_definition(T, value; client_type="DataType"),
             context,
           ))
           @test error isa WebQuantumSavory.APIError
@@ -2047,7 +2126,7 @@
         @test custom_choosers.chooseslotA([2, 3]) == 2
         @test custom_choosers.chooseslotB([2, 3]) == 3
 
-        forged_lambda = WebQuantumSavory._instantiate_protocol(
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
           Dict(
             "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
             "parameters" => [Dict(
@@ -2058,12 +2137,11 @@
           ),
           context,
         )
-        @test forged_lambda.success_prob == 0.25
-        @test WebQuantumSavory._protocol_parameter_handling_type(
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._classify_declared_wire_value(
           Float64,
-          "Lambda",
-          0.25,
-        ) === Float64
+          0.25;
+          selected_type="Lambda",
+        )
       end
     finally
       WebQuantumSavory.destroy_simulation(simulation_name)
@@ -2191,6 +2269,13 @@
       @test unknown isa WebQuantumSavory.APIError
       @test unknown.status_code == 400
       @test unknown.error_code == "VALIDATION_ERROR"
+      for inexact_id in ("DepolarizedBellPair ", "depolarizedbellpair")
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._validate_states_zoo_recipe(Dict(
+          "kind" => "states_zoo",
+          "state_type" => inexact_id,
+          "parameters" => Dict("p" => 0.5),
+        ))
+      end
 
       missing = states_zoo_error("DepolarizedBellPair", Dict())
       @test missing isa WebQuantumSavory.APIError
@@ -2240,7 +2325,13 @@
       )
       withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
         kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :pairstate, tagged_recipe)
+        @test materialize_declared_test_parameter!(
+          kwargs,
+          :pairstate,
+          QuantumSavory.SymQObj,
+          tagged_recipe;
+          selected_type="Symbolic",
+        )
         @test kwargs[:pairstate] isa QuantumSavory.StatesZoo.DepolarizedBellPair
 
         weighted_recipe = Dict(
@@ -2248,7 +2339,13 @@
           "state_type" => "BarrettKokBellPairW",
           "parameters" => barrett_weighted_parameters,
         )
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :weighted, weighted_recipe)
+        @test materialize_declared_test_parameter!(
+          kwargs,
+          :weighted,
+          QuantumSavory.SymQObj,
+          weighted_recipe;
+          selected_type="Symbolic",
+        )
         @test kwargs[:weighted] isa QuantumSavory.SymQObj
         @test abs(LinearAlgebra.tr(QuantumSavory.express(kwargs[:weighted]))) ≈ 1
       end
@@ -2256,7 +2353,13 @@
       # Existing symbolic strings keep their evaluation-backed behavior.
       withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
         kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :pairstate, "Z₁")
+        @test materialize_declared_test_parameter!(
+          kwargs,
+          :pairstate,
+          QuantumSavory.SymQObj,
+          "Z₁";
+          selected_type="Symbolic",
+        )
         @test haskey(kwargs, :pairstate)
       end
   end
@@ -2990,7 +3093,71 @@
 
       null_typed_value = variable_validation_error(payload -> (payload["variables"][1]["value"] = nothing))
       @test null_typed_value isa WebQuantumSavory.APIError
-      @test occursin("must not be null", null_typed_value.message)
+      @test occursin("does not match declared type", null_typed_value.message)
+
+      invalid_unused_literal = variable_validation_error(payload -> begin
+        push!(payload["variables"], Dict(
+          "id" => "unused-invalid",
+          "name" => "unused invalid",
+          "type" => "Int64",
+          "value" => "7",
+        ))
+      end)
+      @test invalid_unused_literal isa WebQuantumSavory.APIError
+      @test occursin("value does not match declared type 'Int64'", invalid_unused_literal.message)
+
+      unknown_unused_type = variable_validation_error(payload -> begin
+        push!(payload["variables"], Dict(
+          "id" => "unused-unknown",
+          "name" => "unused unknown",
+          "type" => "Main.LegacyAlias",
+          "value" => 7,
+        ))
+      end)
+      @test unknown_unused_type isa WebQuantumSavory.APIError
+      @test occursin("unsupported type", unknown_unused_type.message)
+
+      for (legacy_type, legacy_value) in (
+        "Int" => 7,
+        "Float32" => 0.5,
+        "Wildcard" => "Wildcard",
+      )
+        legacy_type_error = variable_validation_error(payload -> begin
+          push!(payload["variables"], Dict(
+            "id" => "legacy-type",
+            "name" => "legacy type",
+            "type" => legacy_type,
+            "value" => legacy_value,
+          ))
+        end)
+        @test legacy_type_error isa WebQuantumSavory.APIError
+        @test occursin("unsupported type", legacy_type_error.message)
+      end
+
+      intrinsic_variables = deepcopy(variable_payload)
+      intrinsic_variables["variables"] = Any[
+        deepcopy(variable_payload["variables"][1]),
+        Dict(
+          "id" => "no-value",
+          "name" => "no value",
+          "type" => "Nothing",
+          "value" => "nothing",
+        ),
+        Dict(
+          "id" => "wildcard",
+          "name" => "wildcard",
+          "type" => "QuantumSavory.Wildcard",
+          "value" => "Wildcard",
+        ),
+      ]
+      @test WebQuantumSavory.validate_payload(intrinsic_variables)["success"]
+      for index in 2:length(intrinsic_variables["variables"])
+        null_intrinsic = deepcopy(intrinsic_variables)
+        null_intrinsic["variables"][index]["value"] = nothing
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+          null_intrinsic,
+        )
+      end
 
       for variable_type in ("Function", "Lambda")
         for alias in ("default", "Default", " DEFAULT ")
@@ -3003,12 +3170,19 @@
         end
       end
 
-      case_variant_default = variable_validation_error(payload -> begin
-        payload["variables"][1]["type"] = "Default"
-        payload["variables"][1]["value"] = nothing
-      end)
-      @test case_variant_default isa WebQuantumSavory.APIError
-      @test occursin("case-sensitive", case_variant_default.message)
+      source_is_not_executed = deepcopy(variable_payload)
+      source_is_not_executed["variables"] = Any[
+        deepcopy(variable_payload["variables"][1]),
+        Dict(
+          "id" => "deferred-source",
+          "name" => "deferred source",
+          "type" => "Lambda",
+          "value" => "error(\"admission must not execute source\")",
+        ),
+      ]
+      withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
+        @test WebQuantumSavory.validate_payload(source_is_not_executed)["success"]
+      end
 
       function_default_script = deepcopy(variable_payload)
       function_default_script["variables"][1]["type"] = "Function"
@@ -3032,7 +3206,7 @@
       runtime_payload["name"] = simulation_name
       runtime_payload["variables"] = [
         Dict("id" => "probability", "name" => "probability", "type" => "Float64", "value" => 0.25),
-        Dict("id" => "no_retry", "name" => "no retry", "type" => "Nothing", "value" => nothing),
+        Dict("id" => "no_retry", "name" => "no retry", "type" => "Nothing", "value" => "nothing"),
         Dict("id" => "protocol_default", "name" => "protocol default", "type" => "default", "value" => nothing),
         Dict(
           "id" => "contextual_lambda",
@@ -3054,7 +3228,7 @@
         "parameters" => Any[
           Dict(
             "name" => "chooseL",
-            "type" => "Function",
+            "type" => "Lambda",
             "value" => Dict("kind" => "variable", "id" => "contextual_lambda"),
           ),
           Dict(
@@ -3146,7 +3320,7 @@
         end
         @test conversion_error isa WebQuantumSavory.APIError
         @test conversion_error.status_code == 400
-        @test occursin("Failed to convert variable", conversion_error.message)
+        @test occursin("does not match declared type 'Float64'", conversion_error.message)
 
         incompatible_protocol_definition = Dict(
           "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
@@ -3180,16 +3354,15 @@
         @test constructor_error.details["variable_id"] == "string_probability"
         @test constructor_error.details["parameter_name"] == "success_prob"
 
-        # Literal parameters use the authoritative constructor field type, not
-        # a stale or forged client snapshot.
+        # A minimized transport descriptor is consistency-only and cannot be
+        # used to widen or contradict simulator metadata.
         literal_protocol_definition = deepcopy(incompatible_protocol_definition)
         literal_protocol_definition["parameters"][1]["value"] = 0.25
         literal_protocol_definition["parameters"][1]["type"] = "String"
-        literal_protocol = WebQuantumSavory._instantiate_protocol(
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._instantiate_protocol(
           literal_protocol_definition,
           ctx,
         )
-        @test literal_protocol.success_prob == 0.25
       finally
         haskey(WebQuantumSavory.STATE, simulation_name) && WebQuantumSavory.destroy_simulation(simulation_name)
       end
@@ -3197,8 +3370,76 @@
       # A function-valued variable still resolves in the assigned node context.
       kwargs = Dict{Symbol,Any}()
       ctx = Dict{Symbol,Any}(:node => 2)
-      @test WebQuantumSavory._handle_typed_parameter!(kwargs, :filter, "Function", "<(self)", ctx)
+      @test materialize_declared_test_parameter!(
+        kwargs,
+        :filter,
+        "Function",
+        "<(self)",
+        ctx,
+      )
       @test kwargs[:filter].(1:3) == [true, false, false]
+  end
+
+  @testset "Construction-free constructor admission" begin
+      admitted_count = only(WebQuantumSavory._admit_constructor_parameters(
+        [Dict("name" => "count", "type" => "Int64", "value" => 7)],
+        ConstructionFreeAdmissionCanary,
+      ))
+      @test CONSTRUCTION_FREE_CANARY_CALLS[] == 0
+      runtime_kwargs = Dict{Symbol,Any}()
+      @test WebQuantumSavory._materialize_admitted_constructor_parameter!(
+        runtime_kwargs,
+        merge(admitted_count, (raw_value="must not be reclassified",)),
+        Dict{Symbol,Any}(),
+      )
+      @test runtime_kwargs == Dict(:count => 7)
+      @test CONSTRUCTION_FREE_CANARY_CALLS[] == 0
+
+      function exact_entangler_parameter(payload, name)
+        protocol = payload["net"]["edges"][1]["data"]["protocols"][1]
+        return only(parameter for parameter in protocol["parameters"] if parameter["name"] == name)
+      end
+
+      for success_probability in (0.0, 1.0)
+        bounded = current_simulation_payload()
+        parameter = exact_entangler_parameter(bounded, "success_prob")
+        parameter["value"] = success_probability
+        @test WebQuantumSavory.validate_payload(bounded)["success"] == true
+      end
+      for success_probability in (-0.01, 1.01)
+        bounded = current_simulation_payload()
+        parameter = exact_entangler_parameter(bounded, "success_prob")
+        parameter["value"] = success_probability
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(bounded)
+      end
+
+      for safe_integer in (-9_007_199_254_740_991, 9_007_199_254_740_991)
+        WebQuantumSavory._admit_constructor_parameters(
+          [Dict("name" => "count", "type" => "Int64", "value" => safe_integer)],
+          ConstructionFreeAdmissionCanary,
+        )
+      end
+      for unsafe_integer in (-9_007_199_254_740_992, 9_007_199_254_740_992)
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._admit_constructor_parameters(
+          [Dict("name" => "count", "type" => "Int64", "value" => unsafe_integer)],
+          ConstructionFreeAdmissionCanary,
+        )
+      end
+      @test isempty(WebQuantumSavory._admit_constructor_parameters(
+        [Dict("name" => "label", "type" => "String", "value" => nothing)],
+        ContextualIntegerBackground,
+      ))
+      for invalid_omission_type in ("default", "Float32", "Int64")
+        @test_throws WebQuantumSavory.APIError WebQuantumSavory._admit_constructor_parameters(
+          [Dict(
+            "name" => "label",
+            "type" => invalid_omission_type,
+            "value" => nothing,
+          )],
+          ContextualIntegerBackground,
+        )
+      end
+      @test CONSTRUCTION_FREE_CANARY_CALLS[] == 0
   end
 
   @testset "Required Constructor Parameters" begin
@@ -3235,6 +3476,17 @@
       end
       push!(payload["net"]["nodes"][1]["data"]["protocols"], switch_definition)
 
+      array_descriptor = current_simulation_payload()
+      array_parameter = only(filter(
+        parameter -> parameter["name"] == "success_prob",
+        array_descriptor["net"]["edges"][1]["data"]["protocols"][1]["parameters"],
+      ))
+      array_parameter["type"] = Any["Float64"]
+      array_parameter["value"] = 0.5
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        array_descriptor,
+      )
+
       try
         validated = WebQuantumSavory.validate_payload(payload)
         state = WebQuantumSavory.parse_network_graph(validated)
@@ -3259,27 +3511,14 @@
       omitted_switch["parameters"][1]["value"] = nothing
       @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(omitted)
 
-      defaulted = deepcopy(payload)
-      defaulted["variables"] = Any[Dict(
-        "id" => "constructor-default",
-        "name" => "constructor default",
-        "type" => "default",
-        "value" => nothing,
-      )]
-      defaulted_switch =
-        defaulted["net"]["nodes"][1]["data"]["protocols"][end]
-      defaulted_switch["parameters"][1]["value"] =
-        Dict("kind" => "variable", "id" => "constructor-default")
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(defaulted)
-
       string_scalar = deepcopy(payload)
       node_protocol_parameter(
         string_scalar,
         "floatprot_0_1",
         "retention_time",
       )["value"] = "0.15"
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
-        WebQuantumSavory.validate_payload(string_scalar),
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        string_scalar,
       )
 
       string_bool = deepcopy(payload)
@@ -3288,8 +3527,8 @@
         "floatprot_0_1",
         "announce",
       )["value"] = "true"
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
-        WebQuantumSavory.validate_payload(string_bool),
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        string_bool,
       )
 
       string_vector = deepcopy(payload)
@@ -3298,8 +3537,25 @@
         "required-switch",
         "success_probs",
       )["value"] = Any["0.75"]
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory.parse_network_graph(
-        WebQuantumSavory.validate_payload(string_vector),
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        string_vector,
+      )
+
+      safe_integer_vector = deepcopy(payload)
+      node_protocol_parameter(
+        safe_integer_vector,
+        "required-switch",
+        "clientnodes",
+      )["value"] = Any[9_007_199_254_740_991]
+      @test WebQuantumSavory.validate_payload(safe_integer_vector)["success"]
+      unsafe_integer_vector = deepcopy(safe_integer_vector)
+      node_protocol_parameter(
+        unsafe_integer_vector,
+        "required-switch",
+        "clientnodes",
+      )["value"] = Any[9_007_199_254_740_992]
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        unsafe_integer_vector,
       )
 
       export_payload = deepcopy(payload)
@@ -3929,6 +4185,7 @@
     # Simulator catalog identifiers are exact.
     noise_type = WebQuantumSavory._resolve_noise_type_from_string("DEPOLARIZATION")
     @test noise_type === nothing
+    @test WebQuantumSavory._resolve_noise_type_from_string(" Depolarization ") === nothing
 
     # # Test default noise type
     # default_noise = WebQuantumSavory._resolve_noise_type_from_string("default")
@@ -3941,6 +4198,21 @@
     # Simulator catalog identifiers are exact.
     slot_type = WebQuantumSavory._resolve_slot_type_from_string("QUBIT")
     @test slot_type === nothing
+    @test WebQuantumSavory._resolve_slot_type_from_string(" Qubit ") === nothing
+
+    exact_slot_payload = current_simulation_payload()
+    for inexact_slot_type in ("QUBIT", " Qubit ", "UnknownSlot")
+      invalid_slot_payload = deepcopy(exact_slot_payload)
+      invalid_slot_payload["net"]["nodes"][1]["data"]["slots"][1]["type"] =
+        inexact_slot_type
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
+        invalid_slot_payload,
+      )
+    end
+
+    protocol_id = string(QuantumSavory.ProtocolZoo.EntanglerProt)
+    @test WebQuantumSavory._resolve_protocol_type_from_string(protocol_id) !== nothing
+    @test WebQuantumSavory._resolve_protocol_type_from_string(" $protocol_id ") === nothing
 
     # Test non-existent types
     @test WebQuantumSavory._resolve_noise_type_from_string("NonExistent") === nothing
@@ -3948,22 +4220,89 @@
   end
 
   @testset "Parameter Conversion Utility" begin
-    # Wildcard selections use one exact wire sentinel.
-    for wildcard_type in ("Wildcard", "QuantumSavory.Wildcard")
-      ok, wildcard = WebQuantumSavory._convert_parameter_value(wildcard_type, "Wildcard")
-      @test ok
-      @test wildcard isa QuantumSavory.Wildcard
-      ok, wildcard = WebQuantumSavory._convert_parameter_value(wildcard_type, nothing)
-      @test ok
-      @test wildcard isa QuantumSavory.Wildcard
-      @test !first(WebQuantumSavory._convert_parameter_value(wildcard_type, "wildcard"))
+    opaque = Dict("simulator_owned" => Any[1, true, nothing])
+    @test WebQuantumSavory._validate_declared_wire_value(
+      Any,
+      opaque;
+      selected_type="Any",
+    ) === opaque
+    @test WebQuantumSavory._validate_declared_wire_value(
+      Any,
+      "";
+      selected_type="Any",
+    ) == ""
+    opaque_expression = WebQuantumSavory._script_opaque_literal(
+      opaque,
+      "Opaque parameter",
+    )
+    @test opaque_expression ==
+      "Dict{String,Any}(\"simulator_owned\" => Any[1, true, nothing])"
+    @test WebQuantumSavory._script_opaque_literal("", "Opaque parameter") == "\"\""
+    @test !WebQuantumSavory._parameter_type_supports_variable_type(Any, "String")
+    lambda_variable = WebQuantumSavory.Variable(
+      "lambda-chooser",
+      "lambda chooser",
+      "Lambda",
+      "slots -> first(slots)",
+    )
+    exact_function_branch_error = try
+      WebQuantumSavory._admit_constructor_parameters(
+        [Dict(
+          "name" => "chooseslotA",
+          "type" => "Function",
+          "value" => Dict("kind" => "variable", "id" => lambda_variable.id),
+        )],
+        QuantumSavory.ProtocolZoo.EntanglerProt;
+        variables=Dict(lambda_variable.id => lambda_variable),
+      )
+      nothing
+    catch error
+      error
     end
+    @test exact_function_branch_error isa WebQuantumSavory.APIError
+    @test occursin("branch does not match", exact_function_branch_error.message)
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory._validate_declared_wire_value(
+      Any,
+      Dict("kind" => "variable", "id" => "hidden");
+      selected_type="Any",
+    )
+
+    # Wildcard selections use one exact wire sentinel.
+    wildcard_type = "QuantumSavory.Wildcard"
+    ok, wildcard = WebQuantumSavory._convert_parameter_value(wildcard_type, "Wildcard")
+    @test ok
+    @test wildcard === QuantumSavory.W
+    classified_wildcard = WebQuantumSavory._classify_declared_wire_value(
+      QuantumSavory.Wildcard,
+      "Wildcard";
+      selected_type=wildcard_type,
+    )
+    @test classified_wildcard.branch === :literal
+    @test classified_wildcard.value === QuantumSavory.W
+    @test classified_wildcard.handling_type === QuantumSavory.Wildcard
+    @test WebQuantumSavory._script_admitted_value_expression(
+      (
+        branch=classified_wildcard.branch,
+        admitted_value=classified_wildcard.value,
+        handling_type=classified_wildcard.handling_type,
+      ),
+      "Wildcard parameter",
+    ) == "QuantumSavory.Wildcard()"
+    @test !first(WebQuantumSavory._convert_parameter_value(wildcard_type, nothing))
+    @test !first(WebQuantumSavory._convert_parameter_value(wildcard_type, "wildcard"))
+    @test !first(WebQuantumSavory._convert_parameter_value("Wildcard", "Wildcard"))
 
     # Integer targets accept only finite, integral real numbers.
-    ok, v = WebQuantumSavory._convert_parameter_value("Int", 42)
-    @test ok && v == 42
+    @test !first(WebQuantumSavory._convert_parameter_value("Int", 42))
     ok, v = WebQuantumSavory._convert_parameter_value("Int64", 7.0)
     @test ok && v isa Int64 && v == 7
+    for value in (-9_007_199_254_740_991, 9_007_199_254_740_991)
+      ok, v = WebQuantumSavory._convert_parameter_value("Int64", value)
+      @test ok && v == value
+    end
+    for value in (-9_007_199_254_740_992, 9_007_199_254_740_992)
+      @test !first(WebQuantumSavory._convert_parameter_value("Int64", value))
+    end
     for value in ("42", true, 1.5, Inf, NaN)
       @test !first(WebQuantumSavory._convert_parameter_value("Int64", value))
     end
@@ -3972,12 +4311,10 @@
     # declared target type.
     ok, v = WebQuantumSavory._convert_parameter_value("Float64", 3)
     @test ok && v isa Float64 && v == 3.0
-    ok, v = WebQuantumSavory._convert_parameter_value("Float32", 2)
-    @test ok && v isa Float32 && v == 2.0f0
     for value in ("3.14", true, Inf, NaN)
       @test !first(WebQuantumSavory._convert_parameter_value("Float64", value))
     end
-    @test !first(WebQuantumSavory._convert_parameter_value("Float32", 1.0e100))
+    @test !first(WebQuantumSavory._convert_parameter_value("Float32", 2))
 
     # Numeric vectors apply the exact scalar rules element-wise.
     ok, v = WebQuantumSavory._convert_parameter_value(
@@ -4016,7 +4353,7 @@
     ) === false
 
     typed_numeric_kwargs = Dict{Symbol,Any}()
-    @test !WebQuantumSavory._handle_typed_parameter!(
+    @test_throws WebQuantumSavory.APIError materialize_declared_test_parameter!(
       typed_numeric_kwargs,
       :value,
       Float64,
@@ -4070,23 +4407,6 @@
       Dict{Symbol,Any}();
       parameter_context="switch parameter",
     )
-    default_required = deepcopy(switch_parameters)
-    default_required[1]["value"] = Dict("kind" => "variable", "id" => "default")
-    @test_throws WebQuantumSavory.APIError WebQuantumSavory._constructor_parameter_kwargs(
-      default_required,
-      switch_type,
-      Dict{Symbol,Any}();
-      variables=Dict(
-        "default" => WebQuantumSavory.Variable(
-          "default",
-          "constructor default",
-          "Default",
-          nothing,
-        ),
-      ),
-      parameter_context="switch parameter",
-    )
-
     # Strings and sentinels retain their exact wire representations.
     ok, v = WebQuantumSavory._convert_parameter_value(
       "String",
@@ -4094,8 +4414,7 @@
     )
     @test ok && v isa String && v == "hello"
     @test !first(WebQuantumSavory._convert_parameter_value("String", 123))
-    ok, v = WebQuantumSavory._convert_parameter_value("Nothing", nothing)
-    @test ok && v === nothing
+    @test !first(WebQuantumSavory._convert_parameter_value("Nothing", nothing))
     ok, v = WebQuantumSavory._convert_parameter_value("Nothing", "nothing")
     @test ok && v === nothing
     @test !first(WebQuantumSavory._convert_parameter_value("Nothing", "Nothing"))
@@ -4168,11 +4487,13 @@
           nothing,
           "$special_type parameter",
         )
-        @test_throws WebQuantumSavory.APIError WebQuantumSavory._handle_function_lambda_parameter!(
+        @test_throws WebQuantumSavory.APIError materialize_declared_test_parameter!(
           Dict{Symbol,Any}(),
           :callback,
-          special_type,
+          Function,
           alias,
+          Dict{Symbol,Any}();
+          selected_type=special_type,
         )
       end
     end
@@ -4446,18 +4767,28 @@
 
       # Known function references and primitive conversion do not evaluate code.
       safe_function_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
+      @test materialize_declared_test_parameter!(
         safe_function_kwargs,
         :filter,
-        "Function",
+        Function,
         "identity",
       )
       @test safe_function_kwargs[:filter] === identity
 
       safe_primitive_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :rounds, "Int64", 3)
+      @test materialize_declared_test_parameter!(
+        safe_primitive_kwargs,
+        :rounds,
+        Int64,
+        3,
+      )
       @test safe_primitive_kwargs[:rounds] == 3
-      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :label, "String", "hello")
+      @test materialize_declared_test_parameter!(
+        safe_primitive_kwargs,
+        :label,
+        String,
+        "hello",
+      )
       @test safe_primitive_kwargs[:label] == "hello"
 
       safe_noise = WebQuantumSavory._instantiate_noise(Dict(
@@ -4467,22 +4798,26 @@
       @test safe_noise isa QuantumSavory.AmplitudeDamping
 
       # Explicit source-bearing values propagate denial.
-      test_disabled(() -> WebQuantumSavory._handle_function_lambda_parameter!(
+      test_disabled(() -> materialize_declared_test_parameter!(
         Dict{Symbol,Any}(),
         :filter,
-        "Lambda",
+        Function,
         "x -> true",
+        Dict{Symbol,Any}();
+        selected_type="Lambda",
       ))
-      test_disabled(() -> WebQuantumSavory._handle_symbolic_parameter!(
+      test_disabled(() -> materialize_declared_test_parameter!(
         Dict{Symbol,Any}(),
         :pairstate,
-        "Z₁",
+        QuantumSavory.SymQObj,
+        "Z₁";
+        selected_type="Symbolic",
       ))
       complex_kwargs = Dict{Symbol,Any}()
-      @test !WebQuantumSavory._handle_regular_parameter!(
+      @test_throws WebQuantumSavory.APIError materialize_declared_test_parameter!(
         complex_kwargs,
         :values,
-        "Vector{Int64}",
+        Vector{Int64},
         "[1, 2]",
       )
       @test isempty(complex_kwargs)
@@ -6321,27 +6656,29 @@
       "Int64",
       expression("2 * self + nodeid(\"Alice\")"),
     )
+    integer_variable_bindings = Dict(
+      "integer-count" => (
+        name="variable_integer_count",
+        variable=integer_variable,
+        per_assignment=true,
+        fresh_wildcard=false,
+      ),
+    )
+    integer_entry = only(WebQuantumSavory._admit_constructor_parameters(
+      [Dict(
+        "name" => "count",
+        "value" => Dict("kind" => "variable", "id" => "integer-count"),
+      )],
+      ContextualIntegerBackground;
+      variables=Dict("integer-count" => integer_variable),
+      parameter_context="Test background noise parameter",
+    ))
     _, integer_script_expression =
-      WebQuantumSavory._script_constructor_parameter_expression(
-        Dict(
-          "name" => "count",
-          "value" => Dict("kind" => "variable", "id" => "integer-count"),
-        ),
-        Dict(
-          "integer-count" => (
-            name="variable_integer_count",
-            variable=integer_variable,
-            per_assignment=true,
-            fresh_wildcard=false,
-            uses_default=false,
-          ),
-        ),
+      WebQuantumSavory._script_admitted_constructor_parameter_expression(
+        integer_entry,
+        integer_variable_bindings,
         "Test background noise";
         node_index=2,
-        declared_type=Int64,
-        field_schema=first(
-          QuantumSavory.constructor_schema(ContextualIntegerBackground).fields,
-        ),
       )
     @test occursin("Base.Int64(let\n    self = 2", integer_script_expression)
     @test !occursin("nodeid =", integer_script_expression)
@@ -6404,25 +6741,7 @@
       ),
     )
     @test nonnumeric_error isa WebQuantumSavory.APIError
-    @test occursin("does not authoritatively accept", nonnumeric_error.message)
-    script_nonnumeric_error = capture_error(
-      () -> WebQuantumSavory._script_constructor_parameter_expression(
-        only(nonnumeric_expression["parameters"]),
-        Dict{String,NamedTuple}(),
-        "Test background noise";
-        node_index=2,
-        declared_type=String,
-        field_schema=only(filter(
-          field -> field.name === :label,
-          QuantumSavory.constructor_schema(ContextualIntegerBackground).fields,
-        )),
-      ),
-    )
-    @test script_nonnumeric_error isa WebQuantumSavory.APIError
-    @test occursin(
-      "does not authoritatively accept",
-      script_nonnumeric_error.message,
-    )
+    @test occursin("does not accept a numeric expression", nonnumeric_error.message)
 
     function background_validation_error(background; variables=Any[])
       payload = deepcopy(test_payload)
@@ -6483,6 +6802,13 @@
     @test unknown_background isa WebQuantumSavory.APIError
     @test occursin("Unknown background noise type", unknown_background.message)
 
+    wrong_background_literal = background_validation_error(Dict(
+      "type" => "T1Decay",
+      "parameters" => [Dict("name" => "t1", "value" => "2.0")],
+    ))
+    @test wrong_background_literal isa WebQuantumSavory.APIError
+    @test occursin("does not match declared type", wrong_background_literal.message)
+
     unsupported_complex_error = capture_error(() ->
       instantiate_contextual_background([Dict(
           "name" => "values",
@@ -6493,18 +6819,16 @@
       @test unsupported_complex_error.status_code == 400
       @test unsupported_complex_error.error_code == "VALIDATION_ERROR"
       @test unsupported_complex_error.message ==
-        "Unsupported value for test background parameter 'values'"
+        "test background parameter 'values' does not match declared type 'Vector{Int64}'"
       @test unsupported_complex_error.details == Dict{String,Any}(
-        "parameter_name" => "values",
-        "constructor_type" => string(ContextualIntegerBackground),
-        "parameter_type" => "Vector{Int64}",
+        "declared_type" => "Vector{Int64}",
         "received_type" => "Vector{Any}",
       )
     end
 
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_typed_parameter!(
+      @test materialize_declared_test_parameter!(
         kwargs,
         :bounded,
         Float64,
@@ -6513,7 +6837,7 @@
         field_schema=bounded_schema,
       )
       @test kwargs[:bounded] == 0.75
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory._handle_typed_parameter!(
+      @test_throws WebQuantumSavory.APIError materialize_declared_test_parameter!(
         Dict{Symbol,Any}(),
         :bounded,
         Float64,
@@ -6522,7 +6846,7 @@
         field_schema=bounded_schema,
       )
 
-      sensitive_error = capture_error(() -> WebQuantumSavory._handle_typed_parameter!(
+      sensitive_error = capture_error(() -> materialize_declared_test_parameter!(
         Dict{Symbol,Any}(),
         :bounded,
         Float64,
@@ -6544,8 +6868,7 @@
     bounded_script_expression = WebQuantumSavory._script_value_expression(
       Float64,
       expression("1 / 2"),
-      "Bounded numeric";
-      field_schema=bounded_schema,
+      "Bounded numeric",
     )
     @test bounded_script_expression == "Base.Float64(1 / 2)"
     @test !occursin("isa Base.Real", bounded_script_expression)

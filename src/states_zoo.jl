@@ -17,7 +17,7 @@ _states_zoo_object_like(value) =
   value isa AbstractDict || startswith(string(typeof(value)), "JSON3.Object")
 
 function _states_zoo_entry(state_type::AbstractString)
-  id = strip(String(state_type))
+  id = String(state_type)
   schemas = QuantumSavory.StatesZoo.state_family_schemas()
   index = findfirst(schema -> string(nameof(schema.family)) == id, schemas)
   index === nothing && throw(validation_error(
@@ -123,13 +123,8 @@ function _states_zoo_preview_density_operator(state_type::AbstractString, state)
   return QuantumSavory.express(normalized.state), Float64(normalized.weight)
 end
 
-"""
-Validate one StatesZoo parameter object and construct only its allowlisted type.
-
-Parameter names and finite numeric values must exactly satisfy the selected
-simulator-owned `StateFamilySchema`, including open interval endpoints.
-"""
-function construct_states_zoo_state(state_type, parameters)
+"""Validate a StatesZoo family and parameter object without constructing a state."""
+function _validate_states_zoo_state(state_type, parameters)
   state_type isa AbstractString || throw(validation_error(
     "States Zoo field 'state_type' must be a string",
     Dict{String,Any}("received_type" => string(typeof(state_type))),
@@ -141,7 +136,6 @@ function construct_states_zoo_state(state_type, parameters)
     Dict{String,Any}("state_type" => id, "received_type" => string(typeof(parameters))),
   ))
 
-  T = entry.type
   parameter_schemas = entry.schema.parameters
   expected_names = string.(getproperty.(parameter_schemas, :name))
   _validate_states_zoo_object_keys(parameters, expected_names, "States Zoo parameters for '$id'")
@@ -172,8 +166,19 @@ function construct_states_zoo_state(state_type, parameters)
     push!(values, converted)
   end
 
+  return id, entry, values
+end
+
+"""
+Validate one StatesZoo parameter object and construct only its allowlisted type.
+
+Parameter names and finite numeric values must exactly satisfy the selected
+simulator-owned `StateFamilySchema`, including open interval endpoints.
+"""
+function construct_states_zoo_state(state_type, parameters)
+  id, entry, values = _validate_states_zoo_state(state_type, parameters)
   try
-    return T(values...)
+    return entry.type(values...)
   catch error
     isa(error, APIError) && rethrow(error)
     throw(validation_error(
@@ -186,8 +191,8 @@ function construct_states_zoo_state(state_type, parameters)
   end
 end
 
-"""Validate and construct the tagged value stored by a Symbolic variable."""
-function construct_states_zoo_recipe(recipe)
+"""Validate a tagged States Zoo recipe without constructing its simulator state."""
+function _validate_states_zoo_recipe(recipe)
   _states_zoo_object_like(recipe) || throw(validation_error(
     "States Zoo recipe must be an object",
     Dict{String,Any}("received_type" => string(typeof(recipe))),
@@ -201,9 +206,28 @@ function construct_states_zoo_recipe(recipe)
   get(recipe, "kind", nothing) == "states_zoo" || throw(validation_error(
     "States Zoo recipe field 'kind' must equal 'states_zoo'",
   ))
-  state_type = recipe["state_type"]
-  state = construct_states_zoo_state(state_type, recipe["parameters"])
-  state_type, _ = _states_zoo_entry(state_type)
+  state_type, entry, values = _validate_states_zoo_state(
+    recipe["state_type"],
+    recipe["parameters"],
+  )
+  return state_type, entry, values
+end
+
+"""Validate and construct the tagged value stored by a Symbolic variable."""
+function construct_states_zoo_recipe(recipe)
+  state_type, entry, values = _validate_states_zoo_recipe(recipe)
+  state = try
+    entry.type(values...)
+  catch error
+    isa(error, APIError) && rethrow(error)
+    throw(validation_error(
+      "Failed to construct States Zoo type '$state_type'",
+      Dict{String,Any}(
+        "state_type" => state_type,
+        "constructor_error" => sprint(showerror, error),
+      ),
+    ))
+  end
   try
     return QuantumSavory.StatesZoo.normalized_state_and_weight(state).state
   catch error
@@ -231,7 +255,7 @@ function parse_states_zoo_preview_payload(payload)
 
   state_type = payload["state_type"]
   state = construct_states_zoo_state(state_type, payload["parameters"])
-  return strip(String(state_type)), state
+  return String(state_type), state
 end
 
 """Render a state preview and return its PNG plus the original absolute trace."""

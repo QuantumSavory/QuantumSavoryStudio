@@ -5,16 +5,29 @@ using Dates
 using .Logger: @log_event
 
 const _NULLABLE_PARAMETER_SCALAR_TYPES = (
-  "Int",
   "Int64",
   "Float64",
-  "Float32",
   "String",
   "Bool",
 )
 const _EXACT_PARAMETER_SCALAR_TYPES = (_NULLABLE_PARAMETER_SCALAR_TYPES..., "Nothing")
 const _EXACT_PARAMETER_VECTOR_TYPES = ("Vector{Int64}", "Vector{Float64}")
-const _EXACT_PARAMETER_WILDCARD_TYPES = ("Wildcard", "QuantumSavory.Wildcard")
+const _EXACT_PARAMETER_WILDCARD_TYPES = ("QuantumSavory.Wildcard",)
+const _MAX_SAFE_JSON_INTEGER = Int64(9_007_199_254_740_991)
+const _SUPPORTED_VARIABLE_TYPES = Set((
+  "Int64",
+  "Float64",
+  "String",
+  "Bool",
+  "Nothing",
+  "QuantumSavory.Wildcard",
+  "Vector{Int64}",
+  "Vector{Float64}",
+  "Function",
+  "Lambda",
+  "Symbolic",
+  "default",
+))
 
 _is_constructor_default_source_alias(value) =
   value isa AbstractString && lowercase(strip(String(value))) == "default"
@@ -48,8 +61,9 @@ end
 
 Nonblank strings and Booleans retain their JSON types. Numeric scalars and vectors accept
 only finite real numbers other than Booleans; integer targets additionally
-require integral, representable values. Exact null/`"nothing"` and
-null/`"Wildcard"` wire sentinels construct their corresponding Julia values.
+require integral, JavaScript-safe values. Exact `"nothing"` and `"Wildcard"`
+wire sentinels resolve to their corresponding Julia values; JSON null is reserved
+for constructor omission.
 Nullable unions use the same rules as their scalar member.
 
 Returns a `Pair{Bool,Any}` whose first value indicates success. Failure returns
@@ -60,14 +74,14 @@ function _convert_parameter_value(ptype::AbstractString, value)
   ts = String(ptype)
 
   if ts in _EXACT_PARAMETER_WILDCARD_TYPES
-    value === nothing || (value isa AbstractString && value == "Wildcard") ||
+    value isa AbstractString && value == "Wildcard" ||
       return false => nothing
-    return true => QuantumSavory.Wildcard()
+    return true => QuantumSavory.W
   end
 
   nullable_member = _nullable_parameter_scalar_type(ts)
   if nullable_member !== nothing
-    if value === nothing || (value isa AbstractString && value == "nothing")
+    if value isa AbstractString && value == "nothing"
       return true => nothing
     end
     return _convert_parameter_value(nullable_member, value)
@@ -85,17 +99,17 @@ function _convert_parameter_value(ptype::AbstractString, value)
     return true => converted
   end
 
-  if ts in ("Int", "Int64", "Float64", "Float32")
+  if ts in ("Int64", "Float64")
     value isa Real && !(value isa Bool) || return false => nothing
     try
       isfinite(value) || return false => nothing
-      if ts in ("Int", "Int64")
+      if ts == "Int64"
         isinteger(value) || return false => nothing
-        target_type = ts == "Int" ? Int : Int64
-        return true => target_type(value)
+        -_MAX_SAFE_JSON_INTEGER <= value <= _MAX_SAFE_JSON_INTEGER ||
+          return false => nothing
+        return true => Int64(value)
       end
-      target_type = ts == "Float64" ? Float64 : Float32
-      converted = target_type(value)
+      converted = Float64(value)
       isfinite(converted) || return false => nothing
       return true => converted
     catch
@@ -107,7 +121,7 @@ function _convert_parameter_value(ptype::AbstractString, value)
     isempty(strip(converted)) && return false => nothing
     return true => converted
   elseif ts == "Nothing"
-    if value === nothing || (value isa AbstractString && value == "nothing")
+    if value isa AbstractString && value == "nothing"
       return true => nothing
     end
     return false => nothing
@@ -436,29 +450,16 @@ function _parse_variables(payload)
         "$context type 'default' is case-sensitive",
         Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
       ))
-    variable_type == "default" && value !== nothing && throw(validation_error(
-      "$context type 'default' requires a null value",
+    variable_type in _SUPPORTED_VARIABLE_TYPES || throw(validation_error(
+      "$context has unsupported type '$variable_type'",
       Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
     ))
-    variable_type in ("Function", "Lambda") &&
-      _is_constructor_default_source_alias(value) && throw(validation_error(
-        "$context $variable_type value cannot use a Default alias",
-        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-      ))
-    permits_null = variable_type == "default" ||
-      variable_type in ("Nothing", "Wildcard", "QuantumSavory.Wildcard")
-    value === nothing && !permits_null && throw(validation_error(
-      "$context field 'value' must not be null for type '$variable_type'",
-      Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-    ))
-    numeric_expression = _parse_numeric_expression(value; context=context)
-    if numeric_expression !== nothing &&
-       !(variable_type in NUMERIC_EXPRESSION_TARGETS)
-      throw(validation_error(
-        "$context numeric expression requires variable type 'Float64' or 'Int64'",
-        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-      ))
-    end
+    _validate_declared_wire_value(
+      variable_type,
+      value;
+      selected_type=variable_type,
+      context="$context value",
+    )
 
     variables[id] = Variable(id, name, variable_type, value)
     push!(variable_names, name)
@@ -548,6 +549,144 @@ function _collect_background_definitions(payload)
   return definitions
 end
 
+"""Classify and validate constructor parameters without evaluation or construction."""
+function _admit_constructor_parameters(
+  params,
+  constructor_type;
+  variables=Dict{String,Variable}(),
+  parameter_context::String="Constructor parameter",
+  declared_parameter_types=_constructor_parameter_types(constructor_type),
+  constructor_fields_by_name=_constructor_fields_by_name(constructor_type),
+)
+  admitted = Any[]
+  supplied_names = Set{String}()
+  required_names = _required_constructor_parameter_names(constructor_fields_by_name)
+
+  for (parameter_index, parameter) in enumerate(params)
+    _is_object_like(parameter) || throw(validation_error(
+      "$parameter_context $parameter_index must be an object",
+    ))
+    original_name = _required_nonempty_string(
+      parameter,
+      "name",
+      "$parameter_context $parameter_index",
+    )
+    original_name in supplied_names && throw(validation_error(
+      "Duplicate $parameter_context '$original_name'",
+    ))
+    push!(supplied_names, original_name)
+    haskey(declared_parameter_types, original_name) || throw(validation_error(
+      "Unknown $parameter_context '$original_name'",
+      Dict{String,Any}(
+        "parameter_name" => original_name,
+        "constructor_type" => string(constructor_type),
+      ),
+    ))
+
+    context = "$parameter_context '$original_name'"
+    declared_type = declared_parameter_types[original_name]
+    field_schema = get(constructor_fields_by_name, original_name, nothing)
+    transport_type = get(parameter, "type", nothing)
+    transport_type === nothing || _constructor_parameter_selected_type(
+      declared_type,
+      transport_type;
+      context,
+    )
+    haskey(parameter, "value") || throw(validation_error(
+      "$context missing required field: 'value'",
+    ))
+    value = parameter["value"]
+    if _constructor_parameter_is_omitted(value)
+      _reject_required_constructor_omission(
+        required_names,
+        original_name,
+        parameter_context,
+        constructor_type,
+      )
+      continue
+    end
+
+    reference = _parse_variable_reference(value; context)
+    named_tag = _named_tag_parameter_semantics(declared_type) !== nothing
+
+    variable = nothing
+    raw_value = value
+    selected_type = transport_type
+    if reference !== nothing
+      named_tag && throw(validation_error(
+        "Named tag type parameters cannot use variables",
+        Dict{String,Any}("parameter_name" => original_name),
+      ))
+      variable = get(variables, reference.id, nothing)
+      variable === nothing && throw(validation_error(
+        "Unknown variable reference: '$(reference.id)'",
+        Dict{String,Any}(
+          "variable_id" => reference.id,
+          "parameter_name" => original_name,
+        ),
+      ))
+      if _variable_uses_constructor_default(variable)
+        _reject_required_constructor_omission(
+          required_names,
+          original_name,
+          parameter_context,
+          constructor_type,
+        )
+        continue
+      end
+      _parameter_type_supports_variable_type(declared_type, variable.type) ||
+        throw(validation_error(
+          "Variable '$(variable.name)' is incompatible with $context",
+          Dict{String,Any}(
+            "variable_id" => variable.id,
+            "variable_type" => variable.type,
+            "parameter_name" => original_name,
+          ),
+        ))
+      transport_type === nothing ||
+        _transport_type_supports_variable_type(transport_type, variable.type) ||
+        throw(validation_error(
+          "Variable '$(variable.name)' branch does not match $context transport type",
+          Dict{String,Any}(
+            "variable_id" => variable.id,
+            "variable_type" => variable.type,
+            "transport_type" => transport_type,
+            "parameter_name" => original_name,
+          ),
+        ))
+      raw_value = variable.value
+      selected_type = transport_type === nothing ? variable.type : transport_type
+    end
+
+    classified = _classify_declared_wire_value(
+      declared_type,
+      raw_value;
+      selected_type,
+      field_schema,
+      context=variable === nothing ? context : "Variable '$(variable.name)' for $context",
+    )
+    push!(admitted, (
+      name=Symbol(original_name),
+      original_name,
+      raw_value,
+      admitted_value=classified.value,
+      branch=classified.branch,
+      minimum=classified.minimum,
+      maximum=classified.maximum,
+      handling_type=classified.handling_type,
+      variable,
+    ))
+  end
+
+  _require_all_constructor_parameters(
+    required_names,
+    Set(entry.original_name for entry in admitted),
+    parameter_context,
+    constructor_type,
+  )
+  return admitted
+end
+
 """
 Validate catalog-backed protocol and slot-background inputs before construction,
 including direct numeric expressions and every semantic Variable type.
@@ -591,131 +730,15 @@ function _validate_constructor_parameters(payload, variables)
       Dict{String,Any}("location" => location, "constructor_type" => raw_type),
     ))
 
-    constructor_fields_by_name = _constructor_fields_by_name(constructor_type)
-    declared_parameter_types = Dict(
-      name => field_schema.declared_type
-      for (name, field_schema) in pairs(constructor_fields_by_name)
-    )
-    required_names =
-      _required_constructor_parameter_names(constructor_fields_by_name)
-    parameters = definition["parameters"]
-    supplied_names = Set{String}()
-
-    for (parameter_index, parameter) in enumerate(parameters)
-      _is_object_like(parameter) || throw(validation_error(
-        "$location parameter $parameter_index must be an object",
-      ))
-      parameter_name = _required_nonempty_string(
-        parameter,
-        "name",
-        "$location parameter $parameter_index",
-      )
-      parameter_name in supplied_names && throw(validation_error(
-        "$location contains duplicate parameter '$parameter_name'",
-      ))
-      push!(supplied_names, parameter_name)
-
-      haskey(declared_parameter_types, parameter_name) || throw(validation_error(
-        "Unknown $(kind === :protocol ? "protocol" : "background noise") parameter '$parameter_name'",
-        Dict{String,Any}(
-          "parameter_name" => parameter_name,
-          "constructor_type" => raw_type,
-          "location" => location,
-        ),
-      ))
-      value = parameter["value"]
-      if _constructor_parameter_is_omitted(value)
-        _reject_required_constructor_omission(
-          required_names,
-          parameter_name,
-          "$location parameter",
-          constructor_type,
-        )
-        continue
-      end
-      context = "$location parameter '$parameter_name'"
-      declared_type = declared_parameter_types[parameter_name]
-
-      numeric_expression = _parse_numeric_expression(value; context=context)
-      if numeric_expression !== nothing
-        target = _numeric_expression_target_for_parameter(
-          declared_type,
-          get(parameter, "type", nothing),
-        )
-        target === nothing && throw(validation_error(
-          "$context does not accept a numeric expression",
-          Dict{String,Any}(
-            "parameter_name" => parameter_name,
-            "constructor_type" => raw_type,
-          ),
-        ))
-        continue
-      end
-
-      reference = _parse_variable_reference(value; context=context)
-      reference === nothing && continue
-      haskey(variables, reference.id) || throw(validation_error(
-        "Unknown variable reference: '$(reference.id)'",
-        Dict{String,Any}(
-          "variable_id" => reference.id,
-          "parameter_name" => parameter_name,
-          "location" => location,
-        ),
-      ))
-      variable = variables[reference.id]
-      _named_tag_parameter_semantics(declared_type) === nothing ||
-        throw(validation_error(
-          "Named tag type parameters cannot use variables",
-          Dict{String,Any}("parameter_name" => parameter_name),
-        ))
-      if _variable_uses_constructor_default(variable)
-        _reject_required_constructor_omission(
-          required_names,
-          parameter_name,
-          "$location parameter",
-          constructor_type,
-        )
-        continue
-      end
-      _parameter_type_supports_variable_type(declared_type, variable.type) ||
-        throw(validation_error(
-          "Variable '$(variable.name)' is incompatible with $context",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => parameter_name,
-          ),
-        ))
-
-      variable_expression = _parse_numeric_expression(
-        variable.value;
-        context="Variable '$(variable.name)'",
-      )
-      if variable_expression !== nothing
-        target = _numeric_expression_target_for_parameter(declared_type, variable.type)
-        target == variable.type || throw(validation_error(
-          "Variable '$(variable.name)' numeric expression is incompatible with $context",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => parameter_name,
-          ),
-        ))
-      end
-    end
-    _require_all_constructor_parameters(
-      required_names,
-      supplied_names,
-      location,
-      constructor_type,
+    _admit_constructor_parameters(
+      definition["parameters"],
+      constructor_type;
+      variables,
+      parameter_context="$location parameter",
     )
   end
 
   return true
-end
-
-function get_background_constructor_parameters(background_type)
-  QuantumSavory.constructor_schema(background_type).fields
 end
 
 function get_background_types()
@@ -850,20 +873,186 @@ function _constructor_numeric_bound(field_schema, field::Symbol)
   return number
 end
 
-function _numeric_expression_target_for_parameter(declared_type, client_type=nothing)
+"""Resolve one explicit transport descriptor strictly inside a constructor declaration."""
+function _constructor_parameter_selected_type(
+  declared_type,
+  selected_type;
+  context::String="Constructor parameter",
+)
+  selected_type isa AbstractString || throw(validation_error(
+    "$context field 'type' must be a nonblank string",
+  ))
+  selected = String(selected_type)
+  isempty(strip(selected)) && throw(validation_error(
+    "$context field 'type' must be a nonblank string",
+  ))
+
   members = try
     Base.uniontypes(declared_type)
   catch
     Any[declared_type]
   end
-  member_targets = Set(
-    string(member) for member in members
-    if string(member) in NUMERIC_EXPRESSION_TARGETS
-  )
-  if client_type isa AbstractString && String(client_type) in member_targets
-    return String(client_type)
+  named_tag_semantics = _named_tag_parameter_semantics(declared_type)
+  if named_tag_semantics !== nothing
+    if selected == "DataType"
+      return Type{<:QuantumSavory.AbstractTag}
+    elseif selected == "Nothing" && named_tag_semantics.nullable
+      return Nothing
+    end
   end
-  return length(member_targets) == 1 ? only(member_targets) : nothing
+
+  for member in members
+    member === Any && selected == "Any" && return Any
+    member === Function && selected == "Function" && return Function
+    member === Function && selected == "Lambda" && return "Lambda"
+    _is_symbolic_parameter_type(member) && selected == "Symbolic" && return member
+    string(member) == selected && return member
+  end
+  throw(validation_error(
+    "$context transport type '$selected' is not declared by the simulator",
+    Dict{String,Any}(
+      "transport_type" => selected,
+      "declared_type" => string(declared_type),
+    ),
+  ))
+end
+
+_classified_wire_value(
+  branch,
+  value,
+  handling_type;
+  minimum=nothing,
+  maximum=nothing,
+) = (; branch, value, handling_type, minimum, maximum)
+
+"""Classify one declared wire value without source evaluation or construction."""
+function _classify_declared_wire_value(
+  declared_type,
+  value;
+  selected_type=nothing,
+  field_schema=nothing,
+  context::String="Declared value",
+)
+  if declared_type == "default"
+    value === nothing || throw(validation_error(
+      "$context default branch must use exact JSON null",
+    ))
+    return nothing
+  end
+
+  handling_type = if selected_type === nothing
+    declared_type isa AbstractString ? String(declared_type) :
+      _declared_parameter_value_type(declared_type, value)
+  else
+    _constructor_parameter_selected_type(declared_type, selected_type; context)
+  end
+
+  numeric_expression = _parse_numeric_expression(value; context)
+  if numeric_expression !== nothing
+    target = string(handling_type)
+    target in NUMERIC_EXPRESSION_TARGETS || throw(validation_error(
+      "$context does not accept a numeric expression",
+    ))
+    return _classified_wire_value(
+      :numeric_expression,
+      numeric_expression,
+      handling_type;
+      minimum=_constructor_numeric_bound(field_schema, :minimum),
+      maximum=_constructor_numeric_bound(field_schema, :maximum),
+    )
+  end
+
+  named_tag_semantics = _named_tag_parameter_semantics(declared_type)
+  if named_tag_semantics !== nothing
+    if selected_type !== nothing
+      expected_type = value == "nothing" && named_tag_semantics.nullable ?
+        "Nothing" : "DataType"
+      String(selected_type) == expected_type || throw(validation_error(
+        "$context transport type '$(selected_type)' does not match its exact value branch",
+        Dict{String,Any}("expected_type" => expected_type),
+      ))
+    end
+    resolved = _resolve_named_abstract_tag_type(
+      value;
+      nullable=named_tag_semantics.nullable,
+      context,
+    )
+    return _classified_wire_value(:named_tag, resolved, handling_type)
+  end
+
+  type_name = string(handling_type)
+
+  if handling_type === Any || type_name == "Any"
+    return _classified_wire_value(
+      :opaque,
+      _validate_opaque_wire_value(value, context),
+      handling_type,
+    )
+  end
+
+  special_type = _special_parameter_type(handling_type)
+  if special_type in ("Function", "Lambda")
+    value isa AbstractString && !isempty(strip(String(value))) || throw(validation_error(
+      "$context $special_type value must be an exact nonblank string",
+    ))
+    _is_constructor_default_source_alias(value) && throw(validation_error(
+      "$context $special_type value cannot use a Default alias",
+    ))
+    return _classified_wire_value(:function_source, String(value), handling_type)
+  end
+
+  if _is_symbolic_parameter_type(handling_type) || type_name == "Symbolic"
+    if _states_zoo_object_like(value) && get(value, "kind", nothing) == "states_zoo"
+      _validate_states_zoo_recipe(value)
+      return _classified_wire_value(:states_zoo, value, handling_type)
+    end
+    value isa AbstractString && !isempty(strip(String(value))) || throw(validation_error(
+      "$context Symbolic value must be a States Zoo recipe or exact nonblank string",
+    ))
+    return _classified_wire_value(:symbolic_source, String(value), handling_type)
+  end
+
+  converted, converted_value = _convert_parameter_value(type_name, value)
+  converted || throw(validation_error(
+    "$context does not match declared type '$type_name'",
+    Dict{String,Any}(
+      "declared_type" => type_name,
+      "received_type" => string(typeof(value)),
+    ),
+  ))
+
+  minimum = nothing
+  maximum = nothing
+  if converted_value isa Real && !(converted_value isa Bool)
+    minimum = _constructor_numeric_bound(field_schema, :minimum)
+    maximum = _constructor_numeric_bound(field_schema, :maximum)
+    minimum !== nothing && converted_value < minimum && throw(validation_error(
+      "$context is below its declared minimum",
+      Dict{String,Any}("minimum" => minimum),
+    ))
+    maximum !== nothing && converted_value > maximum && throw(validation_error(
+      "$context is above its declared maximum",
+      Dict{String,Any}("maximum" => maximum),
+    ))
+  end
+  return _classified_wire_value(
+    :literal,
+    converted_value,
+    handling_type;
+    minimum,
+    maximum,
+  )
+end
+
+"""
+Validate and convert one declared wire value without evaluating source or invoking a
+simulator constructor.
+
+The simulator declaration remains authoritative. `selected_type` may select only a
+member of that declaration; it never widens it.
+"""
+function _validate_declared_wire_value(args...; kwargs...)
+  return _classify_declared_wire_value(args...; kwargs...).value
 end
 
 """Mirror the frontend's semantic Variable-to-constructor compatibility rules."""
@@ -872,26 +1061,33 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
   variable_name = String(variable_type)
   isempty(variable_name) && return false
   variable_name == "default" && return true
-
   members = try
     Base.uniontypes(declared_type)
   catch
     Any[declared_type]
   end
   return any(members) do member
-    member === Any && return true
+    member === Any && return false
     member_name = string(member)
     if member === Function
       return variable_name in ("Function", "Lambda")
     elseif _is_symbolic_parameter_type(member)
       return variable_name == "Symbolic"
     elseif member === QuantumSavory.Wildcard
-      return variable_name in ("Wildcard", "QuantumSavory.Wildcard")
-    elseif member in (Int, Int64)
-      return variable_name in ("Int", "Int64")
+      return variable_name == "QuantumSavory.Wildcard"
+    elseif member === Int64
+      return variable_name == "Int64"
     end
     return member_name == variable_name
   end
+end
+
+"""Require a minimized parameter descriptor to identify the linked Variable branch."""
+function _transport_type_supports_variable_type(transport_type, variable_type)
+  transport_type isa AbstractString && variable_type isa AbstractString || return false
+  transport = String(transport_type)
+  variable = String(variable_type)
+  return transport == variable
 end
 
 """Whether a Variable requests omission of its assigned constructor keyword."""
@@ -909,9 +1105,8 @@ function _declared_parameter_value_type(declared_type, value)
   length(members) == 1 && return only(members)
 
   if value isa AbstractString
-    stripped = strip(value)
-    stripped == "nothing" && Nothing in members && return Nothing
-    stripped == "Wildcard" && QuantumSavory.Wildcard in members && return QuantumSavory.Wildcard
+    value == "nothing" && Nothing in members && return Nothing
+    value == "Wildcard" && QuantumSavory.Wildcard in members && return QuantumSavory.Wildcard
     Function in members && return Function
     String in members && return String
   elseif value isa Function && Function in members
@@ -927,25 +1122,6 @@ function _declared_parameter_value_type(declared_type, value)
   end
   return declared_type
 end
-
-"""Refine a union member only within the authoritative constructor declaration."""
-function _constructor_parameter_handling_type(declared_type, client_type, value)
-  members = Base.uniontypes(declared_type)
-  if client_type isa AbstractString
-    client_type_name = String(client_type)
-    client_type_name == "Lambda" && Function in members && return "Lambda"
-    if client_type_name == "Symbolic"
-      symbolic_member = findfirst(_is_symbolic_parameter_type, members)
-      symbolic_member === nothing || return members[symbolic_member]
-    end
-    selected_member = findfirst(member -> string(member) == client_type_name, members)
-    selected_member === nothing || return members[selected_member]
-  end
-  return _declared_parameter_value_type(declared_type, value)
-end
-
-_protocol_parameter_handling_type(declared_type, client_type, value) =
-  _constructor_parameter_handling_type(declared_type, client_type, value)
 
 function parse_pt_type(parameters)
   result = []
@@ -965,7 +1141,7 @@ function parse_pt_type(parameters)
     if named_tag_semantics !== nothing
       members = Base.uniontypes(t)
       wire_members = [
-        member == Type{<:QuantumSavory.AbstractTag} ? "Type{<:AbstractTag}" : string(member)
+        member == Type{<:QuantumSavory.AbstractTag} ? "DataType" : string(member)
         for member in members
       ]
       wire_type = length(wire_members) == 1 ? only(wire_members) : wire_members
@@ -1121,7 +1297,7 @@ function _validate_wire_value(
     elseif kind == NUMERIC_EXPRESSION_KIND
       _parse_numeric_expression(value; context)
     elseif kind == "states_zoo"
-      construct_states_zoo_recipe(value)
+      _validate_states_zoo_recipe(value)
     else
       throw(validation_error(
         "$context field 'kind' must be 'variable', 'numeric_expression', or 'states_zoo'",
@@ -1179,20 +1355,7 @@ function _validate_protocol_parameter(parameter, context::String)
   )
   _required_nonempty_string(parameter, "name", context)
 
-  parameter_type = parameter["type"]
-  valid_type = if parameter_type isa AbstractString
-    !isempty(strip(String(parameter_type)))
-  elseif parameter_type isa AbstractVector
-    !isempty(parameter_type) && all(
-      value -> value isa AbstractString && !isempty(strip(String(value))),
-      parameter_type,
-    )
-  else
-    false
-  end
-  valid_type || throw(validation_error(
-    "$context field 'type' must be a nonblank string or a nonempty array of nonblank strings",
-  ))
+  _required_nonempty_string(parameter, "type", context)
   _validate_wire_value(
     parameter["value"];
     allow_variable_reference=true,
@@ -1278,7 +1441,11 @@ function _validate_slot(slot, context::String, slot_ids::Set{String})
   )
   slot_id = _required_nonempty_string(slot, "id", context)
   _claim_unique_payload_id!(slot_ids, slot_id, "slot")
-  _required_nonempty_string(slot, "type", context)
+  slot_type = _required_nonempty_string(slot, "type", context)
+  _resolve_slot_type_from_string(slot_type) === nothing && throw(validation_error(
+    "Unknown slot type: '$slot_type'",
+    Dict{String,Any}("slot_type" => slot_type, "location" => context),
+  ))
   _validate_background_noise(slot["backgroundNoise"], "$context background noise")
   return slot
 end
@@ -1670,7 +1837,7 @@ function get_network_time_tracker(network)
 end
 
 function _resolve_protocol_type_from_string(type_str::AbstractString)
-  type_id = strip(String(type_str))
+  type_id = String(type_str)
 
   if type_id == MOCK_BROKEN_PROTOCOL_TYPE
     if mock_broken_protocol_enabled()
@@ -1735,7 +1902,7 @@ function _instantiate_noise(
 end
 
 function _resolve_noise_type_from_string(type_str::AbstractString)
-  type_id = strip(String(type_str))
+  type_id = String(type_str)
 
   if type_id == "default"
     return nothing # this now means no noise
@@ -1754,7 +1921,7 @@ function _resolve_noise_type_from_string(type_str::AbstractString)
 end
 
 function _resolve_slot_type_from_string(type_str::AbstractString)
-  type_id = strip(String(type_str))
+  type_id = String(type_str)
   schemas = QuantumSavory.slot_schemas()
   index = findfirst(
     schema -> string(nameof(schema.constructor)) == type_id,
@@ -1778,118 +1945,83 @@ function _resolve_type_from_string(type_str::AbstractString, type_group::Symbol)
   end
 end
 
-"""
-Handle Function or Lambda parameter conversion.
-
-The optional `self_node_index` enables node-relative comparison functions for
-node protocols. Leave it as `nothing` for edge and floating protocols.
-"""
-function _handle_function_lambda_parameter!(
+function _materialize_function_source!(
   kwargs::Dict{Symbol,Any},
   name::Symbol,
   special_type::String,
-  value,
+  source::String,
   state=nothing;
   self_node_index::Union{Nothing,Int}=nothing,
   node_name_to_index::Dict{String,Int}=Dict{String,Int}(),
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
 )
-  _is_constructor_default_source_alias(value) && throw(validation_error(
-    "Parameter '$(name)' cannot use a Default alias for $special_type",
-  ))
-  if isa(value, Function)
-    kwargs[name] = value
-    return true
-  elseif isa(value, String)
-    # Try to resolve by name first (works for both Function and Lambda cases),
-    # then fall back to creating a lambda from code.
-    resolved = resolve_function_reference(value)
-    resolved === nothing && (resolved = resolve_self_comparison_reference(value, self_node_index))
-    if resolved === nothing && special_type == "Lambda"
-      require_unsafe_code_evaluation()
-      try
-        resolved = create_lambda(
-          value;
-          node_name_to_index=node_name_to_index,
-          self_node_index=self_node_index,
-          edge_context=edge_context,
-        )
-        # Validate the lambda - try calling it with a test value if it's a filter
-        if name == :filter || name == :chooseslotA || name == :chooseslotB
-          msg = "Created lambda for parameter: $name"
-          if state !== nothing
-            @log_event state Logging.Info msg parameter_name=string(name) lambda_string=value
-          else
-            @info msg parameter_name=name lambda_string=value
-          end
-          
-          # Warn about common mistakes
-          if !occursin("return", value) && !occursin("=>", value)
-            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Slot choosers must return an integer; filters must return a boolean."
-            if state !== nothing
-              @log_event state Logging.Warn warning_msg parameter_name=string(name) lambda_string=value
-            else
-              @warn warning_msg parameter_name=name lambda_string=value
-            end
-          end
-        end
-      catch e
-        isa(e, APIError) && rethrow(e)
-        msg = "Failed to create lambda from string"
+  resolved = resolve_function_reference(source)
+  resolved === nothing &&
+    (resolved = resolve_self_comparison_reference(source, self_node_index))
+  if resolved === nothing && special_type == "Lambda"
+    require_unsafe_code_evaluation()
+    try
+      resolved = create_lambda(
+        source;
+        node_name_to_index,
+        self_node_index,
+        edge_context,
+      )
+      if name in (:filter, :chooseslotA, :chooseslotB)
+        msg = "Created lambda for parameter: $name"
         if state !== nothing
-          @log_event state Logging.Warn msg parameter_name=string(name) value=value error=string(e)
+          @log_event state Logging.Info msg parameter_name=string(name) lambda_string=source
         else
-          @warn msg parameter_name=name value=value error=e
+          @info msg parameter_name=name lambda_string=source
+        end
+        if !occursin("return", source) && !occursin("=>", source)
+          warning_msg = "Lambda may not return a value; slot choosers need an integer and filters a boolean."
+          if state !== nothing
+            @log_event state Logging.Warn warning_msg parameter_name=string(name) lambda_string=source
+          else
+            @warn warning_msg parameter_name=name lambda_string=source
+          end
         end
       end
-    end
-    if resolved !== nothing
-      kwargs[name] = resolved
-      return true
-    else
-      msg = "Could not resolve function/lambda parameter"
+    catch error
+      error isa APIError && rethrow(error)
+      msg = "Failed to create lambda from string"
       if state !== nothing
-        @log_event state Logging.Warn msg parameter_name=string(name) value=value special_type=special_type
+        @log_event state Logging.Warn msg parameter_name=string(name) value=source error=string(error)
       else
-        @warn msg parameter_name=name value=value special_type=special_type
+        @warn msg parameter_name=name value=source error
       end
-      return false
     end
-  else
-    msg = "Function/Lambda parameter has unsupported value type"
+  end
+  if resolved === nothing
+    msg = "Could not resolve function/lambda parameter"
     if state !== nothing
-      @log_event state Logging.Warn msg parameter_name=string(name) value_type=string(typeof(value))
+      @log_event state Logging.Warn msg parameter_name=string(name) value=source special_type=special_type
     else
-      @warn msg parameter_name=name value_type=typeof(value)
+      @warn msg parameter_name=name value=source special_type=special_type
     end
     return false
   end
+  kwargs[name] = resolved
+  return true
 end
 
-"""
-Handle Symbolic parameter conversion
-"""
-function _handle_symbolic_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, value)
-  if isa(value, String)
-    require_unsafe_code_evaluation()
-    try
-      # Use evaluate_symbolic_expression to get the actual symbolic object
-      success, symbolic_value, error = Sandbox.evaluate_symbolic_expression(value)
-      if success
-        kwargs[name] = symbolic_value  # Pass the actual evaluated symbolic object
-        return true
-      else
-        @warn "Failed to evaluate symbolic expression" parameter_name=name value=value error=error
-      end
-    catch e
-      isa(e, APIError) && rethrow(e)
-      @warn "Failed to create symbolic expression from string" parameter_name=name value=value error=e
+function _materialize_symbolic_source!(
+  kwargs::Dict{Symbol,Any},
+  name::Symbol,
+  source::String,
+)
+  require_unsafe_code_evaluation()
+  try
+    success, symbolic_value, error = Sandbox.evaluate_symbolic_expression(source)
+    if success
+      kwargs[name] = symbolic_value
+      return true
     end
-  elseif _states_zoo_object_like(value) && get(value, "kind", nothing) == "states_zoo"
-    kwargs[name] = construct_states_zoo_recipe(value)
-    return true
-  else
-    @warn "Symbolic parameter has unsupported value type" parameter_name=name value_type=typeof(value)
+    @warn "Failed to evaluate symbolic expression" parameter_name=name value=source error
+  catch error
+    error isa APIError && rethrow(error)
+    @warn "Failed to create symbolic expression from string" parameter_name=name value=source error
   end
   return false
 end
@@ -1931,14 +2063,55 @@ function _handle_numeric_expression_parameter!(
   end
 end
 
-"""Assign an exact supported constructor value, returning false on mismatch."""
-function _handle_regular_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, ptype::String, value)
-  ok, converted = _convert_parameter_value(ptype, value)
-  if ok
-    kwargs[name] = converted
+"""Materialize one already classified constructor assignment."""
+function _materialize_admitted_constructor_parameter!(
+  kwargs::Dict{Symbol,Any},
+  entry,
+  ctx::Dict{Symbol,Any},
+  state=nothing,
+)
+  if entry.branch in (:literal, :opaque, :named_tag)
+    kwargs[entry.name] = entry.admitted_value
     return true
+  elseif entry.branch === :numeric_expression
+    return _handle_numeric_expression_parameter!(
+      kwargs,
+      entry.name,
+      string(entry.handling_type),
+      entry.admitted_value,
+      ctx;
+      minimum=entry.minimum,
+      maximum=entry.maximum,
+    )
+  elseif entry.branch === :function_source
+    return _materialize_function_source!(
+      kwargs,
+      entry.name,
+      string(entry.handling_type),
+      entry.admitted_value,
+      state;
+      self_node_index=get(ctx, :node, nothing),
+      node_name_to_index=get(
+        ctx,
+        NODE_NAME_TO_INDEX_CONTEXT_KEY,
+        Dict{String,Int}(),
+      ),
+      edge_context=get(ctx, EDGE_FUNCTION_CONTEXT_KEY, nothing),
+    )
+  elseif entry.branch === :states_zoo
+    kwargs[entry.name] = construct_states_zoo_recipe(entry.admitted_value)
+    return true
+  elseif entry.branch === :symbolic_source
+    return _materialize_symbolic_source!(
+      kwargs,
+      entry.name,
+      entry.admitted_value,
+    )
   end
-  return false
+  throw(server_error(
+    "Runtime received an unknown admitted constructor branch",
+    Dict{String,Any}("branch" => string(entry.branch)),
+  ))
 end
 
 function _special_parameter_type(p_raw_type)
@@ -1952,101 +2125,6 @@ function _special_parameter_type(p_raw_type)
     end
   end
   return nothing
-end
-
-"""Convert and assign one concrete typed value to a protocol keyword."""
-function _handle_typed_parameter!(
-  kwargs,
-  name,
-  p_raw_type,
-  value,
-  ctx,
-  state=nothing;
-  field_schema=nothing,
-  parameter_context::String="Constructor parameter",
-)
-  ptype = p_raw_type === nothing ? "Any" : string(p_raw_type)
-  special_type = _special_parameter_type(p_raw_type)
-
-  try
-    debug_msg = "Processing parameter: $name, type: $ptype, special_type: $special_type"
-    if state !== nothing
-      @log_event state Logging.Debug debug_msg
-    else
-      @debug debug_msg
-    end
-
-    numeric_expression = _parse_numeric_expression(
-      value;
-      context="$parameter_context '$(name)'",
-    )
-    if numeric_expression !== nothing
-      target_type = _numeric_expression_target(p_raw_type)
-      target_type === nothing && throw(validation_error(
-        "$parameter_context '$(name)' does not authoritatively accept a Float64 or Int64 expression",
-      ))
-      return _handle_numeric_expression_parameter!(
-        kwargs,
-        name,
-        target_type,
-        numeric_expression,
-        ctx;
-        minimum=_constructor_numeric_bound(field_schema, :minimum),
-        maximum=_constructor_numeric_bound(field_schema, :maximum),
-      )
-    end
-
-    if p_raw_type isa Type && value isa p_raw_type &&
-       !_is_exact_parameter_value_type(string(p_raw_type))
-      kwargs[name] = value
-      return true
-    end
-
-    if special_type == "Function" || special_type == "Lambda"
-      return _handle_function_lambda_parameter!(
-        kwargs,
-        name,
-        special_type,
-        value,
-        state;
-        self_node_index=get(ctx, :node, nothing),
-        node_name_to_index=get(
-          ctx,
-          NODE_NAME_TO_INDEX_CONTEXT_KEY,
-          Dict{String,Int}(),
-        ),
-        edge_context=get(ctx, EDGE_FUNCTION_CONTEXT_KEY, nothing),
-      )
-    elseif special_type == "Symbolic"
-      return _handle_symbolic_parameter!(kwargs, name, value)
-    else
-      converted = _handle_regular_parameter!(kwargs, name, ptype, value)
-      if converted && kwargs[name] isa Real && !(kwargs[name] isa Bool)
-        minimum = _constructor_numeric_bound(field_schema, :minimum)
-        maximum = _constructor_numeric_bound(field_schema, :maximum)
-        minimum !== nothing && kwargs[name] < minimum && throw(validation_error(
-          "$parameter_context '$(name)' is below its minimum",
-          Dict{String,Any}("parameter_name" => string(name), "minimum" => minimum),
-        ))
-        maximum !== nothing && kwargs[name] > maximum && throw(validation_error(
-          "$parameter_context '$(name)' is above its maximum",
-          Dict{String,Any}("parameter_name" => string(name), "maximum" => maximum),
-        ))
-      end
-      return converted
-    end
-  catch e
-    isa(e, APIError) && rethrow(e)
-    msg = "Failed to convert parameter"
-    if state !== nothing
-      @log_event state Logging.Warn msg parameter_name=string(name) parameter_type=ptype value=value error=string(e)
-    else
-      @warn msg parameter_name=name parameter_type=ptype value=value error=e
-    end
-    # Report conversion failure; catalog-authoritative callers reject an
-    # explicitly supplied invalid value.
-    return false
-  end
 end
 
 """
@@ -2067,180 +2145,41 @@ function _constructor_parameter_kwargs(
 )
   kwargs = Dict{Symbol,Any}()
   variable_assignments = Dict{String,Any}[]
-  supplied_names = Set{String}()
-  required_names =
-    _required_constructor_parameter_names(constructor_fields_by_name)
+  admitted = _admit_constructor_parameters(
+    params,
+    constructor_type;
+    variables,
+    parameter_context,
+    declared_parameter_types,
+    constructor_fields_by_name,
+  )
 
-  for (parameter_index, parameter) in enumerate(params)
-    _is_object_like(parameter) || throw(validation_error(
-      "$parameter_context $parameter_index must be an object",
-    ))
-    original_name = _required_nonempty_string(
-      parameter,
-      "name",
-      "$parameter_context $parameter_index",
-    )
-    original_name in supplied_names && throw(validation_error(
-      "Duplicate $parameter_context '$original_name'",
-    ))
-    push!(supplied_names, original_name)
-    haskey(declared_parameter_types, original_name) || throw(validation_error(
-      "Unknown $parameter_context '$original_name'",
-      Dict{String,Any}(
-        "parameter_name" => original_name,
-        "constructor_type" => string(constructor_type),
-      ),
-    ))
-
-    value = get(parameter, "value", nothing)
-    if _constructor_parameter_is_omitted(value)
-      _reject_required_constructor_omission(
-        required_names,
-        original_name,
-        parameter_context,
-        constructor_type,
-      )
-      continue
-    end
-
-    name = Symbol(original_name)
-    declared_type = declared_parameter_types[original_name]
-    field_schema = get(constructor_fields_by_name, original_name, nothing)
-    named_tag_semantics = _named_tag_parameter_semantics(declared_type)
-
-    if named_tag_semantics !== nothing
-      _parse_variable_reference(
-        value;
-        context="$parameter_context '$original_name'",
-      ) === nothing || throw(validation_error(
-        "Named tag type parameters cannot use variables",
-        Dict{String,Any}("parameter_name" => original_name),
-      ))
-      kwargs[name] = _resolve_named_abstract_tag_type(
-        value;
-        nullable=named_tag_semantics.nullable,
-        context="$parameter_context '$original_name'",
-      )
-      continue
-    end
-
-    reference = _parse_variable_reference(
-      value;
-      context="$parameter_context '$original_name'",
-    )
-    if reference !== nothing
-      variable = get(variables, reference.id, nothing)
-      variable === nothing && throw(validation_error(
-        "Unknown variable reference: '$(reference.id)'",
-        Dict{String,Any}(
-          "variable_id" => reference.id,
-          "parameter_name" => original_name,
-        ),
-      ))
-      if _variable_uses_constructor_default(variable)
-        _reject_required_constructor_omission(
-          required_names,
-          original_name,
-          parameter_context,
-          constructor_type,
-        )
-        continue
-      end
-      _parameter_type_supports_variable_type(declared_type, variable.type) ||
-        throw(validation_error(
-          "Variable '$(variable.name)' is incompatible with $parameter_context '$original_name'",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => original_name,
-          ),
-        ))
-
-      variable_expression = _parse_numeric_expression(
-        variable.value;
-        context="Variable '$(variable.name)'",
-      )
-      if variable_expression !== nothing
-        target_type = _numeric_expression_target_for_parameter(
-          declared_type,
-          variable.type,
-        )
-        target_type == variable.type || throw(validation_error(
-          "Variable '$(variable.name)' numeric expression is incompatible with $parameter_context '$original_name'",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => original_name,
-          ),
-        ))
-      end
-
-      handling_type = _constructor_parameter_handling_type(
-        declared_type,
-        variable.type,
-        variable.value,
-      )
-      converted = _handle_typed_parameter!(
-        kwargs,
-        name,
-        handling_type,
-        variable.value,
-        ctx,
-        state;
-        field_schema,
-        parameter_context,
-      )
-      converted || throw(validation_error(
-        "Failed to convert variable '$(variable.name)' for $parameter_context '$original_name'",
-        Dict{String,Any}(
-          "variable_id" => variable.id,
-          "variable_name" => variable.name,
-          "variable_type" => variable.type,
-          "parameter_name" => original_name,
-        ),
-      ))
-      push!(variable_assignments, Dict{String,Any}(
-        "variable_id" => variable.id,
-        "variable_name" => variable.name,
-        "variable_type" => variable.type,
-        "parameter_name" => original_name,
-        "parameter_type" => string(get(parameter, "type", "Any")),
-      ))
-      continue
-    end
-
-    handling_type = _constructor_parameter_handling_type(
-      declared_type,
-      get(parameter, "type", nothing),
-      value,
-    )
-    converted = _handle_typed_parameter!(
+  for entry in admitted
+    converted = _materialize_admitted_constructor_parameter!(
       kwargs,
-      name,
-      handling_type,
-      value,
+      entry,
       ctx,
-      state;
-      field_schema,
-      parameter_context,
+      state,
     )
     converted || throw(validation_error(
-      "Unsupported value for $parameter_context '$original_name'",
+      entry.variable === nothing ?
+        "Unsupported value for $parameter_context '$(entry.original_name)'" :
+        "Failed to convert variable '$(entry.variable.name)' for $parameter_context '$(entry.original_name)'",
       Dict{String,Any}(
-        "parameter_name" => original_name,
+        "parameter_name" => entry.original_name,
         "constructor_type" => string(constructor_type),
-        "parameter_type" => string(declared_type),
-        "received_type" => string(typeof(value)),
+        "received_type" => string(typeof(entry.raw_value)),
       ),
     ))
+    entry.variable === nothing && continue
+    push!(variable_assignments, Dict{String,Any}(
+      "variable_id" => entry.variable.id,
+      "variable_name" => entry.variable.name,
+      "variable_type" => entry.variable.type,
+      "parameter_name" => entry.original_name,
+      "parameter_type" => string(entry.handling_type),
+    ))
   end
-
-  _require_all_constructor_parameters(
-    required_names,
-    Set(string(name) for name in keys(kwargs)),
-    parameter_context,
-    constructor_type,
-  )
 
   return kwargs, variable_assignments
 end

@@ -480,7 +480,7 @@
         parameter -> parameter["field"] == "tag",
         protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)]["parameters"],
       ))
-      @test entangler_tag["type"] == ["Nothing", "Type{<:AbstractTag}"]
+      @test entangler_tag["type"] == ["Nothing", "DataType"]
       @test entangler_tag["kind"] == "named_tag_type"
       @test entangler_tag["nullable"] === true
 
@@ -488,7 +488,7 @@
         parameter -> parameter["field"] == "tag",
         virtual_protocol["parameters"],
       ))
-      @test consumer_tag["type"] == "Type{<:AbstractTag}"
+      @test consumer_tag["type"] == "DataType"
       @test consumer_tag["kind"] == "named_tag_type"
       @test consumer_tag["nullable"] === false
   end
@@ -1336,6 +1336,9 @@
       @test contract["components"]["schemas"]["ProtocolParameter"]["properties"][
         "value"
       ]["\$ref"] == "#/components/schemas/ConstructorParameterValue"
+      @test contract["components"]["schemas"]["ProtocolParameter"]["properties"][
+        "type"
+      ]["type"] == "string"
       @test contract["components"]["schemas"]["SimulationVariable"]["properties"][
         "value"
       ]["\$ref"] == "#/components/schemas/VariableDefinitionValue"

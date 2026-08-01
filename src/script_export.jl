@@ -342,6 +342,26 @@ function _script_literal(value, context::String)
   ))
 end
 
+"""Render admitted recursively untagged JSON as a Julia literal."""
+function _script_opaque_literal(value, context::String)
+  if _is_object_like(value)
+    entries = sort!(collect(pairs(value)); by=entry -> string(first(entry)))
+    isempty(entries) && return "Dict{String,Any}()"
+    rendered = [
+      repr(string(key)) * " => " *
+      _script_opaque_literal(nested_value, "$context field '$(string(key))'")
+      for (key, nested_value) in entries
+    ]
+    return "Dict{String,Any}(" * join(rendered, ", ") * ")"
+  elseif value isa AbstractVector
+    return "Any[" * join((
+      _script_opaque_literal(item, "$context item $index")
+      for (index, item) in enumerate(value)
+    ), ", ") * "]"
+  end
+  return _script_literal(value, context)
+end
+
 function _script_raw_expression(value, context::String)
   if !(value isa AbstractString)
     return _script_literal(value, context)
@@ -707,6 +727,30 @@ function _script_function_expression(
   )
 end
 
+function _script_numeric_source_expression(
+  source::AbstractString,
+  target_type::String,
+  node_index,
+  context::String;
+  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
+)
+  parsed = _script_validate_source(source, context)
+  references = _script_assignment_context_references(parsed)
+  context_bindings = _script_assignment_bindings(
+    node_index,
+    edge_context,
+    references,
+  )
+
+  target_constructor = target_type == "Float64" ? "Base.Float64" : "Base.Int64"
+  source_expression = _script_user_source_expression(
+    source,
+    parsed,
+    context_bindings,
+  )
+  return "$target_constructor$source_expression"
+end
+
 function _script_numeric_expression(
   value,
   target_type::String,
@@ -718,21 +762,13 @@ function _script_numeric_expression(
   expression === nothing && throw(validation_error(
     "$context must use the numeric-expression tagged representation",
   ))
-  parsed = _script_validate_source(expression.source, context)
-  references = _script_assignment_context_references(parsed)
-  context_bindings = _script_assignment_bindings(
-    node_index,
-    edge_context,
-    references,
-  )
-
-  target_constructor = target_type == "Float64" ? "Base.Float64" : "Base.Int64"
-  source_expression = _script_user_source_expression(
+  return _script_numeric_source_expression(
     expression.source,
-    parsed,
-    context_bindings,
+    target_type,
+    node_index,
+    context;
+    edge_context,
   )
-  return "$target_constructor$source_expression"
 end
 
 function _script_validate_deferred_lambda(value, context::String)
@@ -758,9 +794,6 @@ function _script_states_zoo_expression(
   return_trace::Bool=false,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
-  # Constructing the allowlisted symbolic value validates exact keys, ranges,
-  # and the constructor without evaluating user-provided Julia source.
-  construct_states_zoo_recipe(recipe)
   state_type = String(recipe["state_type"])
   _, entry = _states_zoo_entry(state_type)
   arguments = [
@@ -836,28 +869,6 @@ function _script_regular_expression(
   ))
 end
 
-function _script_assert_constructor_numeric_bounds(
-  raw_type,
-  value,
-  field_schema,
-  context::String,
-)
-  field_schema === nothing && return nothing
-  converted, converted_value = _convert_parameter_value(
-    _script_declared_type(raw_type),
-    value,
-  )
-  if converted && converted_value isa Real && !(converted_value isa Bool)
-    minimum = _constructor_numeric_bound(field_schema, :minimum)
-    maximum = _constructor_numeric_bound(field_schema, :maximum)
-    minimum !== nothing && converted_value < minimum &&
-      throw(validation_error("$context is below its minimum"))
-    maximum !== nothing && converted_value > maximum &&
-      throw(validation_error("$context is above its maximum"))
-  end
-  return nothing
-end
-
 function _script_value_expression(
   raw_type,
   value,
@@ -865,7 +876,6 @@ function _script_value_expression(
   node_index=nothing,
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-  field_schema=nothing,
 )
   numeric_expression = _parse_numeric_expression(value; context)
   if numeric_expression !== nothing
@@ -894,12 +904,6 @@ function _script_value_expression(
   elseif special_type == "Symbolic"
     return _script_symbolic_expression(value, context; imports)
   end
-  _script_assert_constructor_numeric_bounds(
-    raw_type,
-    value,
-    field_schema,
-    context,
-  )
   return _script_regular_expression(raw_type, value, context; imports)
 end
 
@@ -1019,41 +1023,31 @@ function _script_noise_expression(
   type_name = noise_definition["type"]
   type_name == "default" && return "nothing"
   parameters = noise_definition["parameters"]
+  parameters isa AbstractVector || throw(validation_error(
+    "$context parameters must be an array",
+  ))
 
   noise_type = _resolve_type_from_string(type_name, :noise)
   noise_type === nothing && throw(validation_error("$context has unknown type '$type_name'"))
-  declared_parameter_types = _constructor_parameter_types(noise_type)
-  constructor_fields_by_name = _constructor_fields_by_name(noise_type)
+  variables = Dict(
+    String(id) => binding.variable
+    for (id, binding) in pairs(variable_bindings)
+  )
+  admitted = _admit_constructor_parameters(
+    parameters,
+    noise_type;
+    variables,
+    parameter_context="$context parameter",
+  )
   keywords = String[]
-  supplied_names = Set{String}()
-  for parameter in parameters
-    _is_object_like(parameter) || throw(validation_error("$context parameter must be an object"))
-    name = haskey(parameter, "name") ? String(parameter["name"]) : String(get(parameter, "field", ""))
-    isempty(name) && throw(validation_error("$context parameter is missing its name"))
-    name in supplied_names && throw(validation_error(
-      "$context contains duplicate parameter '$name'",
-    ))
-    push!(supplied_names, name)
-    haskey(declared_parameter_types, name) ||
-      throw(validation_error("$context has unknown parameter '$name'"))
-    value = get(parameter, "value", nothing)
-    if _constructor_parameter_is_omitted(value)
-      continue
-    end
-    _, expression = _script_constructor_parameter_expression(
-      parameter,
+  for entry in admitted
+    name, expression = _script_admitted_constructor_parameter_expression(
+      entry,
       variable_bindings,
       context;
       node_index,
-      declared_type=declared_parameter_types[name],
-      field_schema=get(
-        constructor_fields_by_name,
-        name,
-        nothing,
-      ),
       imports,
     )
-    expression === nothing && continue
     Base.isidentifier(name) ||
       throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
     push!(keywords, "$name = $expression")
@@ -1131,7 +1125,7 @@ function _script_variable_bindings(
       Set{Symbol}()
     end
     per_assignment = self_dependent || !isempty(source_references)
-    fresh_wildcard = variable.type in ("Wildcard", "QuantumSavory.Wildcard")
+    fresh_wildcard = variable.type == "QuantumSavory.Wildcard"
     bindings[variable.id] = (
       name=binding,
       variable=variable,
@@ -1227,107 +1221,84 @@ function _script_variable_bindings(
   return bindings
 end
 
-function _script_constructor_parameter_expression(
-  parameter,
+function _script_admitted_value_expression(
+  entry,
+  context::String;
+  node_index=nothing,
+  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
+  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
+)
+  if entry.branch === :named_tag
+    tag_type = entry.admitted_value
+    return tag_type === nothing ? "nothing" : _script_reference(imports, tag_type)
+  elseif entry.branch === :opaque
+    return _script_opaque_literal(entry.admitted_value, context)
+  elseif entry.branch === :numeric_expression
+    return _script_numeric_source_expression(
+      entry.admitted_value.source,
+      string(entry.handling_type),
+      node_index,
+      context;
+      edge_context,
+    )
+  elseif entry.branch === :function_source
+    return _script_function_expression(
+      entry.admitted_value,
+      _script_special_type(entry.handling_type),
+      node_index,
+      context;
+      edge_context,
+    )
+  elseif entry.branch === :states_zoo
+    return _script_states_zoo_expression(entry.admitted_value, context; imports)
+  elseif entry.branch === :symbolic_source
+    return _script_raw_expression(entry.admitted_value, context)
+  elseif entry.branch === :literal
+    if entry.admitted_value isa QuantumSavory.Wildcard
+      wildcard = _script_reference(imports, QuantumSavory.Wildcard)
+      return "$wildcard()"
+    end
+    return _script_literal(entry.admitted_value, context)
+  end
+  throw(server_error(
+    "Script export received an unknown admitted constructor branch",
+    Dict{String,Any}("branch" => string(entry.branch)),
+  ))
+end
+
+function _script_admitted_constructor_parameter_expression(
+  entry,
   variable_bindings,
   context::String;
   node_index=nothing,
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-  declared_type=nothing,
-  field_schema=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
 )
-  name = if haskey(parameter, "name")
-    _required_nonempty_string(parameter, "name", "$context parameter")
-  else
-    _required_nonempty_string(parameter, "field", "$context parameter")
-  end
-  value = get(parameter, "value", nothing)
-  _constructor_parameter_is_omitted(value) && return name, nothing
-
-  named_tag_semantics = _named_tag_parameter_semantics(declared_type)
-  if named_tag_semantics !== nothing
-    _parse_variable_reference(value; context="$context parameter '$name'") === nothing ||
-      throw(validation_error(
-        "$context parameter '$name' cannot use a variable for a named tag type",
-        Dict{String,Any}("parameter_name" => name),
-      ))
-    tag_type = _resolve_named_abstract_tag_type(
-      value;
-      nullable=named_tag_semantics.nullable,
-      context="$context parameter '$name'",
-    )
-    return name, tag_type === nothing ? "nothing" : _script_reference(imports, tag_type)
-  end
-
-  reference = _parse_variable_reference(value; context="$context parameter '$name'")
-  if reference !== nothing
-    binding = get(variable_bindings, reference.id, nothing)
-    binding === nothing && throw(validation_error("$context parameter '$name' references an unknown variable"))
-    binding.uses_default && return name, nothing
-    _parameter_type_supports_variable_type(
-      declared_type,
-      binding.variable.type,
-    ) || throw(validation_error(
-      "Variable '$(_script_comment(binding.variable.name))' is incompatible with $context parameter '$name'",
+  name = entry.original_name
+  value_context = "$context parameter '$name'"
+  if entry.variable !== nothing
+    binding = get(variable_bindings, entry.variable.id, nothing)
+    binding === nothing && throw(server_error(
+      "Script export is missing an admitted Variable binding",
+      Dict{String,Any}(
+        "variable_id" => entry.variable.id,
+        "parameter_name" => name,
+      ),
     ))
     binding.fresh_wildcard && return name, "$(binding.name)()"
-    if binding.per_assignment
-      numeric_expression = _parse_numeric_expression(
-        binding.variable.value;
-        context="Variable '$(_script_comment(binding.variable.name))'",
-      )
-      if numeric_expression !== nothing
-        target_type = _numeric_expression_target_for_parameter(
-          declared_type,
-          binding.variable.type,
-        )
-        target_type == binding.variable.type || throw(validation_error(
-          "Variable '$(_script_comment(binding.variable.name))' numeric expression is incompatible with $context parameter '$name'",
-        ))
-      end
-      expression = _script_value_expression(
-        binding.variable.type,
-        binding.variable.value,
-        "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'";
-        node_index=node_index,
-        edge_context=edge_context,
-        field_schema,
-        imports,
-      )
-      expression === nothing && throw(validation_error(
-        "Variable '$(_script_comment(binding.variable.name))' cannot use a constructor default here",
-      ))
-      return name, expression
-    end
-    _script_assert_constructor_numeric_bounds(
-      binding.variable.type,
-      binding.variable.value,
-      field_schema,
-      "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'",
-    )
-    return name, binding.name
+    binding.per_assignment || return name, binding.name
+    value_context =
+      "Variable '$(_script_comment(entry.variable.name))' assigned to $value_context"
   end
-
-  handling_type = _constructor_parameter_handling_type(
-    declared_type,
-    get(parameter, "type", nothing),
-    value,
-  )
-  expression = _script_value_expression(
-    handling_type,
-    value,
-    "$context parameter '$name'";
-    node_index=node_index,
-    edge_context=edge_context,
-    field_schema,
+  expression = _script_admitted_value_expression(
+    entry,
+    value_context;
+    node_index,
+    edge_context,
     imports,
   )
   return name, expression
 end
-
-_script_protocol_parameter_expression(args...; kwargs...) =
-  _script_constructor_parameter_expression(args...; kwargs...)
 
 function _script_protocol!(
   lines::Vector{String},
@@ -1347,11 +1318,20 @@ function _script_protocol!(
   protocol_type = _resolve_type_from_string(raw_type, :protocol)
   protocol_type === nothing && throw(validation_error("$context has unknown type '$raw_type'"))
   schema = QuantumSavory.ProtocolZoo.protocol_schema(protocol_type)
-  declared_parameter_types = _constructor_parameter_types(schema.constructor)
-  constructor_fields_by_name =
-    _constructor_fields_by_name(schema.constructor)
   parameters = get(protocol_definition, "parameters", Any[])
   parameters isa AbstractVector || throw(validation_error("$context parameters must be an array"))
+  variables = Dict(
+    String(id) => binding.variable
+    for (id, binding) in pairs(variable_bindings)
+  )
+  admitted = _admit_constructor_parameters(
+    parameters,
+    protocol_type;
+    variables,
+    parameter_context="$context parameter",
+    declared_parameter_types=_constructor_parameter_types(schema.constructor),
+    constructor_fields_by_name=_constructor_fields_by_name(schema.constructor),
+  )
 
   keywords = ["sim = sim", "net = network"]
   placement_context = Dict{Symbol,Any}()
@@ -1365,35 +1345,15 @@ function _script_protocol!(
     push!(keywords, "$(field) = $value")
   end
 
-  for parameter in parameters
-    _is_object_like(parameter) || throw(validation_error("$context parameter must be an object"))
-    submitted_name = _required_nonempty_string(parameter, "name", "$context parameter")
-    haskey(declared_parameter_types, submitted_name) || throw(validation_error(
-      "$context has unknown parameter '$submitted_name'",
-      Dict{String,Any}(
-        "parameter_name" => submitted_name,
-        "protocol_type" => string(protocol_type),
-      ),
-    ))
-    value = get(parameter, "value", nothing)
-    if _constructor_parameter_is_omitted(value)
-      continue
-    end
-    name, expression = _script_constructor_parameter_expression(
-      parameter,
+  for entry in admitted
+    name, expression = _script_admitted_constructor_parameter_expression(
+      entry,
       variable_bindings,
       context;
       node_index=node_index,
       edge_context=edge_context,
-      declared_type=declared_parameter_types[submitted_name],
-      field_schema=get(
-        constructor_fields_by_name,
-        submitted_name,
-        nothing,
-      ),
       imports,
     )
-    expression === nothing && continue
     Base.isidentifier(name) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
     push!(keywords, "$name = $expression")
   end
