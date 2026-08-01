@@ -27,6 +27,7 @@ import {
   buildVariableInputOptions,
   findParameterInputOption,
   inferParameterInputOption,
+  parameterTypeSupportsVariableType,
 } from './parameterTypes'
 import {
   normalizeRepresentationConfig,
@@ -34,7 +35,9 @@ import {
 } from './representations'
 import { assertBackendPlatformInfo } from './platformInfo.js'
 import {
+  ExactJsonValueError,
   MAX_SAFE_JSON_INTEGER,
+  cloneExactJsonValue,
   cloneExactOpaqueJsonValue,
 } from './exactWireValues.js'
 
@@ -186,15 +189,42 @@ export class ProjectSchemaError extends Error {
   }
 }
 
+function exactJsonDiagnostic(error) {
+  return {
+    path: error.path,
+    expected: error.expected,
+    actual: error.actual,
+  }
+}
+
+function semanticProjectError(path, error) {
+  return new ProjectSchemaError([{
+    path,
+    expected: 'a value consistent with its declared type and selected branch',
+    actual: error instanceof Error ? error.message : String(error),
+  }])
+}
+
 /**
  * Admit one raw project document without coercion, mutation, hydration, or storage.
  */
 export function admitProjectDocument(document) {
-  if (!projectDocumentValidator(document)) {
+  let exactDocument
+  try {
+    exactDocument = cloneExactJsonValue(document)
+  } catch (error) {
+    if (error instanceof ExactJsonValueError) {
+      throw new ProjectSchemaError([exactJsonDiagnostic(error)])
+    }
+    throw error
+  }
+
+  if (!projectDocumentValidator(exactDocument)) {
     throw new ProjectSchemaError(
-      schemaDiagnostics(document, projectDocumentValidator.errors),
+      schemaDiagnostics(exactDocument, projectDocumentValidator.errors),
     )
   }
+  validateProjectWireSemantics(exactDocument)
   return document
 }
 
@@ -418,7 +448,7 @@ function normalizeNumericExpressionValue(value, context) {
   }
 }
 
-const EXACT_INTEGER_TYPES = new Set(['Int', 'Int64'])
+const EXACT_INTEGER_TYPES = new Set(['Int64'])
 const EXACT_FLOAT_TYPES = new Set(['Float64'])
 const EXACT_NUMERIC_VECTOR_TYPES = new Set(['Vector{Int64}', 'Vector{Float64}'])
 
@@ -493,7 +523,7 @@ function requireExactLiteralWireValue(
     throw new Error(`${context} Nothing value must use the exact nothing sentinel`)
   }
   if (
-    ['Wildcard', 'QuantumSavory.Wildcard'].includes(selectedType)
+    selectedType === 'QuantumSavory.Wildcard'
     && value !== 'Wildcard'
   ) {
     throw new Error(`${context} Wildcard value must use the exact Wildcard sentinel`)
@@ -552,7 +582,7 @@ function normalizeConstructorParameter(rawParameter, context = 'Constructor para
     if (!constructorSelectionIsDeclared(declaredTypes, explicitSelection)) {
       throw new Error(`${context} selectedType ${explicitSelection} is not declared`)
     }
-    if (value == null || value === '') {
+    if (value == null) {
       throw new Error(`${context} ${explicitSelection} selection requires an explicit value`)
     }
   }
@@ -707,6 +737,126 @@ function normalizeVariableRecord(rawVariable, context = 'Variable') {
     selectedType,
     value,
   }
+}
+
+function projectSemanticCheck(path, check) {
+  try {
+    return check()
+  } catch (error) {
+    if (error instanceof ProjectSchemaError) throw error
+    throw semanticProjectError(path, error)
+  }
+}
+
+function expectedVariableSelection(parameter, variable, context) {
+  const variableType = variable.selectedType === 'default'
+    ? 'default'
+    : variable.type
+  if (variableType === 'default') {
+    throw new Error(`${context} cannot reference a Default Variable`)
+  }
+  if (!parameterTypeSupportsVariableType(parameter.type, variableType)) {
+    throw new Error(
+      `${context} references Variable ${variable.id} with incompatible type ${variableType}`,
+    )
+  }
+
+  const options = buildParameterInputOptions(parameter.type, parameter)
+    .filter(option => option.enabled && option.inputKind !== 'default')
+  const exact = options.find(option => option.id === variable.selectedType)
+  if (exact) return exact.id
+  const compatible = options.find(option => (
+    parameterTypeSupportsVariableType(option.wireType, variableType)
+  ))
+  if (!compatible) {
+    throw new Error(
+      `${context} has no declared branch for Variable ${variable.id} type ${variableType}`,
+    )
+  }
+  return compatible.id
+}
+
+function validateProjectWireSemantics(document) {
+  const variablesById = new Map()
+  const variableNames = new Set()
+  document.variables.forEach((variable, index) => {
+    const path = `/variables/${index}`
+    projectSemanticCheck(path, () => normalizeVariableRecord(variable, `Variable ${index + 1}`))
+    if (variablesById.has(variable.id)) {
+      throw semanticProjectError(`${path}/id`, new Error(`Duplicate Variable ID ${variable.id}`))
+    }
+    if (variableNames.has(variable.name)) {
+      throw semanticProjectError(
+        `${path}/name`,
+        new Error(`Duplicate Variable name ${variable.name}`),
+      )
+    }
+    variablesById.set(variable.id, variable)
+    variableNames.add(variable.name)
+  })
+
+  const validateParameter = (parameter, path, context) => {
+    projectSemanticCheck(path, () => normalizeConstructorParameter(parameter, context))
+    if (!isRecord(parameter.value) || parameter.value.kind !== 'variable') return
+    const variable = variablesById.get(parameter.value.id)
+    if (!variable) {
+      throw semanticProjectError(
+        `${path}/value/id`,
+        new Error(`Unknown Variable reference ${parameter.value.id}`),
+      )
+    }
+    const expectedSelection = projectSemanticCheck(`${path}/selectedType`, () => (
+      expectedVariableSelection(parameter, variable, context)
+    ))
+    if (parameter.selectedType !== expectedSelection) {
+      throw semanticProjectError(
+        `${path}/selectedType`,
+        new Error(
+          `${context} selects ${parameter.selectedType}, but Variable ${variable.id} requires `
+          + `${expectedSelection}`,
+        ),
+      )
+    }
+  }
+
+  const validateProtocol = (protocol, path) => {
+    protocol.parameters.forEach((parameter, index) => {
+      validateParameter(
+        parameter,
+        `${path}/parameters/${index}`,
+        `Protocol ${protocol.id} parameter ${parameter.name}`,
+      )
+    })
+  }
+  const validateSlot = (slot, path) => {
+    slot.backgroundNoise.parameters.forEach((parameter, index) => {
+      validateParameter(
+        parameter,
+        `${path}/backgroundNoise/parameters/${index}`,
+        `Background ${slot.backgroundNoise.type} parameter ${parameter.field}`,
+      )
+    })
+  }
+
+  document.net.nodes.forEach((node, nodeIndex) => {
+    node.data.slots.forEach((slot, slotIndex) => (
+      validateSlot(slot, `/net/nodes/${nodeIndex}/data/slots/${slotIndex}`)
+    ))
+    node.data.protocols.forEach((protocol, protocolIndex) => (
+      validateProtocol(protocol, `/net/nodes/${nodeIndex}/data/protocols/${protocolIndex}`)
+    ))
+  })
+  document.net.edges.forEach((edge, edgeIndex) => {
+    edge.data.protocols.forEach((protocol, protocolIndex) => (
+      validateProtocol(protocol, `/net/edges/${edgeIndex}/data/protocols/${protocolIndex}`)
+    ))
+  })
+  document.net.protocols.forEach((protocol, protocolIndex) => (
+    validateProtocol(protocol, `/net/protocols/${protocolIndex}`)
+  ))
+  document.net.physicalConfig.nodeTemplate.slots.forEach((slot, slotIndex) => (
+    validateSlot(slot, `/net/physicalConfig/nodeTemplate/slots/${slotIndex}`)
+  ))
 }
 
 function hydrateProtocol(rawProtocol) {

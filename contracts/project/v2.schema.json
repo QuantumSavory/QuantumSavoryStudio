@@ -101,17 +101,35 @@
       ],
       "items": false
     },
+    "constructorTypeName": {
+      "type": "string",
+      "enum": [
+        "Int64",
+        "Float64",
+        "Vector{Int64}",
+        "Vector{Float64}",
+        "Bool",
+        "String",
+        "Nothing",
+        "QuantumSavory.Wildcard",
+        "Function",
+        "Lambda",
+        "Symbolic",
+        "Any",
+        "DataType"
+      ]
+    },
     "typeDescriptor": {
       "anyOf": [
         {
-          "$ref": "#/$defs/nonBlankString"
+          "$ref": "#/$defs/constructorTypeName"
         },
         {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/nonBlankString"
+            "$ref": "#/$defs/constructorTypeName"
           }
         }
       ]
@@ -285,9 +303,14 @@
         "$ref": "#/$defs/opaqueParameterValue"
       }
     },
-    "exactIntegerOrVariable": {
+    "safeInteger": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "safeIntegerOrVariable": {
       "anyOf": [
-        { "type": "integer" },
+        { "$ref": "#/$defs/safeInteger" },
         { "$ref": "#/$defs/variableReference" }
       ]
     },
@@ -297,9 +320,9 @@
         { "$ref": "#/$defs/variableReference" }
       ]
     },
-    "exactIntegerVectorOrVariable": {
+    "safeIntegerVectorOrVariable": {
       "anyOf": [
-        { "type": "array", "items": { "type": "integer" } },
+        { "type": "array", "items": { "$ref": "#/$defs/safeInteger" } },
         { "$ref": "#/$defs/variableReference" }
       ]
     },
@@ -344,149 +367,334 @@
         { "$ref": "#/$defs/variableReference" }
       ]
     },
-    "exactConstructorParameterBranches": {
+    "numericExpressionOrVariable": {
+      "anyOf": [
+        { "$ref": "#/$defs/numericExpression" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "symbolicOrVariable": {
+      "anyOf": [
+        { "$ref": "#/$defs/nonBlankString" },
+        { "$ref": "#/$defs/statesZooValue" },
+        { "$ref": "#/$defs/variableReference" }
+      ]
+    },
+    "nonNullOpaqueValue": {
       "allOf": [
+        { "$ref": "#/$defs/opaqueParameterValue" },
+        { "not": { "type": "null" } }
+      ]
+    },
+    "constructorSelectionContract": {
+      "oneOf": [
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Int", "Int64"] } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactIntegerOrVariable" } } }
+          "properties": {
+            "selectedType": { "const": "default" },
+            "value": { "type": "null" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Float64", "Float32"] } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactNumberOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "Vector{Int64}" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactIntegerVectorOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "Vector{Float64}" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactNumberVectorOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "Bool" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactBooleanOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "String" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactStringOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "Nothing" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactNothingOrVariable" } } }
-        },
-        {
-          "if": {
-            "properties": {
-              "selectedType": { "enum": ["Wildcard", "QuantumSavory.Wildcard"] }
+          "properties": {
+            "selectedType": { "const": "Int64" },
+            "type": {
+              "anyOf": [
+                { "const": "Int64" },
+                { "type": "array", "contains": { "const": "Int64" } }
+              ]
             },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/exactWildcardOrVariable" } } }
+            "value": { "$ref": "#/$defs/safeIntegerOrVariable" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Function", "Lambda"] } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/nonDefaultSourceOrVariable" } } }
+          "properties": {
+            "selectedType": { "const": "Float64" },
+            "type": {
+              "anyOf": [
+                { "const": "Float64" },
+                { "type": "array", "contains": { "const": "Float64" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactNumberOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Vector{Int64}" },
+            "type": {
+              "anyOf": [
+                { "const": "Vector{Int64}" },
+                { "type": "array", "contains": { "const": "Vector{Int64}" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/safeIntegerVectorOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Vector{Float64}" },
+            "type": {
+              "anyOf": [
+                { "const": "Vector{Float64}" },
+                { "type": "array", "contains": { "const": "Vector{Float64}" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactNumberVectorOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Bool" },
+            "type": {
+              "anyOf": [
+                { "const": "Bool" },
+                { "type": "array", "contains": { "const": "Bool" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactBooleanOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "String" },
+            "type": {
+              "anyOf": [
+                { "const": "String" },
+                { "type": "array", "contains": { "const": "String" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactStringOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Nothing" },
+            "type": {
+              "anyOf": [
+                { "const": "Nothing" },
+                { "type": "array", "contains": { "const": "Nothing" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactNothingOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "QuantumSavory.Wildcard" },
+            "type": {
+              "anyOf": [
+                { "const": "QuantumSavory.Wildcard" },
+                { "type": "array", "contains": { "const": "QuantumSavory.Wildcard" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/exactWildcardOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Function" },
+            "type": {
+              "anyOf": [
+                { "const": "Function" },
+                { "type": "array", "contains": { "const": "Function" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/nonDefaultSourceOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Lambda" },
+            "type": {
+              "anyOf": [
+                { "enum": ["Function", "Lambda"] },
+                {
+                  "type": "array",
+                  "contains": { "enum": ["Function", "Lambda"] }
+                }
+              ]
+            },
+            "value": { "$ref": "#/$defs/nonDefaultSourceOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Symbolic" },
+            "type": {
+              "anyOf": [
+                { "const": "Symbolic" },
+                { "type": "array", "contains": { "const": "Symbolic" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/symbolicOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "Any" },
+            "type": {
+              "anyOf": [
+                { "const": "Any" },
+                { "type": "array", "contains": { "const": "Any" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/nonNullOpaqueValue" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "DataType" },
+            "type": {
+              "anyOf": [
+                { "const": "DataType" },
+                {
+                  "type": "array",
+                  "contains": { "const": "DataType" }
+                }
+              ]
+            },
+            "value": { "$ref": "#/$defs/nonBlankString" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "expression:Int64" },
+            "type": {
+              "anyOf": [
+                { "const": "Int64" },
+                { "type": "array", "contains": { "const": "Int64" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/numericExpressionOrVariable" }
+          }
+        },
+        {
+          "properties": {
+            "selectedType": { "const": "expression:Float64" },
+            "type": {
+              "anyOf": [
+                { "const": "Float64" },
+                { "type": "array", "contains": { "const": "Float64" } }
+              ]
+            },
+            "value": { "$ref": "#/$defs/numericExpressionOrVariable" }
+          }
         }
       ]
     },
-    "exactVariableBranches": {
-      "allOf": [
+    "variableSelectionContract": {
+      "oneOf": [
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Int", "Int64"] } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "integer" } } }
+          "properties": {
+            "type": { "const": "default" },
+            "selectedType": { "const": "default" },
+            "value": { "type": "null" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Float64", "Float32"] } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "number" } } }
+          "properties": {
+            "type": { "const": "Int64" },
+            "selectedType": { "const": "Int64" },
+            "value": { "$ref": "#/$defs/safeInteger" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "const": "Vector{Int64}" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "array", "items": { "type": "integer" } } } }
+          "properties": {
+            "type": { "const": "Float64" },
+            "selectedType": { "const": "Float64" },
+            "value": { "type": "number" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "const": "Vector{Float64}" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "array", "items": { "type": "number" } } } }
+          "properties": {
+            "type": { "const": "Vector{Int64}" },
+            "selectedType": { "const": "Vector{Int64}" },
+            "value": { "type": "array", "items": { "$ref": "#/$defs/safeInteger" } }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "const": "Bool" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "boolean" } } }
+          "properties": {
+            "type": { "const": "Vector{Float64}" },
+            "selectedType": { "const": "Vector{Float64}" },
+            "value": { "type": "array", "items": { "type": "number" } }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "const": "String" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "$ref": "#/$defs/nonBlankString" } } }
+          "properties": {
+            "type": { "const": "Bool" },
+            "selectedType": { "const": "Bool" },
+            "value": { "type": "boolean" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "const": "Nothing" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "const": "nothing" } } }
+          "properties": {
+            "type": { "const": "String" },
+            "selectedType": { "const": "String" },
+            "value": { "$ref": "#/$defs/nonBlankString" }
+          }
         },
         {
-          "if": {
-            "properties": {
-              "selectedType": { "enum": ["Wildcard", "QuantumSavory.Wildcard"] }
-            },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "const": "Wildcard" } } }
+          "properties": {
+            "type": { "const": "Nothing" },
+            "selectedType": { "const": "Nothing" },
+            "value": { "const": "nothing" }
+          }
         },
         {
-          "if": {
-            "properties": { "selectedType": { "enum": ["Function", "Lambda"] } },
-            "required": ["selectedType"]
-          },
-          "then": {
-            "properties": {
-              "value": {
-                "allOf": [
-                  { "$ref": "#/$defs/nonBlankString" },
-                  { "not": { "type": "string", "pattern": "^\\s*[dD][eE][fF][aA][uU][lL][tT]\\s*$" } }
-                ]
-              }
+          "properties": {
+            "type": { "const": "QuantumSavory.Wildcard" },
+            "selectedType": { "const": "QuantumSavory.Wildcard" },
+            "value": { "const": "Wildcard" }
+          }
+        },
+        {
+          "properties": {
+            "type": { "const": "Function" },
+            "selectedType": { "const": "Function" },
+            "value": {
+              "allOf": [
+                { "$ref": "#/$defs/nonBlankString" },
+                { "not": { "type": "string", "pattern": "^\\s*[dD][eE][fF][aA][uU][lL][tT]\\s*$" } }
+              ]
             }
+          }
+        },
+        {
+          "properties": {
+            "type": { "const": "Lambda" },
+            "selectedType": { "const": "Lambda" },
+            "value": {
+              "allOf": [
+                { "$ref": "#/$defs/nonBlankString" },
+                { "not": { "type": "string", "pattern": "^\\s*[dD][eE][fF][aA][uU][lL][tT]\\s*$" } }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "type": { "const": "Symbolic" },
+            "selectedType": { "const": "Symbolic" },
+            "value": {
+              "anyOf": [
+                { "$ref": "#/$defs/nonBlankString" },
+                { "$ref": "#/$defs/statesZooValue" }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "type": { "const": "Int64" },
+            "selectedType": { "const": "expression:Int64" },
+            "value": { "$ref": "#/$defs/numericExpression" }
+          }
+        },
+        {
+          "properties": {
+            "type": { "const": "Float64" },
+            "selectedType": { "const": "expression:Float64" },
+            "value": { "$ref": "#/$defs/numericExpression" }
           }
         }
       ]
@@ -495,15 +703,7 @@
       "type": "object",
       "additionalProperties": false,
       "allOf": [
-        { "$ref": "#/$defs/exactConstructorParameterBranches" },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "default" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "null" } } },
-          "else": { "properties": { "value": { "not": { "type": "null" } } } }
-        }
+        { "$ref": "#/$defs/constructorSelectionContract" }
       ],
       "required": [
         "name",
@@ -530,15 +730,7 @@
       "type": "object",
       "additionalProperties": false,
       "allOf": [
-        { "$ref": "#/$defs/exactConstructorParameterBranches" },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "default" } },
-            "required": ["selectedType"]
-          },
-          "then": { "properties": { "value": { "type": "null" } } },
-          "else": { "properties": { "value": { "not": { "type": "null" } } } }
-        }
+        { "$ref": "#/$defs/constructorSelectionContract" }
       ],
       "required": [
         "field",
@@ -1052,25 +1244,7 @@
       "type": "object",
       "additionalProperties": false,
       "allOf": [
-        { "$ref": "#/$defs/exactVariableBranches" },
-        {
-          "if": {
-            "properties": { "selectedType": { "const": "default" } },
-            "required": ["selectedType"]
-          },
-          "then": {
-            "properties": {
-              "type": { "const": "default" },
-              "value": { "type": "null" }
-            }
-          },
-          "else": {
-            "properties": {
-              "type": { "not": { "const": "default" } },
-              "value": { "not": { "type": "null" } }
-            }
-          }
-        }
+        { "$ref": "#/$defs/variableSelectionContract" }
       ],
       "required": [
         "id",

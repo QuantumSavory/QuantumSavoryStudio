@@ -374,8 +374,8 @@ function discriminatingStoredProject() {
     value: { nested: { enabled: true } },
   }, {
     name: 'linked',
-    type: 'Float64',
-    selectedType: 'Float64',
+    type: 'Symbolic',
+    selectedType: 'Symbolic',
     value: { kind: 'variable', id: 'variable_state' },
   }, {
     name: 'expression',
@@ -627,12 +627,220 @@ describe('project schema v2 admission', () => {
     const raw = discriminatingStoredProject()
     expect(admitProjectDocument(raw)).toBe(raw)
 
-    raw.net.nodes[0].data.protocols[0].parameters[0].value.kind = 'custom'
+    raw.net.nodes[0].data.protocols[0].parameters[0].value = ''
+    expect(admitProjectDocument(raw)).toBe(raw)
+
+    raw.net.nodes[0].data.protocols[0].parameters[0].value = { kind: 'custom' }
     expect(() => admitProjectDocument(raw)).toThrow(ProjectSchemaError)
+  })
+
+  it.each(['Int64', 'DataType', 'QuantumSavory.Wildcard'])(
+    'admits canonical %s metadata with the durable Default/null omission form',
+    (type) => {
+      const raw = discriminatingStoredProject()
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type,
+        selectedType: 'default',
+        value: null,
+      })
+      expect(admitProjectDocument(raw)).toBe(raw)
+    },
+  )
+
+  it.each([
+    ['unknown constructor selection', raw => {
+      raw.net.nodes[0].data.protocols[0].parameters[0].selectedType = 'LegacyAny'
+    }],
+    ['Variable reference in an opaque Any branch', raw => {
+      raw.net.nodes[0].data.protocols[0].parameters[0].value = {
+        kind: 'variable',
+        id: 'variable_state',
+      }
+    }],
+    ['constructor selection outside its declaration', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'String',
+        selectedType: 'Float64',
+        value: 0.25,
+      })
+    }],
+    ['expression selection with a literal', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[2], {
+        selectedType: 'expression:Float64',
+        value: 0.5,
+      })
+    }],
+    ['literal selection with an expression', raw => {
+      raw.net.nodes[0].data.protocols[0].parameters[2].selectedType = 'Float64'
+    }],
+    ['Variable selection outside its type', raw => {
+      raw.variables[0].selectedType = 'String'
+    }],
+    ['unknown Variable selection', raw => {
+      raw.variables[0].selectedType = 'LegacySymbolic'
+    }],
+    ['removed Float32 member hidden behind a valid constructor selection', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: ['Float64', 'Float32'],
+        selectedType: 'Float64',
+        value: 0.25,
+      })
+    }],
+    ['removed named-tag member hidden behind a valid constructor selection', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: ['Nothing', 'Type{<:AbstractTag}'],
+        selectedType: 'Nothing',
+        value: 'nothing',
+      })
+    }],
+    ['unknown member hidden behind a valid background selection', raw => {
+      Object.assign(raw.net.nodes[0].data.slots[0].backgroundNoise.parameters[0], {
+        type: ['Float64', 'FutureScalar'],
+        selectedType: 'Float64',
+        value: 0.25,
+      })
+    }],
+    ['removed Float32 scalar hidden behind Default omission', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'Float32',
+        selectedType: 'default',
+        value: null,
+      })
+    }],
+    ['removed named-tag scalar hidden behind Default omission', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'Type{<:AbstractTag}',
+        selectedType: 'default',
+        value: null,
+      })
+    }],
+    ['unknown scalar hidden behind Default omission', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'FutureScalar',
+        selectedType: 'default',
+        value: null,
+      })
+    }],
+    ['removed constructor Float32 branch', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'Float32',
+        selectedType: 'Float32',
+        value: 0.25,
+      })
+    }],
+    ['removed Variable Float32 branch', raw => {
+      Object.assign(raw.variables[0], {
+        type: 'Float32',
+        selectedType: 'Float32',
+        value: 0.25,
+      })
+    }],
+    ['removed constructor Int branch', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'Int',
+        selectedType: 'Int',
+        value: 1,
+      })
+    }],
+    ['removed constructor Wildcard branch', raw => {
+      Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+        type: 'Wildcard',
+        selectedType: 'Wildcard',
+        value: 'Wildcard',
+      })
+    }],
+    ['removed Variable Int branch', raw => {
+      Object.assign(raw.variables[0], {
+        type: 'Int',
+        selectedType: 'Int',
+        value: 1,
+      })
+    }],
+    ['removed Variable Wildcard branch', raw => {
+      Object.assign(raw.variables[0], {
+        type: 'Wildcard',
+        selectedType: 'Wildcard',
+        value: 'Wildcard',
+      })
+    }],
+  ])('rejects a %s', (_label, mutate) => {
+    const raw = discriminatingStoredProject()
+    mutate(raw)
+    expect(() => admitProjectDocument(raw)).toThrow(ProjectSchemaError)
+  })
+
+  it('rejects schema-valid Variable links whose selected branches are incompatible', () => {
+    const raw = discriminatingStoredProject()
+    Object.assign(raw.net.nodes[0].data.protocols[0].parameters[1], {
+      type: 'Float64',
+      selectedType: 'Float64',
+    })
+
+    let error
+    try {
+      admitProjectDocument(raw)
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(ProjectSchemaError)
+    expect(error.path).toBe('/net/nodes/0/data/protocols/0/parameters/1/selectedType')
+    expect(error.actual).toMatch(/Variable variable_state.*Symbolic/)
+  })
+
+  it('rejects non-JSON roots before schema traversal without invoking accessors', () => {
+    const accessor = vi.fn(() => 'read')
+    const raw = storedProject()
+    Object.defineProperty(raw, 'description', {
+      enumerable: true,
+      get: accessor,
+    })
+
+    expect(() => admitProjectDocument(raw)).toThrow(ProjectSchemaError)
+    expect(accessor).not.toHaveBeenCalled()
+
+    const cyclic = storedProject()
+    cyclic.description = cyclic
+    expect(() => admitProjectDocument(cyclic)).toThrow(/acyclic JSON value/)
+  })
+
+  it.each([
+    ['Int64', 9_007_199_254_740_991, true],
+    ['Int64', 9_007_199_254_740_992, false],
+    ['Vector{Int64}', [-9_007_199_254_740_991, 9_007_199_254_740_991], true],
+    ['Vector{Int64}', [9_007_199_254_740_992], false],
+  ])('applies the safe-integer boundary to %s value %j', (type, value, admitted) => {
+    const raw = discriminatingStoredProject()
+    Object.assign(raw.net.nodes[0].data.protocols[0].parameters[0], {
+      type,
+      selectedType: type,
+      value,
+    })
+    const admission = () => admitProjectDocument(raw)
+    if (admitted) expect(admission()).toBe(raw)
+    else expect(admission).toThrow(ProjectSchemaError)
   })
 })
 
 describe('decodeStoredProject', () => {
+  it('rejects removed and unsafe numeric branches before model hydration', () => {
+    const unsafeInteger = discriminatingStoredProject()
+    Object.assign(unsafeInteger.net.nodes[0].data.protocols[0].parameters[0], {
+      type: 'Int64',
+      selectedType: 'Int64',
+      value: 9_007_199_254_740_992,
+    })
+    expect(() => decodeStoredProject(unsafeInteger)).toThrow(ProjectSchemaError)
+
+    const removedFloat = discriminatingStoredProject()
+    Object.assign(removedFloat.variables[0], {
+      type: 'Float32',
+      selectedType: 'Float32',
+      value: 0.25,
+    })
+    expect(() => decodeStoredProject(removedFloat)).toThrow(ProjectSchemaError)
+  })
+
   it('hydrates current storage into independent model identities and honors the storage name', () => {
     const raw = storedProject()
     const original = structuredClone(raw)

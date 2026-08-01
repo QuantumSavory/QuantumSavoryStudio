@@ -571,6 +571,51 @@ describe('project session', () => {
     ['open', (harness, _document) => harness.session.open('B'), true],
     ['import', (harness, document) => harness.session.importProject(document, 'B'), false],
     ['demo', (harness, document) => harness.session.openDemo(document), false],
+  ])('rejects a semantically incompatible Variable link during %s before platform lookup', async (
+    _operation,
+    run,
+    stored,
+  ) => {
+    const document = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    document.variables.push({
+      id: 'string-variable',
+      name: 'string_variable',
+      type: 'String',
+      selectedType: 'String',
+      value: 'not a number',
+    })
+    document.net.protocols.push({
+      id: 'linked-protocol',
+      type: 'Example.LinkedProtocol',
+      parameters: [{
+        name: 'rate',
+        type: 'Float64',
+        selectedType: 'Float64',
+        value: { kind: 'variable', id: 'string-variable' },
+      }],
+    })
+    const fetchPlatformInfo = vi.fn()
+    const harness = createHarness({
+      projects: stored ? { B: document } : {},
+      getPlatformInfo: vi.fn(() => null),
+      fetchPlatformInfo,
+    })
+
+    expect(await run(harness, document)).toBe(false)
+
+    expect(harness.showError).toHaveBeenCalledWith(
+      expect.stringMatching(/schema validation.*selectedType/i),
+    )
+    expect(fetchPlatformInfo).not.toHaveBeenCalled()
+    expect(harness.api.destroySimulation).not.toHaveBeenCalled()
+    expect(harness.store.saveProject).not.toHaveBeenCalled()
+    expect(harness.store.openProject).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['open', (harness, _document) => harness.session.open('B'), true],
+    ['import', (harness, document) => harness.session.importProject(document, 'B'), false],
+    ['demo', (harness, document) => harness.session.openDemo(document), false],
   ])('preserves protected state when %s platform preflight fails', async (
     _operation,
     run,
