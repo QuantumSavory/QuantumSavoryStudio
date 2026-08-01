@@ -95,6 +95,10 @@
       response_field="slot_types",
       item_schema="slotTypeMetadata",
     ),
+    "listStatesZooTypesResponse" => (
+      response_field="states_zoo_types",
+      item_schema="statesZooTypeMetadata",
+    ),
   )
   for (response_schema, catalog) in pairs(catalog_schemas)
     response = operation_schemas[response_schema]
@@ -109,6 +113,41 @@
     @test parameters["items"]["\$ref"] ==
       "#/components/schemas/HttpOperationSchemas/\$defs/constructorParameterMetadata"
   end
+
+  states_zoo_type = operation_schemas["statesZooTypeMetadata"]
+  @test Set(states_zoo_type["required"]) ==
+    Set(["id", "display_name", "weighted", "parameters"])
+  @test states_zoo_type["properties"]["parameters"]["items"]["\$ref"] ==
+    "#/components/schemas/HttpOperationSchemas/\$defs/statesZooParameterMetadata"
+
+  states_zoo_parameter = operation_schemas["statesZooParameterMetadata"]
+  @test states_zoo_parameter["additionalProperties"] == false
+  @test Set(states_zoo_parameter["required"]) == Set([
+    "name",
+    "type",
+    "integer",
+    "doc",
+    "min",
+    "max",
+    "min_inclusive",
+    "max_inclusive",
+    "good",
+  ])
+  @test states_zoo_parameter["properties"]["integer"] ==
+    Dict("type" => "boolean")
+  integer_parameter, floating_parameter = states_zoo_parameter["oneOf"]
+  @test integer_parameter["properties"]["type"] == Dict("const" => "Int")
+  @test integer_parameter["properties"]["integer"] == Dict("const" => true)
+  for field in ("min", "max", "good")
+    @test integer_parameter["properties"][field] == Dict(
+      "type" => "integer",
+      "minimum" => -9007199254740991,
+      "maximum" => 9007199254740991,
+    )
+  end
+  @test floating_parameter["properties"]["type"] ==
+    Dict("not" => Dict("const" => "Int"))
+  @test floating_parameter["properties"]["integer"] == Dict("const" => false)
 
   for path_item in values(document["paths"])
     for (method, operation) in pairs(path_item)

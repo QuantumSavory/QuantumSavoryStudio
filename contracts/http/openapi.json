@@ -2727,6 +2727,124 @@
               }
             }
           },
+          "statesZooParameterMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "integer",
+              "doc",
+              "min",
+              "max",
+              "min_inclusive",
+              "max_inclusive",
+              "good"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "integer": {
+                "type": "boolean"
+              },
+              "doc": {
+                "type": "string"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "min_inclusive": {
+                "type": "boolean"
+              },
+              "max_inclusive": {
+                "type": "boolean"
+              },
+              "good": {
+                "type": "number"
+              }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "Int"
+                  },
+                  "integer": {
+                    "const": true
+                  },
+                  "min": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "max": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "good": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "not": {
+                      "const": "Int"
+                    }
+                  },
+                  "integer": {
+                    "const": false
+                  }
+                }
+              }
+            ]
+          },
+          "statesZooTypeMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "display_name",
+              "weighted",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "display_name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "weighted": {
+                "type": "boolean"
+              },
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/statesZooParameterMetadata"
+                }
+              }
+            }
+          },
           "stringArray": {
             "type": "array",
             "items": {
@@ -3974,7 +4092,10 @@
             ],
             "properties": {
               "states_zoo_types": {
-                "$ref": "#/components/schemas/HttpOperationSchemas/$defs/objectArray"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/HttpOperationSchemas/$defs/statesZooTypeMetadata"
+                }
               }
             }
           },

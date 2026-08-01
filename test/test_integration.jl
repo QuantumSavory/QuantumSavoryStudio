@@ -1258,7 +1258,17 @@
         contract["components"]["schemas"]["HttpOperationSchemas"]["\$defs"]
       @test haskey(operation_schemas, "parseNetworkGraphRequest")
       @test haskey(operation_schemas, "manipulateSimulationStateResponse")
+      @test haskey(operation_schemas, "statesZooParameterMetadata")
       @test !haskey(operation_schemas, "getMcpStatusResponse")
+      states_zoo_response = operation_schemas["listStatesZooTypesResponse"]
+      @test states_zoo_response["properties"]["states_zoo_types"]["items"]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/statesZooTypeMetadata"
+      @test operation_schemas["statesZooTypeMetadata"]["properties"]["parameters"][
+        "items"
+      ]["\$ref"] ==
+        "#/components/schemas/HttpOperationSchemas/\$defs/statesZooParameterMetadata"
+      @test operation_schemas["statesZooParameterMetadata"]["properties"]["integer"] ==
+        Dict("type" => "boolean")
       @test contract["paths"]["/parse_network_graph"]["post"]["requestBody"][
         "content"
       ]["application/json"]["schema"]["\$ref"] ==
