@@ -46,6 +46,7 @@ podman build \
   --file "$app_root/Containerfile" \
   --pull=newer \
   --tag "$image_name" \
+  --ulimit nofile=65536:65536 \
   "$app_root"
 
 start_container() {
