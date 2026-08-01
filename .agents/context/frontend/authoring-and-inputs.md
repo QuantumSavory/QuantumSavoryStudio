@@ -133,6 +133,9 @@ recipes own one generated trace companion and must not overwrite an unrelated va
 on an ID/name collision. Backend registry and rendering rules live in
 [States Zoo and rendering](../backend/states-zoo-and-rendering.md).
 
+Catalogs are closed. Inputs retain exact simulator types and backend-derived
+integrality; integer controls use step 1 and accept only safely representable integers.
+
 ## Anchors
 
 - **Command service:** [`gui/src/domain/design/DesignCommandService.js`](../../../gui/src/domain/design/DesignCommandService.js).

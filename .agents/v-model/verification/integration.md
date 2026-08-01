@@ -50,13 +50,13 @@
 
 - **Covers:** SUB-005
 - **Method:** test
-- **Procedure:** Exercise direct, copied, and generated inputs against real, missing, and malformed catalogs, covering required/optional fields, an existing-owner protocol, boundaries, omission, unknown IDs, placement, descriptor conflicts, Variables, and keyword construction.
+- **Procedure:** Exercise direct/copied/generated inputs across real, missing, malformed catalogs, including existing-owner protocol, state kinds, requiredness, placement, bounds, unknown IDs, conflicts, Variables, and keyword construction.
 - **Environment / configuration:** Real backend/frontend integration without synthetic catalogs
-- **Pass criterion:** All paths derive matching type, placement, requiredness, nullability, bounds, and resolution; false differs from omission; valid values use catalog keyword construction; invalid metadata, values, placement, or descriptors preserve the design.
+- **Pass criterion:** Paths match type, placement, requiredness, nullability, numeric kind, bounds, and resolution; finite reals construct floating states; inexact browser integers fail; false differs from omission; valid values use catalog keywords; invalid metadata, values, placement, and descriptors preserve design.
 - **Status:** planned
 - **Evidence:** [`Project.toml`](../../../Project.toml), [`gui/tests/unit/designCommandService.test.js`](../../../gui/tests/unit/designCommandService.test.js), and [`gui/tests/unit/simulationController.test.js`](../../../gui/tests/unit/simulationController.test.js)
-- **Nonconformance:** Artifacts encode requiredness and keyword-complete SimpleSwitch
-  construction. The upstream pin is unreachable; no real-stack run covers the full
+- **Nonconformance:** Artifacts encode requiredness and complete SimpleSwitch
+  construction. The upstream pin is unreachable; no real-stack run covers
   catalog/failure matrix.
 
 ## INTV-006 — Verify serialized backend lifecycle transitions
