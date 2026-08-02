@@ -4,16 +4,12 @@
 - **Open when:** Changing lifecycle phases/capabilities, API namespacing, Runner controls,
   polling, logs, panic handling, or simulation cleanup.
 - **Do not open when:** Changing backend simulation algorithms or project persistence.
-- **Related specification IDs:** SYS-005, SYS-006, SYS-008, SYS-012, SUB-006,
-  SUB-007, SUB-013, CMP-011, CMP-013
 - **Review when:** A backend state field, frontend phase, action capability, polling
   cadence, or lifecycle API call changes.
 
-Normative lifecycle, diagnostic, and MCP Play behavior is defined by
-[SYS-005](../../v-model/02-system-requirements/gui-and-simulation.md#sys-005--control-the-simulation-lifecycle),
-[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
-and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-This reference records the current frontend controller and its gaps.
+The frontend should preserve structured backend failures in the Tools Log, and GUI Play
+and MCP Run should share readiness, validation, preparation, start, and actionable
+failure behavior. This reference records the current frontend controller and its gaps.
 
 ## Phase and capabilities
 
@@ -65,24 +61,23 @@ accessible progress.
 Live tag/query tooling is available only while the backend retains a usable parsed
 network. It is cleared for empty, blocked, purged, or execution-timeout states.
 
-The target GUI/MCP equivalence is in
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-Current MCP dispatch reaches `runSimulationWithSteps` but bypasses
+GUI Play and MCP `simulation_run` should invoke the same readiness/capability,
+validation, parse, prepare, and start path while preserving structured actionable
+failure details. Current MCP dispatch reaches `runSimulationWithSteps` but bypasses
 `capabilities.canRun`, collapses `false` to a generic error, and does not record the
 implicit prepared revision.
 
 ## Error boundary
 
-The required structured handoff for failures delivered to or polled by the GUI is in
-[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
-Backend-produced diagnostic details are retained across local/public profiles under
-that contract.
+Failures delivered to or polled by the GUI should retain the backend classification or
+code, message, status, available details, and diagnostic payload in at least one Tools
+Log record across local and public profiles.
 
 Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
 responses through the shared JSON reader. Several legacy lifecycle/result calls parse or
 swallow transport failures and return `undefined` or fallback values. Startup uses
 settled capability requests and clears shell loading without one universal user-facing
-failure policy. These paths are conformance gaps, not conventions to copy.
+failure policy. These paths are known gaps, not conventions to copy.
 
 ## Anchors
 
@@ -99,4 +94,5 @@ failure policy. These paths are conformance gaps, not conventions to copy.
 - Is the 15-minute client timeout intentionally distinct from each ten-minute backend
   run segment?
 - The exact degraded-startup capability policy after one metadata failure is still an
-  implementation choice; its diagnostic obligation remains governed by SYS-008.
+  implementation choice; failures still need the structured Tools Log handoff described
+  above.

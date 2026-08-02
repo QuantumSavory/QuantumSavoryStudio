@@ -5,7 +5,6 @@
   sidecar, or coordinating a cross-component tool/resource rollout.
 - **Do not open when:** Reasoning about authoring semantics or only looking up one
   tool/schema contract.
-- **Related specification IDs:** SYS-011, SYS-012, SUB-011, SUB-013, CMP-009
 - **Review when:** Environment configuration, dependency pin, transport adapter,
   supervisor lifecycle, operational diagnostics, or tool/resource rollout changes.
 
@@ -50,7 +49,7 @@ authoring, lifecycle relay, or activity presentation changes.
 3. Update backend dispatch/resource adapters and sidecar registration.
 4. Exercise backend hub/supervisor, sidecar loader/transport, frontend bridge/contract,
    and browser collaboration evidence in proportion to the change.
-5. Update V-model requirements/actions when observable behavior or evidence changes.
+5. Update the relevant routed context when observable behavior or evidence changes.
 
 ## Upgrade ModelContextProtocol
 
@@ -71,7 +70,7 @@ transport behavior and installs a safe logger.
 - Normal Stop unbinds the browser before stopping the sidecar.
 - On binding desynchronization or `OUTCOME_UNKNOWN`, inspect the visible project and
   simulation state, then explicitly create a fresh browser binding, read current state,
-  and use a fresh operation ID. The baselined transport-session ledger must retain the
+  and use a fresh operation ID. The intended transport-session ledger must retain the
   uncertain ID so it cannot replay; current code instead clears pending commands and its
   success cache on unbind/rebind, so treat the old ID as burned even though the server
   forgets it.

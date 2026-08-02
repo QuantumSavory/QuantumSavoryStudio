@@ -4,8 +4,6 @@
 - **Open when:** Reasoning about users, component authority, deployment profiles,
   persistence, trust boundaries, or supported environments.
 - **Do not open when:** Looking up one route, project field, tool schema, or test command.
-- **Related specification IDs:** STK-001, STK-002, STK-004, STK-005, STK-008,
-  STK-009, SYS-001, SYS-008, SYS-009, SYS-011, SYS-013, SYS-014
 - **Review when:** Product actors, component roles, deployment profiles, persistence,
   authentication, or support policy changes.
 

@@ -4,7 +4,6 @@
 - **Open when:** Changing structured States Zoo recipes, explicit state allowlists,
   weighted traces, preview rendering, or PNG/HTML serialization.
 - **Do not open when:** Changing ordinary Variables, tags, or simulation lifecycle.
-- **Related specification IDs:** SYS-004, SUB-005
 - **Review when:** The explicit state registry, recipe schema, weighting semantics,
   renderer boundary, or preview response changes.
 

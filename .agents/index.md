@@ -1,14 +1,10 @@
 # WebQuantumSavory Agent Context
 
 Use this page as a selective router. Do not preload or recursively read `.agents/`.
+The linked context documents are the maintained source for product boundaries,
+implementation guidance, and known gaps.
 
-## Specification
-
-- [V-model](v-model/index.md) — open when changing observable behavior, compatibility,
-  interfaces, acceptance criteria, or verification evidence; do not open for a purely
-  mechanical repository task.
-
-## Working context
+## Context
 
 | Context | Need | Open when | Do not open when |
 | --- | --- | --- | --- |

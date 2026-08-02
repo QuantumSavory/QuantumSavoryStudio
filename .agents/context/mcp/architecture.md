@@ -4,16 +4,11 @@
 - **Open when:** Understanding why the sidecar exists, which component owns design or
   simulation state, the local trust model, or cross-process failure behavior.
 - **Do not open when:** Looking up one tool schema or running the sidecar.
-- **Related specification IDs:** STK-004, STK-005, SYS-011, SYS-012, SYS-016,
-  SUB-011, SUB-012, SUB-013
 - **Review when:** Process isolation, browser authority, locality, dependency placement,
   or command/read ownership changes.
 
-Normative product scope and collaboration behavior is defined by
-[STK-004](../../v-model/01-stakeholder-outcomes.md#stk-004--collaborate-with-a-local-ai-while-retaining-gui-control),
-[SYS-011](../../v-model/02-system-requirements/operations-and-deployment.md#sys-011--gate-local-collaboration-explicitly),
-and [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work).
-This explanation records why the current process split exists.
+This explanation records the local, browser-authoritative collaboration boundary and why
+the current process split exists.
 
 ## One product, four actors
 
@@ -70,10 +65,11 @@ multi-user security boundary.
 ## Failure model
 
 Backend generations serialize start/stop and revoke stale capabilities. One external
-session and one renewable browser binding are currently supported. The required
-pre-/post-delivery recovery behavior is defined by
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely);
-the current bounded binding-scoped replay cache does not fully implement it.
+session and one renewable browser binding are supported. Within a transport session,
+operation IDs should remain bound to their normalized requests and terminal outcomes
+across browser rebind: exact retries return the original result, conflicting reuse does
+not mutate, and uncertain delivery stops edits until inspection and rebind. The current
+bounded binding-scoped replay cache does not fully implement that behavior.
 
 Activity and supervisor diagnostics are bounded and redact recognized credentials,
 capabilities, session identifiers, binary bodies, and raw transcript fields. Redaction
@@ -92,6 +88,5 @@ exception and source details.
 ## Recovery boundary
 
 Loopback, Origin checks, and the ephemeral capability do not exclude every process on
-the local host and are not user authentication. Restart/rebind recovery is normative in
-SYS-016 and described with its current implementation delta in
-[browser collaboration](browser-collaboration.md).
+the local host and are not user authentication. Restart/rebind recovery and its current
+implementation gap are described in [browser collaboration](browser-collaboration.md).

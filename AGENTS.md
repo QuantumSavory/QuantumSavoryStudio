@@ -13,8 +13,8 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
   [MCP sidecar](mcp/AGENTS.md).
 - Use [the agent context index](.agents/index.md) only when the closest router does not
   identify the context needed for the task. Do not read `.agents/` recursively.
-- Open [the V-model](.agents/v-model/index.md) when changing observable behavior,
-  interfaces, compatibility, acceptance criteria, or verification evidence.
+- Keep the selectively routed context synchronized when changing observable behavior,
+  interfaces, compatibility, or verification boundaries.
 - Treat `_docs_/` and `_tests_/` as historical material, not maintained code roots.
 
 ## Primary commands
@@ -53,5 +53,5 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
 
 ## Handoff
 
-Report behavior and documentation changed, checks run, unresolved specification or
-evidence gaps, and checks not run.
+Report behavior and documentation changed, checks run, unresolved behavior or evidence
+gaps, and checks not run.

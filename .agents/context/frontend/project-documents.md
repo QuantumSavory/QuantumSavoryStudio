@@ -5,18 +5,15 @@
   names, browser storage, or collaboration/simulation/script projections.
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
-- **Related specification IDs:** STK-006, SYS-003, SYS-015, SUB-002, SUB-014,
-  CMP-001, CMP-010
 - **Review when:** A durable field, schema version, normalization, projection, storage
   key, or project-transition rule changes.
 
-Normative project behavior is defined by
-[STK-006](../../v-model/01-stakeholder-outcomes.md#stk-006--attempt-schema-mismatched-projects-without-a-compatibility-promise),
-[SYS-003](../../v-model/02-system-requirements/gui-and-simulation.md#sys-003--warn-and-attempt-project-schema-differences),
-[SYS-015](../../v-model/02-system-requirements/operations-and-deployment.md#sys-015--discard-the-active-project-when-replacement-starts),
-[CMP-001](../../v-model/04-component-contracts.md#cmp-001--codec-warning-version-and-identity-invariants),
-and [CMP-010](../../v-model/04-component-contracts.md#cmp-010--destructive-project-session-transition).
-This reference describes the current machinery and its deltas from those records.
+Project decoding should warn about every differing, missing, or malformed schema marker
+and then attempt ordinary validation and best-effort decode; version classification
+alone should not reject a document. Active-project replacement should tear down the
+current browser session before candidate work, leave the latest failed or cancelled
+transition empty, and prevent superseded candidates from being installed. This
+reference describes the current machinery and its gaps from those rules.
 
 ## Canonical shapes
 
@@ -40,14 +37,13 @@ exception, not permission to add more durable UI state.
 ## Version and compatibility
 
 Current stored schema is version 1, independently of the software version. There is no
-cross-release guarantee in the baseline. The target warning/open behavior is in
-[SYS-003](../../v-model/02-system-requirements/gui-and-simulation.md#sys-003--warn-and-attempt-project-schema-differences):
-schema classification does not replace ordinary structural validation, and structural
-invalidity can still end the attempt with a structured error.
+cross-release guarantee. Schema classification does not replace ordinary structural
+validation, and structural invalidity can still end the attempt with a structured
+error.
 
 Current code coerces missing/non-integer markers to schema 0, accepts negative integer
 markers without warning, and rejects future integers. Existing software-major
-confirmation is also not the required schema warning. These are conformance gaps.
+confirmation is also not the required schema warning. These are known gaps.
 Normalization of old or additive shapes is opportunistic recovery, not evidence of a
 compatibility promise.
 
@@ -58,9 +54,8 @@ legacy document is accepted by the interactive import path.
 ## Browser persistence
 
 Named projects use browser `localStorage`, including a metadata index and recent-project
-pointer. Exact keys and contents are implementation details; the cross-release policy is
-defined by [STK-006](../../v-model/01-stakeholder-outcomes.md#stk-006--attempt-schema-mismatched-projects-without-a-compatibility-promise).
-There is no server-side saved-project store.
+pointer. Exact keys and contents are implementation details, and no cross-release key or
+schema compatibility is promised. There is no server-side saved-project store.
 
 Save As protects an existing different name unless overwrite is explicit, then aligns
 the stored name, active name, and simulation namespace. Unsaved state combines a
@@ -69,16 +64,18 @@ and never save automatically.
 
 ## Project transitions
 
-The destructive ordering and supersession rules are defined by
-[SYS-015](../../v-model/02-system-requirements/operations-and-deployment.md#sys-015--discard-the-active-project-when-replacement-starts)
-and [CMP-010](../../v-model/04-component-contracts.md#cmp-010--destructive-project-session-transition).
-They concern the active browser session, not deletion of a previously persisted named
+Saved-project open, import, demo, create/new-project, and other replacements should
+invalidate the old transition generation and clear the active graph, name, selection,
+polling, result windows, and collaboration ownership before retrieval, preflight,
+validation, or decode. Cancellation or failure of the latest transition should leave
+the session empty, and a superseded completion must not displace the newer result. These
+rules concern the active browser session, not deletion of a previously persisted named
 project; backend simulation records have their own destroy/retention lifecycle.
 
 Current open/import/demo preflight and decode, and new-project creation/storage, occur
 before active-session teardown. Rejection or failure can therefore preserve the active
 project; an overlapping create may also leave its stored candidate. That ordering is a
-conformance gap.
+known gap.
 
 ## Frontend-only fields
 

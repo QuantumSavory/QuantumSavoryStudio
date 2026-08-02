@@ -4,16 +4,11 @@
 - **Open when:** Changing generated Julia, import resolution, supported runtime/export
   mappings, filenames, or export-side validation.
 - **Do not open when:** Changing live simulation lifecycle or frontend download styling.
-- **Related specification IDs:** STK-003, SYS-007, SUB-008, CMP-007
 - **Review when:** A project payload field, constructor mapping, lexical source context,
   representation, physical-link rule, or generated example changes.
 
-Normative export fidelity, side-effect, and help behavior is defined by
-[STK-003](../../v-model/01-stakeholder-outcomes.md#stk-003--continue-with-standalone-simulation-source),
-[SYS-007](../../v-model/02-system-requirements/gui-and-simulation.md#sys-007--generate-faithful-pedagogical-source),
-[SUB-008](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-008--side-effect-bounded-script-generation-boundary),
-and [CMP-007](../../v-model/04-component-contracts.md#cmp-007--deterministic-script-binding-and-imports).
-This reference records the current generator and evidence gaps.
+This reference records the generator's maintained fidelity, side-effect, and help
+boundaries together with current evidence gaps.
 
 ## Product purpose
 
@@ -55,9 +50,8 @@ delay callables, context bindings, per-assignment expression Variables, and weig
 state/trace construction.
 
 The frontend Export Script tab currently only requests, displays, and downloads backend
-text. The target feature-specific disclosure rule is in
-[SYS-007](../../v-model/02-system-requirements/gui-and-simulation.md#sys-007--generate-faithful-pedagogical-source).
-The existing panel-level warning is general; no maintained supported/omitted-feature
+text. Export help should identify each omitted or simplified selected GUI feature. The
+existing panel-level warning is general; no maintained supported/omitted-feature
 inventory currently proves exhaustive corresponding help.
 
 ## Verification boundaries
@@ -67,7 +61,7 @@ semantics, and no registry mutation. HTTP tests cover response/filename and name
 behavior. The dedicated export-panel scenario mocks its endpoint; the background-noise
 browser scenario reaches the real route and inspects selected generated semantics.
 No single action downloads a real backend response and then independently edits/runs
-it, so that action remains planned.
+it, so that end-to-end coverage remains missing.
 
 ## Anchors
 
