@@ -15,7 +15,6 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
   identify the context needed for the task. Do not read `.agents/` recursively.
 - Keep the selectively routed context synchronized when changing observable behavior,
   interfaces, compatibility, or verification boundaries.
-- Treat `_docs_/` and `_tests_/` as historical material, not maintained code roots.
 
 ## Primary commands
 

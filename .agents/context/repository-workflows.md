@@ -76,9 +76,9 @@ Do not commit:
 - `node_modules/`, `test-results/`, `playwright-report/`, or `ci-artifacts/`;
 - Genie caches/sessions, SQLite runtime files, logs, or local capability/session data.
 
-Edit `gui/public/` for static frontend source. Treat `_docs_/`, `_tests_/`, and the
-implemented plans under `plans/followups/` as historical evidence, not current task
-instructions.
+Edit `gui/public/` for static frontend source. The former `_docs_/` and `_tests_/`
+trees remain available in Git history only. Treat implemented plans under
+`plans/followups/` as historical evidence, not current task instructions.
 
 ## Finish
 
