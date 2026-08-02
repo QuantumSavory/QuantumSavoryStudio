@@ -104,14 +104,18 @@ end
 function simulation_create!(
   service::SimulationService,
   payload::AbstractDict;
-  validation=validate_payload(payload),
+  validation=nothing,
   builder=build_simulation_state,
+  catalogs=_constructor_catalog_snapshot(),
 )
-  name = string(validation["data"]["name"])
+  validation_result = validation === nothing ?
+    validate_payload(payload; catalogs) : validation
+  name = string(validation_result["data"]["name"])
   # Construct the replacement before touching a healthy existing simulation.
   # Parsing may fail after structural validation (for example while materializing
   # a runtime protocol), and such a failure must leave the prior state intact.
-  state = builder(validation)
+  state = builder === build_simulation_state ?
+    builder(validation_result; catalogs) : builder(validation_result)
   _with_simulation_lifecycle_lock(service, name) do
     simulation_action_is_valid!(service, name; destroy=true, lifecycle_locked=true)
     lock(service.lock) do

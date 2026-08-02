@@ -877,13 +877,10 @@ describe('backend payload codecs', () => {
       ],
     }
     project.net.nodes[0].data.protocols[0].parameters = [
-      { name: 'sim', type: 'ConcurrentSim.Simulation' },
-      { name: 'node', type: 'Int64', value: 1 },
       { name: 'kept', type: 'Union', selectedType: 'Float64', value: 0.5 },
       { name: 'unset', type: 'Float64', value: null },
     ]
     project.net.edges[0].data.protocols[0].parameters = [
-      { name: 'nodeA', type: 'Int64', value: 1 },
       { name: 'value', type: 'Symbolic', value: { kind: 'variable', id: 'variable_state' } },
     ]
 
@@ -969,7 +966,7 @@ describe('backend payload codecs', () => {
 
     expect(slot.isLocked).toBe(true)
     expect(slot.backgroundNoise.doc).toBe('Editor documentation')
-    expect(project.net.nodes[0].data.protocols[0].parameters[2].selectedType).toBe('Float64')
+    expect(project.net.nodes[0].data.protocols[0].parameters[0].selectedType).toBe('Float64')
   })
 
   it('serializes nullable named-tag union choices with their established wire values', () => {

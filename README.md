@@ -149,7 +149,8 @@ The state response will show `simulation_paused: true` and `simulation_running: 
 
 - **`GET /background_types`** - Available background noise models
 - **`GET /slot_types`** - Available quantum slot types
-- **`GET /protocol_types`** - Available protocol types with parameters
+- **`GET /protocol_types`** - Live upstream protocol metadata, including placement,
+  parameters, required fields, and virtual-edge eligibility
 - **`GET /protocols/:name/:protocol_id`** - Details for a protocol instance in a simulation
 - **`GET /slots/:name/:slot_id`** - Details for a slot in a simulation
 - **`GET /simulations`** - List existing simulations with `name` and `status`
@@ -225,18 +226,28 @@ fields may be omitted or `null` by legacy API clients.
 Protocol constructor inputs follow one metadata-driven pipeline:
 
 ```text
-QuantumSavory constructor metadata
+QuantumSavory runtime catalogs
+  → Web catalog adapter
   → backend Julia-type metadata
   → frontend input descriptors
   → minimized base Julia type plus tagged value
 ```
 
-Every editable constructor parameter begins with a **Default** choice. Default
-stores no value and omits the keyword from simulator and script-export payloads,
-so the QuantumSavory constructor applies its own default. Catalog `defaultValue`
-metadata is help text only; a new project does not copy it into the draft.
-Choosing an explicit literal, function, tag, or expression starts an empty
-editor and requires a valid value before it is committed.
+The backend reads QuantumSavory's slot, background, and protocol catalogs on each
+request. Protocol placement, editable parameters, required fields, and virtual-edge
+eligibility therefore come from the same upstream metadata used for validation,
+runtime construction, and script export. Payloads contain only advertised editable
+parameters; the backend supplies simulation, network, and attachment arguments.
+
+Optional constructor parameters begin with a **Default** choice. Default stores no
+value and omits the keyword from simulator and script-export payloads, so the
+QuantumSavory constructor applies its own default. Required parameters omit Default,
+start on the first supported concrete choice with an incomplete value, and must be
+populated before the protocol can be committed. A required parameter also rejects a
+Variable whose value is Default. Catalog `defaultValue` metadata is help text only;
+a new project does not copy it into the draft. Choosing an explicit literal,
+function, tag, or expression starts an empty editor and requires a valid value before
+it is committed.
 
 `Float64` and `Int64` parameters and Variables can use a Julia numeric
 expression. The declared type remains `Float64` or `Int64`; project JSON stores

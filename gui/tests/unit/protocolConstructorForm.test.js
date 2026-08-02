@@ -7,6 +7,10 @@ import TypedValueInput from '../../src/components/panels/TypedValueInput.vue'
 import { VariableReference } from '../../src/models/Variable'
 import { UI_SERVICES_KEY } from '../../src/composables/uiServices'
 import { api } from '../../src/utils/ApiConnector'
+import {
+  createProtocolFromDefinition,
+  validateProtocolConstructorDraft,
+} from '../../src/utils/protocolConstructors'
 
 const PROTOCOL_TYPE = 'QuantumSavory.ProtocolZoo.TestNodeProtocol'
 const ENTANGLER_TYPE = 'QuantumSavory.ProtocolZoo.EntanglerProt'
@@ -16,8 +20,6 @@ const protocolDefinition = {
   type: PROTOCOL_TYPE,
   group: 'node',
   parameters: [
-    { field: 'sim', type: 'Any', doc: 'Injected simulation.' },
-    { field: 'node', type: 'Int64', doc: 'Injected node.' },
     {
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
@@ -71,14 +73,10 @@ afterAll(() => {
 })
 
 describe('ProtocolConstructorForm', () => {
-  it('filters injected constructor arguments and retains documentation tooltips', () => {
+  it('renders catalog fields and retains documentation tooltips', () => {
     const protocol = {
       type: PROTOCOL_TYPE,
-      parameters: [
-        { name: 'sim', type: 'Any' },
-        { name: 'node', type: 'Int64' },
-        { name: 'rounds', type: 'Int64', value: 3 }
-      ]
+      parameters: [{ name: 'rounds', type: 'Int64', value: 3 }]
     }
     const wrapper = mountForm({ protocol, category: 'node' })
 
@@ -102,11 +100,19 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.find('.unknown-type-indicator').exists()).toBe(false)
   })
 
-  it('renders an explicit empty constructor panel when no configurable fields remain', () => {
+  it('renders an explicit empty constructor panel for an empty catalog entry', () => {
+    const emptyDefinition = {
+      type: 'QuantumSavory.ProtocolZoo.EmptyNodeProtocol',
+      group: 'node',
+      parameters: [],
+    }
+    api._config.value = {
+      protocolTypes: { node: [emptyDefinition], edge: [], floating: [] },
+    }
     const wrapper = mountForm({
       protocol: {
-        type: PROTOCOL_TYPE,
-        parameters: [{ name: 'sim', type: 'Any' }, { name: 'node', type: 'Int64' }]
+        type: emptyDefinition.type,
+        parameters: [],
       },
       category: 'node',
       emptyText: 'This protocol has no configurable constructor parameters.'
@@ -116,6 +122,49 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('.empty-protocol-parameters').text()).toBe(
       'This protocol has no configurable constructor parameters.'
     )
+  })
+
+  it('keeps optional fields Default-first and required fields concrete but incomplete', () => {
+    const definition = {
+      type: 'QuantumSavory.ProtocolZoo.RequiredNodeProtocol',
+      group: 'node',
+      parameters: [
+        { field: 'rounds', type: 'Int64', required: false },
+        { field: 'clientnodes', type: 'Vector{Int64}', required: true },
+      ],
+    }
+    api._config.value = {
+      protocolTypes: { node: [definition], edge: [], floating: [] },
+    }
+    const protocol = createProtocolFromDefinition(definition)
+    const [optional, required] = protocol.parameters
+
+    expect(optional).toMatchObject({ selectedType: 'default', value: null })
+    expect(required).toMatchObject({ selectedType: 'Vector{Int64}', value: null })
+    expect(() => validateProtocolConstructorDraft(definition, protocol))
+      .toThrow('clientnodes requires a complete Vector{Int64} value')
+
+    const wrapper = mountForm({
+      protocol,
+      category: 'node',
+      variables: [{
+        id: 'variable-default',
+        name: 'use default',
+        type: 'default',
+        selectedType: 'default',
+        value: null,
+      }],
+    })
+    const selectors = wrapper.findAll('.complexTypeSelector')
+    expect(selectors[0].findAll('option').map(option => option.text()))
+      .toEqual(['Default', 'Int64', 'Int64 Expression'])
+    expect(selectors[1].findAll('option').map(option => option.text()))
+      .toEqual(['Vector{Int64}'])
+    expect(wrapper.get('[aria-label="Set clientnodes from a variable"]')
+      .attributes('disabled')).toBeDefined()
+
+    required.value = [2]
+    expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
   })
 
   it('preserves union choices and contextual Function filtering', async () => {

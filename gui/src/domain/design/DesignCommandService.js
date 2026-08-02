@@ -1469,6 +1469,12 @@ export class DesignCommandService {
         const assignmentType = variable.selectedType === 'default'
           ? 'default'
           : variable.type
+        if (parameterDefinition.required === true && assignmentType === 'default') {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `Required parameter ${parameterName} cannot use a Default-valued Variable.`,
+          )
+        }
         if (!parameterTypeSupportsVariableType(declaredType, assignmentType)) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',

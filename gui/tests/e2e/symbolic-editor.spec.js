@@ -4,7 +4,7 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   type: 'TestProtocols.SymbolicProt',
   doc: 'Protocol used to exercise symbolic parameter editing.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [{
     field: 'observable',
     type: 'Symbolic',
@@ -16,7 +16,7 @@ const CUSTOM_FUNCTION_PROTOCOL_TYPE = {
   type: 'TestProtocols.FunctionProt',
   doc: 'Protocol used to exercise custom-function parameter editing.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [{
     field: 'callback',
     type: 'Function',

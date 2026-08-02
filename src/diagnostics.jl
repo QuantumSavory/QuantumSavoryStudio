@@ -41,13 +41,13 @@ end
 
 """Reject script export for projects containing the server-only diagnostic."""
 function reject_mock_broken_protocol_export(payload)
-  for (protocol, location) in _collect_protocol_definitions(payload)
-    _is_mock_broken_protocol_definition(protocol) || continue
+  for protocol in _collect_protocol_definitions(payload)
+    _is_mock_broken_protocol_definition(protocol.definition) || continue
     throw(validation_error(
       "MockBrokenProtocol is diagnostic-only and cannot be exported as a Julia script",
       Dict{String,Any}(
         "protocol_type" => MOCK_BROKEN_PROTOCOL_TYPE,
-        "location" => location,
+        "location" => protocol.location,
       ),
     ))
   end

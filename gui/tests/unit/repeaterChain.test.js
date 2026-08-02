@@ -35,8 +35,6 @@ const ENTANGLER_DEFINITION = {
   group: 'edge',
   virtual: false,
   parameters: [
-    { field: 'nodeA', type: 'Int64' },
-    { field: 'nodeB', type: 'Int64' },
     { field: 'success_prob', type: 'Float64', defaultValue: 0.001 },
     { field: 'settings', type: 'Any', defaultValue: { nested: { value: 'metadata' } } }
   ]
@@ -45,9 +43,8 @@ const ENTANGLER_DEFINITION = {
 const SWAPPER_DEFINITION = {
   type: SWAPPER_TYPE,
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [
-    { field: 'node', type: 'Int64' },
     {
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function']
@@ -64,10 +61,8 @@ const SWAPPER_DEFINITION = {
 const TRACKER_DEFINITION = {
   type: TRACKER_TYPE,
   group: 'node',
-  virtual: null,
-  parameters: [
-    { field: 'node', type: 'Int64' }
-  ]
+  virtual: false,
+  parameters: []
 }
 
 function protocol(id, type, parameters = []) {
@@ -250,7 +245,9 @@ describe('protocol constructor helpers', () => {
 
     parametersByName(seeded).success_prob.extra.nested = false
     expect(template.parameters[0].extra.nested).toBe(true)
-    expect(ENTANGLER_DEFINITION.parameters[3].defaultValue.nested.value).toBe('metadata')
+    expect(ENTANGLER_DEFINITION.parameters.find(
+      parameter => parameter.field === 'settings',
+    ).defaultValue.nested.value).toBe('metadata')
   })
 
   it('preserves an explicit empty branch and validates rather than normalizing it', () => {

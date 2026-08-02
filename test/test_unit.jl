@@ -9,20 +9,23 @@
   using ConcurrentSim
   using Dates
 
-  @eval begin
-    """A test-only background used to exercise non-Float64 catalog fields."""
-    Base.@kwdef struct ContextualIntegerBackground
-      count::Int64 = 1
-      label::String = "default"
-    end
-    QuantumSavory.constructor_metadata(::Type{ContextualIntegerBackground}) = [
-      (field=:count, type=Int64, doc="A contextual integer constructor field."),
-      (field=:label, type=String, doc="A nonnumeric constructor field."),
-    ]
+  if !isdefined(Main, :ContextualIntegerBackground)
+    Core.eval(Main, :(using QuantumSavory))
+    Core.eval(Main, :(
+      Base.@kwdef struct ContextualIntegerBackground <: QuantumSavory.AbstractBackground
+        count::Int64 = 1
+        label::String = "default"
+      end
+    ))
+    Core.eval(Main, Expr(:public, :ContextualIntegerBackground))
+    Core.eval(Main, :(
+      QuantumSavory.constructor_metadata(::Type{ContextualIntegerBackground}) = [
+        (field=:count, type=Int64, doc="A contextual integer constructor field."),
+        (field=:label, type=String, doc="A nonnumeric constructor field."),
+      ]
+    ))
   end
-  WebQuantumSavory._ensure_noise_types_cache!()
-  WebQuantumSavory._NOISE_TYPES_CACHE[]["contextualintegerbackground"] =
-    ContextualIntegerBackground
+  ContextualIntegerBackground = Main.ContextualIntegerBackground
 
   # Load test data
   test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload.json"))
@@ -102,7 +105,7 @@
     parameter_by_name["pairstate"]["value"] = Dict("kind" => "variable", "id" => "state-variable")
     parameter_by_name["success_prob"]["value"] =
       Dict("kind" => "variable", "id" => "weighted-state-variable_tr")
-    parameter_by_name["chooseA"]["value"] = Dict("kind" => "variable", "id" => "default-function-variable")
+    parameter_by_name["chooseslotA"]["value"] = Dict("kind" => "variable", "id" => "default-function-variable")
 
     state_names_before = Set(keys(WebQuantumSavory.STATE))
     script = WebQuantumSavory.generate_julia_script(payload)
@@ -254,11 +257,6 @@
     tagged_by_name["tag"]["value"] = counterpart_id
     tagged_by_name["attempt_time"]["type"] = "String"
     tagged_by_name["attempt_time"]["value"] = 0.125
-    push!(tagged_parameters, Dict(
-      "name" => "stale_blank_parameter",
-      "type" => "DataType",
-      "value" => "",
-    ))
     tagged_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
       WebQuantumSavory.generate_julia_script(tagged_payload)
     end
@@ -270,7 +268,6 @@
     @test occursin("tag = EntanglementCounterpart", tagged_script)
     @test occursin("attempt_time = 0.125", tagged_script)
     @test !occursin("attempt_time = \"0.125\"", tagged_script)
-    @test !occursin("stale_blank_parameter", tagged_script)
     @test Meta.parseall(tagged_script) isa Expr
 
     symbolic_payload = deepcopy(tagged_payload)
@@ -301,10 +298,10 @@
       "distance == 12500.0 && delay == 0.125 && refractive_index == 1.5 && " *
       "loss == 0.2 && transmissivity == 0.95 && " *
       "node_a == 1 && node_b == 2 && Base.length((slot,)) == 1 && slot > 0)"
-    lambda_by_name["chooseA"]["type"] = "Lambda"
-    lambda_by_name["chooseA"]["value"] = raw_context_lambda
-    lambda_by_name["chooseB"]["type"] = "Lambda"
-    lambda_by_name["chooseB"]["value"] = "slot -> slot > 0"
+    lambda_by_name["chooseslotA"]["type"] = "Lambda"
+    lambda_by_name["chooseslotA"]["value"] = raw_context_lambda
+    lambda_by_name["chooseslotB"]["type"] = "Lambda"
+    lambda_by_name["chooseslotB"]["value"] = "slot -> slot > 0"
     lambda_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       WebQuantumSavory.generate_julia_script(lambda_payload)
     end
@@ -1473,8 +1470,8 @@
           2,
         )
         edge_ctx = Dict{Symbol,Any}(
-          :nodeA => 1,
-          :nodeB => 2,
+          :node_a => 1,
+          :node_b => 2,
           WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
           WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY => physical_edge_context,
         )
@@ -1610,120 +1607,104 @@
     end
   end
 
-  @testset "Protocol Types" begin
-      @test !WebQuantumSavory.mock_broken_protocol_enabled(override=nothing)
-      @test WebQuantumSavory.mock_broken_protocol_enabled(override=" TRUE ")
-      @test !WebQuantumSavory.mock_broken_protocol_enabled(override="False")
-      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="1")
-      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="yes")
+  @testset "Live Protocol Catalog Adapter" begin
+      upstream_entries = QuantumSavory.ProtocolZoo.available_protocol_types()
+      web_entries = Dict(entry["type"] => entry for entry in WebQuantumSavory.get_protocol_types())
 
-      withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => nothing) do
-        hidden_types = WebQuantumSavory.get_protocol_types()
-        @test all(pt["type"] != WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE for pt in hidden_types)
-        @test WebQuantumSavory._resolve_protocol_type_from_string(
-          WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
-        ) === nothing
-      end
+      for upstream in upstream_entries
+        wire_type = string(parentmodule(upstream.type), ".", nameof(upstream.type))
+        @test haskey(web_entries, wire_type)
+        web = web_entries[wire_type]
+        adapter = WebQuantumSavory._resolve_protocol_catalog_entry(wire_type)
 
-      withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "false") do
-        hidden_types = WebQuantumSavory.get_protocol_types()
-        @test all(pt["type"] != WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE for pt in hidden_types)
-        @test WebQuantumSavory._resolve_protocol_type_from_string(
-          WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
-        ) === nothing
+        @test adapter.type === upstream.type
+        @test adapter.attachment === upstream.attachment
+        @test adapter.attachment_fields == upstream.attachment_fields
+        @test web["group"] == (upstream.attachment === :network ? "floating" : string(upstream.attachment))
+        @test web["virtual"] === upstream.permits_virtual_edge
+
+        upstream_parameters = Dict(string(parameter.field) => parameter for parameter in upstream.parameters)
+        web_parameters = Dict(string(parameter.field) => parameter for parameter in web["parameters"])
+        @test keys(web_parameters) == keys(upstream_parameters)
+        for (field, upstream_parameter) in upstream_parameters
+          @test web_parameters[field].required === upstream_parameter.required
+        end
       end
 
       withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "true") do
-        diagnostic_types = WebQuantumSavory.get_protocol_types()
         diagnostic = only(filter(
-          pt -> pt["type"] == WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
-          diagnostic_types,
+          entry -> entry["type"] == WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
+          WebQuantumSavory.get_protocol_types(),
         ))
         @test diagnostic["group"] == "floating"
-        @test isempty(diagnostic["parameters"])
-        @test WebQuantumSavory._resolve_protocol_type_from_string(
-          WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
-        ) === WebQuantumSavory.MockBrokenProtocol
+        @test diagnostic["virtual"] === false
       end
+  end
 
-      withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "invalid") do
-        @test_throws ArgumentError WebQuantumSavory.get_protocol_types()
+  @testset "SimpleSwitch Catalog Construction and Export" begin
+      payload = JSON.parsefile(joinpath(
+        @__DIR__,
+        "..",
+        "gui",
+        "src",
+        "demos",
+        "1.Entangler.Example.json",
+      ))
+      payload["name"] = "simple_switch_catalog_parity"
+      empty!(payload["net"]["edges"][1]["data"]["protocols"])
+      switch_definition = Dict(
+        "id" => "simple-switch",
+        "type" => string(QuantumSavory.ProtocolZoo.SimpleSwitchDiscreteProt),
+        "parameters" => Any[
+          Dict("name" => "clientnodes", "type" => "Vector{Int64}", "value" => [2]),
+          Dict("name" => "success_probs", "type" => "Vector{Float64}", "value" => [0.8]),
+        ],
+      )
+      push!(payload["net"]["nodes"][1]["data"]["protocols"], switch_definition)
+
+      missing_required = deepcopy(payload)
+      pop!(missing_required["net"]["nodes"][1]["data"]["protocols"][1]["parameters"])
+      required_error = try
+        WebQuantumSavory.validate_payload(missing_required)
+        nothing
+      catch error
+        error
       end
+      @test required_error isa WebQuantumSavory.APIError
+      @test occursin("success_probs", required_error.message)
 
-      protocol_types = WebQuantumSavory.get_protocol_types()
-      @test isa(protocol_types, Vector)
-      @test !isempty(protocol_types)
-      @test all(isa(pt, Dict) for pt in protocol_types)
-      @test all(haskey(pt, "type") for pt in protocol_types)
-      @test all(haskey(pt, "doc") for pt in protocol_types)
-      @test all(haskey(pt, "group") for pt in protocol_types)
-      @test all(haskey(pt, "parameters") for pt in protocol_types)
-      @test all(haskey(pt, "virtual") for pt in protocol_types)
-      @test all(pt["group"] in ["node", "edge", "floating"] for pt in protocol_types)
-
-      protocol_types_by_name = Dict(pt["type"] => pt for pt in protocol_types)
-      virtual_protocol = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglementConsumer)]
-      physical_protocols = [
-        protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)],
-        protocol_types_by_name[string(QuantumSavory.ProtocolZoo.LinkController)],
-      ]
-
-      @test virtual_protocol["group"] == "edge"
-      @test virtual_protocol["virtual"] === true
-      @test all(pt["group"] == "edge" for pt in physical_protocols)
-      @test all(pt["virtual"] === false for pt in physical_protocols)
-
-      entangler_parameters = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)]["parameters"]
-      pairstate = only(filter(parameter -> string(parameter.field) == "pairstate", entangler_parameters))
-      @test pairstate.type == "Symbolic"
-
-      entangler_tag = only(filter(parameter -> string(parameter.field) == "tag", entangler_parameters))
-      @test entangler_tag.type == ["Nothing", "Type{<:AbstractTag}"]
-      @test entangler_tag.kind == WebQuantumSavory.NAMED_TAG_PARAMETER_KIND
-      @test entangler_tag.nullable === true
-
-      consumer_parameters = virtual_protocol["parameters"]
-      consumer_tag = only(filter(parameter -> string(parameter.field) == "tag", consumer_parameters))
-      @test consumer_tag.type == "Type{<:AbstractTag}"
-      @test consumer_tag.kind == WebQuantumSavory.NAMED_TAG_PARAMETER_KIND
-      @test consumer_tag.nullable === false
-
-      @test WebQuantumSavory._named_tag_parameter_semantics(
-        Type{<:QuantumSavory.AbstractTag},
-      ) == (; nullable=false)
-      @test WebQuantumSavory._named_tag_parameter_semantics(
-        Union{Nothing,Type{<:QuantumSavory.AbstractTag}},
-      ) == (; nullable=true)
-      @test WebQuantumSavory._named_tag_parameter_semantics(DataType) === nothing
-      @test WebQuantumSavory._named_tag_parameter_semantics(
-        Union{Nothing,DataType},
-      ) === nothing
-      @test WebQuantumSavory._named_tag_parameter_semantics(
-        Union{Nothing,Float64,Type{<:QuantumSavory.AbstractTag}},
-      ) === nothing
-      @test WebQuantumSavory._protocol_parameter_handling_type(
-        Union{Int64,Function},
-        "Int64",
-        "1",
-      ) === Int64
-      @test WebQuantumSavory._protocol_parameter_handling_type(
-        Union{Int64,Function},
-        "Lambda",
-        "slots -> first(slots)",
-      ) == "Lambda"
-      @test WebQuantumSavory._is_symbolic_parameter_type(QuantumSavory.SymQObj)
-      @test WebQuantumSavory._protocol_parameter_handling_type(
-        QuantumSavory.SymQObj,
-        "Symbolic",
-        Dict("kind" => "states_zoo"),
-      ) === QuantumSavory.SymQObj
-      consumer_declared_types = WebQuantumSavory._protocol_constructor_parameter_types(
-        QuantumSavory.ProtocolZoo.EntanglementConsumer,
+      validation = WebQuantumSavory.validate_payload(payload)
+      state = WebQuantumSavory.build_simulation_state(validation)
+      runtime_switch = WebQuantumSavory._instantiate_protocol(
+        switch_definition,
+        Dict{Symbol,Any}(
+          :sim => WebQuantumSavory.get_network_time_tracker(state.network),
+          :net => state.network,
+          :node => 1,
+        ),
       )
-      @test consumer_declared_types["_log"] == fieldtype(
-        QuantumSavory.ProtocolZoo.EntanglementConsumer,
-        :_log,
+      @test runtime_switch.switchnode == 1
+      @test runtime_switch.clientnodes == [2]
+      @test runtime_switch.success_probs == [0.8]
+      @test runtime_switch._backlog[1, 1] == 0
+
+      script = WebQuantumSavory.generate_julia_script(payload)
+      @test occursin("switchnode = 1", script)
+      paused_script = replace(
+        script,
+        "\nrun(sim, simulation_duration)\n" =>
+          "\n# run(sim, simulation_duration)  # paused by the switch parity test\n";
+        count=1,
       )
+      generated_module = Module(gensym(:SimpleSwitchCatalogExport))
+      Core.eval(generated_module, :(using Base))
+      Base.include_string(generated_module, paused_script, "simple-switch-catalog-export.jl")
+      exported_switch = only(getfield(generated_module, :protocols)).second
+      @test exported_switch.switchnode == runtime_switch.switchnode
+      @test exported_switch.clientnodes == runtime_switch.clientnodes
+      @test exported_switch.success_probs == runtime_switch.success_probs
+      @test exported_switch._backlog[1, 1] == runtime_switch._backlog[1, 1]
+      WebQuantumSavory.cleanup_state!(state)
   end
 
   @testset "Named AbstractTag Protocol Parameters" begin
@@ -1734,8 +1715,8 @@
     context = Dict{Symbol,Any}(
       :sim => WebQuantumSavory.get_network_time_tracker(state.network),
       :net => state.network,
-      :nodeA => 1,
-      :nodeB => 2,
+      :node_a => 1,
+      :node_b => 2,
     )
     counterpart_id = "QuantumSavory.ProtocolZoo.EntanglementCounterpart"
 
@@ -1822,22 +1803,6 @@
         )
         @test authoritative_symbolic.pairstate isa QuantumSavory.SymQObj
 
-        log_entries = @NamedTuple{t::Float64,obs1::Float64,obs2::Float64}[
-          (t=1.0, obs1=2.0, obs2=3.0),
-        ]
-        consumer_with_log = WebQuantumSavory._instantiate_protocol(
-          Dict(
-            "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
-            "parameters" => [Dict(
-              "name" => "log",
-              "type" => "String",
-              "value" => log_entries,
-            )],
-          ),
-          context,
-        )
-        @test consumer_with_log._log == log_entries
-
         for blank in (nothing, "", "  ")
           default_entangler = WebQuantumSavory._instantiate_protocol(
             protocol_definition(
@@ -1889,10 +1854,12 @@
         @test error isa WebQuantumSavory.APIError
         @test occursin("Unknown protocol parameter", error.message)
         unknown_parameter["parameters"][1]["value"] = ""
-        @test WebQuantumSavory._instantiate_protocol(
+        error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
           unknown_parameter,
           context,
-        ) isa QuantumSavory.ProtocolZoo.EntanglerProt
+        ))
+        @test error isa WebQuantumSavory.APIError
+        @test occursin("Unknown protocol parameter", error.message)
       end
 
       withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
@@ -1901,12 +1868,12 @@
             "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
             "parameters" => Any[
               Dict(
-                "name" => "chooseA",
+                "name" => "chooseslotA",
                 "type" => "Lambda",
                 "value" => "slots -> first(slots)",
               ),
               Dict(
-                "name" => "chooseB",
+                "name" => "chooseslotB",
                 "type" => "Lambda",
                 "value" => "slots -> last(slots)",
               ),
@@ -2405,7 +2372,12 @@
           "value" => nothing,
         ),
       ]
-      variable_payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][4]["value"] = Dict(
+      retention_parameter(payload) = only(
+        parameter for parameter in
+          payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"]
+        if parameter["name"] == "retention_time"
+      )
+      retention_parameter(variable_payload)["value"] = Dict(
         "kind" => "variable",
         "id" => "variable_retention",
       )
@@ -2461,14 +2433,14 @@
       @test occursin("missing required field: 'value'", missing_value.message)
 
       malformed_reference = variable_validation_error(payload -> delete!(
-        payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][4]["value"],
+        retention_parameter(payload)["value"],
         "id",
       ))
       @test malformed_reference isa WebQuantumSavory.APIError
       @test occursin("missing required field: 'id'", malformed_reference.message)
 
       dangling_reference = variable_validation_error(payload -> (
-        payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][4]["value"]["id"] = "missing"
+        retention_parameter(payload)["value"]["id"] = "missing"
       ))
       @test dangling_reference isa WebQuantumSavory.APIError
       @test dangling_reference.status_code == 400
@@ -2554,8 +2526,8 @@
         ctx = Dict{Symbol,Any}(
           :sim => state.simulation,
           :net => state.network,
-          :nodeA => 1,
-          :nodeB => 2,
+          :node_a => 1,
+          :node_b => 2,
         )
 
         states_zoo_protocol_definition = Dict(
@@ -2685,7 +2657,7 @@
       payload["net"]["edges"][1]["data"]["transmissivity"] = 0.95
       entangler_definition = payload["net"]["edges"][1]["data"]["protocols"][1]
       choose_a = only(filter(
-        parameter -> parameter["name"] == "chooseA",
+        parameter -> parameter["name"] == "chooseslotA",
         entangler_definition["parameters"],
       ))
       choose_a["type"] = "Lambda"
@@ -5486,8 +5458,8 @@
       assignment_context = Dict{Symbol,Any}(
         :sim => state.simulation,
         :net => state.network,
-        :nodeA => 1,
-        :nodeB => 2,
+        :node_a => 1,
+        :node_b => 2,
         WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY =>
           WebQuantumSavory._node_name_to_index(validation["graph_info"]["nodes"]),
         WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY =>

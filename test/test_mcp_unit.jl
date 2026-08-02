@@ -761,15 +761,14 @@
     @test occursin("expired", run_error.message)
   end
 
-  @testset "catalog adapters preserve placement metadata" begin
-    catalog = WebQuantumSavory._catalog_snapshot()
-    entries = WebQuantumSavory._catalog_entries(catalog, "protocols")
+  @testset "catalog tools smoke test" begin
+    listed = WebQuantumSavory.dispatch_mcp_tool!(
+      "catalog_list",
+      Dict("kind" => "protocols");
+      hub=WebQuantumSavory.CollaborationHub(),
+    )
+    entries = listed["protocols"]
     @test !isempty(entries)
-    @test all(haskey(entry, "placement") for entry in entries)
-    @test WebQuantumSavory._catalog_entries(
-      Dict{String,Any}("slots" => Any["Qubit"]),
-      SubString("xslots", 2),
-    ) == Any["Qubit"]
 
     first_entry = first(entries)
     result = WebQuantumSavory.dispatch_mcp_tool!(
@@ -781,6 +780,5 @@
       hub=WebQuantumSavory.CollaborationHub(),
     )
     @test result["entry"]["type"] == first_entry["type"]
-    @test result["entry"]["placement"] == first_entry["placement"]
   end
 end

@@ -21,8 +21,6 @@ const ENTANGLER_DEFINITION = {
   group: 'edge',
   virtual: false,
   parameters: [
-    { field: 'nodeA', type: 'Int64' },
-    { field: 'nodeB', type: 'Int64' },
     {
       field: 'success_prob',
       type: 'Float64',
@@ -41,9 +39,8 @@ const ENTANGLER_DEFINITION = {
 const SWAPPER_DEFINITION = {
   type: SWAPPER_TYPE,
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [
-    { field: 'node', type: 'Int64' },
     {
       field: 'nodeL',
       type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
@@ -68,8 +65,8 @@ const SWAPPER_DEFINITION = {
 const TRACKER_DEFINITION = {
   type: TRACKER_TYPE,
   group: 'node',
-  virtual: null,
-  parameters: [{ field: 'node', type: 'Int64' }]
+  virtual: false,
+  parameters: []
 }
 
 const FULL_PROTOCOL_TYPES = {
@@ -681,8 +678,6 @@ describe('RepeaterChainDialog protocol automation', () => {
           protocol: {
             type: ENTANGLER_TYPE,
             parameters: [
-              { name: 'nodeA', type: 'Int64', selectedType: 'default', value: null },
-              { name: 'nodeB', type: 'Int64', selectedType: 'default', value: null },
               {
                 name: 'success_prob',
                 type: 'Float64',
@@ -699,7 +694,6 @@ describe('RepeaterChainDialog protocol automation', () => {
           protocol: {
             type: SWAPPER_TYPE,
             parameters: [
-              { name: 'node', type: 'Int64', selectedType: 'default', value: null },
               {
                 name: 'nodeL',
                 type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
@@ -722,12 +716,7 @@ describe('RepeaterChainDialog protocol automation', () => {
           definition: TRACKER_DEFINITION,
           protocol: {
             type: TRACKER_TYPE,
-            parameters: [{
-              name: 'node',
-              type: 'Int64',
-              selectedType: 'default',
-              value: null
-            }]
+            parameters: []
           }
         }
       }

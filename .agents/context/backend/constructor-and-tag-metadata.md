@@ -14,6 +14,12 @@ WebQuantumSavory must not maintain a parallel list. The exact entries are depend
 data, so tests and documentation should inspect the catalog rather than freeze current
 member names.
 
+`src/catalogs.jl` reads all three upstream catalogs on every call and resolves types
+without mutable caches. Its protocol projection preserves upstream `parameters`,
+`attachment_fields`, and `permits_virtual_edge`; only the upstream `network`
+attachment is renamed to the existing Web `floating` wire group. The opt-in
+`MockBrokenProtocol` entry is synthetic and diagnostic-only.
+
 The typed-input flow is:
 
 ```text
@@ -23,9 +29,11 @@ QuantumSavory constructor member
   -> minimized base wire type plus optional tagged value
 ```
 
-Frontend descriptor IDs are UI choices, not Julia types on the wire. Default constructor
-selection omits the keyword so Julia applies its own default; metadata `defaultValue` is
-documentation rather than fresh draft state.
+Frontend descriptor IDs are UI choices, not Julia types on the wire. Optional Default
+selection omits the keyword so Julia applies its own default. A field with
+`required=true` must produce an explicit constructor keyword and cannot consume a
+Default-valued Variable. Metadata `defaultValue` is documentation rather than fresh
+draft state.
 
 ## Placement and physical context
 
@@ -39,6 +47,12 @@ Only protocols whose runtime metadata permits virtual placement may be attached 
 virtual edge. The frontend resolves physical quantities and sends them with physical
 edges; backend validation checks bounds but does not recompute or cross-check the
 frontend formula.
+
+Clients submit only upstream-advertised protocol parameters. Simulation, network, and
+attachment values are server-owned; private or injected fields are rejected like any
+other unknown parameter. Attachment metadata maps semantic roles (`node`, `node_a`,
+and `node_b`) to the constructor keywords advertised by QuantumSavory, so validation,
+runtime construction, and script export share one placement contract.
 
 ## Named tags and live queries
 
@@ -61,7 +75,8 @@ an explicit dependency policy.
 
 ## Anchors
 
-- **Catalog/parser:** [`src/parser.jl`](../../../src/parser.jl).
+- **Catalog adapter:** [`src/catalogs.jl`](../../../src/catalogs.jl).
+- **Validation/construction:** [`src/parser.jl`](../../../src/parser.jl).
 - **Tag codec:** [`src/tag_metadata.jl`](../../../src/tag_metadata.jl).
 - **Dependency declaration:** [`Project.toml`](../../../Project.toml).
 - **Contract evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl) and

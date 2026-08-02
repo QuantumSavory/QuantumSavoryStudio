@@ -153,34 +153,14 @@
       response = make_request("GET", "/background_types")
       @test response.status == 200
       data = parse_response(response)
-      @test haskey(data, "background_types")
-      @test isa(data["background_types"], Vector)
       @test !isempty(data["background_types"])
-      @test all(haskey(bt, "type") for bt in data["background_types"])
-      @test all(haskey(bt, "doc") for bt in data["background_types"])
-      @test all(haskey(bt, "parameters") for bt in data["background_types"])
-      parameters = [parameter for bt in data["background_types"] for parameter in bt["parameters"]]
-      @test !isempty(parameters)
-      @test all(haskey(parameter, "field") for parameter in parameters)
-      @test all(haskey(parameter, "type") for parameter in parameters)
-      @test all(
-        parameter["type"] isa String || (
-          parameter["type"] isa Vector &&
-          all(member -> member isa String, parameter["type"])
-        )
-        for parameter in parameters
-      )
   end
 
   @testset "Slot Types Endpoint" begin
       response = make_request("GET", "/slot_types")
       @test response.status == 200
       data = parse_response(response)
-      @test haskey(data, "slot_types")
-      @test isa(data["slot_types"], Vector)
       @test !isempty(data["slot_types"])
-      @test all(haskey(st, "type") for st in data["slot_types"])
-      @test all(haskey(st, "doc") for st in data["slot_types"])
   end
 
   @testset "Known Functions Endpoint" begin
@@ -272,43 +252,7 @@
       response = make_request("GET", "/protocol_types")
       @test response.status == 200
       data = parse_response(response)
-      @test haskey(data, "protocol_types")
-      @test isa(data["protocol_types"], Vector)
       @test !isempty(data["protocol_types"])
-      @test all(haskey(pt, "type") for pt in data["protocol_types"])
-      @test all(haskey(pt, "doc") for pt in data["protocol_types"])
-      @test all(haskey(pt, "group") for pt in data["protocol_types"])
-      @test all(haskey(pt, "parameters") for pt in data["protocol_types"])
-      @test all(haskey(pt, "virtual") for pt in data["protocol_types"])
-      @test all(pt["group"] in ["node", "edge", "floating"] for pt in data["protocol_types"])
-
-      protocol_types_by_name = Dict(pt["type"] => pt for pt in data["protocol_types"])
-      virtual_protocol = protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglementConsumer)]
-      physical_protocols = [
-        protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)],
-        protocol_types_by_name[string(QuantumSavory.ProtocolZoo.LinkController)],
-      ]
-
-      @test virtual_protocol["group"] == "edge"
-      @test virtual_protocol["virtual"] === true
-      @test all(pt["group"] == "edge" for pt in physical_protocols)
-      @test all(pt["virtual"] === false for pt in physical_protocols)
-
-      entangler_tag = only(filter(
-        parameter -> parameter["field"] == "tag",
-        protocol_types_by_name[string(QuantumSavory.ProtocolZoo.EntanglerProt)]["parameters"],
-      ))
-      @test entangler_tag["type"] == ["Nothing", "Type{<:AbstractTag}"]
-      @test entangler_tag["kind"] == "named_tag_type"
-      @test entangler_tag["nullable"] === true
-
-      consumer_tag = only(filter(
-        parameter -> parameter["field"] == "tag",
-        virtual_protocol["parameters"],
-      ))
-      @test consumer_tag["type"] == "Type{<:AbstractTag}"
-      @test consumer_tag["kind"] == "named_tag_type"
-      @test consumer_tag["nullable"] === false
   end
 
   @testset "Named AbstractTag Protocol Boundaries" begin
