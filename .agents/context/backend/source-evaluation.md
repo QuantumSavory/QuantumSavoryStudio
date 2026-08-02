@@ -5,22 +5,20 @@
   predicates, lexical contexts, capability metadata, or evaluation policy.
 - **Do not open when:** Handling numeric literals, known predefined functions, or
   structured States Zoo recipes that do not execute source.
-- **Related specification IDs:** STK-005, SYS-009, SUB-010, CMP-006
 - **Review when:** Any source-bearing entry point, allowlist, context binding, error
   disclosure rule, or evaluation gate changes.
 
-Normative admission, opt-in, containment, and disclosure behavior is defined by
-[STK-005](../../v-model/01-stakeholder-outcomes.md#stk-005--control-native-source-risk),
-[SYS-009](../../v-model/02-system-requirements/operations-and-deployment.md#sys-009--default-deny-and-externally-contain-native-source-execution),
-and [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable).
-This reference records the current evaluator and its gaps.
+The intended boundary is default-denied native evaluation, one explicit operator
+opt-in, admission through the restricted language, external containment when enabled
+publicly, and preservation of backend-produced diagnostics. This reference records the
+current evaluator and its gaps.
 
 ## Trust boundary
 
-The baseline makes `WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true` the sole operator
+`WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true` is intended to be the sole operator
 opt-in. Current code parses explicit `true`/`false` strictly, but with the variable absent
 it enables evaluation in `dev` and `test` and disables it elsewhere. The implicit
-development/test enablement is a conformance gap.
+development/test enablement is a known gap.
 
 The restricted language reduces risk but is not a security sandbox: accepted Julia
 executes natively in the server process without memory, operation, or safely
@@ -61,7 +59,7 @@ parses, guards, and evaluates the expression.
 
 `parser.jl` retains a separate complex-parameter fallback that interpolates a value and
 declared type into source and calls module-global `eval` after the environment gate,
-without the allowlist or a fresh module. This is a critical conformance gap: do not
+without the allowlist or a fresh module. This is a critical gap: do not
 extend or copy that path.
 
 ## Allowlist and contexts
@@ -91,17 +89,15 @@ use 400, but non-string `code`/`expr` and some other malformed inputs can still 
 generic 500. The `/test_code`, `/test_numeric_expression`, and
 `/test_symbolic_expression` handlers currently return parse, guard, and execution
 failures as `success:false`, generally with HTTP 200. Other runtime paths may translate
-them into validation errors. SYS-008 requires backend-produced diagnostic fields to
-survive deployment-profile handoff; current production redaction is therefore a
-conformance gap.
+them into validation errors. Backend-produced diagnostic fields should survive
+deployment-profile handoff; current production redaction is therefore a known gap.
 
 ## Verification gap
 
 Backend unit tests exercise disabled policy and conditional integration tests contain
 both branches, but server-backed CI sets `GENIE_ENV=test`; absent an override, the
 current default therefore enables evaluation. Browser disabled-mode tests mock
-capability responses. A real disabled backend system action remains planned in the
-V-model.
+capability responses. A real disabled-backend system test remains missing.
 
 ## Anchors
 

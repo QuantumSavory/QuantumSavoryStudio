@@ -4,18 +4,12 @@
 - **Open when:** Changing contract versions, tools, resources, schemas, annotations,
   dispatch, sessions, revisions, operation IDs, or stable errors.
 - **Do not open when:** Changing unrelated GUI editing or operational sidecar setup.
-- **Related specification IDs:** SYS-012, SYS-016, SUB-012, SUB-013, CMP-008,
-  CMP-009, CMP-011, CMP-012
 - **Review when:** `contracts/mcp/`, a dispatch branch, resource template, error code,
   session rule, or replay rule changes.
 
-Normative collaboration, retry, Run, annotation, and resource behavior is defined by
-[SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely),
-[CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants),
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness),
-and [CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
-This reference records current registry/dispatch mechanics and conformance deltas.
+This reference records current registry and dispatch mechanics together with the
+browser-authority, retry, Run, annotation, and resource rules they are intended to
+provide.
 
 ## Contract source
 
@@ -43,8 +37,9 @@ The sidecar publishes current-design and simulation-state resources plus catalog
 slot-result, and protocol-result templates. Backend adapters return primitive/JSON,
 HTML, or PNG representations.
 
-The required representation and error surface is defined by
-[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
+Every successful slot or protocol result should expose URI-safe, readable, nonempty HTML
+and PNG resources. Unavailable, malformed, or missing resource requests should return
+stable structured errors.
 
 Current adapters advertise both formats before establishing that both exist, can return
 `nothing` content, and interpolate identifiers without percent-encoding while matching
@@ -58,35 +53,36 @@ Design mutations require the caller's `expected_revision`; GUI and MCP changes a
 one collaboration revision. Lifecycle tools act on the current browser state after draft
 flush and intentionally omit that field.
 
-The session-lifetime ledger, conflict, uncertainty, rebind, and restart rules are
-specified by
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-The annotation rule is in
-[CMP-012](../../v-model/04-component-contracts.md#cmp-012--truthful-mcp-metadata-and-result-resources).
+For one transport session, the operation ledger should bind every operation ID to its
+tool, normalized arguments, and terminal success, error, or unknown outcome until
+restart. Exact retries return the original outcome without delivery; mismatched reuse
+returns nonretryable `OPERATION_ID_CONFLICT`; entries survive browser rebind without
+eviction; and `OUTCOME_UNKNOWN` never replays. Only intrinsically repeat-safe tools
+should advertise `idempotentHint`; accepting an operation ID does not make a mutation
+intrinsically idempotent.
 
 Current code instead retains only 256 successful results, clears them on bind/unbind,
 does not bind an ID to tool/arguments, does not retain rejected/unknown outcomes, and
 marks mutation/lifecycle tools idempotent. Treat every one of those differences as a
-conformance gap.
+known gap.
 
 ## Simulation run
 
-The Play-equivalence and prepared-revision contract is defined by
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+`simulation_run` should share GUI Play's readiness/capability, validation, parse,
+prepare, and start path, preserve actionable failure details, and record the prepared
+browser revision.
 
 The current browser relay already shares the controller, but the hub records
 `prepared_source_revision` only after explicit prepare. Direct-run revision recording is
-a conformance gap.
+a known gap.
 
 ## Error and recovery categories
 
-The normative error/recovery outcomes are defined by
-[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-operation-recovery-boundary)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-Current hub code has binding-expiry, stale-revision, and selected desynchronization
-handling, but its binding-scoped success cache cannot implement the baselined retry and
-uncertainty outcomes.
+Binding ownership/expiry, stale revision, operation conflict, and uncertain
+acknowledgement should stop edits instead of continuing from conflicting or unknown
+state. Current hub code has binding-expiry, stale-revision, and selected
+desynchronization handling, but its binding-scoped success cache cannot implement the
+intended retry and uncertainty outcomes.
 
 Simulation reads verify binding generation, simulation namespace, and design revision
 before and after the read. This does not freeze concurrent simulation internals into one

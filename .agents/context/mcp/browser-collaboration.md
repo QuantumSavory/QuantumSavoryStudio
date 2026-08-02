@@ -4,17 +4,11 @@
 - **Open when:** Changing browser binding, leases, canonical snapshots, revisions, draft
   flushing, command commit, GUI-originated changes, or lifecycle relay.
 - **Do not open when:** Starting/upgrading the sidecar or changing tool schemas alone.
-- **Related specification IDs:** SYS-011, SYS-012, SYS-016, SUB-003, SUB-012,
-  SUB-013, CMP-002, CMP-008, CMP-011
 - **Review when:** Binding ownership, revision/hash semantics, command execution, or
   collaboration teardown changes.
 
-Normative browser authority, revision, operation-recovery, and Play behavior is defined
-by [SYS-012](../../v-model/02-system-requirements/operations-and-deployment.md#sys-012--coordinate-browser-authoritative-mcp-work),
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely),
-[SUB-012](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-012--browser-lease-revision-and-operation-recovery-boundary),
-and [CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
-This reference describes the current bridge/hub machinery and its gaps.
+This reference describes browser authority, revisions, operation recovery, Play
+equivalence, and the current bridge/hub gaps.
 
 ## Binding
 
@@ -53,25 +47,27 @@ revision stream.
 
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
 unclassified deep-watch synchronization fallback. The shared-handler requirement for
-new MCP operations is specified by SUB-003/CMP-002.
+new MCP operations is to use the same candidate, validation, and atomic-reconciliation
+path as their equivalent GUI actions.
 
 ## Lifecycle and reads
 
 Lifecycle mutations currently relay through the existing browser simulation controller,
-although direct Run bypasses part of the GUI capability/readiness path described in
-[CMP-011](../../v-model/04-component-contracts.md#cmp-011--shared-guimcp-play-readiness).
+although direct Run bypasses part of the shared GUI capability/readiness, validation,
+prepare, start, and actionable-error path.
 Catalog reads and simulation-result reads do not mutate the design; simulation reads use
 backend services and verify collaboration context around the read.
 
 ## Delivery failures
 
-The required pre-delivery, post-delivery, rebind, and restart outcomes are specified by
-[SYS-016](../../v-model/02-system-requirements/operations-and-deployment.md#sys-016--preserve-mcp-operation-identity-and-recover-safely)
-and [CMP-008](../../v-model/04-component-contracts.md#cmp-008--session-operation-ledger-and-unknown-outcome-invariants).
-Current code can cancel selected pre-delivery cases and desynchronize a binding after
-impossible acknowledgement, but its bounded binding-scoped success cache does not retain
-the required terminal outcomes across rebind. See [tool contract](tool-contract.md) for
-the complete current delta.
+One transport session should retain every operation ID with its normalized request and
+terminal success, error, or unknown outcome until restart. Exact retries return the
+original outcome without delivery; mismatched reuse fails without mutation; an unknown
+outcome cannot replay; and browser rebind does not clear the ledger. Current code can
+cancel selected pre-delivery cases and desynchronize a binding after impossible
+acknowledgement, but its bounded binding-scoped success cache does not retain the
+required terminal outcomes across rebind. See [tool contract](tool-contract.md) for the
+complete current delta.
 
 ## Anchors
 
@@ -87,4 +83,4 @@ the complete current delta.
   migration debt with a retirement trigger?
 
 Current lease, polling, and queue sizes remain implementation choices; the supported
-session/binding cardinality is defined by SYS-011/SYS-012.
+cardinality is one MCP transport session and one renewable browser binding.

@@ -4,7 +4,6 @@
 - **Open when:** Tracing application composition, domain ownership, canonical project
   flow, or deciding where cross-feature behavior belongs.
 - **Do not open when:** Looking up one project field, component style, or test command.
-- **Related specification IDs:** SYS-002, SUB-002, SUB-003
 - **Review when:** The composition root, project authority, domain-service boundary, or
   frontend/backend/MCP ownership changes.
 
@@ -52,9 +51,9 @@ initialization also occurs in `App.vue`, not `main.js`.
 
 ## Shared authoring direction
 
-The prospective shared-handler rule is defined by
-[SUB-003](../../v-model/03-subsystem-contracts/core-application.md#sub-003--shared-atomic-authoring-boundary).
-Not every historical GUI edit already uses that service: a deep snapshot watcher still
+Every authoring operation exposed through MCP should share the browser-visible semantics
+of its equivalent GUI action and commit either one whole valid result or no result. Not
+every historical GUI edit already uses that service: a deep snapshot watcher still
 publishes an “Unclassified GUI design change” for retained paths. That fallback is
 evidence of transitional coverage, not a second command architecture.
 

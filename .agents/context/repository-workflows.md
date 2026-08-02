@@ -5,7 +5,6 @@
   validation, or deciding whether an artifact is generated.
 - **Do not open when:** Reasoning about intended product behavior or component
   architecture.
-- **Related specification IDs:** None — repository-only workflow
 - **Review when:** A manifest, runtime requirement, test runner, CI script, or generated
   output boundary changes.
 
@@ -83,7 +82,7 @@ instructions.
 
 ## Finish
 
-Run the documentation linter for documentation changes, review `git diff --check`,
+Check changed Markdown links for documentation changes, review `git diff --check`,
 inspect `git status`, and report every check not run. Never treat a committed test file
 as current passing execution evidence without a durable run record.
 

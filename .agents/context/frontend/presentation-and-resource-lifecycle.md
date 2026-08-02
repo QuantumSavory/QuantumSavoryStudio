@@ -5,8 +5,6 @@
   generated images, panel/sidebar layout, accessibility, or browser-resource cleanup.
 - **Do not open when:** Changing project payloads, backend routes, or simulation
   algorithms.
-- **Related specification IDs:** SYS-002, SYS-006, SYS-008, SUB-003, SUB-007,
-  CMP-013
 - **Review when:** Shared presentation infrastructure, accessibility contracts, or
   component cleanup ownership changes.
 
@@ -74,7 +72,7 @@ panel minimum where the viewport permits, and preserve the width while the sideb
 hidden.
 
 These exact thresholds, placements, colors, and panel dimensions are current machinery;
-do not promote them to V-model requirements without acceptance intent.
+do not treat them as long-lived acceptance commitments without maintainer confirmation.
 
 ## Testing conventions
 

@@ -5,7 +5,6 @@
   generators, layers/sources, curve handles, or marker identity.
 - **Do not open when:** Changing generic UI controls, backend lifecycle, or project
   storage unrelated to geometry.
-- **Related specification IDs:** SYS-002, SYS-003, SUB-002, SUB-004, CMP-003
 - **Review when:** A persisted geometry field, coordinate model, physical formula,
   generator result, or MapLibre ownership rule changes.
 
