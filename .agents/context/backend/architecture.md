@@ -4,7 +4,6 @@
 - **Open when:** Tracing Genie boot, root/package ownership, process-local state,
   generated assets, or the backend's frontend/MCP boundaries.
 - **Do not open when:** Looking up one endpoint shape or selecting a test command.
-- **Related specification IDs:** SYS-001, SYS-010, SYS-013, SUB-001, SUB-006
 - **Review when:** Boot order, module composition, state ownership, process boundaries,
   or generated frontend serving changes.
 

@@ -5,15 +5,13 @@
   Swagger, simulation naming, or error helpers.
 - **Do not open when:** Changing simulation algorithms, browser presentation, or MCP
   transport internals.
-- **Related specification IDs:** SYS-006, SYS-008, SUB-007, SUB-009, CMP-013
 - **Review when:** A public/internal route, error code, status code, or Swagger schema
   changes.
 
-Normative failure handoff and diagnostic disclosure is defined by
-[SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable),
-[SUB-009](../../v-model/03-subsystem-contracts/policy-errors-and-collaboration.md#sub-009--private-http-contract-and-failure-handoff),
-and [CMP-013](../../v-model/04-component-contracts.md#cmp-013--frontend-error-envelope-preservation).
-This reference records the current HTTP machinery and known drift.
+Every GUI-supporting HTTP operation should translate classified and unexpected failures
+into a structured envelope. Frontend callers should preserve its classification/code,
+message, status, available details, and diagnostic payload in the Tools Log. This
+reference records the current HTTP machinery and known drift from that behavior.
 
 ## Product boundary
 
@@ -47,9 +45,9 @@ Failure responses have this common core:
 The helper adds `error_code` only when it is nonempty and adds `details` only when it is
 not `nothing`; neither field is part of the required common core.
 
-The baselined contract linked above is stronger than this current implementation. It
-does not impose one universal HTTP status/success-envelope convention, but it does
-require preservation of backend-produced diagnostic fields across deployment profiles.
+The intended failure handoff is stronger than this current implementation. It does not
+impose one universal HTTP status/success-envelope convention, but it does require
+preservation of backend-produced diagnostic fields across deployment profiles.
 Credential, session, and capability redaction in MCP operational transcripts remains a
 separate secret-handling boundary.
 
@@ -88,8 +86,7 @@ physical-link, variable, and protocol conditions. It is not a complete JSON-sche
 validator. Nested malformed shapes may fail later. Lifecycle handlers currently index
 some required body fields directly; missing fields can become generic 500 responses.
 Some frontend callers also swallow transport failures or replace them with fallback
-values. Those are nonconformances with structured Log-tab reporting, not conventions to
-copy.
+values. Those are known gaps in structured Log-tab reporting, not conventions to copy.
 
 ## Known contract gaps
 

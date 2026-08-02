@@ -5,16 +5,11 @@
   cleanup, logs, tags, panic reporting, or resource limits.
 - **Do not open when:** Changing source evaluation, generated scripts, or frontend-only
   project editing.
-- **Related specification IDs:** SYS-005, SYS-006, SYS-010, SUB-006, SUB-007, CMP-004, CMP-005
 - **Review when:** State fields, lifecycle transitions, time limits, cleanup policy, or
   live-result availability changes.
 
-Normative lifecycle, observation, and retention behavior is defined by
-[SYS-005](../../v-model/02-system-requirements/gui-and-simulation.md#sys-005--control-the-simulation-lifecycle),
-[SYS-006](../../v-model/02-system-requirements/gui-and-simulation.md#sys-006--observe-simulations-and-diagnostics),
-[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources),
-and [SUB-007](../../v-model/03-subsystem-contracts/core-application.md#sub-007--observation-diagnostics-and-cleanup-boundary).
-This reference records current runtime mechanics and known deltas.
+This reference records current lifecycle, observation, retention, diagnostic, and
+cleanup behavior together with known gaps.
 
 ## State and lifecycle
 
@@ -56,15 +51,16 @@ updating frontend and MCP derivations.
 - Blocking refreshes activity. A later scan removes the retained record after it has
   then been idle for more than 300 minutes.
 
-The current 10/30/300-minute constants are not configurable. Their baselined
-fixed-but-approximate semantics are specified by
-[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources).
+The current 10/30/300-minute constants are not configurable. Treat them as fixed but
+approximate: checks act no earlier than each threshold and at the first convenient
+later opportunity.
 
 ## Cleanup target and current delta
 
-The destructive failed-cleanup outcome is specified by
-[SYS-010](../../v-model/02-system-requirements/operations-and-deployment.md#sys-010--bound-and-discard-simulation-resources)
-and [SUB-007](../../v-model/03-subsystem-contracts/core-application.md#sub-007--observation-diagnostics-and-cleanup-boundary).
+Destructive cleanup should attempt every assigned-state release independently, aggregate
+failures, discard the heavy references and registry record without retaining retry
+state, and return a structured failure with a severe-degradation diagnostic when any
+release fails.
 
 Cleanup attempts to trace out assigned state and clear network, mapping, graph, and
 payload references. Individual trace-out failures are logged and do not stop remaining
@@ -75,7 +71,7 @@ that failure does not reach the caller as a cleanup warning.
 
 Cleanup also clears the references needed to retry an individual failed release. That
 matches the no-retry decision, but returning `true`, retaining a blocked record, and
-failing to surface severe degradation do not match SYS-010/SUB-007.
+failing to surface severe degradation do not match the intended cleanup behavior.
 
 ## Logs, panic, and live metadata
 
@@ -83,8 +79,8 @@ Starting a new target clears captured logs; resuming a paused target preserves t
 HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Live tags,
 queries, slots, and protocol rendering require a retained register/network and become
 unavailable after blocking or destruction. Panic state and structured logs may contain
-full exception messages and stack traces. The required disclosure and GUI handoff are
-specified by [SYS-008](../../v-model/02-system-requirements/gui-and-simulation.md#sys-008--keep-the-private-guiapi-boundary-structured-and-observable);
+full exception messages and stack traces. Failures delivered to or polled by the GUI
+should preserve their classification, message, and available details in the Tools Log;
 current production evaluation redaction is a separate gap.
 
 ## Anchors

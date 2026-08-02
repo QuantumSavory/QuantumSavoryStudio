@@ -4,7 +4,6 @@
 - **Open when:** Changing protocol/background/slot catalogs, typed constructor inputs,
   named tags, live tag/query codecs, or placement metadata.
 - **Do not open when:** Editing frontend layout or changing States Zoo rendering.
-- **Related specification IDs:** SYS-004, SUB-005
 - **Review when:** QuantumSavory metadata APIs, parameter descriptors, tag signatures,
   placement rules, or tag wire values change.
 

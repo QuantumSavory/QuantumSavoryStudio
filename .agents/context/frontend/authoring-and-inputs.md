@@ -4,7 +4,6 @@
 - **Open when:** Changing design commands, editor drafts, edit locks, constructor
   descriptors, Variables, protocols, background noise, expressions, or validation UI.
 - **Do not open when:** Changing read-only rendering or backend evaluator internals.
-- **Related specification IDs:** SYS-002, SYS-004, SYS-012, SUB-003, SUB-005, CMP-002
 - **Review when:** An authoring operation, typed-value branch, validation rule, or
   GUI/MCP authoring path changes.
 
@@ -23,10 +22,10 @@ Simulation-affecting operations are rejected while editing is locked. A transact
 containing any such operation is rejected as a whole. Descriptions and annotations
 remain editable because their project projections do not affect simulation.
 
-The prospective shared-handler rule is defined by
-[SUB-003](../../v-model/03-subsystem-contracts/core-application.md#sub-003--shared-atomic-authoring-boundary).
-Current migration remains incomplete; do not use the old router's universal claim that
-all historical GUI mutations already use the service.
+New MCP authoring operations and their equivalent GUI actions should use this same
+candidate, validation, and atomic-reconciliation path. Current migration remains
+incomplete; do not use the old router's universal claim that all historical GUI
+mutations already use the service.
 
 ## Constructor descriptors
 
@@ -66,7 +65,7 @@ Draft text, preview values/errors, requests, and open/collapsed presentation sta
 editor-owned rather than intended project data. Current protocol/background
 normalization nevertheless preserves string `latex`, and codec normalization clones
 additive fields; imported preview/error fields may therefore round-trip as a documented
-conformance gap.
+gap.
 
 Numeric expressions persist only `{kind:"numeric_expression", source:"..."}` while
 retaining the declared numeric type. Linked Variables validate against each assignment
