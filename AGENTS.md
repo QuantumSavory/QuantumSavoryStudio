@@ -15,7 +15,6 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
   identify the context needed for the task. Do not read `.agents/` recursively.
 - Open [the V-model](.agents/v-model/index.md) when changing observable behavior,
   interfaces, compatibility, acceptance criteria, or verification evidence.
-- Treat `_docs_/` and `_tests_/` as historical material, not maintained code roots.
 
 ## Primary commands
 
