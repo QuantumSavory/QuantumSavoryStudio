@@ -275,7 +275,7 @@ test.describe('Default-first numeric expression inputs', () => {
     await page.locator('.hamburger-btn').click()
     await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
     const stored = await page.evaluate(() => (
-      JSON.parse(localStorage.getItem('cqn_project_Numeric Expression Persistence'))
+      JSON.parse(localStorage.getItem('cqn_v2_project_Numeric Expression Persistence'))
     ))
     expect(stored.net.edges[0].data.protocols[0].parameters[0]).toEqual({
       name: 'delay_scale',

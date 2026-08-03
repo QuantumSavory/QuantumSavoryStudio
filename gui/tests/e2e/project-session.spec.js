@@ -29,14 +29,29 @@ async function mockBackend(page, parseRequests, { platformHandler } = {}) {
 async function seedProjects(page, names) {
   await page.addInitScript(projectNames => {
     for (const name of projectNames) {
-      localStorage.setItem(`cqn_project_${name}`, JSON.stringify({
-        schemaVersion: 1,
+      localStorage.setItem(`cqn_v2_project_${name}`, JSON.stringify({
+        schemaVersion: 2,
         name,
         description: '',
+        annotations: [],
         variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-        uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
+        simulationConfig: {
+          time: 1,
+          timeStep: 0.1,
+          qubitRepresentation: 'QuantumOpticsRepr',
+          qumodeRepresentation: 'QuantumOpticsRepr',
+        },
+        net: {
+          nodes: [],
+          edges: [],
+          protocols: [],
+          physicalConfig: {
+            refractiveIndex: 1.5,
+            lossDbPerKm: 0.2,
+            nodeTemplate: { slots: [] },
+          },
+        },
+        map: { position: [-98.5795, 39.8283], zoom: 4 },
       }))
     }
   }, names)
@@ -66,7 +81,9 @@ test('confirmed deletion immediately refreshes the open-project list', async ({ 
   await expect(openDialog).toBeVisible()
   await expect(openDialog.getByText('Delete Me', { exact: true })).toHaveCount(0)
   await expect(openDialog.getByText('Keep Me', { exact: true })).toBeVisible()
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('cqn_project_Delete Me'))).toBeNull()
+  await expect.poll(() => page.evaluate(() => (
+    localStorage.getItem('cqn_v2_project_Delete Me')
+  ))).toBeNull()
 })
 
 test('Save As keeps storage, document, reload, and simulation namespaces aligned', async ({ page }) => {
@@ -106,9 +123,16 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(page.locator('.project-name-label')).toHaveText('Project B')
 
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cqn_project_Project B')))
-  expect(stored).toMatchObject({ schemaVersion: 1, name: 'Project B' })
+  const stored = await page.evaluate(() => (
+    JSON.parse(localStorage.getItem('cqn_v2_project_Project B'))
+  ))
+  expect(stored).toMatchObject({ schemaVersion: 2, name: 'Project B' })
   expect(stored.net.nodes).toHaveLength(2)
+  expect(stored.net.physicalConfig).toEqual({
+    refractiveIndex: 1.468,
+    lossDbPerKm: 0.2,
+    nodeTemplate: { slots: [] },
+  })
   expect(stored.simulationConfig).toMatchObject({
     qubitRepresentation: 'CliffordRepr',
     qumodeRepresentation: 'GabsRepr',
@@ -121,6 +145,15 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
     qubitRepresentation: 'CliffordRepr',
     qumodeRepresentation: 'GabsRepr',
   })
+  expect(await page.evaluate(() => ({
+    recent: localStorage.getItem('cqn_v2_recent_project_name'),
+    physicalConfig: JSON.parse(
+      localStorage.getItem('cqn_v2_project_Project B'),
+    ).net.physicalConfig,
+  }))).toEqual({
+    recent: 'Project B',
+    physicalConfig: stored.net.physicalConfig,
+  })
 
   await page.reload()
   await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
@@ -131,8 +164,8 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
   await expect(page.getByLabel('Qmodes')).toHaveValue('GabsRepr')
 
   const reloaded = await page.evaluate(() => ({
-    recent: localStorage.getItem('recentProjectName'),
-    stored: JSON.parse(localStorage.getItem('cqn_project_Project B'))
+    recent: localStorage.getItem('cqn_v2_recent_project_name'),
+    stored: JSON.parse(localStorage.getItem('cqn_v2_project_Project B'))
   }))
   expect(reloaded.recent).toBe('Project B')
   expect(reloaded.stored.name).toBe('Project B')
@@ -152,7 +185,7 @@ test('Save As refuses to overwrite a different existing project', async ({ page 
 
   const originalTarget = JSON.stringify({ sentinel: 'must not be overwritten' })
   await page.evaluate(({ target }) => {
-    localStorage.setItem('cqn_project_Existing Target', target)
+    localStorage.setItem('cqn_v2_project_Existing Target', target)
     const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
     setup.projectData.description = 'unsaved active-session edit'
   }, { target: originalTarget })
@@ -174,8 +207,8 @@ test('Save As refuses to overwrite a different existing project', async ({ page 
     return {
       activeName: setup.projectData.name,
       activeDescription: setup.projectData.description,
-      recentName: localStorage.getItem('recentProjectName'),
-      target: localStorage.getItem('cqn_project_Existing Target'),
+      recentName: localStorage.getItem('cqn_v2_recent_project_name'),
+      target: localStorage.getItem('cqn_v2_project_Existing Target'),
     }
   })
   expect(afterRejectedSaveAs).toEqual({
@@ -194,16 +227,31 @@ test('a late startup restore cannot replace a user-created session', async ({ pa
 
   await page.addInitScript(() => {
     const oldProject = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: 'Old Project',
       description: 'old snapshot',
+      annotations: [],
       variables: [],
-      simulationConfig: { time: 1, timeStep: 0.1 },
-      net: { nodes: [], edges: [], protocols: [] },
-      uiGlobal: { map: { position: [-98.5795, 39.8283], zoom: 4 } }
+      simulationConfig: {
+        time: 1,
+        timeStep: 0.1,
+        qubitRepresentation: 'QuantumOpticsRepr',
+        qumodeRepresentation: 'QuantumOpticsRepr',
+      },
+      net: {
+        nodes: [],
+        edges: [],
+        protocols: [],
+        physicalConfig: {
+          refractiveIndex: 1.5,
+          lossDbPerKm: 0.2,
+          nodeTemplate: { slots: [] },
+        },
+      },
+      map: { position: [-98.5795, 39.8283], zoom: 4 },
     }
-    localStorage.setItem('cqn_project_Old Project', JSON.stringify(oldProject))
-    localStorage.setItem('recentProjectName', 'Old Project')
+    localStorage.setItem('cqn_v2_project_Old Project', JSON.stringify(oldProject))
+    localStorage.setItem('cqn_v2_recent_project_name', 'Old Project')
   })
 
   await mockBackend(page, [], {

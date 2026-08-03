@@ -5,7 +5,7 @@ import NodePanel from '../../src/components/panels/NodePanel.vue'
 import Node from '../../src/models/Node'
 import { UI_SERVICES_KEY } from '../../src/composables/uiServices'
 import { api } from '../../src/utils/ApiConnector'
-import { createEmptyProject } from '../../src/utils/projectCodec'
+import { createEmptyProject } from '../../src/utils/projectDocument'
 
 const MenuStub = {
   props: ['model'],

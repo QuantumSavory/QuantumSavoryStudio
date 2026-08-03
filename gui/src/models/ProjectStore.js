@@ -156,31 +156,4 @@ export default class ProjectStore {
     }))
   }
 
-  // Rebuild metadata index from existing projects (utility function)
-  static rebuildMetadataIndex() {
-    const projectNames = this.listProjects()
-    const existingIndex = this.getMetadataIndex()
-    const newIndex = {}
-    const now = new Date().toISOString()
-    
-    projectNames.forEach(name => {
-      const projectData = this.loadProject(name)
-      const existingMetadata = existingIndex[name] || {}
-      
-      if (projectData) {
-        const summary = summarizeProject(projectData)
-        
-        newIndex[name] = {
-          // For legacy projects, try to get timestamps from old format, otherwise use existing or defaults
-          createdAt: projectData.uiGlobal?.createdAt || projectData.createdAt || existingMetadata.createdAt || now,
-          updatedAt: projectData.uiGlobal?.updatedAt || projectData.updatedAt || existingMetadata.updatedAt || now,
-          openedAt: projectData.uiGlobal?.openedAt || projectData.openedAt || existingMetadata.openedAt || null,
-          ...summary
-        }
-      }
-    })
-    
-    this.saveMetadataIndex(newIndex)
-    return newIndex
-  }
 }

@@ -376,7 +376,8 @@ describe('project document v2 values and determinism', () => {
       ['unsafe', 'Int64', Number.MAX_SAFE_INTEGER + 1],
       ['nonfinite', 'Float64', Number.POSITIVE_INFINITY],
       ['nothing', 'Nothing', 'Nothing'],
-      ['wildcard', 'QuantumSavory.Wildcard', 'QuantumSavory.Wildcard'],
+      ['wildcard-alias', 'QuantumSavory.Wildcard', 'Wildcard'],
+      ['wildcard-sentinel', 'Wildcard', 'QuantumSavory.Wildcard'],
       ['tag-extra', 'Float64', { kind: 'numeric_expression', source: '1', preview: 1 }],
       ['tag-unknown', 'Symbolic', { kind: 'expression', source: 'x' }],
     ]

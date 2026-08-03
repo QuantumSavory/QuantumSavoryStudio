@@ -21,14 +21,12 @@ export function useProjectSession({
   getSimulationStatus,
   defaultMapCenter,
   defaultMapZoom,
-  minimumTimeStep,
   markAsSaved,
   resetSimulation,
   stopPolling,
   stopAlivePolling,
   closeAllResultWindows,
   hideSlotState = () => {},
-  syncLegacyProjectData = () => {},
   beforeProjectReplacement = () => {},
   confirmDelete = message => window.confirm(message),
   showError = message => window.alert(message),
@@ -119,7 +117,12 @@ export function useProjectSession({
     projectData.value = {
       ...projectData.value,
       annotations: [],
-      net: { nodes: [], edges: [], protocols: [] }
+      net: {
+        ...projectData.value.net,
+        nodes: [],
+        edges: [],
+        protocols: [],
+      },
     }
     await nextTick()
     if (generation !== transitionGeneration.value) return false
@@ -131,7 +134,6 @@ export function useProjectSession({
     mapCenter.value = [...decoded.map.position]
     mapZoom.value = decoded.map.zoom
 
-    syncLegacyProjectData()
     markAsSaved?.()
     return true
   }
@@ -230,7 +232,6 @@ export function useProjectSession({
       isDemoProject.value = false
       mapCenter.value = [...defaultMapCenter]
       mapZoom.value = defaultMapZoom
-      syncLegacyProjectData()
       markAsSaved?.()
       addLog?.('info', `New project created: ${name}`, 'System')
       return true
@@ -274,7 +275,6 @@ export function useProjectSession({
       currentProjectName.value = name
       projectData.value.name = name
       isDemoProject.value = false
-      syncLegacyProjectData()
       markAsSaved?.()
       addLog?.('info', `Project saved as: ${name}`, 'System')
       return true
@@ -306,7 +306,6 @@ export function useProjectSession({
       mapCenter.value = [...defaultMapCenter]
       mapZoom.value = defaultMapZoom
       store.clearRecentProjectName()
-      syncLegacyProjectData()
       markAsSaved?.()
     }
     addLog?.('warning', `Project deleted: ${name}`, 'System')

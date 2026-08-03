@@ -97,6 +97,7 @@ async function createProjectWithEdgeProtocol(page) {
       parameters: [{
         name: 'rounds',
         type: 'Int64',
+        selectedType: 'default',
         value: null,
       }],
     })
@@ -137,9 +138,9 @@ test.describe('Protocol variable type compatibility', () => {
     expect(parameterTypeSupportsVariableType('Function', 'Lambda')).toBe(true)
     expect(parameterTypeSupportsVariableType('Lambda', 'Function')).toBe(false)
     expect(parameterTypeSupportsVariableType('SymbolicUtils.Symbolic{Real}', 'Symbolic')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Wildcard', 'QuantumSavory.Wildcard')).toBe(true)
+    expect(parameterTypeSupportsVariableType('QuantumSavory.Wildcard', 'Wildcard')).toBe(true)
     expect(parameterTypeSupportsVariableType('Any', 'Bool')).toBe(true)
-    expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(true)
+    expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(false)
   })
 })
 
@@ -234,13 +235,11 @@ test.describe('Global protocol variables', () => {
       id: variableId,
       name: 'retry_rounds',
       type: 'Int64',
-      selectedType: 'Int64',
       value: 7,
     }
     const expectedFullParameter = {
       name: 'rounds',
       type: 'Int64',
-      selectedType: 'Int64',
       value: { kind: 'variable', id: variableId },
     }
     const expectedMinimizedParameter = {
@@ -297,6 +296,7 @@ test.describe('Global protocol variables', () => {
       const variables = projectData?.variables
       const parameter = projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]
       if (!variables || !parameter) throw new Error('Reactive project state is unavailable')
+      parameter.selectedType = 'Int64'
       parameter.value = 2
       variables.push(
         { id: 'variable_label', name: 'round label', type: 'String', value: 'four' },
@@ -334,13 +334,12 @@ test.describe('Global protocol variables', () => {
     await variableSelector.selectOption('variable_rounds')
     await expect(variableSelector).toHaveValue('variable_rounds')
 
-    await page.evaluate(() => {
-      const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-      const variable = setupState?.projectData?.variables?.find(({ id }) => id === 'variable_rounds')
-      if (!variable) throw new Error('Assigned variable is unavailable')
-      variable.type = 'String'
-      variable.selectedType = 'String'
-    })
+    await page.getByRole('tab', { name: 'Variables' }).click()
+    const variableRow = page.getByTestId('variables-panel')
+      .locator('[data-variable-id="variable_rounds"]')
+    await variableRow.locator('.variable-type-select').selectOption('String')
+    await variableRow.locator('.variable-value-input input[type="text"]').fill('four')
+    await variableRow.locator('.variable-name-input').click()
 
     await expect(variableSelector).toHaveValue('variable_rounds')
     await expect(variableSelector.locator('option')).toHaveText([
@@ -363,22 +362,31 @@ test.describe('Global protocol variables', () => {
     )
   })
 
-  test('defaults legacy project data without variables to an empty list', async ({ page }) => {
-    const variables = await page.evaluate(() => {
+  test('rejects an unversioned project instead of defaulting missing variables', async ({ page }) => {
+    const result = await page.evaluate(() => {
       const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       if (typeof setupState?.deserializeProjectData !== 'function') {
         throw new Error('Project deserializer is unavailable')
       }
-
-      const project = setupState.deserializeProjectData({
-        name: 'Legacy Project',
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-      })
-      return JSON.parse(JSON.stringify(project.variables))
+      try {
+        setupState.deserializeProjectData({ name: 'Unversioned Project' })
+        return { accepted: true }
+      } catch (error) {
+        return {
+          accepted: false,
+          code: error.code,
+          contract: error.details?.contract,
+          supportedVersions: error.details?.supported_versions,
+        }
+      }
     })
 
-    expect(variables).toEqual([])
+    expect(result).toEqual({
+      accepted: false,
+      code: 'UNSUPPORTED_VERSION',
+      contract: 'project',
+      supportedVersions: [2],
+    })
   })
 
   test('offers the same supported value forms as protocol parameters', async ({ page }) => {
@@ -389,17 +397,16 @@ test.describe('Global protocol variables', () => {
     const variableRow = variablesPanel.locator('.variable-row')
     const typeSelect = variableRow.locator('.variable-type-select')
     await expect(typeSelect.locator('option')).toHaveText([
-      'Default',
-      'Int64',
-      'Int64 Expression',
       'Float64',
       'Float64 Expression',
+      'Int64',
+      'Int64 Expression',
       'Bool',
       'String',
       'Predefined Function',
       'Custom Function',
       'Symbolic',
-      'QuantumSavory.Wildcard',
+      'Wildcard',
       'Vector{Int64}',
       'Vector{Float64}',
       'Nothing',
@@ -418,11 +425,8 @@ test.describe('Global protocol variables', () => {
     await typeSelect.selectOption('Symbolic')
     await expect(variableRow.locator('.code-editor-with-symbols')).toBeVisible()
 
-    await typeSelect.selectOption('QuantumSavory.Wildcard')
+    await typeSelect.selectOption('Wildcard')
     await expect(variableRow.locator('.variable-value-input')).toHaveText('Wildcard')
-
-    await typeSelect.selectOption('default')
-    await expect(variableRow.locator('.variable-value-input')).toBeEmpty()
 
     await typeSelect.selectOption('Vector{Int64}')
     await expect(variableRow.locator('.variable-value-input input[type="text"]')).toBeVisible()

@@ -430,8 +430,8 @@ test.describe('States Zoo variables', () => {
     await page.locator('.hamburger-btn').click()
     await page.getByText('Save', { exact: true }).click()
     expect(await page.evaluate(({ projectName, id }) => {
-      const project = JSON.parse(localStorage.getItem(`cqn_project_${projectName}`))
-      localStorage.setItem('recentProjectName', projectName)
+      const project = JSON.parse(localStorage.getItem(`cqn_v2_project_${projectName}`))
+      localStorage.setItem('cqn_v2_recent_project_name', projectName)
       return project.variables.find(variable => variable.id === id)
     }, { projectName: 'Weighted States Zoo Project', id: traceId })).toEqual({
       id: traceId,
@@ -642,8 +642,8 @@ test.describe('States Zoo variables', () => {
     await page.locator('.hamburger-btn').click()
     await page.getByText('Save', { exact: true }).click()
     const storedVariable = await page.evaluate(projectName => {
-      const project = JSON.parse(localStorage.getItem(`cqn_project_${projectName}`))
-      localStorage.setItem('recentProjectName', projectName)
+      const project = JSON.parse(localStorage.getItem(`cqn_v2_project_${projectName}`))
+      localStorage.setItem('cqn_v2_recent_project_name', projectName)
       return project.variables[0]
     }, 'Saved States Zoo Project')
     expect(storedVariable).toEqual({

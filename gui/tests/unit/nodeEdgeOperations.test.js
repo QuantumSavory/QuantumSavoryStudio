@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import { useNodeEdgeOperations } from '../../src/composables/useNodeEdgeOperations'
-import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../../src/utils/projectCodec'
+import {
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  createEmptyProject,
+} from '../../src/utils/projectDocument'
 import Edge from '../../src/models/Edge'
 import Node from '../../src/models/Node'
 import {
@@ -16,6 +20,14 @@ function sharedExecutor(projectData) {
     defaultBackgroundNoise: () => ({ type: 'default', parameters: [] }),
   })
   return operations => service.execute({ operations, origin: 'gui' })
+}
+
+function canonicalProject({ annotations = [], nodes = [], edges = [] } = {}) {
+  const project = createEmptyProject('Operations')
+  project.annotations.push(...annotations)
+  project.net.nodes.push(...nodes)
+  project.net.edges.push(...edges)
+  return project
 }
 
 describe('node and edge operation map state', () => {
@@ -38,7 +50,7 @@ describe('node and edge operation map state', () => {
     const nodeA = new Node({ id: 'a', name: 'A', position: [-72, 42] })
     const nodeB = new Node({ id: 'b', name: 'B', position: [-71, 42] })
     const physical = new Edge({ id: 'physical', source: nodeA, target: nodeB })
-    const projectData = ref({ net: { nodes: [nodeA, nodeB], edges: [physical] } })
+    const projectData = ref(canonicalProject({ nodes: [nodeA, nodeB], edges: [physical] }))
     const alert = vi.fn()
     const operations = useNodeEdgeOperations(projectData, ref(false), vi.fn(), {
       showAlert: alert,
@@ -150,10 +162,7 @@ describe('node and edge operation map state', () => {
       id: 'annotation-2',
       markdown: 'Second note',
     }
-    const projectData = ref({
-      annotations: [annotation, otherAnnotation],
-      net: { nodes: [], edges: [] },
-    })
+    const projectData = ref(canonicalProject({ annotations: [annotation, otherAnnotation] }))
     const addLog = vi.fn()
     const alert = vi.fn()
     const operations = useNodeEdgeOperations(projectData, ref(true), addLog, {

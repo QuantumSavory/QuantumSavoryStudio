@@ -400,7 +400,7 @@ test.describe('Layout Tools repeater chain generator', () => {
 
     await page.click('.hamburger-btn')
     await page.getByText('Save', { exact: true }).click()
-    await page.evaluate(name => localStorage.setItem('recentProjectName', name), projectName)
+    await page.evaluate(name => localStorage.setItem('cqn_v2_recent_project_name', name), projectName)
     await page.reload()
     await expect(page.locator('.node-marker')).toHaveCount(5, { timeout: 15_000 })
     await expect(page.locator('.edge-list-item')).toHaveCount(5)

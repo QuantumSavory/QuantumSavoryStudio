@@ -118,7 +118,7 @@ describe('parameter input descriptors', () => {
       [option('Float64', 'expression:Float64'), { value: null }, false],
       [option('Bool', 'Bool'), { value: false }, true],
       [option('Nothing', 'Nothing'), { value: 'nothing' }, true],
-      [option('QuantumSavory.Wildcard', 'QuantumSavory.Wildcard'), {
+      [option('QuantumSavory.Wildcard', 'Wildcard'), {
         value: 'Wildcard',
       }, true],
       [option('String', 'String'), { value: 'name' }, true],

@@ -13,9 +13,13 @@ import {
 import { INVALID_EDGE_GEOMETRY_REASON } from '../../src/utils/edgeGeometry'
 import {
   createEmptyProject,
-  encodeDesignDocument,
-  toSimulationPayload,
-} from '../../src/utils/projectCodec'
+  encodeProject,
+} from '../../src/utils/projectDocument'
+import { toSimulationPayload } from '../../src/utils/simulationPayload'
+
+const encodeDesignDocument = project => encodeProject(project, {
+  backgroundCatalog: () => [{ type: 'NoNoise', parameters: [] }],
+})
 
 function serviceFor(project, options = {}) {
   let nextId = 0
@@ -795,17 +799,6 @@ describe('DesignCommandService', () => {
       code: 'VALIDATION_FAILED',
       message: 'Unknown background noise type: LegacyNoise',
     })
-    await expect(service.requireBackgroundNoise({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
-    }, {
-      project,
-      allowLegacyLiteral: true,
-    })).resolves.toEqual({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
-    })
-
     await service.execute({
       operations: [{
         kind: 'slots.create',
@@ -1234,8 +1227,7 @@ describe('DesignCommandService', () => {
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    const service = serviceFor(project, {
-      protocolCatalog: () => ({
+    const protocolCatalog = {
         node: [{
           type: 'Example.OptionalProtocol',
           parameters: [{
@@ -1245,7 +1237,9 @@ describe('DesignCommandService', () => {
         }],
         edge: [],
         floating: [],
-      }),
+    }
+    const service = serviceFor(project, {
+      protocolCatalog: () => protocolCatalog,
     })
 
     await service.execute({
@@ -1264,7 +1258,7 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    expect(toSimulationPayload(project).net.nodes[0].data.protocols[0].parameters)
+    expect(toSimulationPayload(project, { protocolCatalog }).net.nodes[0].data.protocols[0].parameters)
       .toEqual([{
         name: 'retry_lock_time',
         type: 'Nothing',

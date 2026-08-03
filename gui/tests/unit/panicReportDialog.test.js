@@ -35,7 +35,7 @@ const panic = {
 }
 
 const project = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: 'Unsafe / Project',
   description: 'Full canonical project',
   variables: [],

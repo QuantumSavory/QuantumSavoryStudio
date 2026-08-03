@@ -1002,22 +1002,9 @@ function _script_noise_expression(
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
   catalogs=_constructor_catalog_snapshot(),
 )
-  noise_definition === nothing && return "nothing"
-  if noise_definition isa AbstractString
-    String(noise_definition) == "default" && return "nothing"
-    type_name = String(noise_definition)
-    parameters = Any[]
-  elseif _is_object_like(noise_definition)
-    type_name = _required_nonempty_string(noise_definition, "type", context)
-    type_name == "default" && return "nothing"
-    parameters = get(noise_definition, "parameters", Any[])
-    parameters isa AbstractVector || throw(validation_error("$context parameters must be an array"))
-  else
-    throw(validation_error(
-      "$context must be a background-noise object, string, or null",
-      Dict{String,Any}("received_type" => string(typeof(noise_definition))),
-    ))
-  end
+  type_name = String(noise_definition["type"])
+  type_name == "default" && return "nothing"
+  parameters = noise_definition["parameters"]
 
   catalog_entry = _resolve_background_catalog_entry(type_name, catalogs)
   catalog_entry === nothing && throw(validation_error("$context has unknown type '$type_name'"))
@@ -1034,7 +1021,6 @@ function _script_noise_expression(
     parameter_label="background noise parameter",
   )
   for parameter in validated_parameters
-    parameter.produces_value || continue
     name = parameter.name
     _, expression = _script_constructor_parameter_expression(
       parameter.definition,
@@ -1073,7 +1059,7 @@ function _script_variable_bindings(
 )
   variables = _parse_variables(payload)
   bindings = Dict{String,NamedTuple}()
-  raw_variables = get(payload, "variables", Any[])
+  raw_variables = payload["variables"]
 
   if isempty(raw_variables)
     push!(lines, "# This project does not define simulation-wide variables.")
@@ -1102,11 +1088,6 @@ function _script_variable_bindings(
       used,
       "variable_$(item.index)",
     )
-    uses_default = lowercase(variable.type) == "default" || (
-      variable.type == "Function" &&
-      variable.value isa AbstractString &&
-      lowercase(strip(String(variable.value))) == "default"
-    )
     self_dependent = special_type in ("Function", "Lambda") && any(
       first(pair) == strip(string(variable.value)) for pair in SELF_COMPARISON_OPERATORS
     )
@@ -1116,7 +1097,7 @@ function _script_variable_bindings(
         "Variable '$(_script_comment(variable.name))'",
       )
       _script_assignment_context_references(parsed)
-    elseif special_type == "Lambda" && !uses_default && !self_dependent
+    elseif special_type == "Lambda" && !self_dependent
       variable.value isa AbstractString || throw(validation_error(
         "Variable '$(_script_comment(variable.name))' must be a function name or Julia function expression",
         Dict{String,Any}("received_type" => string(typeof(variable.value))),
@@ -1125,7 +1106,7 @@ function _script_variable_bindings(
       isempty(source) && throw(validation_error(
         "Variable '$(_script_comment(variable.name))' must not be blank",
       ))
-      if source == "default" || resolve_function_reference(source) !== nothing
+      if resolve_function_reference(source) !== nothing
         Set{Symbol}()
       else
         parsed = _script_validate_source(
@@ -1138,13 +1119,12 @@ function _script_variable_bindings(
       Set{Symbol}()
     end
     per_assignment = self_dependent || !isempty(source_references)
-    fresh_wildcard = variable.type in ("Wildcard", "QuantumSavory.Wildcard")
+    fresh_wildcard = variable.type == "Wildcard"
     bindings[variable.id] = (
       name=binding,
       variable=variable,
       per_assignment=per_assignment,
       fresh_wildcard=fresh_wildcard,
-      uses_default=uses_default,
     )
   end
 
@@ -1177,15 +1157,6 @@ function _script_variable_bindings(
         lines,
         "$(binding.name), $(companion_binding.name) = $expression" *
         "  # GUI variable IDs: $(_script_comment(variable.id)), $(_script_comment(companion_id))",
-      )
-      continue
-    end
-
-    if binding.uses_default
-      push!(
-        lines,
-        "$(binding.name) = nothing" *
-        "  # GUI variable \"$(_script_comment(variable.name))\": constructor default",
       )
       continue
     end
@@ -1225,7 +1196,9 @@ function _script_variable_bindings(
         imports,
       )
     end
-    expression === nothing && throw(validation_error("Variable '$(_script_comment(variable.name))' cannot use a constructor default here"))
+    expression === nothing && throw(validation_error(
+      "Variable '$(_script_comment(variable.name))' has no script representation",
+    ))
     push!(
       lines,
       "$(binding.name) = $expression  # GUI variable ID: $(_script_comment(variable.id))",
@@ -1272,7 +1245,6 @@ function _script_constructor_parameter_expression(
   if reference !== nothing
     binding = get(variable_bindings, reference.id, nothing)
     binding === nothing && throw(validation_error("$context parameter '$name' references an unknown variable"))
-    binding.uses_default && return name, nothing
     _parameter_type_supports_variable_type(
       declared_type,
       binding.variable.type,
@@ -1385,7 +1357,6 @@ function _script_protocol!(
 
   produced_names = Set{String}()
   for parameter in validated_parameters
-    parameter.produces_value || continue
     submitted_name = parameter.name
     name, expression = _script_constructor_parameter_expression(
       parameter.definition,
@@ -1543,7 +1514,7 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
         script_representation(default_representations, slot_type, render_reference),
       )
       push!(background_expressions, _script_noise_expression(
-        get(slot, "backgroundNoise", nothing),
+        slot["backgroundNoise"],
         "Node $node_index slot $slot_index background noise";
         variable_bindings,
         node_index,

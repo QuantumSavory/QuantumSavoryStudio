@@ -190,14 +190,20 @@ async function createProjectWithEdge(page) {
         {
           name: 'nodeL',
           type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+          selectedType: 'default',
+          value: null,
         },
         {
           name: 'nodeH',
           type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+          selectedType: 'default',
+          value: null,
         },
         {
           name: 'chooseL',
           type: 'Function',
+          selectedType: 'default',
+          value: null,
         },
       ],
     })
@@ -207,9 +213,13 @@ async function createProjectWithEdge(page) {
       parameters: [{
         name: 'chooseslotA',
         type: ['Int64', 'Function'],
+        selectedType: 'default',
+        value: null,
       }, {
         name: 'retry_lock_time',
         type: ['Nothing', 'Float64'],
+        selectedType: 'default',
+        value: null,
       }, {
         name: 'tag',
         type: ['Nothing', 'DataType'],
@@ -222,7 +232,8 @@ async function createProjectWithEdge(page) {
       type: 'QuantumSavory.ProtocolZoo.EntanglementConsumer',
       parameters: [{
         name: 'tag',
-        type: 'Any',
+        type: 'Type{<:QuantumSavory.AbstractTag}',
+        selectedType: 'default',
         value: null,
       }],
     })
@@ -244,9 +255,8 @@ async function openProtocolEditor(panel, protocolName) {
 async function serializedNodeParameter(page, name) {
   return page.evaluate(parameterName => {
     const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const minimized = setupState?.minimizedProjectData
-    const payload = minimized?.value ?? minimized
-    return payload?.net?.nodes?.[0]?.data?.protocols?.[0]?.parameters?.find(
+    const projectDocument = setupState?.serializeProjectData?.()
+    return projectDocument?.net?.nodes?.[0]?.data?.protocols?.[0]?.parameters?.find(
       parameter => parameter.name === parameterName,
     )
   }, name)
@@ -255,9 +265,8 @@ async function serializedNodeParameter(page, name) {
 async function serializedEdgeParameter(page, name, protocolType = ENTANGLER_TYPE.type) {
   return page.evaluate(({ parameterName, resolvedProtocolType }) => {
     const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
-    const minimized = setupState?.minimizedProjectData
-    const payload = minimized?.value ?? minimized
-    const protocol = payload?.net?.edges?.[0]?.data?.protocols?.find(
+    const projectDocument = setupState?.serializeProjectData?.()
+    const protocol = projectDocument?.net?.edges?.[0]?.data?.protocols?.find(
       candidate => candidate.type === resolvedProtocolType,
     )
     return protocol?.parameters?.find(
@@ -278,7 +287,7 @@ test.describe('Protocol parameter options', () => {
     const nodeLRow = parameterRow(swapperEditor, 'nodeL')
     const nodeLTypeSelector = nodeLRow.locator('.complexTypeSelector')
 
-    await expect(nodeLTypeSelector.locator('option[value="QuantumSavory.Wildcard"]')).toBeEnabled()
+    await expect(nodeLTypeSelector.locator('option[value="Wildcard"]')).toBeEnabled()
     await nodeLTypeSelector.selectOption('Function')
 
     const nodeFunctionSelector = nodeLRow.locator('.functionSelector')
@@ -287,14 +296,14 @@ test.describe('Protocol parameter options', () => {
       await expect(nodeFunctionSelector.locator(`option[value="${name}"]`)).toBeEnabled()
     }
 
-    await nodeLTypeSelector.selectOption('QuantumSavory.Wildcard')
+    await nodeLTypeSelector.selectOption('Wildcard')
     await expect(nodeLRow.locator('.param-value')).toHaveText('Wildcard')
     await expect(nodeLRow.locator('.param-value input, .param-value select')).toHaveCount(0)
 
     const serializedParameter = await serializedNodeParameter(page, 'nodeL')
     expect(serializedParameter).toEqual({
       name: 'nodeL',
-      type: 'QuantumSavory.Wildcard',
+      type: 'Wildcard',
       value: 'Wildcard',
     })
 
@@ -335,7 +344,7 @@ test.describe('Protocol parameter options', () => {
     const nodeLTypeSelector = nodeLRow.locator('.complexTypeSelector')
     await expect(nodeLTypeSelector.locator('option')).toHaveText([
       'Default',
-      'QuantumSavory.Wildcard',
+      'Wildcard',
       'Int64',
       'Int64 Expression',
       'Predefined Function',
@@ -372,7 +381,7 @@ test.describe('Protocol parameter options', () => {
     await expect(chooseLRow.locator('.code-editor-with-symbols')).toBeVisible()
   })
 
-  test('edits old tag snapshots through live nullable metadata and caches exact catalog IDs', async ({ page }) => {
+  test('edits tag drafts through live nullable metadata and caches exact catalog IDs', async ({ page }) => {
     await page.locator('.edge-list-item').first().click()
     const panel = page.locator('#edgePanel')
     const entangler = await openProtocolEditor(panel, 'EntanglerProt')

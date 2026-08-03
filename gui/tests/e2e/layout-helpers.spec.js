@@ -375,7 +375,7 @@ test.describe('star and graph layout helpers', () => {
 
     await page.locator('.hamburger-btn').click()
     await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
-    await page.evaluate(name => localStorage.setItem('recentProjectName', name), projectName)
+    await page.evaluate(name => localStorage.setItem('cqn_v2_recent_project_name', name), projectName)
     await page.reload()
     await expect(page.locator('.node-marker')).toHaveCount(4, { timeout: 15_000 })
 
@@ -601,7 +601,7 @@ test.describe('star and graph layout helpers', () => {
 
     await page.locator('.hamburger-btn').click()
     await page.getByRole('menuitem', { name: 'Save', exact: true }).click()
-    await page.evaluate(name => localStorage.setItem('recentProjectName', name), projectName)
+    await page.evaluate(name => localStorage.setItem('cqn_v2_recent_project_name', name), projectName)
     await page.reload()
     await expect(page.locator('.node-marker')).toHaveCount(4, { timeout: 15_000 })
     await expect(page.locator('.edge-list-item')).toHaveCount(6)

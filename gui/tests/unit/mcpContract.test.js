@@ -11,7 +11,7 @@ import {
   DesignCommandService,
   operationsForTool,
 } from '../../src/domain/design/DesignCommandService'
-import { createEmptyProject } from '../../src/utils/projectCodec'
+import { createEmptyProject } from '../../src/utils/projectDocument'
 
 describe('shared MCP contract registry', () => {
   it('loads one unique versioned definition for every advertised tool', () => {

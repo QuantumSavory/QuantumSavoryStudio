@@ -40,7 +40,6 @@
     "type" => "Qubit",
     "backgroundNoise" => Dict(
       "type" => "default",
-      "doc" => "No background noise",
       "parameters" => Any[],
     ),
   )
@@ -67,6 +66,13 @@
       "data" => Dict(
         "type" => "connection",
         "protocols" => protocols,
+        (is_logic ? () : (
+          "distanceMeters" => 1000.0,
+          "propagationDelaySeconds" => 0.000005,
+          "refractiveIndex" => 1.5,
+          "lossDbPerKm" => 0.2,
+          "transmissivity" => 0.95,
+        ))...,
       ),
     )
   end
@@ -108,6 +114,10 @@
 
     Dict(
       "name" => name,
+      "simulationConfig" => Dict(
+        "qubitRepresentation" => "QuantumOpticsRepr",
+        "qumodeRepresentation" => "QuantumOpticsRepr",
+      ),
       "variables" => Any[],
       "net" => Dict(
         "nodes" => Any[

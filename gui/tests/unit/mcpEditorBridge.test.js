@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { McpEditorBridge } from '../../src/features/mcp/McpEditorBridge'
 import Variable, { STATES_ZOO_VALUE_KIND } from '../../src/models/Variable'
-import { createEmptyProject } from '../../src/utils/projectCodec'
+import { createEmptyProject } from '../../src/utils/projectDocument'
 
 beforeAll(() => {
   if (!globalThis.crypto?.subtle) {

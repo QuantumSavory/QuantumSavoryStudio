@@ -710,7 +710,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         ),
         isLocked: false,
@@ -1217,7 +1216,6 @@ export class DesignCommandService {
       project = this.getProject(),
       ownerId = null,
       template = false,
-      allowLegacyLiteral = false,
     } = {},
   ) {
     if (!record(noise)) {
@@ -1248,13 +1246,10 @@ export class DesignCommandService {
       )
     }
     if (!definition) {
-      if (catalog.length > 0 && !allowLegacyLiteral) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Unknown background noise type: ${type}`,
-        )
-      }
-      return deepClone(noise)
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Unknown background noise type: ${type}`,
+      )
     }
 
     const parameters = await this.constructorParameters(
@@ -1480,21 +1475,15 @@ export class DesignCommandService {
       let normalizedSelectedType
       if (isVariableReference(suppliedParameter.value)) {
         const variable = byId(project.variables, suppliedParameter.value.id, 'Variable')
-        const assignmentType = variable.selectedType === 'default'
-          ? 'default'
-          : variable.type
         const linkedOption = parameterInputOptionForVariable(
           parameterDefinition.type,
           parameterDefinition,
           variable,
         )
         if (!linkedOption) {
-          const message = parameterDefinition.required === true && assignmentType === 'default'
-            ? `Required parameter ${parameterName} cannot use a Default-valued Variable.`
-            : `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`
           throw new DesignCommandError(
             'VALIDATION_FAILED',
-            message,
+            `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
           )
         }
         normalizedSelectedType = linkedOption.id
@@ -1607,7 +1596,6 @@ export class DesignCommandService {
     if (
       Object.hasOwn(value, 'type')
       && value.type !== semanticType
-      && (Object.hasOwn(value, 'selectedType') || option.inputKind !== 'default')
     ) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1929,7 +1917,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         )
       }

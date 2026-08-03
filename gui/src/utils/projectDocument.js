@@ -21,7 +21,6 @@ import {
   buildParameterInputOptions,
   findParameterInputOption,
   isSymbolicType,
-  isWildcardType,
 } from './parameterTypes.js'
 import {
   createProtocolFromDefinition,
@@ -242,7 +241,7 @@ function canonicalTypedValue(type, value, path, { variable = false } = {}) {
     if (value !== 'nothing') fail(path, 'Nothing must use the "nothing" sentinel')
     return value
   }
-  if (isWildcardType(type)) {
+  if (type === 'Wildcard') {
     if (value !== 'Wildcard') fail(path, 'Wildcard must use the "Wildcard" sentinel')
     return value
   }
@@ -380,7 +379,10 @@ function liveAssignments(parameters, definitions, path, identity) {
     }
     const option = findParameterInputOption(definition.type, definition, selectedType)
     if ((!option?.enabled && option?.wireType !== 'Any') || !option?.wireType) {
-      fail(pointer(pointer(path, index), 'selectedType'), 'selected catalog branch is invalid')
+      fail(
+        pointer(pointer(path, index), 'selectedType'),
+        `selected catalog branch is invalid: ${String(selectedType)}`,
+      )
     }
     assigned.push({
       name,

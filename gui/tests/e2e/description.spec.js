@@ -202,7 +202,7 @@ test.describe('Project description', () => {
       setup.saveProject()
       const full = setup.serializeProjectData()
       const minimized = setup.minimizedProjectData?.value ?? setup.minimizedProjectData
-      const saved = JSON.parse(localStorage.getItem('cqn_project_Description Persistence Test'))
+      const saved = JSON.parse(localStorage.getItem('cqn_v2_project_Description Persistence Test'))
       return {
         live: setup.projectData.description,
         fullDescription: full.description,
@@ -243,7 +243,9 @@ test.describe('Project description', () => {
     let appDialog = page.getByRole('dialog', { name: 'Import failed' })
     await expect(appDialog).toContainText('Invalid project document at /description')
     await appDialog.getByRole('button', { name: 'OK' }).click()
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('cqn_project_Invalid Description Import'))).toBeNull()
+    await expect.poll(() => page.evaluate(() => (
+      localStorage.getItem('cqn_v2_project_Invalid Description Import')
+    ))).toBeNull()
 
     const importedDescription = '# Imported\n\nWith $a+b$.'
     await page.evaluate(({ project, description }) => {
@@ -263,7 +265,7 @@ test.describe('Project description', () => {
       return setup.projectData.description
     })).toBe(importedDescription)
     await expect.poll(() => page.evaluate(() => {
-      const stored = JSON.parse(localStorage.getItem('cqn_project_Imported Description Project'))
+      const stored = JSON.parse(localStorage.getItem('cqn_v2_project_Imported Description Project'))
       return stored.description
     })).toBe(importedDescription)
   })

@@ -22,8 +22,7 @@ function createHarness({
     stopAlive: vi.fn(),
     closeWindows: vi.fn(),
     hide: vi.fn(),
-    markSaved: vi.fn(),
-    syncLegacy: vi.fn()
+    markSaved: vi.fn()
   }
   const store = {
     loadProject: vi.fn(name => records.get(name) || null),
@@ -54,14 +53,12 @@ function createHarness({
     getSimulationStatus: vi.fn(),
     defaultMapCenter: [0, 0],
     defaultMapZoom: 4,
-    minimumTimeStep: 0.1,
     markAsSaved: calls.markSaved,
     resetSimulation: calls.reset,
     stopPolling: calls.stop,
     stopAlivePolling: calls.stopAlive,
     closeAllResultWindows: calls.closeWindows,
     hideSlotState: calls.hide,
-    syncLegacyProjectData: calls.syncLegacy,
     beforeProjectReplacement,
     showError,
     store,

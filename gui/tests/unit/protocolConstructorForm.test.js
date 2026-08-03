@@ -148,11 +148,11 @@ describe('ProtocolConstructorForm', () => {
       protocol,
       category: 'node',
       variables: [{
-        id: 'variable-default',
-        name: 'use default',
-        type: 'default',
-        selectedType: 'default',
-        value: null,
+        id: 'variable-string',
+        name: 'incompatible string',
+        type: 'String',
+        selectedType: 'String',
+        value: 'not a vector',
       }],
     })
     const selectors = wrapper.findAll('.complexTypeSelector')
@@ -219,7 +219,7 @@ describe('ProtocolConstructorForm', () => {
 
     expect(typeSelector.findAll('option').map(option => option.text())).toEqual([
       'Default',
-      'QuantumSavory.Wildcard',
+      'Wildcard',
       'Int64',
       'Int64 Expression',
       'Predefined Function',
@@ -240,7 +240,7 @@ describe('ProtocolConstructorForm', () => {
       'identity'
     ])
 
-    await typeSelector.setValue('QuantumSavory.Wildcard')
+    await typeSelector.setValue('Wildcard')
     expect(parameter.value).toBe('Wildcard')
     expect(wrapper.get('.param-value').text()).toContain('Wildcard')
   })
