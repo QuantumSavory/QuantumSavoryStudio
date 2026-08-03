@@ -233,11 +233,15 @@ QuantumSavory runtime catalogs
   → minimized base Julia type plus tagged value
 ```
 
-The backend reads QuantumSavory's slot, background, and protocol catalogs on each
-request. Protocol placement, editable parameters, required fields, and virtual-edge
-eligibility therefore come from the same upstream metadata used for validation,
-runtime construction, and script export. Payloads contain only advertised editable
-parameters; the backend supplies simulation, network, and attachment arguments.
+Constructor-consuming requests and standalone validation, construction, or script
+export operations each take one fresh snapshot of QuantumSavory's slot, background,
+and protocol catalogs. The operation reuses that snapshot for every item, while the
+next operation reads upstream metadata again. This avoids repeated item-level
+discovery and process-global mutable caches. Protocol placement, editable parameters,
+required fields, and virtual-edge eligibility therefore come from the same upstream
+metadata used for validation, runtime construction, and script export. Payloads
+contain only advertised editable parameters; the backend supplies simulation,
+network, and attachment arguments.
 
 Optional constructor parameters begin with a **Default** choice. Default stores no
 value and omits the keyword from simulator and script-export payloads, so the

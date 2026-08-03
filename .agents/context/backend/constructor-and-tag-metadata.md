@@ -14,8 +14,11 @@ WebQuantumSavory must not maintain a parallel list. The exact entries are depend
 data, so tests and documentation should inspect the catalog rather than freeze current
 member names.
 
-`src/catalogs.jl` reads all three upstream catalogs on every call and resolves types
-without mutable caches. Its protocol projection preserves upstream `parameters`,
+Constructor-consuming requests and standalone validation, construction, or script
+export operations take one fresh snapshot of all three upstream catalogs and pass it
+through every item-level lookup. The next operation reads upstream metadata again, so
+newly loaded extensions remain discoverable without repeated item-level scans or
+process-global mutable caches. The protocol projection preserves upstream `parameters`,
 `attachment_fields`, and `permits_virtual_edge`; only the upstream `network`
 attachment is renamed to the existing Web `floating` wire group. The opt-in
 `MockBrokenProtocol` entry is synthetic and diagnostic-only.
