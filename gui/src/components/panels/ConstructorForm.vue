@@ -426,8 +426,13 @@ function clearVariableAssignment(param) {
   if (parameterDisabled(param)) return
   const key = directParameterKey(param)
   const direct = directParameterValues.get(key)
-  param.selectedType = direct?.selectedType || parameterInputOptions(param)[0]?.id
-  param.value = direct?.value ?? null
+  const options = parameterInputOptions(param)
+  const directOption = options.find(option => (
+    option.enabled && option.id === direct?.selectedType
+  ))
+  const fallback = directOption || options.find(option => option.enabled) || options[0]
+  param.selectedType = fallback?.id
+  param.value = directOption ? (direct?.value ?? null) : null
   directParameterValues.delete(key)
   variablePickerParameter.value = null
   emit('commit')

@@ -140,7 +140,7 @@ export function buildParameterInputOptions(
     const enabled = parameterTypeIsKnown(declaredType)
     options.push(descriptor({
       id: declaredType,
-      inputKind: inputKindForType(declaredType),
+      inputKind: enabled ? inputKindForType(declaredType) : 'unsupported',
       wireType: declaredType,
       enabled,
     }))

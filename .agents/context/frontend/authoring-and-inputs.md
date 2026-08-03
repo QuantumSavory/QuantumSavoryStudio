@@ -34,8 +34,10 @@ descriptors containing an ID, label, input kind, wire type, and enabled state. T
 selector for an optional parameter begins with Default. Default clears the draft value
 and omits the keyword from minimized payloads. A required protocol parameter omits
 Default, selects its first enabled concrete descriptor with a null value, and remains
-invalid until that value is complete. A Default-valued Variable is incompatible with a
-required parameter.
+invalid until that value is complete. When none of its declared descriptors is supported,
+the required parameter retains its first disabled descriptor so the unsupported field is
+visible and invalid instead of blocking the editor. A Default-valued Variable is
+incompatible with a required parameter.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old

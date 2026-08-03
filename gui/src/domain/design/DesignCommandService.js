@@ -33,7 +33,6 @@ import {
   numericExpressionTargetType,
   parameterInputOptionForVariable,
   parameterTypeIsNumber,
-  parameterTypeSupportsVariableType,
   parseNumericParameterValue,
 } from '../../utils/parameterTypes.js'
 import {
@@ -1465,31 +1464,21 @@ export class DesignCommandService {
       let normalizedSelectedType
       if (isVariableReference(suppliedParameter.value)) {
         const variable = byId(project.variables, suppliedParameter.value.id, 'Variable')
-        const declaredType = parameterDefinition.type
         const assignmentType = variable.selectedType === 'default'
           ? 'default'
           : variable.type
-        if (parameterDefinition.required === true && assignmentType === 'default') {
-          throw new DesignCommandError(
-            'VALIDATION_FAILED',
-            `Required parameter ${parameterName} cannot use a Default-valued Variable.`,
-          )
-        }
-        if (!parameterTypeSupportsVariableType(declaredType, assignmentType)) {
-          throw new DesignCommandError(
-            'VALIDATION_FAILED',
-            `Variable ${variable.name} is incompatible with parameter ${parameterName}.`,
-          )
-        }
         const linkedOption = parameterInputOptionForVariable(
           parameterDefinition.type,
           parameterDefinition,
           variable,
         )
         if (!linkedOption) {
+          const message = parameterDefinition.required === true && assignmentType === 'default'
+            ? `Required parameter ${parameterName} cannot use a Default-valued Variable.`
+            : `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`
           throw new DesignCommandError(
             'VALIDATION_FAILED',
-            `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
+            message,
           )
         }
         normalizedSelectedType = linkedOption.id

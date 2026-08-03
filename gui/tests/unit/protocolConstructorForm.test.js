@@ -167,6 +167,43 @@ describe('ProtocolConstructorForm', () => {
     expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
   })
 
+  it('keeps an unsupported required field visible and invalid', () => {
+    const definition = {
+      type: 'Example.RequiredOpenWorldProtocol',
+      group: 'node',
+      parameters: [{
+        field: 'labels',
+        type: 'Vector{String}',
+        required: true,
+        doc: 'Labels supplied by a third-party protocol.',
+      }],
+    }
+    api._config.value = {
+      protocolTypes: { node: [definition], edge: [], floating: [] },
+    }
+
+    const protocol = createProtocolFromDefinition(definition)
+    expect(protocol.parameters[0]).toMatchObject({
+      name: 'labels',
+      selectedType: 'Vector{String}',
+      value: null,
+    })
+    expect(() => validateProtocolConstructorDraft(definition, protocol))
+      .toThrow('Constructor field labels uses a disabled input option.')
+
+    const wrapper = mountForm({ protocol, category: 'node' })
+    const selector = wrapper.get('[aria-label="Input option for labels"]')
+    expect(selector.findAll('option').map(option => option.text()))
+      .toEqual(['Vector{String}'])
+    expect(selector.get('option').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.unknown-type-indicator').exists()).toBe(true)
+    expect(wrapper.get('.param-name').attributes('data-tooltip'))
+      .toContain('**Unsupported:** `Vector{String}`')
+    expect(wrapper.get('.unsupported-parameter-value').text())
+      .toBe('Unsupported input type')
+    expect(wrapper.get('.param-item-row').classes()).toContain('grayed-parameter')
+  })
+
   it('preserves union choices and contextual Function filtering', async () => {
     const parameter = {
       name: 'nodeL',
@@ -400,6 +437,42 @@ describe('ProtocolConstructorForm', () => {
       selectedType: 'Int64',
       value: 7,
     })
+  })
+
+  it('uses the first enabled input after an unsupported direct branch is unlinked', async () => {
+    const type = ['Example.Unsupported', 'Int64']
+    const definition = {
+      type: 'Example.RequiredUnionProtocol',
+      group: 'node',
+      parameters: [{ field: 'choice', type, required: true }],
+    }
+    api._config.value = {
+      protocolTypes: { node: [definition], edge: [], floating: [] },
+    }
+    const parameter = {
+      name: 'choice',
+      type,
+      selectedType: 'Example.Unsupported',
+      value: 'stale',
+    }
+    const variable = {
+      id: 'variable-choice',
+      name: 'choice',
+      type: 'Int64',
+      selectedType: 'Int64',
+      value: 2,
+    }
+    const wrapper = mountForm({
+      protocol: { type: definition.type, parameters: [parameter] },
+      category: 'node',
+      variables: [variable],
+    })
+
+    await wrapper.get('[aria-label="Set choice from a variable"]').trigger('click')
+    await wrapper.get('.variable-selector').setValue(variable.id)
+    await wrapper.get('[aria-label="Use a direct value for choice"]').trigger('click')
+
+    expect(parameter).toMatchObject({ selectedType: 'Int64', value: null })
   })
 
   it('visibly identifies strategy-controlled fields and disables every editing path', async () => {

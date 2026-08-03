@@ -64,14 +64,19 @@ function definitionParameters(definition) {
   return definition.parameters
 }
 
+function initialParameterInputOption(options) {
+  return options.find(option => option.enabled) || options[0] || null
+}
+
 function parameterFromDefinition(parameter) {
   const name = parameter?.field
   if (typeof name !== 'string' || !name) throw new Error(
     'Runtime protocol metadata contains a parameter without a field name.',
   )
-  const option = buildParameterInputOptions(parameter.type, parameter)
-    .find(candidate => candidate.enabled)
-  if (!option) throw new Error(`Runtime protocol field ${name} has no supported input option.`)
+  const option = initialParameterInputOption(
+    buildParameterInputOptions(parameter.type, parameter),
+  )
+  if (!option) throw new Error(`Runtime protocol field ${name} has no input option.`)
 
   return {
     name,
@@ -87,7 +92,7 @@ function normalizeSeededParameter(parameter, definition) {
   if (options.some(option => option.id === normalized.selectedType)) return normalized
 
   if (normalized.value == null || normalized.value === '' || normalized.value === 'default') {
-    normalized.selectedType = options.find(option => option.enabled)?.id
+    normalized.selectedType = initialParameterInputOption(options)?.id
     normalized.value = null
     return normalized
   }
