@@ -1,4 +1,4 @@
-import contract from '../../../../contracts/mcp/v1/tools.json'
+import contract from '../../../../contracts/mcp/contract.json'
 
 export const MCP_CONTRACT_VERSION = contract.contract_version
 export const MCP_TOOLS = Object.freeze(contract.tools)

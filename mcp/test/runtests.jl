@@ -5,6 +5,7 @@ include(joinpath(@__DIR__, "..", "main.jl"))
 
 @testset "MCP transport dependency and lifecycle signal" begin
     @test pkgversion(ModelContextProtocol) == v"0.6.0"
+    @test pkgversion(JSONSchema) == v"1.5.0"
 
     transport = SingleSessionHttpTransport(HttpTransport())
     waiter = @async wait_for_session_initialization(transport)
@@ -68,15 +69,50 @@ end
         push!(dispatched, tool_name)
         tool_name
     end
-    tools = load_tools(
-        Dict{String,Any}("contract_version" => 1);
-        result_handler=handler,
-    )
+    contract = load_contract()
+    validators = compile_input_schemas(contract)
+    tools = load_tools(Dict{String,Any}(); result_handler=handler)
 
+    @test contract["contract_version"] == 1
+    @test length(validators) == length(contract["tools"])
     @test length(tools) == 23
     @test getfield(first(tools), :name) == "design_get"
     @test getfield(last(tools), :name) == "simulation_logs"
     @test getfield(tools[3], :handler)(Dict{String,Any}()) == "catalog_list"
     @test getfield(tools[end], :handler)(Dict{String,Any}()) == "simulation_logs"
     @test dispatched == ["catalog_list", "simulation_logs"]
+
+    nested_schema = JSONSchema.Schema(Dict(
+        "type" => "object",
+        "required" => Any["operations"],
+        "properties" => Dict(
+            "operations" => Dict(
+                "type" => "array",
+                "items" => Dict(
+                    "type" => "object",
+                    "required" => Any["id"],
+                ),
+            ),
+        ),
+    ))
+    nested_issue = JSONSchema.validate(
+        nested_schema,
+        Dict("operations" => Any[Dict{String,Any}()]),
+    )
+    @test json_pointer_path(nested_issue) == "/operations/0/id"
+    catalog_get = only(filter(tool -> getfield(tool, :name) == "catalog_get", tools))
+    invalid = getfield(catalog_get, :handler)(Dict{String,Any}("kind" => "protocols"))
+    @test getfield(invalid, :is_error)
+    @test getfield(invalid, :structured_content) == Dict{String,Any}(
+        "code" => "VALIDATION_FAILED",
+        "message" => "Tool arguments do not match the MCP contract at /type.",
+        "retryable" => false,
+        "details" => Dict{String,Any}("contract_path" => "/type"),
+    )
+    @test dispatched == ["catalog_list", "simulation_logs"]
+
+    @test_throws ErrorException validate_schema_keywords!(
+        Dict{String,Any}("prefixItems" => Any[]),
+    )
+    @test !occursin("prefixItems", read(CONTRACT_FILE, String))
 end

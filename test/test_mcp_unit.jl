@@ -16,6 +16,11 @@
     )
   end
 
+  @testset "contract version authority" begin
+    contract = WebQuantumSavory.JSON.parsefile(WebQuantumSavory.MCP_CONTRACT_FILE)
+    @test WebQuantumSavory.MCP_CONTRACT_VERSION == contract["contract_version"]
+  end
+
   @testset "strict feature configuration" begin
     disabled = WebQuantumSavory.read_mcp_configuration(
       Dict{String,String}();
