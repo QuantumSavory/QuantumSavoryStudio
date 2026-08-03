@@ -101,22 +101,6 @@
               "type": "QuantumSavory.ProtocolZoo.EntanglerProt",
               "parameters": [
                 {
-                  "name": "sim",
-                  "type": "ConcurrentSim.Simulation"
-                },
-                {
-                  "name": "net",
-                  "type": "QuantumSavory.RegisterNet"
-                },
-                {
-                  "name": "nodeA",
-                  "type": "Int64"
-                },
-                {
-                  "name": "nodeB",
-                  "type": "Int64"
-                },
-                {
                   "name": "pairstate",
                   "type": "Symbolic"
                 },
@@ -152,14 +136,14 @@
                   "type": "Int64"
                 },
                 {
-                  "name": "chooseA",
+                  "name": "chooseslotA",
                   "type": [
                     "Int64",
                     "Function"
                   ]
                 },
                 {
-                  "name": "chooseB",
+                  "name": "chooseslotB",
                   "type": [
                     "Int64",
                     "Function"

@@ -857,14 +857,12 @@ function parameterWireType(parameter) {
   return selectedType ?? parameter?.type
 }
 
-function cleanProtocol(protocol, excludedParameterNames) {
+function cleanProtocol(protocol) {
   const plain = plainProtocol(protocol)
   return {
     ...plain,
     parameters: plain.parameters
-      .filter(parameter => (
-        !excludedParameterNames.has(parameter?.name) && hasValue(parameter)
-      ))
+      .filter(hasValue)
       .map(parameter => {
         const cleaned = cloneValue(parameter)
         cleaned.type = parameterWireType(cleaned)
@@ -900,8 +898,6 @@ function cleanBackgroundNoise(value) {
 export function toSimulationPayload(project) {
   const source = isRecord(project) ? project : createEmptyProject()
   const sourceNet = isRecord(source.net) ? source.net : {}
-  const nodeExclusions = new Set(['sim', 'net', 'node'])
-  const edgeExclusions = new Set(['sim', 'net', 'nodeA', 'nodeB'])
   const physicalConfig = normalizePhysicalConfig(sourceNet.physicalConfig)
 
   return {
@@ -947,7 +943,7 @@ export function toSimulationPayload(project) {
                   return cleaned
                 }),
                 protocols: (sourceData.protocols || [])
-                  .map(protocol => cleanProtocol(protocol, nodeExclusions)),
+                  .map(cleanProtocol),
               },
             }
           })
@@ -978,13 +974,13 @@ export function toSimulationPayload(project) {
                     }
                   : {}),
                 protocols: (payloadData.protocols || [])
-                  .map(protocol => cleanProtocol(protocol, edgeExclusions)),
+                  .map(cleanProtocol),
               },
             }
           })
         : [],
       protocols: Array.isArray(sourceNet.protocols)
-        ? sourceNet.protocols.map(protocol => cleanProtocol(protocol, edgeExclusions))
+        ? sourceNet.protocols.map(cleanProtocol)
         : [],
     },
   }

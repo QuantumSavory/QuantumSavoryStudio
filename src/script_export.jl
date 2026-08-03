@@ -259,7 +259,7 @@ end
 
 _script_binding_source(binding) = _script_binding_source(parentmodule(binding), binding)
 
-function _script_import_candidates()
+function _script_import_candidates(catalogs=_constructor_catalog_snapshot())
   candidates = Set{Tuple{Module,Symbol}}(_SCRIPT_STATIC_IMPORT_SOURCES)
   push!(candidates, _script_binding_source(QuantumSavory.Wildcard))
 
@@ -275,13 +275,13 @@ function _script_import_candidates()
       ))
     end
   end
-  for entry in QuantumSavory.ProtocolZoo.available_protocol_types()
+  for entry in catalogs.protocols
     push!(candidates, _script_binding_source(entry.type))
   end
-  for entry in QuantumSavory.available_background_types()
+  for entry in catalogs.backgrounds
     push!(candidates, _script_binding_source(entry.type))
   end
-  for entry in QuantumSavory.available_slot_types()
+  for entry in catalogs.slots
     push!(candidates, _script_binding_source(entry.type))
   end
   for entry in values(STATES_ZOO_TYPE_REGISTRY)
@@ -1000,6 +1000,7 @@ function _script_noise_expression(
   variable_bindings=Dict{String,NamedTuple}(),
   node_index=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
+  catalogs=_constructor_catalog_snapshot(),
 )
   noise_definition === nothing && return "nothing"
   if noise_definition isa AbstractString
@@ -1018,33 +1019,29 @@ function _script_noise_expression(
     ))
   end
 
-  noise_type = _resolve_type_from_string(type_name, :noise)
-  noise_type === nothing && throw(validation_error("$context has unknown type '$type_name'"))
-  declared_parameter_types = _constructor_parameter_types(noise_type)
-  constructor_parameter_metadata = _constructor_parameter_metadata(noise_type)
+  catalog_entry = _resolve_background_catalog_entry(type_name, catalogs)
+  catalog_entry === nothing && throw(validation_error("$context has unknown type '$type_name'"))
+  noise_type = catalog_entry.type
+  declared_parameter_types = _catalog_parameter_types(catalog_entry)
+  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
   keywords = String[]
-  supplied_names = Set{String}()
-  for parameter in parameters
-    _is_object_like(parameter) || throw(validation_error("$context parameter must be an object"))
-    name = haskey(parameter, "name") ? String(parameter["name"]) : String(get(parameter, "field", ""))
-    isempty(name) && throw(validation_error("$context parameter is missing its name"))
-    name in supplied_names && throw(validation_error(
-      "$context contains duplicate parameter '$name'",
-    ))
-    push!(supplied_names, name)
-    value = get(parameter, "value", nothing)
-    if value === nothing ||
-        (value isa AbstractString && isempty(strip(String(value))))
-      continue
-    end
-    haskey(declared_parameter_types, name) ||
-      throw(validation_error("$context has unknown parameter '$name'"))
+  produced_names = Set{String}()
+  validated_parameters = _validated_catalog_parameters(
+    parameters,
+    declared_parameter_types;
+    context,
+    constructor_type=noise_type,
+    parameter_label="background noise parameter",
+  )
+  for parameter in validated_parameters
+    parameter.produces_value || continue
+    name = parameter.name
     _, expression = _script_constructor_parameter_expression(
-      parameter,
+      parameter.definition,
       variable_bindings,
       context;
       node_index,
-      declared_type=declared_parameter_types[name],
+      declared_type=parameter.declared_type,
       constructor_metadata=get(
         constructor_parameter_metadata,
         name,
@@ -1056,7 +1053,14 @@ function _script_noise_expression(
     Base.isidentifier(name) ||
       throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
     push!(keywords, "$name = $expression")
+    push!(produced_names, name)
   end
+  _require_catalog_parameters(
+    _required_catalog_parameters(catalog_entry),
+    produced_names,
+    context;
+    details=Dict{String,Any}("constructor_type" => type_name),
+  )
   constructor = _script_reference(imports, noise_type)
   return isempty(keywords) ? "$constructor()" : "$constructor(; " * join(keywords, ", ") * ")"
 end
@@ -1345,59 +1349,70 @@ function _script_protocol!(
   node_b=nothing,
   edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
   imports::Union{Nothing,_ScriptImportRegistry}=nothing,
+  catalogs=_constructor_catalog_snapshot(),
 )
   _is_object_like(protocol_definition) || throw(validation_error("$context must be an object"))
   raw_type = _required_nonempty_string(protocol_definition, "type", context)
-  protocol_type = _resolve_type_from_string(raw_type, :protocol)
-  protocol_type === nothing && throw(validation_error("$context has unknown type '$raw_type'"))
-  declared_parameter_types = _protocol_constructor_parameter_types(protocol_type)
-  constructor_parameter_metadata =
-    _protocol_constructor_parameter_metadata(protocol_type)
+  catalog_entry = _resolve_protocol_catalog_entry(raw_type, catalogs)
+  catalog_entry === nothing && throw(validation_error("$context has unknown type '$raw_type'"))
+  protocol_type = catalog_entry.type
+  declared_parameter_types = _catalog_parameter_types(catalog_entry)
+  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
   parameters = get(protocol_definition, "parameters", Any[])
-  parameters isa AbstractVector || throw(validation_error("$context parameters must be an array"))
+  validated_parameters = _validated_catalog_parameters(
+    parameters,
+    declared_parameter_types;
+    context,
+    constructor_type=protocol_type,
+    parameter_label="protocol parameter",
+  )
 
   keywords = ["sim = sim", "net = network"]
+  semantic_attachments = Dict{Symbol,Any}()
   if node_index !== nothing
-    push!(keywords, "node = $node_index")
+    semantic_attachments[:node] = node_index
   elseif node_a !== nothing && node_b !== nothing
-    push!(keywords, "nodeA = $node_a", "nodeB = $node_b")
+    semantic_attachments[:node_a] = node_a
+    semantic_attachments[:node_b] = node_b
+  end
+  for (keyword, value) in _protocol_attachment_pairs(
+    catalog_entry,
+    semantic_attachments;
+    context,
+  )
+    push!(keywords, "$(keyword) = $value")
   end
 
-  for parameter in parameters
-    _is_object_like(parameter) || throw(validation_error("$context parameter must be an object"))
-    submitted_name = _required_nonempty_string(parameter, "name", "$context parameter")
-    submitted_name in ("sim", "net", "node", "nodeA", "nodeB") && continue
-    constructor_name = get(PROTOCOL_KEYWORD_MAPPINGS, submitted_name, submitted_name)
-    value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(String(value))))
-      continue
-    end
-    haskey(declared_parameter_types, constructor_name) || throw(validation_error(
-      "$context has unknown parameter '$submitted_name'",
-      Dict{String,Any}(
-        "parameter_name" => submitted_name,
-        "protocol_type" => string(protocol_type),
-      ),
-    ))
+  produced_names = Set{String}()
+  for parameter in validated_parameters
+    parameter.produces_value || continue
+    submitted_name = parameter.name
     name, expression = _script_constructor_parameter_expression(
-      parameter,
+      parameter.definition,
       variable_bindings,
       context;
       node_index=node_index,
       edge_context=edge_context,
-      declared_type=declared_parameter_types[constructor_name],
+      declared_type=parameter.declared_type,
       constructor_metadata=get(
         constructor_parameter_metadata,
-        constructor_name,
+        submitted_name,
         nothing,
       ),
       imports,
     )
     expression === nothing && continue
-    keyword = get(PROTOCOL_KEYWORD_MAPPINGS, name, name)
-    Base.isidentifier(keyword) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
-    push!(keywords, "$keyword = $expression")
+    Base.isidentifier(name) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
+    push!(keywords, "$name = $expression")
+    push!(produced_names, name)
   end
+
+  _require_catalog_parameters(
+    _required_catalog_parameters(catalog_entry),
+    produced_names,
+    context;
+    details=Dict{String,Any}("constructor_type" => raw_type),
+  )
 
   protocol_id = string(get(protocol_definition, "id", context))
   binding = _script_identifier(
@@ -1421,10 +1436,10 @@ Generate a deterministic, standalone Julia script for one validated GUI project.
 The function parses user-provided Julia expressions for syntax but never
 evaluates them and never creates or mutates a server-side simulation.
 """
-function generate_julia_script(payload)
+function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot())
   _is_object_like(payload) || throw(validation_error("Export payload must be an object"))
   reject_mock_broken_protocol_export(payload)
-  validation = validate_payload(payload)
+  validation = validate_payload(payload; catalogs)
   data = validation["data"]
   nodes = validation["graph_info"]["nodes"]
   edges = validation["graph_info"]["edges"]
@@ -1435,7 +1450,7 @@ function generate_julia_script(payload)
   default_representations = representation_config(data)
   filename = _script_filename(data["name"])
   output_stem = first(filename, length(filename) - 3)
-  imports = _script_import_registry()
+  imports = _script_import_registry(_script_import_candidates(catalogs))
   references = _script_static_references!(imports)
   render_reference = (source_module, binding) ->
     _script_reference(imports, source_module, binding)
@@ -1520,7 +1535,7 @@ function generate_julia_script(payload)
     for (slot_index, slot) in enumerate(slots)
       _is_object_like(slot) || throw(validation_error("Node $node_index slot $slot_index must be an object"))
       slot_type_name = _required_nonempty_string(slot, "type", "Node $node_index slot $slot_index")
-      slot_type = _resolve_type_from_string(slot_type_name, :slot)
+      slot_type = _resolve_type_from_string(slot_type_name, :slot, catalogs)
       slot_type === nothing && throw(validation_error("Node $node_index slot $slot_index has unknown type '$slot_type_name'"))
       push!(trait_expressions, "$(_script_reference(imports, slot_type))()")
       push!(
@@ -1533,6 +1548,7 @@ function generate_julia_script(payload)
         variable_bindings,
         node_index,
         imports,
+        catalogs,
       ))
     end
     traits = isempty(trait_expressions) ? "Any[]" : "[" * join(trait_expressions, ", ") * "]"
@@ -1601,6 +1617,7 @@ function generate_julia_script(payload)
         "Node $node_index protocol $protocol_index";
         node_index=node_index,
         imports,
+        catalogs,
       )
     end
   end
@@ -1620,6 +1637,7 @@ function generate_julia_script(payload)
         node_b=target,
         edge_context=edge_function_context,
         imports,
+        catalogs,
       )
     end
   end
@@ -1630,6 +1648,7 @@ function generate_julia_script(payload)
       lines, protocol, variable_bindings, used, protocol_entries,
       "Floating protocol $protocol_index";
       imports,
+      catalogs,
     )
   end
 

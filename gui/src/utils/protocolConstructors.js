@@ -64,16 +64,24 @@ function definitionParameters(definition) {
   return definition.parameters
 }
 
+function initialParameterInputOption(options) {
+  return options.find(option => option.enabled) || options[0] || null
+}
+
 function parameterFromDefinition(parameter) {
   const name = parameter?.field
   if (typeof name !== 'string' || !name) throw new Error(
     'Runtime protocol metadata contains a parameter without a field name.',
   )
+  const option = initialParameterInputOption(
+    buildParameterInputOptions(parameter.type, parameter),
+  )
+  if (!option) throw new Error(`Runtime protocol field ${name} has no input option.`)
 
   return {
     name,
     type: deepClone(parameter.type),
-    selectedType: 'default',
+    selectedType: option.id,
     value: null
   }
 }
@@ -84,7 +92,7 @@ function normalizeSeededParameter(parameter, definition) {
   if (options.some(option => option.id === normalized.selectedType)) return normalized
 
   if (normalized.value == null || normalized.value === '' || normalized.value === 'default') {
-    normalized.selectedType = 'default'
+    normalized.selectedType = initialParameterInputOption(options)?.id
     normalized.value = null
     return normalized
   }
@@ -139,6 +147,12 @@ export function validateProtocolConstructorDraft(definition, protocol = null) {
     if (!parameterInputIsComplete(option, parameter)) {
       throw new Error(`Constructor field ${field} requires a complete ${option.label} value.`)
     }
+  }
+  const missingRequired = definitions.filter(parameter => (
+    parameter?.required === true && !supplied.has(parameter.field)
+  ))
+  if (missingRequired.length) {
+    throw new Error(`Constructor field ${missingRequired[0].field} is required.`)
   }
   return true
 }

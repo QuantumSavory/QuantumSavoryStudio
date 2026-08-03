@@ -34,7 +34,7 @@ const REPEATER_AUTOMATION_PROTOCOL_TYPES = [{
   type: 'QuantumSavory.ProtocolZoo.SwapperProt',
   doc: 'Swap entanglement at a node.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [{
     field: 'nodeL',
     type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
@@ -55,7 +55,7 @@ const REPEATER_AUTOMATION_PROTOCOL_TYPES = [{
   type: 'QuantumSavory.ProtocolZoo.EntanglementTracker',
   doc: 'Track established entanglement at a node.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [],
 }]
 

@@ -64,7 +64,7 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   type: 'TestProtocols.SymbolicProt',
   doc: 'Protocol used to exercise States Zoo variable assignment.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [{
     field: 'observable',
     type: 'SymbolicUtils.Symbolic{Real}',

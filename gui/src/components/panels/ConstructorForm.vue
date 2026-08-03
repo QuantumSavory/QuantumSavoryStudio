@@ -4,8 +4,8 @@
     :data-testid="template ? templateTestId : testId"
     :data-template="String(template)"
   >
-    <div v-if="filteredParameters.length" class="params-container">
-      <div v-for="param in filteredParameters" :key="parameterName(param)" class="param-item">
+    <div v-if="constructorParameters.length" class="params-container">
+      <div v-for="param in constructorParameters" :key="parameterName(param)" class="param-item">
         <div
           class="param-item-row"
           :class="{
@@ -194,7 +194,6 @@ import {
   isNumericExpressionOptionId,
   isNumericExpressionValue,
   parameterInputOptionForVariable,
-  parameterTypeSupportsVariableType,
   resetValueForType,
   unknownParameterTypes,
 } from '../../utils/parameterTypes'
@@ -206,7 +205,6 @@ const props = defineProps({
   constructor: { type: Object, required: true },
   parameterIdentity: { type: String, default: 'name' },
   getParameterDefinition: { type: Function, required: true },
-  excludedParameters: { type: Array, default: () => [] },
   subject: { type: String, default: 'constructor' },
   testId: { type: String, default: 'constructor' },
   templateTestId: { type: String, default: 'template-constructor' },
@@ -235,14 +233,13 @@ function directParameterKey(param) {
 }
 
 const isEditingDisabled = computed(() => props.disabled || props.editingLocked)
-const filteredParameters = computed(() => {
+const constructorParameters = computed(() => {
   const parameters = props.constructor?.parameters
   if (!Array.isArray(parameters)) {
     console.warn('Constructor parameters is not an array:', parameters)
     return []
   }
-  const excluded = new Set(props.excludedParameters)
-  return parameters.filter(param => !excluded.has(parameterName(param)))
+  return parameters
 })
 
 function parameterName(param) {
@@ -375,10 +372,7 @@ function assignedVariable(param) {
 function variableIsCompatible(param, variable) {
   return runtimeParameterDefinition(param)?.kind !== 'named_tag_type'
     && !!variable
-    && parameterTypeSupportsVariableType(
-      declaredParameterType(param),
-      variable.selectedType === 'default' ? 'default' : variable.type,
-    )
+    && !!inputOptionForVariable(param, variable)
 }
 
 function compatibleVariables(param) {
@@ -432,8 +426,13 @@ function clearVariableAssignment(param) {
   if (parameterDisabled(param)) return
   const key = directParameterKey(param)
   const direct = directParameterValues.get(key)
-  param.selectedType = direct?.selectedType || 'default'
-  param.value = direct?.value ?? null
+  const options = parameterInputOptions(param)
+  const directOption = options.find(option => (
+    option.enabled && option.id === direct?.selectedType
+  ))
+  const fallback = directOption || options.find(option => option.enabled) || options[0]
+  param.selectedType = fallback?.id
+  param.value = directOption ? (direct?.value ?? null) : null
   directParameterValues.delete(key)
   variablePickerParameter.value = null
   emit('commit')
@@ -482,7 +481,7 @@ watch(() => props.constructor, () => {
 })
 
 watchEffect(() => {
-  filteredParameters.value.forEach(initializeParameter)
+  constructorParameters.value.forEach(initializeParameter)
   const param = variablePickerParameter.value
   if (param && (parameterDisabled(param) || !compatibleVariables(param).length)) {
     variablePickerParameter.value = null

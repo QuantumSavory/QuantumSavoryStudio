@@ -42,7 +42,7 @@ const SWAPPER_TYPE = {
   type: 'QuantumSavory.ProtocolZoo.SwapperProt',
   doc: 'Swap entanglement at a node.',
   group: 'node',
-  virtual: null,
+  virtual: false,
   parameters: [
     {
       field: 'nodeL',

@@ -145,7 +145,11 @@ function _run_startup_warmup!(;
       simulation_exists(SIMULATION_SERVICE, STARTUP_WARMUP_STATE_NAME) && error(
         "Startup warmup state name is already in use: $STARTUP_WARMUP_STATE_NAME",
       )
-      warmup_state = parse_network_graph(validate_payload(payload))
+      catalogs = _constructor_catalog_snapshot()
+      warmup_state = parse_network_graph(
+        validate_payload(payload; catalogs);
+        catalogs,
+      )
       prepare_simulation(warmup_state, STARTUP_WARMUP_STATE_NAME)
       warmup_logger = Logger.make_logger(warmup_state; console=Logging.NullLogger())
       run_simulation(

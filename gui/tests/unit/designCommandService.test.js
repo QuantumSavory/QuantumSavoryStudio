@@ -962,6 +962,77 @@ describe('DesignCommandService', () => {
     expect(project.variables).toHaveLength(1)
   })
 
+  it('uses constructor descriptors to admit Default-valued Variable links', async () => {
+    const project = createEmptyProject('Default Variables')
+    project.net.nodes.push(new Node({
+      id: 'node_a',
+      name: 'A',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    project.variables.push(
+      new Variable({
+        id: 'variable_default',
+        name: 'default value',
+        type: 'default',
+        selectedType: 'default',
+        value: null,
+      }),
+      new Variable({
+        id: 'variable_label',
+        name: 'label',
+        type: 'String',
+        selectedType: 'String',
+        value: 'not an integer',
+      }),
+    )
+    const service = serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{
+          type: 'Example.OptionalProtocol',
+          parameters: [{ field: 'rounds', type: 'Int64', required: false }],
+        }, {
+          type: 'Example.RequiredProtocol',
+          parameters: [{ field: 'rounds', type: 'Int64', required: true }],
+        }],
+        edge: [],
+        floating: [],
+      }),
+    })
+    const createWithVariable = (type, variableId) => service.execute({
+      operations: [{
+        kind: 'protocols.create',
+        placement: 'node',
+        owner_id: 'node_a',
+        value: {
+          type,
+          parameters: [{
+            name: 'rounds',
+            value: new VariableReference(variableId),
+          }],
+        },
+      }],
+    })
+
+    await createWithVariable('Example.OptionalProtocol', 'variable_default')
+    expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
+      selectedType: 'default',
+      value: { kind: 'variable', id: 'variable_default' },
+    })
+    await expect(
+      createWithVariable('Example.RequiredProtocol', 'variable_default'),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Required parameter rounds cannot use a Default-valued Variable.',
+    })
+    await expect(
+      createWithVariable('Example.RequiredProtocol', 'variable_label'),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'Variable label has no compatible input option for parameter rounds.',
+    })
+  })
+
   it('accepts numeric-expression tags only through matching authoritative descriptors', async () => {
     const project = createEmptyProject('Numeric expressions')
     project.net.nodes.push(new Node({

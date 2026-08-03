@@ -35,11 +35,16 @@ describe('parameter input descriptors', () => {
 
   it('expands Function once and keeps unsupported declared members visible', () => {
     const options = buildParameterInputOptions(['Function', 'Example.Unsupported'])
-    expect(options.map(option => [option.id, option.label, option.enabled])).toEqual([
-      ['default', 'Default', true],
-      ['Function', 'Predefined Function', true],
-      ['Lambda', 'Custom Function', true],
-      ['Example.Unsupported', 'Example.Unsupported', false],
+    expect(options.map(option => [
+      option.id,
+      option.label,
+      option.inputKind,
+      option.enabled,
+    ])).toEqual([
+      ['default', 'Default', 'default', true],
+      ['Function', 'Predefined Function', 'predefined-function', true],
+      ['Lambda', 'Custom Function', 'code', true],
+      ['Example.Unsupported', 'Example.Unsupported', 'unsupported', false],
     ])
   })
 

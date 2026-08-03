@@ -357,16 +357,7 @@ export class ApiConnector {
       })
       if (!resProtTypes.ok) throw new Error(`Protocol types fetch failed: ${resProtTypes.status}`)
       const responseObjectProtTypes = await resProtTypes.json()
-      let parsedTypes = responseObjectProtTypes.protocol_types;
-      
-      // Remove non-string parameters
-      // To-do: parse these so we don't need to exclude them
-      parsedTypes = parsedTypes.map(type => ({
-        ...type,
-        parameters: type.parameters.filter(param => {
-          return typeof param.type === 'string' || param.type === 'Function' || Array.isArray( param.type )
-        })
-      }));
+      const parsedTypes = responseObjectProtTypes.protocol_types;
       this._config.value.protocolTypes = {
         floating: [], 
         node: [], 

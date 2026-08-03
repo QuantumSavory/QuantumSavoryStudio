@@ -31,8 +31,13 @@ mutations already use the service.
 
 Editable protocol parameters, background-noise parameters, and Variables use explicit
 descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector begins with Default. Default clears the draft value and omits the keyword from
-minimized payloads.
+selector for an optional parameter begins with Default. Default clears the draft value
+and omits the keyword from minimized payloads. A required protocol parameter omits
+Default, selects its first enabled concrete descriptor with a null value, and remains
+invalid until that value is complete. When none of its declared descriptors is supported,
+the required parameter retains its first disabled descriptor so the unsupported field is
+visible and invalid instead of blocking the editor. A Default-valued Variable is
+incompatible with a required parameter.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
@@ -41,6 +46,7 @@ value and transient validation state.
 Constructor member metadata from the backend is authoritative for:
 
 - protocol placement and virtual-edge eligibility;
+- required protocol fields;
 - nullable unions and named-tag semantics;
 - field-compatible Variable assignment;
 - bounds and target types.
@@ -50,9 +56,10 @@ catalog.
 
 `ConstructorForm` is the shared descriptor/validation/Variable-assignment core for
 protocols and background noise. Its thin wrappers differ in parameter identity
-(`name` versus `field`), metadata lookup, and injected protocol fields; do not fork
-background input rules. An installed background expression receives concrete node
-context. A layout template receives representative/deferred validation, and
+(`name` versus `field`) and metadata lookup; protocol payloads contain no injected
+constructor fields. Do not fork background input rules. An installed background
+expression receives concrete node context. A layout template receives
+representative/deferred validation, and
 `DesignCommandService` must revalidate every cloned background against its destination
 node after candidate positions stabilize, aborting the whole generation if one fails.
 

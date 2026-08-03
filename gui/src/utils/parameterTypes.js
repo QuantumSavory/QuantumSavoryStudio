@@ -81,8 +81,8 @@ function uniqueDescriptors(options) {
 
 /**
  * Convert authoritative Julia constructor metadata to the frontend input
- * contract. Every field has one Default-first selector, even for singleton
- * Julia types.
+ * contract. Optional fields begin with Default; required fields expose only
+ * concrete choices.
  */
 export function buildParameterInputOptions(
   inputType,
@@ -90,14 +90,15 @@ export function buildParameterInputOptions(
   { numericExpressions = true } = {},
 ) {
   const declaredTypes = Array.isArray(inputType) ? inputType : [inputType]
-  const options = [
-    descriptor({
+  const options = []
+  if (metadata?.required !== true) {
+    options.push(descriptor({
       id: 'default',
       label: 'Default',
       inputKind: 'default',
       wireType: null,
-    }),
-  ]
+    }))
+  }
 
   if (metadata?.kind === 'named_tag_type') {
     if (metadata.nullable === true) {
@@ -139,7 +140,7 @@ export function buildParameterInputOptions(
     const enabled = parameterTypeIsKnown(declaredType)
     options.push(descriptor({
       id: declaredType,
-      inputKind: inputKindForType(declaredType),
+      inputKind: enabled ? inputKindForType(declaredType) : 'unsupported',
       wireType: declaredType,
       enabled,
     }))
@@ -185,6 +186,9 @@ export function parameterInputOptionForVariable(inputType, metadata, variable) {
   const semanticType = variable?.selectedType === 'default'
     ? 'default'
     : variable?.type
+  if (semanticType === 'default') {
+    return options.find(option => option.inputKind === 'default') || null
+  }
   return options.find(option => (
     option.enabled
     && option.inputKind !== 'default'

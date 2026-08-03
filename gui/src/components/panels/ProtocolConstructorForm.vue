@@ -3,7 +3,6 @@
     class="protocol-constructor-form"
     :constructor="protocol"
     :get-parameter-definition="parameterDefinition"
-    :excluded-parameters="injectedParameters"
     :category="category"
     :variables="variables"
     :editing-locked="editingLocked"
@@ -35,8 +34,6 @@ const props = defineProps({
   template: { type: Boolean, default: false },
 })
 const emit = defineEmits(['commit'])
-
-const injectedParameters = ['sim', 'net', 'node', 'nodeA', 'nodeB']
 
 function parameterDefinition(parameter) {
   return api.getProtocolParameterDefinition(

@@ -4,41 +4,6 @@
 using Dates
 using .Logger: @log_event
 
-# Simple caches to avoid repeated scans/logs during type resolution
-const _PROTOCOL_TYPES_CACHE = Ref(Dict{String, Any}())
-const _NOISE_TYPES_CACHE = Ref(Dict{String, Any}())
-const _SLOT_TYPES_CACHE = Ref(Dict{String, Any}())
-
-function _ensure_protocol_types_cache!()
-  if isempty(_PROTOCOL_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for pt in QuantumSavory.ProtocolZoo.available_protocol_types()
-      mapping[lowercase(string(pt.type))] = pt.type
-    end
-    _PROTOCOL_TYPES_CACHE[] = mapping
-  end
-end
-
-function _ensure_noise_types_cache!()
-  if isempty(_NOISE_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for bt in QuantumSavory.available_background_types()
-      mapping[lowercase(string(bt.type |> nameof))] = bt.type
-    end
-    _NOISE_TYPES_CACHE[] = mapping
-  end
-end
-
-function _ensure_slot_types_cache!()
-  if isempty(_SLOT_TYPES_CACHE[])
-    mapping = Dict{String, Any}()
-    for st in QuantumSavory.available_slot_types()
-      mapping[lowercase(string(st.type |> nameof))] = st.type
-    end
-    _SLOT_TYPES_CACHE[] = mapping
-  end
-end
-
 """Convert a raw parameter value to a target primitive, Wildcard, or simple Union type.
 
 Supported target strings: "Int", "Int64", "Float64", "Float32", "String", "Nothing", "Bool",
@@ -461,7 +426,7 @@ function _parse_variable_reference(value; context::String="Protocol parameter")
 end
 
 function _collect_protocol_definitions(payload)
-  definitions = Tuple{Any,String}[]
+  definitions = NamedTuple[]
   net = get(payload, "net", nothing)
   _is_object_like(net) || return definitions
 
@@ -473,7 +438,15 @@ function _collect_protocol_definitions(payload)
       _is_object_like(node_data) || continue
       protocols = get(node_data, "protocols", Any[])
       protocols isa AbstractVector || continue
-      append!(definitions, ((protocol, "node $index") for protocol in protocols))
+      append!(definitions, (
+        (
+          definition=protocol,
+          location="node $index",
+          attachment=:node,
+          virtual=false,
+        )
+        for protocol in protocols
+      ))
     end
   end
 
@@ -485,13 +458,29 @@ function _collect_protocol_definitions(payload)
       _is_object_like(edge_data) || continue
       protocols = get(edge_data, "protocols", Any[])
       protocols isa AbstractVector || continue
-      append!(definitions, ((protocol, "edge $index") for protocol in protocols))
+      append!(definitions, (
+        (
+          definition=protocol,
+          location="edge $index",
+          attachment=:edge,
+          virtual=_is_virtual_edge(edge),
+        )
+        for protocol in protocols
+      ))
     end
   end
 
   protocols = get(net, "protocols", Any[])
   if protocols isa AbstractVector
-    append!(definitions, ((protocol, "floating protocol") for protocol in protocols))
+    append!(definitions, (
+      (
+        definition=protocol,
+        location="floating protocol",
+        attachment=:network,
+        virtual=false,
+      )
+      for protocol in protocols
+    ))
   end
 
   return definitions
@@ -523,21 +512,95 @@ function _collect_background_definitions(payload)
   return definitions
 end
 
-"""
-Validate all catalog-backed constructor parameter tags before construction.
+_constructor_parameter_value_is_blank(value) = value === nothing ||
+  (value isa AbstractString && isempty(strip(String(value))))
 
-Despite its historical name, this covers protocols and slot backgrounds,
-including direct numeric expressions and every semantic Variable type.
+"""Validate constructor parameter names once before caller-specific value handling."""
+function _validated_catalog_parameters(
+  parameters,
+  declared_parameter_types;
+  context::String,
+  constructor_type,
+  parameter_label::String="constructor parameter",
+)
+  parameters isa AbstractVector || throw(validation_error(
+    "$context parameters must be an array",
+  ))
+
+  supplied_names = Set{String}()
+  validated = NamedTuple[]
+  for (parameter_index, parameter) in enumerate(parameters)
+    _is_object_like(parameter) || throw(validation_error(
+      "$context parameter $parameter_index must be an object",
+    ))
+    name = _required_nonempty_string(
+      parameter,
+      "name",
+      "$context parameter $parameter_index",
+    )
+    name in supplied_names && throw(validation_error(
+      "$context contains duplicate parameter '$name'",
+    ))
+    push!(supplied_names, name)
+
+    haskey(declared_parameter_types, name) || throw(validation_error(
+      "Unknown $parameter_label '$name'",
+      Dict{String,Any}(
+        "parameter_name" => name,
+        "constructor_type" => string(constructor_type),
+      ),
+    ))
+    value = get(parameter, "value", nothing)
+    push!(validated, (
+      definition=parameter,
+      name=name,
+      declared_type=declared_parameter_types[name],
+      value=value,
+      produces_value=!_constructor_parameter_value_is_blank(value),
+    ))
+  end
+  return validated
+end
+
+"""Require every catalog-marked field to produce a concrete constructor value."""
+function _require_catalog_parameters(
+  required_parameters,
+  produced_parameters,
+  context::String;
+  details=Dict{String,Any}(),
+)
+  missing_required = sort!(collect(setdiff(required_parameters, produced_parameters)))
+  isempty(missing_required) && return nothing
+  error_details = merge(
+    Dict{String,Any}("missing_parameters" => missing_required),
+    Dict{String,Any}(details),
+  )
+  throw(validation_error(
+    "$context is missing required parameter(s): $(join(missing_required, ", "))",
+    error_details,
+  ))
+end
+
 """
-function _validate_variable_references(payload, variables)
+Validate catalog placement and constructor values before construction.
+
+This covers protocols and slot backgrounds, including direct numeric
+expressions and every semantic Variable type.
+"""
+function _validate_catalog_constructors(
+  payload,
+  variables;
+  catalogs=_constructor_catalog_snapshot(),
+)
   constructors = Any[
     (
-      definition=definition,
-      location=location,
+      definition=protocol.definition,
+      location=protocol.location,
       kind=:protocol,
-      mappings=PROTOCOL_KEYWORD_MAPPINGS,
+      attachment=protocol.attachment,
+      virtual=protocol.virtual,
     )
-    for (definition, location) in _collect_protocol_definitions(payload)
+    for protocol in _collect_protocol_definitions(payload)
   ]
   append!(
     constructors,
@@ -545,7 +608,8 @@ function _validate_variable_references(payload, variables)
       definition=definition,
       location=location,
       kind=:background,
-      mappings=Dict{String,String}(),
+      attachment=nothing,
+      virtual=false,
     )
     for (definition, location) in _collect_background_definitions(payload)
   )
@@ -555,13 +619,19 @@ function _validate_variable_references(payload, variables)
     location = constructor.location
     kind = constructor.kind
     if definition isa AbstractString
-      String(definition) == "default" && continue
-      resolved = kind === :protocol ?
-        _resolve_protocol_type_from_string(String(definition)) :
-        _resolve_noise_type_from_string(String(definition))
-      resolved === nothing && throw(validation_error(
-        "Unknown $(kind === :protocol ? "protocol" : "background noise") type: '$(definition)'",
+      kind === :protocol && throw(validation_error(
+        "$location must be a catalog-backed object",
       ))
+      String(definition) == "default" && continue
+      catalog_entry = _resolve_background_catalog_entry(String(definition), catalogs)
+      catalog_entry === nothing && throw(validation_error(
+        "Unknown background noise type: '$(definition)'",
+      ))
+      _require_catalog_parameters(
+        _required_catalog_parameters(catalog_entry),
+        Set{String}(),
+        "Background noise '$(definition)'",
+      )
       continue
     end
     _is_object_like(definition) || throw(validation_error(
@@ -572,64 +642,54 @@ function _validate_variable_references(payload, variables)
     if kind === :background && raw_type == "default"
       continue
     end
-    constructor_type = kind === :protocol ?
-      _resolve_protocol_type_from_string(raw_type) :
-      _resolve_noise_type_from_string(raw_type)
-    constructor_type === nothing && throw(validation_error(
+    catalog_entry = kind === :protocol ?
+      _resolve_protocol_catalog_entry(raw_type, catalogs) :
+      _resolve_background_catalog_entry(raw_type, catalogs)
+    catalog_entry === nothing && throw(validation_error(
       "Unknown $(kind === :protocol ? "protocol" : "background noise") type: '$raw_type'",
       Dict{String,Any}("location" => location, "constructor_type" => raw_type),
     ))
+    constructor_type = catalog_entry.type
 
-    declared_parameter_types = kind === :protocol ?
-      _protocol_constructor_parameter_types(constructor_type) :
-      _constructor_parameter_types(constructor_type)
-    parameters = get(definition, "parameters", Any[])
-    parameters isa AbstractVector || throw(validation_error(
-      "$location parameters must be an array",
-    ))
-    supplied_names = Set{String}()
-
-    for (parameter_index, parameter) in enumerate(parameters)
-      _is_object_like(parameter) || throw(validation_error(
-        "$location parameter $parameter_index must be an object",
-      ))
-      parameter_name = _required_nonempty_string(
-        parameter,
-        "name",
-        "$location parameter $parameter_index",
-      )
-      parameter_name in supplied_names && throw(validation_error(
-        "$location contains duplicate parameter '$parameter_name'",
-      ))
-      push!(supplied_names, parameter_name)
-
-      if kind === :protocol &&
-          Symbol(parameter_name) in (:sim, :net, :node, :nodeA, :nodeB)
-        continue
-      end
-      haskey(parameter, "value") || continue
-      value = parameter["value"]
-      if value === nothing ||
-          (value isa AbstractString && isempty(strip(String(value))))
-        continue
-      end
-      constructor_name = get(constructor.mappings, parameter_name, parameter_name)
-      haskey(declared_parameter_types, constructor_name) || throw(validation_error(
-        "Unknown $(kind === :protocol ? "protocol" : "background noise") parameter '$parameter_name'",
+    if kind === :protocol
+      catalog_entry.attachment === constructor.attachment || throw(validation_error(
+        "Protocol '$raw_type' cannot be attached at $location",
         Dict{String,Any}(
-          "parameter_name" => parameter_name,
-          "constructor_type" => raw_type,
-          "location" => location,
+          "protocol_type" => raw_type,
+          "actual_placement" => string(constructor.attachment),
+          "expected_placement" => string(catalog_entry.attachment),
         ),
       ))
+      constructor.virtual && !catalog_entry.permits_virtual_edge && throw(validation_error(
+        "Protocol '$raw_type' is not permitted on a virtual edge",
+      ))
+    end
+
+    declared_parameter_types = _catalog_parameter_types(catalog_entry)
+    required_parameters = _required_catalog_parameters(catalog_entry)
+    kind_label = kind === :protocol ? "protocol" : "background noise"
+    subject = "$(uppercasefirst(kind_label)) '$raw_type'"
+    parameters = _validated_catalog_parameters(
+      get(definition, "parameters", Any[]),
+      declared_parameter_types;
+      context="$subject at $location",
+      constructor_type,
+      parameter_label="$kind_label parameter",
+    )
+    produced_names = Set{String}()
+
+    for parameter in parameters
+      parameter_name = parameter.name
+      parameter.produces_value || continue
+      value = parameter.value
       context = "$location parameter '$parameter_name'"
-      declared_type = declared_parameter_types[constructor_name]
+      declared_type = parameter.declared_type
 
       numeric_expression = _parse_numeric_expression(value; context=context)
       if numeric_expression !== nothing
         target = _numeric_expression_target_for_parameter(
           declared_type,
-          get(parameter, "type", nothing),
+          get(parameter.definition, "type", nothing),
         )
         target === nothing && throw(validation_error(
           "$context does not accept a numeric expression",
@@ -638,11 +698,15 @@ function _validate_variable_references(payload, variables)
             "constructor_type" => raw_type,
           ),
         ))
+        push!(produced_names, parameter_name)
         continue
       end
 
       reference = _parse_variable_reference(value; context=context)
-      reference === nothing && continue
+      if reference === nothing
+        push!(produced_names, parameter_name)
+        continue
+      end
       haskey(variables, reference.id) || throw(validation_error(
         "Unknown variable reference: '$(reference.id)'",
         Dict{String,Any}(
@@ -657,7 +721,16 @@ function _validate_variable_references(payload, variables)
           "Named tag type parameters cannot use variables",
           Dict{String,Any}("parameter_name" => parameter_name),
         ))
-      _variable_uses_constructor_default(variable) && continue
+      if _variable_uses_constructor_default(variable)
+        parameter_name in required_parameters && throw(validation_error(
+          "Required $kind_label parameter '$parameter_name' cannot use a Default-valued Variable",
+          Dict{String,Any}(
+            "parameter_name" => parameter_name,
+            "variable_id" => variable.id,
+          ),
+        ))
+        continue
+      end
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $context",
@@ -683,38 +756,24 @@ function _validate_variable_references(payload, variables)
           ),
         ))
       end
+      push!(produced_names, parameter_name)
     end
+
+    _require_catalog_parameters(
+      required_parameters,
+      produced_names,
+      subject;
+      details=Dict{String,Any}(
+        "constructor_type" => raw_type,
+        "location" => location,
+      ),
+    )
   end
 
   return true
 end
 
-function get_background_constructor_parameters(background_type)
-  QuantumSavory.constructor_metadata(background_type)
-end
-
-function get_background_types()
-  background_types = QuantumSavory.available_background_types()
-  [
-    Dict(
-      "type" => string(nameof(abt.type)),
-      "doc" => string(abt.doc),
-      "parameters" => get_background_constructor_parameters(abt.type) |> parse_pt_type
-    ) for abt in background_types
-  ]
-end
-
-function get_slot_types()
-  slot_types = QuantumSavory.available_slot_types()
-  [Dict("type" => string(nameof(st.type)), "doc" => string(st.doc)) for st in slot_types]
-end
-
 const NAMED_TAG_PARAMETER_KIND = "named_tag_type"
-const PROTOCOL_KEYWORD_MAPPINGS = Dict(
-  "chooseA" => "chooseslotA",
-  "chooseB" => "chooseslotB",
-  "log" => "_log",
-)
 
 """Recognize current and legacy symbolic protocol type identities."""
 function _is_symbolic_parameter_type(type)
@@ -770,30 +829,6 @@ function _constructor_parameter_metadata(constructor_type)
     string(parameter.field) => parameter
     for parameter in QuantumSavory.constructor_metadata(constructor_type)
   )
-end
-
-"""Return protocol constructor fields, including supported private keyword aliases."""
-function _protocol_constructor_parameter_types(protocol_type)
-  declared = _constructor_parameter_types(protocol_type)
-  reflected_fields = Dict(string(name) => type for (name, type) in zip(
-    fieldnames(protocol_type),
-    fieldtypes(protocol_type),
-  ))
-  for keyword in values(PROTOCOL_KEYWORD_MAPPINGS)
-    haskey(reflected_fields, keyword) && (declared[keyword] = reflected_fields[keyword])
-  end
-  return declared
-end
-
-"""Return documented constructor metadata keyed by the accepted wire keyword."""
-function _protocol_constructor_parameter_metadata(protocol_type)
-  metadata = _constructor_parameter_metadata(protocol_type)
-  for (wire_name, constructor_name) in PROTOCOL_KEYWORD_MAPPINGS
-    haskey(metadata, wire_name) &&
-      !haskey(metadata, constructor_name) &&
-      (metadata[constructor_name] = metadata[wire_name])
-  end
-  return metadata
 end
 
 function _constructor_numeric_bound(metadata, field::Symbol)
@@ -969,40 +1004,6 @@ function parse_pt_type(parameters::AbstractVector)
   result
 end
 
-function get_protocol_types()
-  protocol_types = QuantumSavory.ProtocolZoo.available_protocol_types()
-
-  result = []
-  for pt in protocol_types
-    pts = QuantumSavory.constructor_metadata(pt.type)
-
-    nodes_count = pt.nodeargs
-    if nodes_count == 1
-      group = "node"
-    elseif nodes_count == 2
-      group = "edge"
-    else
-      group = "floating"
-    end
-
-    virtual = group == "edge" ? QuantumSavory.ProtocolZoo.permits_virtual_edge(pt.type) : nothing
-
-    push!(result, Dict("type" => string(pt.type), "doc" => string(pt.doc), "group" => group, "parameters" => pts |> parse_pt_type, "virtual" => virtual))
-  end
-
-  if mock_broken_protocol_enabled()
-    push!(result, Dict(
-      "type" => MOCK_BROKEN_PROTOCOL_TYPE,
-      "doc" => "Diagnostic-only floating protocol that intentionally crashes during simulation stepping.",
-      "group" => "floating",
-      "parameters" => Any[],
-      "virtual" => nothing,
-    ))
-  end
-
-  result
-end
-
 function extract_payload(payload = nothing, raw_payload = nothing)
   # Helper: parse media type parameters (e.g., "application/json; charset=utf-8")
   _is_json_mediatype(s) = try
@@ -1053,7 +1054,7 @@ function extract_payload(payload = nothing, raw_payload = nothing)
   throw(validation_error("No valid JSON payload found", Dict{String, Any}("raw_payload_type" => string(typeof(raw_payload)))))
 end
 
-function validate_payload(payload)
+function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
   try
     # Validate top-level structure
     if !haskey(payload, "name")
@@ -1159,25 +1160,6 @@ function validate_payload(payload)
         protocols isa AbstractVector || throw(validation_error(
           "Virtual edge $i protocols must be an array",
         ))
-        for (protocol_index, protocol) in enumerate(protocols)
-          _is_object_like(protocol) || throw(validation_error(
-            "Virtual edge $i protocol $protocol_index must be an object",
-          ))
-          type_name = _required_nonempty_string(
-            protocol,
-            "type",
-            "Virtual edge $i protocol $protocol_index",
-          )
-          protocol_type = _resolve_protocol_type_from_string(type_name)
-          protocol_type === nothing && throw(validation_error(
-            "Virtual edge $i protocol $protocol_index has unknown type '$type_name'",
-          ))
-          if !QuantumSavory.ProtocolZoo.permits_virtual_edge(protocol_type)
-            throw(validation_error(
-              "Protocol '$type_name' is not permitted on a virtual edge",
-            ))
-          end
-        end
       else
         endpoint_pair = minmax(source, target)
         endpoint_pair in physical_endpoint_pairs && throw(validation_error(
@@ -1194,7 +1176,7 @@ function validate_payload(payload)
     # their definitions and every tagged protocol-parameter reference before
     # creating backend state.
     variables = _parse_variables(payload)
-    _validate_variable_references(payload, variables)
+    _validate_catalog_constructors(payload, variables; catalogs)
 
     # Prepare success response with graph info
     response = Dict(
@@ -1243,7 +1225,7 @@ end
 """Return register names in the same order as the validated nodes."""
 _register_names(nodes) = [string(node["name"]) for node in nodes]
 
-function create_registers_from_nodes(data)
+function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapshot())
   # Extract nodes from the validation result
   nodes = data["graph_info"]["nodes"]
   default_representations = representation_config(data["data"])
@@ -1270,7 +1252,7 @@ function create_registers_from_nodes(data)
     for slot_data in slots
       # Parse slot type dynamically
       slot_type_str = slot_data["type"]
-      slot_type = _resolve_type_from_string(slot_type_str, :slot)
+      slot_type = _resolve_type_from_string(slot_type_str, :slot, catalogs)
       if slot_type === nothing
         error("Unknown slot type: $slot_type_str")
       end
@@ -1284,7 +1266,7 @@ function create_registers_from_nodes(data)
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
       background = noise_def === nothing ? nothing :
-        _instantiate_noise(noise_def, background_context; variables)
+        _instantiate_noise(noise_def, background_context; variables, catalogs)
       push!(background_noise, background)
     end
 
@@ -1308,30 +1290,12 @@ function get_network_time_tracker(network)
   get_time_tracker(network)
 end
 
-function _resolve_protocol_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
-
-  if input_lower == lowercase(MOCK_BROKEN_PROTOCOL_TYPE)
-    if mock_broken_protocol_enabled()
-      return MockBrokenProtocol
-    end
-    @warn "Diagnostic protocol is disabled" type_str=type_str configuration_variable=MOCK_BROKEN_PROTOCOL_ENV_VAR
-    return nothing
-  end
-
-  _ensure_protocol_types_cache!()
-  T = get(_PROTOCOL_TYPES_CACHE[], input_lower, nothing)
-  if T === nothing
-    @warn "Protocol type not found in whitelist" type_str=type_str
-  end
-  return T
-end
-
 # Instantiate a background noise from either a String name or an object.
 function _instantiate_noise(
   noise_def,
   ctx::Dict{Symbol,Any}=Dict{Symbol,Any}();
   variables=Dict{String,Variable}(),
+  catalogs=_constructor_catalog_snapshot(),
 )
   # String form: "Depolarization" or any available background type name
   if isa(noise_def, AbstractString)
@@ -1339,8 +1303,9 @@ function _instantiate_noise(
       return nothing # this now means no noise
     end
 
-    T = _resolve_type_from_string(String(noise_def), :noise)
-    T === nothing && error("Unknown background noise type: $(noise_def)")
+    catalog_entry = _resolve_background_catalog_entry(String(noise_def), catalogs)
+    catalog_entry === nothing && error("Unknown background noise type: $(noise_def)")
+    T = catalog_entry.type
     return T()
   end
 
@@ -1354,8 +1319,9 @@ function _instantiate_noise(
       return nothing
     end
     
-    T = _resolve_type_from_string(String(tstr), :noise)
-    T === nothing && error("Unknown background noise type: $(tstr)")
+    catalog_entry = _resolve_background_catalog_entry(String(tstr), catalogs)
+    catalog_entry === nothing && error("Unknown background noise type: $(tstr)")
+    T = catalog_entry.type
 
     raw_params = Vector{Any}(get(noise_def, "parameters", Any[]))
     kwargs, variable_assignments = _constructor_parameter_kwargs(
@@ -1364,6 +1330,9 @@ function _instantiate_noise(
       ctx;
       variables,
       parameter_context="background noise parameter",
+      declared_parameter_types=_catalog_parameter_types(catalog_entry),
+      constructor_parameter_metadata=_catalog_parameter_metadata(catalog_entry),
+      required_parameters=_required_catalog_parameters(catalog_entry),
     )
 
     isempty(variable_assignments) &&
@@ -1388,47 +1357,6 @@ function _instantiate_noise(
   end
 
   error("Unsupported backgroundNoise definition (expected object or nothing): $(typeof(noise_def))")
-end
-
-function _resolve_noise_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
-  _ensure_noise_types_cache!()
-
-  if input_lower == "default"
-    return nothing # this now means no noise
-
-    # Choose first available background type deterministically
-    # for (_, T) in _NOISE_TYPES_CACHE[]
-    #   return T
-    # end
-  end
-
-  T = get(_NOISE_TYPES_CACHE[], input_lower, nothing)
-  if T === nothing
-    @warn "Noise type not found in whitelist" type_str=type_str
-  end
-  return T
-end
-
-function _resolve_slot_type_from_string(type_str::AbstractString)
-  input_lower = lowercase(type_str)
-  _ensure_slot_types_cache!()
-  T = get(_SLOT_TYPES_CACHE[], input_lower, nothing)
-  if T === nothing
-    @warn "Slot type not found in whitelist" type_str=type_str
-  end
-  return T
-end
-
-function _resolve_type_from_string(type_str::AbstractString, type_group::Symbol)
-  # Reduce log noise; warn only on misses at leaf resolvers
-  return if type_group == :protocol
-    _resolve_protocol_type_from_string(type_str)
-  elseif type_group == :noise
-    _resolve_noise_type_from_string(type_str)
-  elseif type_group == :slot
-    _resolve_slot_type_from_string(type_str)
-  end
 end
 
 """
@@ -1465,7 +1393,7 @@ function _handle_function_lambda_parameter!(
           edge_context=edge_context,
         )
         # Validate the lambda - try calling it with a test value if it's a filter
-        if name == :filter || name == :chooseA || name == :chooseB
+        if name in (:filter, :chooseslotA, :chooseslotB)
           msg = "Created lambda for parameter: $name"
           if state !== nothing
             @log_event state Logging.Info msg parameter_name=string(name) lambda_string=value
@@ -1475,7 +1403,7 @@ function _handle_function_lambda_parameter!(
           
           # Warn about common mistakes
           if !occursin("return", value) && !occursin("=>", value)
-            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Functions like chooseA/chooseB must return an integer, filter must return a boolean."
+            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Slot selectors must return an integer and filters must return a boolean."
             if state !== nothing
               @log_event state Logging.Warn warning_msg parameter_name=string(name) lambda_string=value
             else
@@ -1734,47 +1662,29 @@ function _constructor_parameter_kwargs(
   ctx::Dict{Symbol,Any},
   state=nothing;
   variables=Dict{String,Variable}(),
-  parameter_mappings=Dict{String,String}(),
-  ignored_parameters=Set{Symbol}(),
   parameter_context::String="Constructor parameter",
   declared_parameter_types=_constructor_parameter_types(constructor_type),
   constructor_parameter_metadata=_constructor_parameter_metadata(constructor_type),
+  required_parameters=Set{String}(),
 )
   kwargs = Dict{Symbol,Any}()
   variable_assignments = Dict{String,Any}[]
-  supplied_names = Set{String}()
+  parameters = _validated_catalog_parameters(
+    params,
+    declared_parameter_types;
+    context=parameter_context,
+    constructor_type,
+    parameter_label=parameter_context,
+  )
 
-  for (parameter_index, parameter) in enumerate(params)
-    _is_object_like(parameter) || throw(validation_error(
-      "$parameter_context $parameter_index must be an object",
-    ))
-    original_name = _required_nonempty_string(
-      parameter,
-      "name",
-      "$parameter_context $parameter_index",
-    )
-    original_name in supplied_names && throw(validation_error(
-      "Duplicate $parameter_context '$original_name'",
-    ))
-    push!(supplied_names, original_name)
-    Symbol(original_name) in ignored_parameters && continue
+  for parameter in parameters
+    original_name = parameter.name
+    parameter.produces_value || continue
+    value = parameter.value
 
-    value = get(parameter, "value", nothing)
-    if value === nothing || (value isa AbstractString && isempty(strip(value)))
-      continue
-    end
-
-    constructor_name = get(parameter_mappings, original_name, original_name)
-    haskey(declared_parameter_types, constructor_name) || throw(validation_error(
-      "Unknown $parameter_context '$original_name'",
-      Dict{String,Any}(
-        "parameter_name" => original_name,
-        "constructor_type" => string(constructor_type),
-      ),
-    ))
-    name = Symbol(constructor_name)
-    declared_type = declared_parameter_types[constructor_name]
-    metadata = get(constructor_parameter_metadata, constructor_name, nothing)
+    name = Symbol(original_name)
+    declared_type = parameter.declared_type
+    metadata = get(constructor_parameter_metadata, original_name, nothing)
     named_tag_semantics = _named_tag_parameter_semantics(declared_type)
 
     if named_tag_semantics !== nothing
@@ -1860,14 +1770,14 @@ function _constructor_parameter_kwargs(
         "variable_name" => variable.name,
         "variable_type" => variable.type,
         "parameter_name" => original_name,
-        "parameter_type" => string(get(parameter, "type", "Any")),
+        "parameter_type" => string(get(parameter.definition, "type", "Any")),
       ))
       continue
     end
 
     handling_type = _constructor_parameter_handling_type(
       declared_type,
-      get(parameter, "type", nothing),
+      get(parameter.definition, "type", nothing),
       value,
     )
     _handle_typed_parameter!(
@@ -1882,6 +1792,15 @@ function _constructor_parameter_kwargs(
     )
   end
 
+  _require_catalog_parameters(
+    required_parameters,
+    Set(string(parameter) for parameter in keys(kwargs)),
+    "Constructor '$(constructor_type)'";
+    details=Dict{String,Any}(
+      "constructor_type" => string(constructor_type),
+    ),
+  )
+
   return kwargs, variable_assignments
 end
 
@@ -1890,29 +1809,27 @@ function _instantiate_protocol(
   ctx::Dict{Symbol,Any},
   state=nothing;
   variables=Dict{String,Variable}(),
+  catalogs=_constructor_catalog_snapshot(),
 )
   # Handle both Dict{String,Any} and JSON3.Object types
   tstr = get(prot_def, "type", nothing)
   tstr === nothing && return nothing
-  T = _resolve_type_from_string(String(tstr), :protocol)
-  T === nothing && return nothing
+  catalog_entry = _resolve_protocol_catalog_entry(String(tstr), catalogs)
+  catalog_entry === nothing && return nothing
+  T = catalog_entry.type
 
-  declared_parameter_types = _protocol_constructor_parameter_types(T)
-  constructor_parameter_metadata = _protocol_constructor_parameter_metadata(T)
+  declared_parameter_types = _catalog_parameter_types(catalog_entry)
+  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
 
   params = Vector{Any}(get(prot_def, "parameters", Any[]))
 
-  kwargs = Dict{Symbol, Any}()
-
-  # Add sim, net, and node(s) as keyword arguments
-  kwargs[:sim] = ctx[:sim]
-  kwargs[:net] = ctx[:net]
-
-  if haskey(ctx, :node)
-    kwargs[:node] = ctx[:node]
-  elseif haskey(ctx, :nodeA) && haskey(ctx, :nodeB)
-    kwargs[:nodeA] = ctx[:nodeA]
-    kwargs[:nodeB] = ctx[:nodeB]
+  kwargs = Dict{Symbol,Any}(:sim => ctx[:sim], :net => ctx[:net])
+  for (keyword, value) in _protocol_attachment_pairs(
+    catalog_entry,
+    ctx;
+    context="Protocol '$(catalog_entry.wire_type)'",
+  )
+    kwargs[keyword] = value
   end
 
   parameter_kwargs, variable_assignments = _constructor_parameter_kwargs(
@@ -1921,11 +1838,10 @@ function _instantiate_protocol(
     ctx,
     state;
     variables,
-    parameter_mappings=PROTOCOL_KEYWORD_MAPPINGS,
-    ignored_parameters=Set((:sim, :net, :node, :nodeA, :nodeB)),
     parameter_context="protocol parameter",
     declared_parameter_types,
     constructor_parameter_metadata,
+    required_parameters=_required_catalog_parameters(catalog_entry),
   )
   merge!(kwargs, parameter_kwargs)
 
@@ -1973,11 +1889,14 @@ function action_is_valid(
   )
 end
 
-function build_simulation_state(data)
+function build_simulation_state(data; catalogs=_constructor_catalog_snapshot())
   g = build_graph(data)
 
   # Create registers array based on node slots data
-  registers, slot_mapping, slot_reverse_mapping = create_registers_from_nodes(data)
+  registers, slot_mapping, slot_reverse_mapping = create_registers_from_nodes(
+    data;
+    catalogs,
+  )
 
   # Create the RegisterNet from the graph and registers
   delays = _physical_delay_map(data)
@@ -2005,5 +1924,5 @@ function build_simulation_state(data)
   return state
 end
 
-parse_network_graph(data) =
-  simulation_create!(SIMULATION_SERVICE, data; validation=data)
+parse_network_graph(data; catalogs=_constructor_catalog_snapshot()) =
+  simulation_create!(SIMULATION_SERVICE, data; validation=data, catalogs)

@@ -30,7 +30,6 @@ APIError(message::String, status_code::Int, error_code::String) = APIError(messa
 Base.showerror(io::IO, e::APIError) = print(io, "APIError: $(e.message) (status: $(e.status_code))")
 
 
-# include("constructors.jl")
 include("errors.jl")
 include("evaluation_policy.jl")
 include("mcp_config.jl")
@@ -46,6 +45,7 @@ include("states_zoo.jl")
 include("representations.jl")
 include("parser.jl")
 include("diagnostics.jl")
+include("catalogs.jl")
 include("script_export.jl")
 using .Logger: @log_event
 
@@ -492,7 +492,14 @@ function cleanup_state!(state::State)
   end
 end
 
-function launch_protocols(data, net, sim, protocol_mapping = Dict{String, Any}(), state = nothing)
+function launch_protocols(
+  data,
+  net,
+  sim,
+  protocol_mapping=Dict{String,Any}(),
+  state=nothing;
+  catalogs=_constructor_catalog_snapshot(),
+)
   launched = Dict("nodes" => 0, "edges" => 0, "floating" => 0)
   # Parse once for the full launch. Variable values remain raw until each
   # assignment is resolved in its node/edge/floating protocol context.
@@ -516,7 +523,7 @@ function launch_protocols(data, net, sim, protocol_mapping = Dict{String, Any}()
         :node => idx,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
-      prot = _instantiate_protocol(prot_def, ctx, state; variables=variables)
+      prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
       prot === nothing && continue
       @process prot()
       launched["nodes"] += 1
@@ -554,12 +561,12 @@ function launch_protocols(data, net, sim, protocol_mapping = Dict{String, Any}()
       ctx = Dict{Symbol,Any}(
         :sim => sim,
         :net => net,
-        :nodeA => nodeA_idx,
-        :nodeB => nodeB_idx,
+        :node_a => nodeA_idx,
+        :node_b => nodeB_idx,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
         EDGE_FUNCTION_CONTEXT_KEY => edge_function_context,
       )
-      prot = _instantiate_protocol(prot_def, ctx, state; variables=variables)
+      prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
       prot === nothing && continue
       @process prot()
       launched["edges"] += 1
@@ -589,7 +596,7 @@ function launch_protocols(data, net, sim, protocol_mapping = Dict{String, Any}()
       :net => net,
       NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
     )
-    prot = _instantiate_protocol(prot_def, ctx, state; variables=variables)
+    prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
     prot === nothing && continue
     @info "Launching floating protocol" protocol_type=typeof(prot)
     @process prot()

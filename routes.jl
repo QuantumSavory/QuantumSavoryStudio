@@ -164,6 +164,10 @@ end
                       doc:
                         type: string
                         description: Documentation describing the protocol type
+                      group:
+                        type: string
+                        enum: [node, edge, floating]
+                        description: Where the protocol may be attached in a network payload
                       parameters:
                         type: array
                         description: List of constructor parameters for the protocol type
@@ -198,9 +202,15 @@ end
                             nullable:
                               type: boolean
                               description: Whether a named-tag-type field also permits Nothing.
+                            required:
+                              type: boolean
+                              description: Whether the field must produce an explicit constructor keyword.
                             doc:
                               type: string
                               description: Documentation describing the parameter
+                      virtual:
+                        type: boolean
+                        description: Whether the protocol may be attached to a virtual edge; false for non-edge placements
 """
 route("/protocol_types") do
   Dict(:protocol_types => get_protocol_types()) |> json
