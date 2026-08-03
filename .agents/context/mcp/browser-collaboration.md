@@ -14,10 +14,14 @@ equivalence, and the current bridge/hub gaps.
 
 One browser editor owns a renewable lease. The browser binds:
 
-- canonical schema-v1 design content;
+- the complete canonical project-v2 document with local-only `map` omitted;
 - a recursively key-sorted SHA-256 synchronization fingerprint;
 - the scoped simulation namespace;
 - revision and generation state.
+
+The browser and backend both derive MCP contract version 2 from
+`contracts/mcp/contract.json`. The backend rejects any other binding version before
+examining the remaining binding or collaboration state.
 
 The fingerprint detects synchronization changes; it is not authentication. The browser
 heartbeats every two seconds against the current eight-second lease, while command
@@ -41,9 +45,10 @@ Authoring commands:
 4. mark the project dirty without saving;
 5. commit canonical snapshot/hash/revision acknowledgement.
 
-Browser-allocated IDs and transaction-local aliases prevent MCP callers from selecting
-durable ID formats. GUI-originated design changes publish snapshots into the same
-revision stream.
+MCP creation operations supply unique nonblank durable IDs, and later operations refer
+to those IDs directly. The command service rejects conflicts against all durable design
+IDs; there is no transaction-local alias layer. GUI-originated design changes publish
+snapshots into the same revision stream.
 
 Not every historical GUI edit is proven to use the shared service. `App.vue` retains an
 unclassified deep-watch synchronization fallback. The shared-handler requirement for

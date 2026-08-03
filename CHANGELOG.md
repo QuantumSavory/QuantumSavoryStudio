@@ -2,6 +2,18 @@
 
 ## unreleased
 
+- Replaced permissive project persistence with the executable, exact-shape project-v2
+  document contract across save/open, import/export, demos, MCP snapshots, and HTTP
+  simulation projection. Version admission now happens first, constructor assignments
+  are sparse, Variables are concrete, and noncanonical fields or values report their
+  first mismatch path. This is a breaking boundary with no v1 migration: new projects
+  use only `cqn_v2_*` browser-storage keys, while older keys remain untouched and
+  invisible.
+- Published MCP contract v2 from the sole `contracts/mcp/contract.json` manifest. The
+  sidecar now compiles and enforces every input schema before dispatch, 25 shared GUI
+  operation kinds are exposed through one atomic `design_edit` tool with direct durable
+  IDs, and `design_get` returns the complete map-free project-v2 document. The eight
+  specialist authoring aliases and `design_transaction` were removed, leaving 15 tools.
 - Replaced Web-owned protocol catalog inference and caches with a live QuantumSavory
   metadata adapter shared by catalog responses, placement validation, runtime
   construction, and script export. Each constructor-consuming request or standalone

@@ -11,25 +11,70 @@ This reference records current registry and dispatch mechanics together with the
 browser-authority, retry, Run, annotation, and resource rules they are intended to
 provide.
 
-## Contract source
+## Contract source and version
 
-`contracts/mcp/v1/tools.json` is the only tool metadata/schema registry. The sidecar
-loads it at startup; frontend contract checks and backend dispatch use the same operation
-names. Do not maintain a second list in Julia or JavaScript.
+`contracts/mcp/contract.json` is the only tool metadata and input-schema registry. The
+sidecar loads it at startup, the frontend imports its version for browser binding, and
+the backend reads the same version. Do not duplicate either the tool inventory or
+`contract_version` in source or startup configuration.
 
-Version 1 currently advertises 23 tools:
+Only integer MCP `contract_version: 2` is admitted. Browser binding classifies the
+version before inspecting editor identity, project/session state, or the snapshot. A
+missing, Boolean, string, fractional, old, or future version returns
+`UNSUPPORTED_VERSION` with `contract: "mcp"`, the received value, and
+`supported_versions: [2]`. MCP contract version 2 and project schema version 2 are
+independent interfaces despite having the same current number.
 
-| Group | Count | Execution boundary |
+## Tool inventory
+
+Version 2 advertises exactly 15 tools:
+
+| Group | Count | Tools |
 | --- | ---: | --- |
-| Design/catalog reads | 4 | Catalogs direct in backend; design reads through browser |
-| Authoring operations | 9 | Browser design-command service |
-| Simulation lifecycle | 5 | Browser simulation controller |
-| Simulation reads | 5 | Backend simulation service with binding/revision checks |
+| Design/catalog reads | 4 | `design_get`, `design_validate`, `catalog_list`, `catalog_get` |
+| Authoring | 1 | `design_edit` |
+| Simulation lifecycle | 5 | `simulation_prepare`, `simulation_run`, `simulation_pause`, `simulation_resume`, `simulation_reset` |
+| Simulation reads | 5 | `simulation_status`, `simulation_results`, `simulation_slot_result`, `simulation_protocol_result`, `simulation_logs` |
 
-Counts and exact members describe current machinery. Version 1 synchronizes the
-frontend, backend, and sidecar shipped in one WebQuantumSavory release. It is not a
-backward-compatibility promise across releases; tools, schemas, result fields, resources,
-and errors may change incompatibly.
+`design_get` always flushes active drafts and returns the complete canonical project-v2
+document, its hash, and project identity. The local-only `map` field is omitted. There
+are no section parameters or partial design DTOs.
+
+`design_edit` requires a nonblank `operation_id`, JavaScript-safe nonnegative
+`expected_revision`, and a nonempty `operations` array. Its closed `oneOf` variants are
+the same 25 kinds registered by `DesignCommandService`:
+
+| Domain | Operation kinds |
+| --- | --- |
+| Design | `design.update` |
+| Topology | `topology.create_node`, `topology.update_node`, `topology.remove_node`, `topology.reorder_node`, `topology.create_edge`, `topology.update_edge`, `topology.remove_edge` |
+| Slots | `slots.create`, `slots.update`, `slots.remove`, `slots.reorder` |
+| Protocols | `protocols.create`, `protocols.update`, `protocols.remove` |
+| Variables | `variables.create`, `variables.update`, `variables.remove` |
+| States Zoo | `states.create`, `states.update`, `states.remove` |
+| Annotations | `annotations.create`, `annotations.update`, `annotations.remove` |
+| Generators | `network.generate` |
+
+Creation variants require caller-chosen, unique, nonblank durable IDs. References use
+those IDs directly; `action`, `client_ref`, alias resolution, and `created_ids` are not
+part of v2. The browser still applies all operations to one candidate, validates it, and
+either reconciles the whole result or changes nothing. Revision checks, operation-ID
+replay handling, simulation edit locks, generator behavior, and affected/deleted ID
+reporting remain on that shared path. There is no full-document `design_replace` tool.
+
+## Executable input schemas
+
+The isolated sidecar environment owns JSONSchema.jl 1.5. At startup it checks every
+input schema against the supported Draft-7/common-keyword allowlist and compiles all 15
+validators. Every tool call is validated before any backend request. Invalid arguments
+return stable `VALIDATION_FAILED` structured content with
+`details.contract_path`; dependency-specific diagnostic wording is not public API.
+
+The manifest schemas reject extra fields, missing required fields, empty operation
+lists, unsafe integers, invalid tagged values, mismatched Variable type/value pairs,
+noncanonical background sentinels, and invalid placement/owner combinations before
+dispatch. Browser/catalog validation still owns semantic facts such as whether a
+referenced durable ID or selected catalog constructor exists.
 
 ## Resources
 
@@ -45,7 +90,9 @@ Current adapters advertise both formats before establishing that both exist, can
 `nothing` content, and interpolate identifiers without percent-encoding while matching
 `/` as a path separator. Existing transport tests list resources but do not read every
 bound representation. Those are implementation and verification gaps, not optional
-parts of the resource contract.
+parts of the resource contract. Exact output schemas, result/resource documentation,
+recipes, and richer discovery remain follow-up scope in
+[#131](https://github.com/QuantumSavory/WebQuantumSavory/issues/131).
 
 ## Revision and operation fields
 
@@ -63,8 +110,8 @@ intrinsically idempotent.
 
 Current code instead retains only 256 successful results, clears them on bind/unbind,
 does not bind an ID to tool/arguments, does not retain rejected/unknown outcomes, and
-marks mutation/lifecycle tools idempotent. Treat every one of those differences as a
-known gap.
+marks lifecycle mutations idempotent. Treat every one of those differences as a known
+gap.
 
 ## Simulation run
 
@@ -91,14 +138,17 @@ transactional snapshot.
 ## Additional current gaps
 
 - Successful reads for every advertised resource template lack durable system evidence.
-- Result schemas are often only the generic object default.
+- Output schemas remain the generic object default.
 
 ## Anchors
 
-- **Contract:** [`contracts/mcp/v1/tools.json`](../../../contracts/mcp/v1/tools.json).
-- **Sidecar loader/resources:** [`mcp/main.jl`](../../../mcp/main.jl).
+- **Contract:** [`contracts/mcp/contract.json`](../../../contracts/mcp/contract.json).
+- **Sidecar loader/validation/resources:** [`mcp/main.jl`](../../../mcp/main.jl).
 - **Backend dispatch:** [`src/mcp_adapters.jl`](../../../src/mcp_adapters.jl).
 - **Hub semantics:** [`src/collaboration_hub.jl`](../../../src/collaboration_hub.jl).
+- **Browser command service:** [`gui/src/domain/design/DesignCommandService.js`](../../../gui/src/domain/design/DesignCommandService.js).
 - **Browser simulation relay:** [`gui/src/features/mcp/simulationControllerAdapter.js`](../../../gui/src/features/mcp/simulationControllerAdapter.js)
   and [simulation client reference](../frontend/simulation-client.md).
+- **Contract evidence:** [`gui/tests/unit/mcpContract.test.js`](../../../gui/tests/unit/mcpContract.test.js)
+  and [`mcp/test/runtests.jl`](../../../mcp/test/runtests.jl).
 - **Transport evidence:** [`mcp/test/http_integration.jl`](../../../mcp/test/http_integration.jl).

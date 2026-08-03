@@ -5,89 +5,103 @@
   names, browser storage, or collaboration/simulation/script projections.
 - **Do not open when:** Changing transient simulation polling or visual-only component
   state.
-- **Review when:** A durable field, schema version, normalization, projection, storage
-  key, or project-transition rule changes.
+- **Review when:** A durable field, schema version, projection, storage key, or
+  project-transition rule changes.
 
-Project decoding should warn about every differing, missing, or malformed schema marker
-and then attempt ordinary validation and best-effort decode; version classification
-alone should not reject a document. Active-project replacement should tear down the
-current browser session before candidate work, leave the latest failed or cancelled
-transition empty, and prevent superseded candidates from being installed. This
-reference describes the current machinery and its gaps from those rules.
+`projectDocument.js` is the sole executable project-document contract. Its stable
+`encodeProject` and `decodeProject` entry points translate between the live object graph
+and canonical project v2; there is no parallel JSON Schema or permissive legacy decoder.
 
-## Canonical shapes
+## Version admission and exact shape
 
-The live frontend graph contains model objects and object references. Durable documents
-use IDs and plain data. `projectCodec.js` is the canonical translation boundary.
+Only integer `schemaVersion: 2` is admitted. Version classification runs before catalog
+access, hydration, storage lookup, session teardown, or any other structural inspection.
+A missing, Boolean, string, fractional, old, or future version raises
+`UNSUPPORTED_VERSION` with `contract: "project"`, the exact `received_version`, and
+`supported_versions: [2]`.
 
-| Shape | Includes | Excludes |
-| --- | --- | --- |
-| Stored/exported project | Schema metadata, named project, network, descriptions, annotations, map/session-safe project fields | Transient editor, request, and live simulation state |
-| Collaboration snapshot | Canonical design content | Storage metadata, UI-only state, runtime slot state |
-| Simulation payload | Validated/minimized network and resolved physical values | Storage/UI state, descriptions, annotations |
-| Script-export payload | Simulation projection plus run configuration | Frontend-only presentation data |
+After version admission, the decoder hydrates the document, canonically re-encodes it,
+and compares the two structures. The first missing, extra, aliased, coerced, or otherwise
+noncanonical value raises `INVALID_PROJECT` with a JSON-pointer-style `path`. Functional
+nested records are closed, emitted collections and fields are required, array order is
+preserved, finite numbers and JavaScript-safe integers are required, and opaque JSON is
+accepted only for an explicitly typed `Any` constructor value with recursively sorted
+object keys.
 
-Encoding and projection helpers must not mutate their input. In memory, edges retain
-`Node` references; durable documents store endpoint IDs and hydrate references on decode.
-The target excludes transient editor metadata, but current constructor normalization
-retains string `latex` and the codec clones unrecognized additive fields. Imported
-constructor preview/error fields can therefore round-trip today; treat that as a current
-exception, not permission to add more durable UI state.
+The root record has these fields:
 
-## Version and compatibility
+| Field | Contract |
+| --- | --- |
+| `schemaVersion` | Required integer `2` |
+| `name`, `description` | Required strings; the project name is normalized |
+| `annotations` | Required closed annotation records; absent area is explicit `null` |
+| `variables` | Required concrete Variable records |
+| `simulationConfig` | Required time, step, and representation configuration |
+| `net` | Required nodes, edges, floating protocols, and physical configuration |
+| `map` | The only optional project-local root field; when present it is closed `{position, zoom}` |
 
-Current stored schema is version 1, independently of the software version. There is no
-cross-release guarantee. Schema classification does not replace ordinary structural
-validation, and structural invalidity can still end the attempt with a structured
-error.
+Omitting `map` hydrates the default viewport. `map: null` is invalid. Collaboration
+snapshots intentionally omit `map`; stored and exported projects include the current
+viewport. Project documents never contain `platformInfo`, generic `uiGlobal`, runtime or
+editor state, or a software-version confirmation marker.
 
-Current code coerces missing/non-integer markers to schema 0, accepts negative integer
-markers without warning, and rejects future integers. Existing software-major
-confirmation is also not the required schema warning. These are known gaps.
-Normalization of old or additive shapes is opportunistic recovery, not evidence of a
-compatibility promise.
+## Constructor and Variable values
 
-The UI import preflight is stricter than the codec: it currently requires network node,
-edge, and protocol arrays before decoding. Do not claim that every codec-accepted partial
-legacy document is accepted by the interactive import path.
+Committed constructor assignments persist sparsely as exact
+`{name, type, value}` records. Names must be unique within their constructor and `type`
+is the selected catalog branch's exact `wireType`. Omitting an optional assignment means
+the simulator constructor supplies its default. Catalog type arrays, descriptor IDs,
+`selectedType`, `defaultValue`, documentation, errors, and previews are never persisted.
+Hydration resolves each sparse assignment against the current slot, background, or
+protocol catalogs; a missing required or unknown assignment is invalid.
 
-## Browser persistence
+Variables persist as concrete `{id, name, type, value}` records, plus only the existing
+optional States Zoo trace-source link. IDs and names are unique, values are non-null,
+and the `default` and `Any` Variable types are not admitted. New Variables begin as
+`Float64` value `0`; incomplete edits remain component-local drafts.
 
-Named projects use browser `localStorage`, including a metadata index and recent-project
-pointer. Exact keys and contents are implementation details, and no cross-release key or
-schema compatibility is promised. There is no server-side saved-project store.
+No background noise is represented only as
+`{"type":"default","parameters":[]}`. Tagged Variable references, numeric
+expressions, and States Zoo recipes use their exact closed records. `Nothing` uses the
+string `"nothing"`, and the qualified Wildcard wire type uses `"Wildcard"`.
+Meaningful nullable fields such as annotation area and physical overrides are emitted
+explicitly as `null`.
 
-Save As protects an existing different name unless overwrite is explicit, then aligns
-the stored name, active name, and simulation namespace. Unsaved state combines a
-canonical serialized snapshot with an explicit dirty flag. MCP design edits mark dirty
-and never save automatically.
+## Derived boundaries
 
-## Project transitions
+| Boundary | Relationship to project v2 |
+| --- | --- |
+| Save/open, import/export, demos | Use the same canonical project document, including the current map when local |
+| MCP snapshots and `design_get` | Use the complete canonical document with local-only `map` omitted |
+| HTTP simulation payload | Reuses sparse assignments, concrete Variables, and the background sentinel while excluding project-only fields and resolving physical edge values |
+| Script export | Extends the HTTP simulation DTO only with run time and time-step configuration |
 
-Saved-project open, import, demo, create/new-project, and other replacements should
-invalidate the old transition generation and clear the active graph, name, selection,
-polling, result windows, and collaboration ownership before retrieval, preflight,
-validation, or decode. Cancellation or failure of the latest transition should leave
-the session empty, and a superseded completion must not displace the newer result. These
-rules concern the active browser session, not deletion of a previously persisted named
-project; backend simulation records have their own destroy/retention lifecycle.
+Encoding and projection helpers must not mutate their inputs. Live edges retain `Node`
+references; documents and transport DTOs store endpoint IDs and hydrate those references
+on decode.
 
-Current open/import/demo preflight and decode, and new-project creation/storage, occur
-before active-session teardown. Rejection or failure can therefore preserve the active
-project; an overlapping create may also leave its stored candidate. That ordering is a
-known gap.
+## Browser persistence and transitions
 
-## Frontend-only fields
+Project v2 uses only `cqn_v2_project_*`, `cqn_v2_projects_metadata_index`, and
+`cqn_v2_recent_project_name`. Older `cqn_*` project, metadata, and recent-project keys
+remain untouched and invisible: code does not scan, delete, rebuild, or migrate them.
+There is no v1 file migration; imported v1 documents fail version admission.
 
-Descriptions and map annotations remain in full project documents but not simulator or
-script-export payloads. Annotation areas persist only their independent free corner;
-derived attachment edges/bounds remain presentation data.
+Open, import, and demo flows fully decode a candidate before collaboration teardown,
+simulation cleanup, active-project replacement, or storage writes. Failed admission
+therefore leaves the current project, browser session, and storage unchanged. Accepted
+replacements still release MapLibre-owned graph objects for one tick, and a transition
+generation prevents an older overlapping operation from displacing the newest one.
+Save As protects an existing different name unless overwrite is explicit and then keeps
+the stored name, active name, and simulation namespace aligned.
 
 ## Anchors
 
-- **Codec:** [`gui/src/utils/projectCodec.js`](../../../gui/src/utils/projectCodec.js).
+- **Document codec:** [`gui/src/utils/projectDocument.js`](../../../gui/src/utils/projectDocument.js).
+- **Simulation DTO:** [`gui/src/utils/simulationPayload.js`](../../../gui/src/utils/simulationPayload.js).
 - **Storage:** [`gui/src/models/ProjectStore.js`](../../../gui/src/models/ProjectStore.js).
 - **Transitions:** [`gui/src/composables/useProjectSession.js`](../../../gui/src/composables/useProjectSession.js).
-- **Import preflight:** [`gui/src/composables/useImportExport.js`](../../../gui/src/composables/useImportExport.js).
-- **Unit evidence:** [`gui/tests/unit/projectCodec.test.js`](../../../gui/tests/unit/projectCodec.test.js)
+- **Import boundary:** [`gui/src/composables/useImportExport.js`](../../../gui/src/composables/useImportExport.js).
+- **Exact-shape evidence:** [`gui/tests/unit/projectDocumentV2.test.js`](../../../gui/tests/unit/projectDocumentV2.test.js).
+- **Storage/session evidence:** [`gui/tests/unit/projectStore.test.js`](../../../gui/tests/unit/projectStore.test.js)
   and [`gui/tests/unit/projectSession.test.js`](../../../gui/tests/unit/projectSession.test.js).

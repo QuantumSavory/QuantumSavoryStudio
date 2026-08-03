@@ -90,6 +90,6 @@ transport behavior and installs a safe logger.
 
 ## Compatibility boundary
 
-The checked-in `contracts/mcp/v1/` version synchronizes the frontend, backend, and
-sidecar shipped together. It does not promise backward-compatible tools, schemas,
+The checked-in `contracts/mcp/contract.json` version synchronizes the frontend, backend,
+and sidecar shipped together. It does not promise backward-compatible tools, schemas,
 resources, errors, or result fields across WebQuantumSavory releases.

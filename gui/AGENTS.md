@@ -30,8 +30,8 @@ repository guidance in `../AGENTS.md`.
 ## Local rules
 
 - Edit `index.html`, `public/`, or `src/`; never edit generated root `../public/` output.
-- Route project encoding/projections through `projectCodec`, authoring through the
-  shared design-command boundary, and lifecycle decisions through its capability model.
+- Route project encoding through `projectDocument.js`, projections through
+  `simulationPayload.js`, and authoring/lifecycle through their shared domain models.
 - Preserve object identity used by map selections and edges; release MapLibre, DOM,
   timer, polling, and window resources on transition or unmount.
 - Add no new `window.*` access outside `legacyBridge`.

@@ -14,9 +14,10 @@ migrated GUI actions. Commands are serialized, applied to an isolated candidate,
 validated, then reconciled atomically into the live graph. Retained durable entities
 preserve object identity.
 
-MCP callers cannot choose durable IDs for newly created objects. The browser allocates
-them and resolves transaction-local `client_ref` aliases. A failed candidate must not
-partially change the live project.
+MCP `design_edit` creation operations require caller-chosen, unique, nonblank durable
+IDs. Later operations and references use those IDs directly; there is no `client_ref`
+alias layer or created-ID map. GUI operations may still ask the service to allocate an
+ID. A failed candidate must not partially change the live project.
 
 Simulation-affecting operations are rejected while editing is locked. A transaction
 containing any such operation is rejected as a whole. Descriptions and annotations
@@ -31,13 +32,14 @@ mutations already use the service.
 
 Editable protocol parameters, background-noise parameters, and Variables use explicit
 descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector for an optional parameter begins with Default. Default clears the draft value
-and omits the keyword from minimized payloads. A required protocol parameter omits
-Default, selects its first enabled concrete descriptor with a null value, and remains
-invalid until that value is complete. When none of its declared descriptors is supported,
-the required parameter retains its first disabled descriptor so the unsupported field is
-visible and invalid instead of blocking the editor. A Default-valued Variable is
-incompatible with a required parameter.
+selector for an optional constructor parameter begins with Default. Default clears the
+draft value and omits the assignment from project and simulation payloads. A required
+protocol parameter omits Default, selects its first enabled concrete descriptor with an
+incomplete draft, and remains invalid until that value is complete. When none of its
+declared descriptors is supported, the required parameter retains its first disabled
+descriptor so the unsupported field is visible and invalid instead of blocking the
+editor. Variables always persist a concrete supported type and non-null value; new
+Variables begin as `Float64` value `0`.
 
 `selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
 Unsupported choices remain visible but disabled. Switching branches clears the old
@@ -68,11 +70,10 @@ node after candidate positions stabilize, aborting the whole generation if one f
 Explicit literal, function, tag, symbolic, or numeric-expression modes begin empty and
 can commit only when complete. `parameter.error` is the shared submission blocker for
 dirty, blank, pending, disabled, missing-context, transport, bound, and source failures.
-Draft text, preview values/errors, requests, and open/collapsed presentation state are
-editor-owned rather than intended project data. Current protocol/background
-normalization nevertheless preserves string `latex`, and codec normalization clones
-additive fields; imported preview/error fields may therefore round-trip as a documented
-gap.
+Draft text, preview values/errors, requests, selected descriptor IDs, catalog metadata,
+and open/collapsed presentation state are editor-owned rather than project data. The
+project-v2 codec persists each committed constructor assignment only as
+`{name, type, value}` and rejects additive preview or editor fields on import.
 
 Numeric expressions persist only `{kind:"numeric_expression", source:"..."}` while
 retaining the declared numeric type. Linked Variables validate against each assignment
