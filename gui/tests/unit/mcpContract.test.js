@@ -7,17 +7,31 @@ import {
   MCP_TOOLS,
   MCP_TOOL_NAMES,
 } from '../../src/features/mcp/contractRegistry'
-import {
-  DesignCommandService,
-  operationsForTool,
-} from '../../src/domain/design/DesignCommandService'
+import { DesignCommandService } from '../../src/domain/design/DesignCommandService'
 import { createEmptyProject } from '../../src/utils/projectDocument'
 
 describe('shared MCP contract registry', () => {
   it('loads one unique versioned definition for every advertised tool', () => {
-    expect(MCP_CONTRACT_VERSION).toBe(1)
+    expect(MCP_CONTRACT_VERSION).toBe(2)
     expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length)
-    expect(MCP_TOOLS).toHaveLength(23)
+    expect(MCP_TOOLS).toHaveLength(15)
+    expect(MCP_TOOL_NAMES).toEqual([
+      'design_get',
+      'design_validate',
+      'catalog_list',
+      'catalog_get',
+      'design_edit',
+      'simulation_prepare',
+      'simulation_run',
+      'simulation_pause',
+      'simulation_resume',
+      'simulation_reset',
+      'simulation_status',
+      'simulation_results',
+      'simulation_slot_result',
+      'simulation_protocol_result',
+      'simulation_logs',
+    ])
     for (const tool of MCP_TOOLS) {
       expect(tool).toMatchObject({
         name: expect.any(String),
@@ -28,81 +42,93 @@ describe('shared MCP contract registry', () => {
     }
   })
 
-  it('publishes structural action schemas for every specialist edit tool', () => {
-    const editTools = MCP_TOOLS.filter(tool => (
-      tool.input_schema?.properties?.actions
-      || tool.input_schema?.properties?.operations
-    ))
-    expect(editTools).toHaveLength(9)
-    for (const tool of editTools) {
-      const collection = tool.input_schema.properties.actions
-        || tool.input_schema.properties.operations
-      expect(collection.items).toMatchObject({
+  it('publishes one closed atomic edit envelope with 25 closed operation variants', () => {
+    const edit = MCP_TOOLS.find(tool => tool.name === 'design_edit')
+    const schema = edit.input_schema
+    const variants = schema.properties.operations.items.oneOf
+
+    expect(schema).toMatchObject({
+      type: 'object',
+      required: ['operation_id', 'expected_revision', 'operations'],
+      additionalProperties: false,
+    })
+    expect(schema.properties.operations.minItems).toBe(1)
+    expect(variants).toHaveLength(25)
+    for (const variant of variants) {
+      expect(variant).toMatchObject({
         type: 'object',
-        required: expect.any(Array),
-        properties: expect.any(Object),
+        required: expect.arrayContaining(['kind']),
+        properties: { kind: { const: expect.any(String) } },
         additionalProperties: false,
       })
-      expect(collection.items.properties.action || collection.items.properties.kind)
-        .toBeTruthy()
     }
   })
 
-  it('advertises the durable Variable input-option selector for edits', () => {
-    const variables = MCP_TOOLS.find(tool => tool.name === 'variables_edit')
-    const valueSchema = variables.input_schema.properties.actions.items
-      .properties.value
-
-    expect(valueSchema.properties.selectedType).toEqual({
-      type: 'string',
-      minLength: 1,
-    })
+  it('requires client-chosen IDs and direct references for creation operations', () => {
+    const edit = MCP_TOOLS.find(tool => tool.name === 'design_edit')
+    const variants = edit.input_schema.properties.operations.items.oneOf
+    const byKind = new Map(variants.map(variant => [variant.properties.kind.const, variant]))
+    const creationKinds = [
+      'topology.create_node',
+      'topology.create_edge',
+      'slots.create',
+      'protocols.create',
+      'variables.create',
+      'states.create',
+      'annotations.create',
+    ]
+    creationKinds.forEach(kind => expect(byKind.get(kind).required).toContain('id'))
+    expect(byKind.get('topology.create_edge').properties.value)
+      .toEqual({ $ref: '#/definitions/edgeCreate' })
+    expect(edit.input_schema.definitions.edgeCreate.properties.source)
+      .toEqual({ $ref: '#/definitions/id' })
+    expect(edit.input_schema.definitions.edgeCreate.properties.target)
+      .toEqual({ $ref: '#/definitions/id' })
+    expect(JSON.stringify(edit)).not.toMatch(/client_ref|selectedType|"action"/)
   })
 
-  it('advertises partial physical defaults and bounded edge transmission', () => {
-    const design = MCP_TOOLS.find(tool => tool.name === 'design_update')
-    const physicalConfig = design.input_schema.properties.actions.items
-      .properties.value.properties.physicalConfig
-    expect(physicalConfig).toMatchObject({
-      minProperties: 1,
-      properties: {
-        refractiveIndex: { exclusiveMinimum: 0 },
-        lossDbPerKm: { minimum: 0 },
-      },
+  it('advertises sparse constructor assignments and bounded physical values', () => {
+    const edit = MCP_TOOLS.find(tool => tool.name === 'design_edit')
+    const definitions = edit.input_schema.definitions
+    const assignment = definitions.assignment.allOf[0]
+    expect(assignment).toMatchObject({
+      required: ['name', 'type', 'value'],
+      additionalProperties: false,
     })
+    const physicalConfig = definitions.designUpdate.properties.physicalConfig
+    expect(physicalConfig.minProperties).toBe(1)
+    expect(physicalConfig.properties.refractiveIndex.allOf.at(-1))
+      .toEqual({ exclusiveMinimum: 0 })
+    expect(physicalConfig.properties.lossDbPerKm.allOf.at(-1))
+      .toEqual({ minimum: 0 })
     expect(physicalConfig).not.toHaveProperty('required')
 
-    const topology = MCP_TOOLS.find(tool => tool.name === 'topology_edit')
-    const overrides = topology.input_schema.properties.actions.items
-      .properties.value.properties.data.properties.physicalOverrides.properties
-    expect(overrides.lossDbPerKm).toMatchObject({ minimum: 0 })
-    expect(overrides.transmissivity).toMatchObject({ minimum: 0, maximum: 1 })
+    const overrides = definitions.physicalOverrides.properties
+    expect(overrides.lossDbPerKm.anyOf[1].allOf.at(-1)).toEqual({ minimum: 0 })
+    expect(overrides.transmissivity.anyOf[1].allOf.at(-1))
+      .toEqual({ minimum: 0, maximum: 1 })
   })
 
-  it('maps every specialist action to exactly one registered browser handler', () => {
-    const project = createEmptyProject('Specialists')
-    const service = new DesignCommandService({ getProject: () => project })
-    const specialistTools = MCP_TOOLS.filter(tool => (
-      tool.input_schema?.properties?.actions
-    ))
-
-    for (const tool of specialistTools) {
-      const actionSchema = tool.input_schema.properties.actions.items.properties.action
-      const actions = actionSchema.enum || [actionSchema.const]
-      for (const action of actions) {
-        const operations = operationsForTool(tool.name, { actions: [{ action }] })
-        expect(operations).toHaveLength(1)
-        expect(service.handlers.has(operations[0].kind)).toBe(true)
-      }
-    }
+  it('does not advertise the v1 authoring aliases', () => {
+    expect(MCP_TOOL_NAMES).not.toEqual(expect.arrayContaining([
+      'design_update',
+      'topology_edit',
+      'slots_edit',
+      'protocols_edit',
+      'variables_edit',
+      'states_edit',
+      'annotations_edit',
+      'network_generate',
+      'design_transaction',
+    ]))
   })
 
   it('advertises exactly the operation kinds registered by the browser service', () => {
     const project = createEmptyProject('Contract')
     const service = new DesignCommandService({ getProject: () => project })
-    const transaction = MCP_TOOLS.find(tool => tool.name === 'design_transaction')
-    const advertisedKinds = transaction.input_schema.properties.operations
-      .items.properties.kind.enum
+    const edit = MCP_TOOLS.find(tool => tool.name === 'design_edit')
+    const advertisedKinds = edit.input_schema.properties.operations.items.oneOf
+      .map(variant => variant.properties.kind.const)
 
     expect(new Set(advertisedKinds)).toEqual(new Set(service.handlers.keys()))
   })

@@ -1,8 +1,5 @@
 import { generateUUid } from '../../utils/Utils.js'
-import {
-  encodeCanonicalDesign,
-  selectCanonicalDesignSections,
-} from './canonicalDesign.js'
+import { encodeCanonicalDesign } from './canonicalDesign.js'
 import { MCP_CONTRACT_VERSION } from './contractRegistry.js'
 
 const HEARTBEAT_INTERVAL = 2_000
@@ -221,16 +218,16 @@ export class McpEditorBridge {
           result = {
             project_name: this.getProjectName(),
             hash: encoded.hash,
-            document: selectCanonicalDesignSections(encoded.document, payload.sections),
+            document: encoded.document,
           }
         } else if (payload.type === 'validate') {
           result = await this.validateDesign(this.getProject())
-        } else if (payload.type === 'design_command') {
-          result = await this.designCommands.executeToolNow(
-            payload.tool,
-            payload.arguments,
-            { origin: 'mcp' },
-          )
+        } else if (payload.type === 'design_edit') {
+          result = await this.designCommands.executeNow({
+            operations: payload.arguments.operations,
+            origin: 'mcp',
+            operationId: payload.arguments.operation_id,
+          })
           documentChanged = true
           durableActionApplied = true
         } else if (payload.type === 'simulation_action') {

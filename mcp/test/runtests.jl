@@ -73,9 +73,9 @@ end
     validators = compile_input_schemas(contract)
     tools = load_tools(Dict{String,Any}(); result_handler=handler)
 
-    @test contract["contract_version"] == 1
+    @test contract["contract_version"] == 2
     @test length(validators) == length(contract["tools"])
-    @test length(tools) == 23
+    @test length(tools) == 15
     @test getfield(first(tools), :name) == "design_get"
     @test getfield(last(tools), :name) == "simulation_logs"
     @test getfield(tools[3], :handler)(Dict{String,Any}()) == "catalog_list"
@@ -100,6 +100,66 @@ end
         Dict("operations" => Any[Dict{String,Any}()]),
     )
     @test json_pointer_path(nested_issue) == "/operations/0/id"
+
+    design_edit = only(filter(tool -> getfield(tool, :name) == "design_edit", tools))
+    unsafe_integer = getfield(design_edit, :handler)(Dict{String,Any}(
+        "operation_id" => "unsafe-variable",
+        "expected_revision" => 0,
+        "operations" => Any[Dict{String,Any}(
+            "kind" => "variables.create",
+            "id" => "unsafe-variable",
+            "value" => Dict(
+                "name" => "unsafe",
+                "type" => "Int64",
+                "value" => 9_007_199_254_740_992,
+            ),
+        )],
+    ))
+    @test getfield(unsafe_integer, :is_error)
+    @test getfield(unsafe_integer, :structured_content)["code"] ==
+        "VALIDATION_FAILED"
+    @test dispatched == ["catalog_list", "simulation_logs"]
+
+    valid_edit = getfield(design_edit, :handler)(Dict{String,Any}(
+        "operation_id" => "direct-create",
+        "expected_revision" => 0,
+        "operations" => Any[
+            Dict{String,Any}(
+                "kind" => "topology.create_node",
+                "id" => "node-direct",
+                "value" => Dict("position" => Any[0, 0]),
+            ),
+            Dict{String,Any}(
+                "kind" => "slots.create",
+                "id" => "slot-direct",
+                "node_id" => "node-direct",
+                "value" => Dict(
+                    "backgroundNoise" => Dict(
+                        "type" => "default",
+                        "parameters" => Any[],
+                    ),
+                ),
+            ),
+        ],
+    ))
+    @test valid_edit == "design_edit"
+    @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
+
+    malformed_edit = getfield(design_edit, :handler)(Dict{String,Any}(
+        "operation_id" => "create-node",
+        "expected_revision" => 0,
+        "operations" => Any[Dict{String,Any}(
+            "kind" => "topology.create_node",
+            "value" => Dict("position" => Any[0, 0]),
+        )],
+    ))
+    @test getfield(malformed_edit, :is_error)
+    @test getfield(malformed_edit, :structured_content)["code"] ==
+        "VALIDATION_FAILED"
+    @test getfield(malformed_edit, :structured_content)["details"]["contract_path"] ==
+        "/operations/0"
+    @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
+
     catalog_get = only(filter(tool -> getfield(tool, :name) == "catalog_get", tools))
     invalid = getfield(catalog_get, :handler)(Dict{String,Any}("kind" => "protocols"))
     @test getfield(invalid, :is_error)
@@ -109,7 +169,7 @@ end
         "retryable" => false,
         "details" => Dict{String,Any}("contract_path" => "/type"),
     )
-    @test dispatched == ["catalog_list", "simulation_logs"]
+    @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
 
     @test_throws ErrorException validate_schema_keywords!(
         Dict{String,Any}("prefixItems" => Any[]),

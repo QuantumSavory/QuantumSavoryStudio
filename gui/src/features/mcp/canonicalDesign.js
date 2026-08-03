@@ -11,7 +11,9 @@ function sortValue(value) {
 }
 
 export function canonicalDesignJson(project, context = {}) {
-  return JSON.stringify(sortValue(encodeProject(project, context)))
+  const document = encodeProject(project, context)
+  delete document.map
+  return JSON.stringify(sortValue(document))
 }
 
 export async function encodeCanonicalDesign(project, context = {}) {

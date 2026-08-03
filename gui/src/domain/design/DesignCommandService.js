@@ -38,6 +38,7 @@ import {
 import {
   createProtocolFromDefinition,
   deepClone,
+  protocolSimpleName,
 } from '../../utils/protocolConstructors.js'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import {
@@ -336,6 +337,29 @@ function protocolCollection(project, operation) {
   throw new DesignCommandError('VALIDATION_FAILED', 'Protocol placement is required.')
 }
 
+function durableDesignIds(project) {
+  const ids = new Set()
+  const add = value => {
+    if (typeof value?.id === 'string') ids.add(value.id)
+  }
+  const addProtocols = protocols => (protocols || []).forEach(add)
+  for (const variable of project.variables || []) add(variable)
+  for (const annotation of project.annotations || []) add(annotation)
+  for (const slot of project.net?.physicalConfig?.nodeTemplate?.slots || []) add(slot)
+  for (const node of project.net?.nodes || []) {
+    add(node)
+    for (const slot of node.data?.slots || []) add(slot)
+    addProtocols(node.data?.protocols)
+  }
+  for (const edge of project.net?.edges || []) {
+    add(edge)
+    for (const point of edge.data?.curvePoints || []) add(point)
+    addProtocols(edge.data?.protocols)
+  }
+  addProtocols(project.net?.protocols)
+  return ids
+}
+
 function operationFromAction(tool, action) {
   if (typeof action?.kind === 'string') return action
   const name = action?.action
@@ -570,18 +594,18 @@ export class DesignCommandService {
     return Object.hasOwn(value, 'simulationConfig') || Object.hasOwn(value, 'physicalConfig')
   }
 
-  assignId(prefix, operation, context) {
-    if (
-      context.origin === 'mcp'
-      && (Object.hasOwn(operation, 'id') || Object.hasOwn(operation.value || {}, 'id'))
-    ) {
+  assignId(prefix, project, operation, context, { allowGenerated = false } = {}) {
+    const supplied = operation.id ?? operation.value?.id
+    if (context.origin === 'mcp' && supplied == null && !allowGenerated) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
-        'Created IDs are allocated by the browser; use client_ref to reference new objects.',
+        `${prefix} ID is required for MCP creation operations.`,
       )
     }
-    const id = operation.id || operation.value?.id || this.idGenerator(prefix)
-    requireString(id, `${prefix} ID`)
+    const id = requireString(supplied ?? this.idGenerator(prefix), `${prefix} ID`)
+    if (durableDesignIds(project).has(id)) {
+      throw new DesignCommandError('VALIDATION_FAILED', `Durable ID already exists: ${id}`)
+    }
     if (operation.client_ref) {
       if (context.aliases.has(operation.client_ref)) {
         throw new DesignCommandError(
@@ -677,7 +701,7 @@ export class DesignCommandService {
 
   async createNode(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('node', operation, context)
+    const id = this.assignId('node', project, operation, context)
     if (project.net.nodes.some(node => node.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Node ID already exists: ${id}`)
     }
@@ -695,7 +719,7 @@ export class DesignCommandService {
     // so `self` and node-name lookups use the concrete destination context.
     project.net.nodes.push(node)
     for (const templateSlot of this.templateSlots(project)) {
-      const slotId = this.assignId('slot', {}, context)
+      const slotId = this.assignId('slot', project, {}, context, { allowGenerated: true })
       if (
         this.allSlots(project).some(slot => slot.id === slotId)
         || node.data.slots.some(slot => slot.id === slotId)
@@ -769,7 +793,7 @@ export class DesignCommandService {
 
   createEdge(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('edge', operation, context)
+    const id = this.assignId('edge', project, operation, context)
     if (project.net.edges.some(edge => edge.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Edge ID already exists: ${id}`)
     }
@@ -899,7 +923,7 @@ export class DesignCommandService {
   }
 
   async createSlotIn(collection, prefix, project, operation, context) {
-    const id = this.assignId(prefix, operation, context)
+    const id = this.assignId(prefix, project, operation, context)
     if (this.allSlots(project).some(slot => slot.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Slot ID already exists: ${id}`)
     }
@@ -911,6 +935,7 @@ export class DesignCommandService {
         project,
         ownerId: operation.template === true ? null : operation.node_id,
         template: operation.template === true,
+        canonicalAssignments: context.origin === 'mcp',
       },
     )
     collection.push({
@@ -933,6 +958,7 @@ export class DesignCommandService {
           project,
           ownerId: operation.template === true ? null : operation.node_id,
           template: operation.template === true,
+          canonicalAssignments: context.origin === 'mcp',
         },
       )
     }
@@ -1216,6 +1242,7 @@ export class DesignCommandService {
       project = this.getProject(),
       ownerId = null,
       template = false,
+      canonicalAssignments = false,
     } = {},
   ) {
     if (!record(noise)) {
@@ -1232,6 +1259,15 @@ export class DesignCommandService {
         'VALIDATION_FAILED',
         'Background noise parameters must be an array.',
       )
+    }
+    if (type === 'default') {
+      if (noise.parameters.length !== 0) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          'Default background noise must use an empty parameter list.',
+        )
+      }
+      return { type: 'default', parameters: [] }
     }
     if (!definition && noise.parameters.some(parameter => (
       (
@@ -1255,14 +1291,17 @@ export class DesignCommandService {
     const parameters = await this.constructorParameters(
       project,
       definition,
-      noise.parameters,
+      noise.parameters.map(parameter => ({
+        ...parameter,
+        field: parameter?.field ?? parameter?.name,
+      })),
       {
         identity: 'field',
         label: 'Background noise',
         placement: 'node',
         ownerId,
         template,
-        rejectMetadataMismatch: true,
+        requireWireType: canonicalAssignments,
         defaults: (definition.parameters || []).map(parameter => ({
           ...deepClone(parameter),
           field: String(parameter.field),
@@ -1281,7 +1320,7 @@ export class DesignCommandService {
   async createProtocol(project, operation, context) {
     const collection = protocolCollection(project, operation)
     const value = operation.value || operation
-    const id = this.assignId('protocol', operation, context)
+    const id = this.assignId('protocol', project, operation, context)
     const allProtocols = [
       ...project.net.protocols,
       ...project.net.nodes.flatMap(node => node.data.protocols),
@@ -1317,6 +1356,7 @@ export class DesignCommandService {
         operation.placement,
         null,
         operation.owner_id,
+        context.origin === 'mcp',
       ),
     }
     collection.push(new FloatingProtocol({ id, ...constructor }))
@@ -1371,6 +1411,7 @@ export class DesignCommandService {
         operation.placement,
         preservedParameterTypes,
         operation.owner_id,
+        context.origin === 'mcp',
       )
     }
     context.affectedIds.add(protocol.id)
@@ -1383,6 +1424,7 @@ export class DesignCommandService {
     placement,
     preservedTypes = null,
     ownerId = null,
+    requireWireType = false,
   ) {
     const defaults = createProtocolFromDefinition(definition).parameters
     return this.constructorParameters(project, definition, supplied, {
@@ -1392,6 +1434,7 @@ export class DesignCommandService {
       ownerId,
       preservedTypes,
       defaults,
+      requireWireType,
     })
   }
 
@@ -1414,6 +1457,7 @@ export class DesignCommandService {
       preservedTypes = null,
       defaults = [],
       rejectMetadataMismatch = false,
+      requireWireType = false,
     } = {},
   ) {
     const canonicalDefaults = deepClone(defaults)
@@ -1486,6 +1530,12 @@ export class DesignCommandService {
             `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
           )
         }
+        if (requireWireType && suppliedParameter.type !== linkedOption.wireType) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${label} parameter ${parameterName} must use wire type ${linkedOption.wireType}.`,
+          )
+        }
         normalizedSelectedType = linkedOption.id
         if (
           ['number', 'numeric-expression'].includes(linkedOption.inputKind)
@@ -1514,6 +1564,12 @@ export class DesignCommandService {
           suppliedParameter,
           parameterDefinition,
         )
+        if (requireWireType && suppliedParameter.type !== effectiveType.wireType) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${label} parameter ${parameterName} must use wire type ${effectiveType.wireType}.`,
+          )
+        }
         normalizedValue = await this.requireTypedValue(
           effectiveType,
           suppliedParameter.value,
@@ -1607,7 +1663,7 @@ export class DesignCommandService {
 
   async createVariable(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('variable', operation, context)
+    const id = this.assignId('variable', project, operation, context)
     if (project.variables.some(variable => variable.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
@@ -1806,7 +1862,7 @@ export class DesignCommandService {
   async createState(project, operation, context) {
     const value = operation.value || operation
     const definition = this.stateDefinition(value.state_type)
-    const id = this.assignId('variable', operation, context)
+    const id = this.assignId('variable', project, operation, context)
     if (project.variables.some(variable => variable.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
@@ -1861,7 +1917,7 @@ export class DesignCommandService {
 
   createAnnotation(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('annotation', operation, context)
+    const id = this.assignId('annotation', project, operation, context)
     if (project.annotations.some(annotation => annotation.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Annotation ID already exists: ${id}`)
     }
@@ -1900,13 +1956,88 @@ export class DesignCommandService {
     context.deletedIds.add(id)
   }
 
+  async mcpRepeaterOptions(project, options) {
+    if (!Object.hasOwn(options, 'automation')) return options
+    if (!record(options.automation)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'Repeater protocol automation settings must be an object.',
+      )
+    }
+    const targets = {
+      entangler: {
+        placement: 'edge',
+        simpleName: 'EntanglerProt',
+        ownerId: options.templateEdgeId,
+      },
+      swapper: {
+        placement: 'node',
+        simpleName: 'SwapperProt',
+        ownerId: options.templateNodeId,
+      },
+      tracker: {
+        placement: 'node',
+        simpleName: 'EntanglementTracker',
+        ownerId: options.templateNodeId,
+      },
+    }
+    const automation = {}
+    for (const [name, target] of Object.entries(targets)) {
+      const setting = options.automation[name]
+      if (setting === undefined) continue
+      const normalized = { enabled: setting.enabled === true }
+      if (name === 'swapper' && Object.hasOwn(setting, 'predicateStrategy')) {
+        normalized.predicateStrategy = setting.predicateStrategy
+      }
+      if (normalized.enabled) {
+        const definition = (this.protocolCatalog()?.[target.placement] || [])
+          .find(candidate => protocolSimpleName(candidate) === target.simpleName)
+        if (!definition) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${target.simpleName} is unavailable in the live protocol catalog.`,
+          )
+        }
+        normalized.definition = definition
+        normalized.protocol = {
+          type: definition.type,
+          parameters: await this.protocolParameters(
+            project,
+            definition,
+            setting.parameters,
+            target.placement,
+            null,
+            target.ownerId,
+            true,
+          ),
+        }
+      }
+      automation[name] = normalized
+    }
+    return { ...options, automation }
+  }
+
   async generateNetwork(project, operation, context) {
     const value = operation.value || operation
-    const generator = this.generators[value.generator || value.type]
+    const generatorName = value.generator || value.type
+    const generator = this.generators[generatorName]
     if (typeof generator !== 'function') {
-      throw new DesignCommandError('VALIDATION_FAILED', `Unknown network generator: ${value.generator || value.type}`)
+      throw new DesignCommandError('VALIDATION_FAILED', `Unknown network generator: ${generatorName}`)
     }
-    const result = await generator(project.net, deepClone(value.options || value))
+    let options = deepClone(value.options || value)
+    if (context.origin === 'mcp' && generatorName === 'repeater_chain') {
+      options = await this.mcpRepeaterOptions(project, options)
+    }
+    let result
+    try {
+      result = await generator(project.net, options)
+    } catch (error) {
+      if (error instanceof DesignCommandError) throw error
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        error?.message || `The ${generatorName} generator rejected its options.`,
+      )
+    }
     // Layout generators clone representative template values. Revalidate each
     // cloned assignment after its destination node has a stable position in
     // the candidate network, then commit the transaction only if all pass.

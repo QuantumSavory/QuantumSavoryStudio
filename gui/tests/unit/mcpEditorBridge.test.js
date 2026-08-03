@@ -40,7 +40,7 @@ function bridgeFixture(overrides = {}) {
   }
   const designCommands = {
     runExclusive: vi.fn(async work => work()),
-    executeToolNow: vi.fn(async () => ({
+    executeNow: vi.fn(async () => ({
       summary: 'Agent changed the design.',
       affected_ids: ['node-1'],
     })),
@@ -70,13 +70,14 @@ describe('McpEditorBridge', () => {
     expect(client.bind).toHaveBeenCalledWith(expect.objectContaining({
       project_name: 'Bridge Project',
       simulation_name: 'user_Bridge Project',
-      contract_version: 1,
+      contract_version: 2,
       snapshot: expect.objectContaining({
         name: 'Bridge Project',
         schemaVersion: 2,
       }),
       hash: expect.stringMatching(/^[0-9a-f]{64}$/),
     }))
+    expect(client.bind.mock.calls[0][0].snapshot).not.toHaveProperty('map')
     expect(bridge.revision).toBe(0)
   })
 
@@ -147,7 +148,7 @@ describe('McpEditorBridge', () => {
     expect(bridge.binding).not.toBeNull()
   })
 
-  it('projects requested design sections in the authoritative browser', async () => {
+  it('returns the complete canonical project document without the local map', async () => {
     const { bridge, client, project } = bridgeFixture()
     project.description = 'Browser-owned'
     project.variables.push(
@@ -168,22 +169,31 @@ describe('McpEditorBridge', () => {
     await bridge.handleCommand({
       command_id: 'command-read',
       base_revision: 0,
-      payload: {
-        type: 'design_get',
-        sections: ['metadata', 'states'],
-      },
+      payload: { type: 'design_get' },
     })
 
     const acknowledgement = client.commit.mock.calls.at(-1)[0]
     expect(acknowledgement.success).toBe(true)
-    expect(acknowledgement.result.document).toEqual({
+    expect(Object.keys(acknowledgement.result.document).sort()).toEqual([
+      'annotations',
+      'description',
+      'name',
+      'net',
+      'schemaVersion',
+      'simulationConfig',
+      'variables',
+    ])
+    expect(acknowledgement.result.document).toMatchObject({
       schemaVersion: 2,
       name: 'Bridge Project',
       description: 'Browser-owned',
-      states: [expect.objectContaining({ id: 'state', name: 'rho' })],
+      net: expect.any(Object),
+      variables: [
+        expect.objectContaining({ id: 'ordinary', name: 'rate' }),
+        expect.objectContaining({ id: 'state', name: 'rho' }),
+      ],
     })
-    expect(acknowledgement.result.document).not.toHaveProperty('net')
-    expect(acknowledgement.result.document).not.toHaveProperty('variables')
+    expect(acknowledgement.result.document).not.toHaveProperty('map')
   })
 
   it('rejects MCP mutations without discarding invalid local drafts', async () => {
@@ -199,13 +209,19 @@ describe('McpEditorBridge', () => {
       operation_id: 'edit-2',
       base_revision: 0,
       payload: {
-        type: 'design_command',
-        tool: 'topology_edit',
-        arguments: {},
+        type: 'design_edit',
+        arguments: {
+          operation_id: 'edit-2',
+          operations: [{
+            kind: 'topology.create_node',
+            id: 'node-2',
+            value: { position: [0, 0] },
+          }],
+        },
       },
     })
 
-    expect(designCommands.executeToolNow).not.toHaveBeenCalled()
+    expect(designCommands.executeNow).not.toHaveBeenCalled()
     expect(client.commit).toHaveBeenCalledWith(expect.objectContaining({
       command_id: 'command-2',
       success: false,
@@ -214,5 +230,31 @@ describe('McpEditorBridge', () => {
         details: { editor: 'protocol-form' },
       }),
     }))
+  })
+
+  it('passes canonical design_edit operations directly to the command service', async () => {
+    const { bridge, designCommands } = bridgeFixture()
+    await bridge.initialize()
+    const operations = [{
+      kind: 'topology.create_node',
+      id: 'node-1',
+      value: { position: [0, 0] },
+    }]
+
+    await bridge.handleCommand({
+      command_id: 'command-edit',
+      operation_id: 'edit-1',
+      base_revision: 0,
+      payload: {
+        type: 'design_edit',
+        arguments: { operation_id: 'edit-1', operations },
+      },
+    })
+
+    expect(designCommands.executeNow).toHaveBeenCalledWith({
+      operations,
+      origin: 'mcp',
+      operationId: 'edit-1',
+    })
   })
 })

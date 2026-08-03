@@ -15,6 +15,7 @@ const SUPPORTED_INPUT_SCHEMA_KEYWORDS = Set([
   "\$ref",
   "additionalItems",
   "additionalProperties",
+  "allOf",
   "anyOf",
   "const",
   "default",
@@ -23,11 +24,14 @@ const SUPPORTED_INPUT_SCHEMA_KEYWORDS = Set([
   "exclusiveMinimum",
   "items",
   "maximum",
+  "maxItems",
   "minItems",
   "minLength",
   "minProperties",
   "minimum",
+  "not",
   "oneOf",
+  "pattern",
   "properties",
   "required",
   "type",
@@ -35,8 +39,8 @@ const SUPPORTED_INPUT_SCHEMA_KEYWORDS = Set([
 ])
 
 const SCHEMA_MAP_KEYWORDS = Set(["definitions", "properties"])
-const SCHEMA_SINGLE_KEYWORDS = Set(["additionalItems", "additionalProperties", "items"])
-const SCHEMA_ARRAY_KEYWORDS = Set(["anyOf", "oneOf"])
+const SCHEMA_SINGLE_KEYWORDS = Set(["additionalItems", "additionalProperties", "items", "not"])
+const SCHEMA_ARRAY_KEYWORDS = Set(["allOf", "anyOf", "oneOf"])
 
 function plain_dictionary(value)
   value isa AbstractDict || return Dict{String,Any}()

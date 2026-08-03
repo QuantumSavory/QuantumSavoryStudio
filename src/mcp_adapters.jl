@@ -1,13 +1,5 @@
 const MCP_DESIGN_MUTATION_TOOLS = Set([
-  "design_update",
-  "topology_edit",
-  "slots_edit",
-  "protocols_edit",
-  "variables_edit",
-  "states_edit",
-  "annotations_edit",
-  "network_generate",
-  "design_transaction",
+  "design_edit",
 ])
 
 const MCP_SIMULATION_LIFECYCLE_TOOLS = Dict(
@@ -226,10 +218,7 @@ function dispatch_mcp_tool!(
     result = if tool == "design_get"
       enqueue_browser_command!(
         hub,
-        Dict(
-          "type" => "design_get",
-          "sections" => get(arguments, "sections", nothing),
-        );
+        Dict("type" => "design_get");
         timeout_seconds=20,
       )
     elseif tool == "design_validate"
@@ -277,8 +266,7 @@ function dispatch_mcp_tool!(
       enqueue_browser_command!(
         hub,
         Dict(
-          "type" => "design_command",
-          "tool" => tool,
+          "type" => "design_edit",
           "arguments" => Dict{String,Any}(string(k) => v for (k, v) in arguments),
         );
         operation_id,
@@ -393,7 +381,7 @@ function _resolve_mcp_resource(
   if resource_uri == "wqs://design/current"
     design = enqueue_browser_command!(
       hub,
-      Dict("type" => "design_get", "sections" => nothing);
+      Dict("type" => "design_get");
       timeout_seconds=20,
     )
     return Dict(

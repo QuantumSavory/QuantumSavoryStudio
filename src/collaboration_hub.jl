@@ -329,14 +329,25 @@ function bind_editor!(
   hub::CollaborationHub,
   request::AbstractDict,
 )
-  contract_version = Int(get(request, "contract_version", 0))
-  contract_version == MCP_CONTRACT_VERSION || throw(
-    _mcp_error(
-      "PROJECT_CHANGED",
-      "The browser and server use different collaboration contract versions.",
-      status=409,
-    ),
+  received_version = get(request, "contract_version", nothing)
+  if !(
+    received_version isa Integer
+    && !(received_version isa Bool)
+    && received_version == MCP_CONTRACT_VERSION
   )
+    throw(
+      _mcp_error(
+        "UNSUPPORTED_VERSION",
+        "Unsupported MCP collaboration contract version.";
+        details=Dict{String,Any}(
+          "contract" => "mcp",
+          "received_version" => received_version,
+          "supported_versions" => [MCP_CONTRACT_VERSION],
+        ),
+      ),
+    )
+  end
+  contract_version = Int(received_version)
   editor_id = strip(string(get(request, "editor_id", "")))
   project_name = strip(string(get(request, "project_name", "")))
   simulation_name = strip(string(get(request, "simulation_name", "")))

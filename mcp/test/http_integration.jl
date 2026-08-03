@@ -211,8 +211,25 @@ end
         )
         @test tools_response.status == 200
         tool_names = Set(tool["name"] for tool in tools_body["result"]["tools"])
-        @test "design_get" in tool_names
-        @test "simulation_status" in tool_names
+        @test tool_names == Set([
+            "design_get",
+            "design_validate",
+            "catalog_list",
+            "catalog_get",
+            "design_edit",
+            "simulation_prepare",
+            "simulation_run",
+            "simulation_pause",
+            "simulation_resume",
+            "simulation_reset",
+            "simulation_status",
+            "simulation_results",
+            "simulation_slot_result",
+            "simulation_protocol_result",
+            "simulation_logs",
+        ])
+        @test !("topology_edit" in tool_names)
+        @test !("design_transaction" in tool_names)
 
         resources_response, resources_body = session_request(
             first_session,
@@ -241,6 +258,31 @@ end
         @test tool_body["result"]["structuredContent"]["code"] ==
             "NO_EDITOR_BOUND"
         @test tool_body["result"]["structuredContent"]["retryable"] === true
+
+        invalid_edit_response, invalid_edit_body = session_request(
+            first_session,
+            40,
+            "tools/call",
+            Dict(
+                "name" => "design_edit",
+                "arguments" => Dict(
+                    "operation_id" => "invalid-before-dispatch",
+                    "expected_revision" => 0,
+                    "operations" => Any[Dict(
+                        "kind" => "topology.create_node",
+                        "value" => Dict("position" => Any[0, 0]),
+                    )],
+                ),
+            ),
+        )
+        @test invalid_edit_response.status == 200
+        @test invalid_edit_body["result"]["isError"] === true
+        @test invalid_edit_body["result"]["structuredContent"]["code"] ==
+            "VALIDATION_FAILED"
+        @test haskey(
+            invalid_edit_body["result"]["structuredContent"]["details"],
+            "contract_path",
+        )
 
         rejected, rejected_body, rejected_session = initialize_session(5)
         @test rejected.status == 409

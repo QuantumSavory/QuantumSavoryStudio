@@ -94,7 +94,7 @@ describe('DesignCommandService', () => {
     })
   })
 
-  it('resolves transaction-local references and preserves retained identities', async () => {
+  it('uses direct transaction-local IDs and preserves retained identities', async () => {
     const project = createEmptyProject('Transaction')
     const retainedNode = new Node({
       id: 'node_existing',
@@ -124,29 +124,34 @@ describe('DesignCommandService', () => {
       operations: [
         {
           kind: 'topology.create_node',
-          client_ref: 'alice',
+          id: 'node_alice',
           value: { name: 'Alice', position: [1, 2] },
         },
         {
           kind: 'topology.create_edge',
-          client_ref: 'link',
+          id: 'edge_link',
           value: {
-            source: { client_ref: 'alice' },
+            source: 'node_alice',
             target: 'node_existing',
           },
         },
         {
           kind: 'slots.create',
-          client_ref: 'memory',
-          node_id: { client_ref: 'alice' },
+          id: 'slot_memory',
+          node_id: 'node_alice',
           value: { type: 'Qubit' },
         },
       ],
     })
 
-    const alice = project.net.nodes.find(node => node.id === result.created_ids.alice)
-    const edge = project.net.edges.find(item => item.id === result.created_ids.link)
-    expect(alice.data.slots[0].id).toBe(result.created_ids.memory)
+    const alice = project.net.nodes.find(node => node.id === 'node_alice')
+    const edge = project.net.edges.find(item => item.id === 'edge_link')
+    expect(alice.data.slots[0].id).toBe('slot_memory')
+    expect(result.affected_ids).toEqual(expect.arrayContaining([
+      'node_alice',
+      'edge_link',
+      'slot_memory',
+    ]))
     expect(new Set([edge.source, edge.target])).toEqual(new Set([alice, retainedNode]))
     expect(project.net.nodes[0]).toBe(retainedNode)
     expect(project.net.nodes[0].data.slots[0]).toBe(retainedSlot)
@@ -332,6 +337,93 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
       message: expect.stringContaining('protocol or background parameters'),
+    })
+  })
+
+  it('hydrates sparse MCP assignments and repeater automation from live catalogs', async () => {
+    const project = createEmptyProject('Sparse agent constructors')
+    project.net.nodes.push(new Node({
+      id: 'node_template',
+      name: 'Template',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const generator = vi.fn(async () => ({ generatedNodes: [], generatedEdges: [] }))
+    const service = serviceFor(project, {
+      backgroundCatalog: () => [{
+        type: 'ThermalNoise',
+        parameters: [{ field: 'rate', type: 'Float64' }],
+      }],
+      protocolCatalog: () => ({
+        edge: [{
+          group: 'edge',
+          type: 'Example.EntanglerProt',
+          parameters: [{ field: 'enabled', type: 'Bool' }],
+        }],
+        node: [
+          { group: 'node', type: 'Example.SwapperProt', parameters: [] },
+          { group: 'node', type: 'Example.EntanglementTracker', parameters: [] },
+        ],
+        floating: [],
+      }),
+      generators: { repeater_chain: generator },
+    })
+
+    await service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'slots.create',
+        id: 'slot-agent',
+        node_id: 'node_template',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: {
+            type: 'ThermalNoise',
+            parameters: [{ name: 'rate', type: 'Float64', value: 0.25 }],
+          },
+        },
+      }],
+    })
+    expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0])
+      .toMatchObject({ field: 'rate', selectedType: 'Float64', value: 0.25 })
+
+    await service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'network.generate',
+        value: {
+          generator: 'repeater_chain',
+          options: {
+            templateNodeId: 'node_template',
+            templateEdgeId: 'edge_template',
+            automation: {
+              entangler: {
+                enabled: true,
+                parameters: [{ name: 'enabled', type: 'Bool', value: true }],
+              },
+              swapper: { enabled: false, predicateStrategy: 'template' },
+            },
+          },
+        },
+      }],
+    })
+
+    const options = generator.mock.calls[0][1]
+    expect(options.automation.entangler).toMatchObject({
+      enabled: true,
+      definition: { type: 'Example.EntanglerProt' },
+      protocol: {
+        type: 'Example.EntanglerProt',
+        parameters: [expect.objectContaining({
+          name: 'enabled',
+          selectedType: 'Bool',
+          value: true,
+        })],
+      },
+    })
+    expect(options.automation.swapper).toEqual({
+      enabled: false,
+      predicateStrategy: 'template',
     })
   })
 
@@ -642,31 +734,40 @@ describe('DesignCommandService', () => {
     expect(project.net.edges[1].target).toBe(nodeC)
   })
 
-  it('allocates MCP-created IDs in the browser and exposes client_ref aliases', async () => {
+  it('requires unique client-chosen IDs for MCP creation operations', async () => {
     const project = createEmptyProject('Agent IDs')
     const service = serviceFor(project)
 
-    const result = await service.execute({
-      origin: 'mcp',
-      operations: [{
-        kind: 'topology.create_node',
-        client_ref: 'alice',
-        value: { name: 'Alice', position: [-72, 42] },
-      }],
-    })
-
-    expect(result.created_ids).toEqual({ alice: 'node_1' })
-    expect(project.net.nodes[0].id).toBe('node_1')
-    await expect(service.execute({
+    await service.execute({
       origin: 'mcp',
       operations: [{
         kind: 'topology.create_node',
         id: 'agent-selected-id',
+        value: { name: 'Alice', position: [-72, 42] },
+      }],
+    })
+
+    expect(project.net.nodes[0].id).toBe('agent-selected-id')
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'topology.create_node',
         value: { name: 'Bob', position: [-71, 42] },
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('use client_ref'),
+      message: expect.stringContaining('ID is required'),
+    })
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'variables.create',
+        id: 'agent-selected-id',
+        value: { name: 'rate', type: 'Float64', value: 0 },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('Durable ID already exists'),
     })
   })
 
