@@ -8,7 +8,6 @@ import {
   DUPLICATE_PHYSICAL_EDGE_REASON,
   DesignCommandError,
   DesignCommandService,
-  operationsForTool,
 } from '../../src/domain/design/DesignCommandService'
 import { INVALID_EDGE_GEOMETRY_REASON } from '../../src/utils/edgeGeometry'
 import {
@@ -33,22 +32,6 @@ function serviceFor(project, options = {}) {
 }
 
 describe('DesignCommandService', () => {
-  it('compiles specialist and transaction calls to the same operations', () => {
-    const operations = [{
-      kind: 'topology.create_node',
-      client_ref: 'alice',
-      value: { name: 'Alice', position: [1, 2] },
-    }]
-    expect(operationsForTool('design_transaction', { operations })).toBe(operations)
-    expect(operationsForTool('topology_edit', {
-      actions: [{
-        action: 'create_node',
-        client_ref: 'alice',
-        value: { name: 'Alice', position: [1, 2] },
-      }],
-    })).toEqual(operations)
-  })
-
   it('validates partial physical-default updates through one design command', async () => {
     const project = createEmptyProject('Physical defaults')
     const service = serviceFor(project)
@@ -1279,13 +1262,11 @@ describe('DesignCommandService', () => {
 
     const expression = { kind: 'numeric_expression', source: 'self / 2' }
     await service.execute({
-      operations: operationsForTool('variables_edit', {
-        actions: [{
-          action: 'update',
-          variable_id: 'variable_timeout',
-          value: { value: expression },
-        }],
-      }),
+      operations: [{
+        kind: 'variables.update',
+        variable_id: 'variable_timeout',
+        value: { value: expression },
+      }],
     })
 
     expect(project.variables[0]).toMatchObject({

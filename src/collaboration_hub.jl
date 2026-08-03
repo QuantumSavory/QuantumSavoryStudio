@@ -24,7 +24,6 @@ mutable struct EditorBinding
   generation::Int
   project_name::String
   simulation_name::String
-  contract_version::Int
   heartbeat_at::DateTime
   desynchronized::Bool
 end
@@ -347,7 +346,6 @@ function bind_editor!(
       ),
     )
   end
-  contract_version = Int(received_version)
   editor_id = strip(string(get(request, "editor_id", "")))
   project_name = strip(string(get(request, "project_name", "")))
   simulation_name = strip(string(get(request, "simulation_name", "")))
@@ -389,7 +387,6 @@ function bind_editor!(
       generation,
       project_name,
       simulation_name,
-      contract_version,
       hub.clock(),
       false,
     )

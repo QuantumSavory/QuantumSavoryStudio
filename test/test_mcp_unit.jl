@@ -301,7 +301,7 @@
     waiting = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="expires-before-delivery",
         expected_revision=0,
         mutates_design=true,
@@ -333,7 +333,7 @@
     delivered_wait = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="expires-after-delivery",
         expected_revision=0,
         mutates_design=true,
@@ -424,7 +424,7 @@
 
     concurrently_waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="concurrent-retry",
       expected_revision=1,
       mutates_design=true,
@@ -432,7 +432,7 @@
     )
     retry_waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="concurrent-retry",
       expected_revision=1,
       mutates_design=true,
@@ -467,7 +467,7 @@
 
     cached = WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="stable-operation",
       expected_revision=0,
       mutates_design=true,
@@ -479,7 +479,7 @@
     conflict = try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="new-operation",
         expected_revision=1,
         mutates_design=true,
@@ -504,7 +504,7 @@
     waiting = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="stale-success",
         expected_revision=0,
         mutates_design=true,
@@ -564,7 +564,7 @@
       waiting = @async try
         WebQuantumSavory.enqueue_browser_command!(
           hub,
-          Dict("type" => "design_command");
+          Dict("type" => "design_edit");
           operation_id="mismatch-operation",
           expected_revision=0,
           mutates_design=true,

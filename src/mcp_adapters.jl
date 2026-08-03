@@ -1,7 +1,3 @@
-const MCP_DESIGN_MUTATION_TOOLS = Set([
-  "design_edit",
-])
-
 const MCP_SIMULATION_LIFECYCLE_TOOLS = Dict(
   "simulation_prepare" => "prepare",
   "simulation_run" => "run",
@@ -254,7 +250,7 @@ function dispatch_mcp_tool!(
         _mcp_error("RESULT_NOT_FOUND", "Catalog entry not found.", status=404),
       )
       Dict("kind" => kind, "type" => type_id, "entry" => entries[entry])
-    elseif tool in MCP_DESIGN_MUTATION_TOOLS
+    elseif tool == "design_edit"
       operation_id = get(arguments, "operation_id", nothing)
       expected_revision = get(arguments, "expected_revision", nothing)
       operation_id === nothing && throw(

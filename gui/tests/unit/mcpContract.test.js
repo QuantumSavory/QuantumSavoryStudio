@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import {
-  MCP_CONTRACT_VERSION,
-  MCP_TOOLS,
-  MCP_TOOL_NAMES,
-} from '../../src/features/mcp/contractRegistry'
+import contract from '../../../contracts/mcp/contract.json'
+import { MCP_CONTRACT_VERSION } from '../../src/features/mcp/contractRegistry'
 import { DesignCommandService } from '../../src/domain/design/DesignCommandService'
 import { createEmptyProject } from '../../src/utils/projectDocument'
+
+const MCP_TOOLS = contract.tools
+const MCP_TOOL_NAMES = contract.tools.map(tool => tool.name)
 
 describe('shared MCP contract registry', () => {
   it('loads one unique versioned definition for every advertised tool', () => {
