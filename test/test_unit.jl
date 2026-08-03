@@ -9,23 +9,31 @@
   using ConcurrentSim
   using Dates
 
-  if !isdefined(Main, :ContextualIntegerBackground)
-    Core.eval(Main, :(using QuantumSavory))
-    Core.eval(Main, :(
-      Base.@kwdef struct ContextualIntegerBackground <: QuantumSavory.AbstractBackground
-        count::Int64 = 1
-        label::String = "default"
-      end
-    ))
-    Core.eval(Main, Expr(:public, :ContextualIntegerBackground))
-    Core.eval(Main, :(
-      QuantumSavory.constructor_metadata(::Type{ContextualIntegerBackground}) = [
-        (field=:count, type=Int64, doc="A contextual integer constructor field."),
-        (field=:label, type=String, doc="A nonnumeric constructor field."),
-      ]
-    ))
+  Base.@kwdef struct ContextualIntegerBackground <: QuantumSavory.AbstractBackground
+    count::Int64 = 1
+    label::String = "default"
   end
-  ContextualIntegerBackground = Main.ContextualIntegerBackground
+
+  QuantumSavory.constructor_metadata(::Type{ContextualIntegerBackground}) = [
+    (field=:count, type=Int64, doc="A contextual integer constructor field."),
+    (field=:label, type=String, doc="A nonnumeric constructor field."),
+  ]
+
+  function constructor_catalogs_with_contextual_background()
+    catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+    backgrounds = copy(catalogs.backgrounds)
+    push!(backgrounds, (
+      type=ContextualIntegerBackground,
+      wire_type="ContextualIntegerBackground",
+      doc="Test-only background with contextual integer and string fields.",
+      parameters=QuantumSavory.constructor_metadata(ContextualIntegerBackground),
+    ))
+    return WebQuantumSavory._ConstructorCatalogSnapshot(
+      catalogs.protocols,
+      backgrounds,
+      catalogs.slots,
+    )
+  end
 
   # Load test data
   test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload.json"))
@@ -1608,14 +1616,34 @@
   end
 
   @testset "Live Protocol Catalog Adapter" begin
+      @test !WebQuantumSavory.mock_broken_protocol_enabled(override=nothing)
+      @test WebQuantumSavory.mock_broken_protocol_enabled(override=" TRUE ")
+      @test !WebQuantumSavory.mock_broken_protocol_enabled(override="False")
+      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="1")
+      @test_throws ArgumentError WebQuantumSavory.mock_broken_protocol_enabled(override="yes")
+
+      live_catalogs = withenv(
+        WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => nothing,
+      ) do
+        WebQuantumSavory._constructor_catalog_snapshot()
+      end
+      @test all(
+        entry.type !== ContextualIntegerBackground
+        for entry in live_catalogs.backgrounds
+      )
       upstream_entries = QuantumSavory.ProtocolZoo.available_protocol_types()
-      web_entries = Dict(entry["type"] => entry for entry in WebQuantumSavory.get_protocol_types())
+      web_entries = withenv(
+        WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => nothing,
+      ) do
+        Dict(entry["type"] => entry for entry in WebQuantumSavory.get_protocol_types())
+      end
+      named_tag_parameters = 0
 
       for upstream in upstream_entries
         wire_type = string(parentmodule(upstream.type), ".", nameof(upstream.type))
         @test haskey(web_entries, wire_type)
         web = web_entries[wire_type]
-        adapter = WebQuantumSavory._resolve_protocol_catalog_entry(wire_type)
+        adapter = WebQuantumSavory._resolve_protocol_catalog_entry(wire_type, live_catalogs)
 
         @test adapter.type === upstream.type
         @test adapter.attachment === upstream.attachment
@@ -1627,21 +1655,77 @@
         web_parameters = Dict(string(parameter.field) => parameter for parameter in web["parameters"])
         @test keys(web_parameters) == keys(upstream_parameters)
         for (field, upstream_parameter) in upstream_parameters
-          @test web_parameters[field].required === upstream_parameter.required
+          web_parameter = web_parameters[field]
+          @test web_parameter.required === upstream_parameter.required
+          named_tag_semantics =
+            WebQuantumSavory._named_tag_parameter_semantics(upstream_parameter.type)
+          if named_tag_semantics === nothing
+            @test !hasproperty(web_parameter, :kind)
+            @test !hasproperty(web_parameter, :nullable)
+          else
+            named_tag_parameters += 1
+            @test web_parameter.kind == WebQuantumSavory.NAMED_TAG_PARAMETER_KIND
+            @test web_parameter.nullable === named_tag_semantics.nullable
+          end
+        end
+      end
+      @test named_tag_parameters > 0
+
+      for override in (nothing, "false")
+        withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => override) do
+          hidden_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+          @test all(
+            entry.wire_type != WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE
+            for entry in hidden_catalogs.protocols
+          )
+          @test_logs (:warn, "Diagnostic protocol is disabled") begin
+            @test WebQuantumSavory._resolve_protocol_catalog_entry(
+              WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
+              hidden_catalogs,
+            ) === nothing
+          end
         end
       end
 
       withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "true") do
+        diagnostic_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
         diagnostic = only(filter(
           entry -> entry["type"] == WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
           WebQuantumSavory.get_protocol_types(),
         ))
         @test diagnostic["group"] == "floating"
         @test diagnostic["virtual"] === false
+        @test WebQuantumSavory._resolve_type_from_string(
+          WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
+          :protocol,
+          diagnostic_catalogs,
+        ) === WebQuantumSavory.MockBrokenProtocol
       end
+
+      withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => "invalid") do
+        @test_throws ArgumentError WebQuantumSavory.get_protocol_types()
+        @test_throws ArgumentError WebQuantumSavory.validate_payload(test_payload)
+        @test WebQuantumSavory.validate_payload(
+          deepcopy(test_payload);
+          catalogs=live_catalogs,
+        )["success"]
+      end
+
+      bare_protocol_payload = deepcopy(test_payload)
+      bare_protocol_payload["net"]["nodes"][1]["data"]["protocols"][1] =
+        string(QuantumSavory.ProtocolZoo.CutoffProt)
+      bare_protocol_error = try
+        WebQuantumSavory.validate_payload(bare_protocol_payload; catalogs=live_catalogs)
+        nothing
+      catch error
+        error
+      end
+      @test bare_protocol_error isa WebQuantumSavory.APIError
+      @test occursin("must be a catalog-backed object", bare_protocol_error.message)
   end
 
   @testset "SimpleSwitch Catalog Construction and Export" begin
+      catalogs = WebQuantumSavory._constructor_catalog_snapshot()
       payload = JSON.parsefile(joinpath(
         @__DIR__,
         "..",
@@ -1665,7 +1749,7 @@
       missing_required = deepcopy(payload)
       pop!(missing_required["net"]["nodes"][1]["data"]["protocols"][1]["parameters"])
       required_error = try
-        WebQuantumSavory.validate_payload(missing_required)
+        WebQuantumSavory.validate_payload(missing_required; catalogs)
         nothing
       catch error
         error
@@ -1673,22 +1757,23 @@
       @test required_error isa WebQuantumSavory.APIError
       @test occursin("success_probs", required_error.message)
 
-      validation = WebQuantumSavory.validate_payload(payload)
-      state = WebQuantumSavory.build_simulation_state(validation)
+      validation = WebQuantumSavory.validate_payload(payload; catalogs)
+      state = WebQuantumSavory.build_simulation_state(validation; catalogs)
       runtime_switch = WebQuantumSavory._instantiate_protocol(
         switch_definition,
         Dict{Symbol,Any}(
           :sim => WebQuantumSavory.get_network_time_tracker(state.network),
           :net => state.network,
           :node => 1,
-        ),
+        );
+        catalogs,
       )
       @test runtime_switch.switchnode == 1
       @test runtime_switch.clientnodes == [2]
       @test runtime_switch.success_probs == [0.8]
       @test runtime_switch._backlog[1, 1] == 0
 
-      script = WebQuantumSavory.generate_julia_script(payload)
+      script = WebQuantumSavory.generate_julia_script(payload; catalogs)
       @test occursin("switchnode = 1", script)
       paused_script = replace(
         script,
@@ -2808,17 +2893,69 @@
   end
 
   @testset "Type Resolution" begin
-      # Test protocol type resolution
-      protocol_type = WebQuantumSavory._resolve_type_from_string("QuantumSavory.ProtocolZoo.CutoffProt", :protocol)
+      catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+
+      protocol_type = WebQuantumSavory._resolve_type_from_string(
+        "QuantumSavory.ProtocolZoo.CutoffProt",
+        :protocol,
+        catalogs,
+      )
       @test protocol_type !== nothing
 
-      # Test case-insensitive resolution
-      protocol_type = WebQuantumSavory._resolve_type_from_string("quantumsavory.protocolzoo.cutoffprot", :protocol)
+      protocol_type = WebQuantumSavory._resolve_type_from_string(
+        "quantumsavory.protocolzoo.cutoffprot",
+        :protocol,
+        catalogs,
+      )
       @test protocol_type !== nothing
 
-      # Test non-existent type
-      protocol_type = WebQuantumSavory._resolve_type_from_string("NonExistentType", :protocol)
-      @test protocol_type === nothing
+      @test WebQuantumSavory._resolve_type_from_string(
+        "Depolarization",
+        :noise,
+        catalogs,
+      ) !== nothing
+      @test WebQuantumSavory._resolve_type_from_string(
+        "DEPOLARIZATION",
+        :noise,
+        catalogs,
+      ) !== nothing
+      @test WebQuantumSavory._resolve_type_from_string(
+        "Qubit",
+        :slot,
+        catalogs,
+      ) !== nothing
+      @test WebQuantumSavory._resolve_type_from_string(
+        "QUBIT",
+        :slot,
+        catalogs,
+      ) !== nothing
+
+      @test_logs (:warn, "Protocol type not found in catalog") begin
+        @test WebQuantumSavory._resolve_type_from_string(
+          "NonExistentType",
+          :protocol,
+          catalogs,
+        ) === nothing
+      end
+      @test_logs (:warn, "Noise type not found in catalog") begin
+        @test WebQuantumSavory._resolve_type_from_string(
+          "NonExistent",
+          :noise,
+          catalogs,
+        ) === nothing
+      end
+      @test_logs (:warn, "Slot type not found in catalog") begin
+        @test WebQuantumSavory._resolve_type_from_string(
+          "NonExistent",
+          :slot,
+          catalogs,
+        ) === nothing
+      end
+      @test_throws ArgumentError WebQuantumSavory._resolve_type_from_string(
+        "Qubit",
+        :unsupported,
+        catalogs,
+      )
   end
 
   @testset "Protocol Instantiation Context" begin
@@ -3114,32 +3251,6 @@
     
     # Test that RegisterNet creation fails due to empty slots (expected behavior)
     @test_throws BoundsError RegisterNet(g, registers)
-  end
-
-  @testset "Type Resolution Functions" begin
-    # Test noise type resolution
-    noise_type = WebQuantumSavory._resolve_noise_type_from_string("Depolarization")
-    @test noise_type !== nothing
-
-    # Test case-insensitive noise resolution
-    noise_type = WebQuantumSavory._resolve_noise_type_from_string("DEPOLARIZATION")
-    @test noise_type !== nothing
-
-    # # Test default noise type
-    # default_noise = WebQuantumSavory._resolve_noise_type_from_string("default")
-    # @test default_noise !== nothing
-
-    # Test slot type resolution
-    slot_type = WebQuantumSavory._resolve_slot_type_from_string("Qubit")
-    @test slot_type !== nothing
-
-    # Test case-insensitive slot resolution
-    slot_type = WebQuantumSavory._resolve_slot_type_from_string("QUBIT")
-    @test slot_type !== nothing
-
-    # Test non-existent types
-    @test WebQuantumSavory._resolve_noise_type_from_string("NonExistent") === nothing
-    @test WebQuantumSavory._resolve_slot_type_from_string("NonExistent") === nothing
   end
 
   @testset "Parameter Conversion Utility" begin
@@ -4655,6 +4766,7 @@
     catch error
       error
     end
+    contextual_catalogs = constructor_catalogs_with_contextual_background()
 
     parsed_expression = WebQuantumSavory._parse_numeric_expression(
       expression("delay / 2"),
@@ -5107,7 +5219,8 @@
             "value" => expression("self + 1"),
           )],
         ),
-        noise_context,
+        noise_context;
+        catalogs=contextual_catalogs,
       )
       @test integer_noise.count == 3
       @test integer_noise.label == "default"
@@ -5128,6 +5241,7 @@
         ),
         noise_context;
         variables=Dict("integer-count" => integer_variable),
+        catalogs=contextual_catalogs,
       )
       @test variable_integer_noise.count == 5
     end
@@ -5220,7 +5334,8 @@
     nonnumeric_error = capture_error(
       () -> WebQuantumSavory._instantiate_noise(
         nonnumeric_expression,
-        noise_context,
+        noise_context;
+        catalogs=contextual_catalogs,
       ),
     )
     @test nonnumeric_error isa WebQuantumSavory.APIError
@@ -5230,6 +5345,7 @@
         nonnumeric_expression,
         "Test background noise",
         node_index=2,
+        catalogs=contextual_catalogs,
       ),
     )
     @test script_nonnumeric_error isa WebQuantumSavory.APIError
@@ -5238,10 +5354,13 @@
       script_nonnumeric_error.message,
     )
 
-    function background_validation_error(background; variables=Any[])
+    function background_validation_error(background; variables=Any[], catalogs=nothing)
       payload = deepcopy(test_payload)
       payload["variables"] = variables
       payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = background
+      catalogs === nothing || return capture_error(
+        () -> WebQuantumSavory.validate_payload(payload; catalogs),
+      )
       return capture_error(() -> WebQuantumSavory.validate_payload(payload))
     end
 
@@ -5290,7 +5409,10 @@
     @test incompatible_variable isa WebQuantumSavory.APIError
     @test occursin("incompatible", incompatible_variable.message)
 
-    nonnumeric_payload_error = background_validation_error(nonnumeric_expression)
+    nonnumeric_payload_error = background_validation_error(
+      nonnumeric_expression;
+      catalogs=contextual_catalogs,
+    )
     @test nonnumeric_payload_error isa WebQuantumSavory.APIError
     @test occursin("does not accept a numeric expression", nonnumeric_payload_error.message)
 
