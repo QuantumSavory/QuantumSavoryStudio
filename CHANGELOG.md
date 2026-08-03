@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.11.0
+## unreleased
 
 - Replaced Web-owned protocol catalog inference and caches with a live QuantumSavory
   metadata adapter shared by catalog responses, placement validation, runtime
@@ -11,6 +11,9 @@
   Boolean virtual-edge eligibility and required fields, and require explicit values for
   required inputs while optional inputs retain Default. Legacy `chooseA`, `chooseB`,
   `log`, and client-supplied attachment fields are rejected.
+
+## 1.11.0 
+
 - Unified Symbolic values, Custom Functions, and `Float64`/`Int64` expressions
   on one source-editor lifecycle: fresh and invalid drafts stay open,
   successful validation collapses to an accessible rendered/source summary,
