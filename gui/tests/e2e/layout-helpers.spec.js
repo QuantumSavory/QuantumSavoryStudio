@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test'
 
+const TEMPLATE_BACKGROUND_TYPES = [{
+  type: 'TestBackgroundNoise',
+  doc: 'Background used to verify deep template cloning.',
+  parameters: [{
+    field: 'strength',
+    type: 'Float64',
+    doc: 'Noise strength.',
+  }],
+}]
+
+const TEMPLATE_PROTOCOL_TYPES = [{
+  type: 'TestNodeProtocol',
+  doc: 'Node protocol used to verify deep template cloning.',
+  group: 'node',
+  virtual: false,
+  parameters: [{ field: 'rounds', type: 'Int64', doc: 'Round count.' }],
+}, {
+  type: 'TestEdgeProtocol',
+  doc: 'Edge protocol used to verify deep template cloning.',
+  group: 'edge',
+  virtual: false,
+  parameters: [{ field: 'attempts', type: 'Int64', doc: 'Attempt count.' }],
+}]
+
 async function mockBackendMetadata(page) {
   await page.route('**/known_functions', route => route.fulfill({
     status: 200,
@@ -9,12 +33,12 @@ async function mockBackendMetadata(page) {
   await page.route('**/background_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { background_types: [] },
+    json: { background_types: TEMPLATE_BACKGROUND_TYPES },
   }))
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { protocol_types: [] },
+    json: { protocol_types: TEMPLATE_PROTOCOL_TYPES },
   }))
   await page.route('**/states_zoo_types', route => route.fulfill({
     status: 200,
@@ -103,24 +127,40 @@ async function configureTemplates(page, templateNodeName = 'Node 1') {
 
     const templateNode = projectData.net.nodes.find(node => node.name === templateNodeName)
 
-    templateNode.data.customConfiguration = { nested: { value: 'node-template' } }
     templateNode.data.slots.push({
       id: 'slot_template',
       type: 'Qubit',
-      backgroundNoise: { type: 'custom', parameters: [{ value: 0.25 }] },
+      backgroundNoise: {
+        type: 'TestBackgroundNoise',
+        parameters: [{
+          field: 'strength',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 0.25,
+        }],
+      },
       assignment: false,
       isLocked: false,
     })
     templateNode.data.protocols.push({
       id: 'protocol_node_template',
       type: 'TestNodeProtocol',
-      parameters: [{ name: 'rounds', type: 'Int64', value: 7 }],
+      parameters: [{
+        name: 'rounds',
+        type: 'Int64',
+        selectedType: 'Int64',
+        value: 7,
+      }],
     })
-    edge.data.customConfiguration = { fidelity: 0.91 }
     edge.data.protocols.push({
       id: 'protocol_edge_template',
       type: 'TestEdgeProtocol',
-      parameters: [{ name: 'attempts', type: 'Int64', value: 5 }],
+      parameters: [{
+        name: 'attempts',
+        type: 'Int64',
+        selectedType: 'Int64',
+        value: 5,
+      }],
     })
 
     return {
@@ -206,17 +246,15 @@ test.describe('star and graph layout helpers', () => {
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: edges.map(edge => edge.data.protocols[0].id),
         nodeDataCopied: peripherals.every(node => (
-          node.data.customConfiguration.nested.value === 'node-template'
-          && node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
+          node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
+          && node.data.protocols[0].parameters[0].value === 7
         )),
-        edgeDataCopied: edges.every(edge => (
-          edge.data.customConfiguration.fidelity === 0.91
-          && edge.data.protocols[0].parameters[0].value === 5
-        )),
+        edgeDataCopied: edges.every(edge => edge.data.protocols[0].parameters[0].value === 5),
         independentNodeData: peripherals[0].data !== peripherals[1].data
-          && peripherals[0].data.customConfiguration !== peripherals[1].data.customConfiguration,
+          && peripherals[0].data.slots[0] !== peripherals[1].data.slots[0]
+          && peripherals[0].data.protocols[0] !== peripherals[1].data.protocols[0],
         independentEdgeData: edges[0].data !== edges[1].data
-          && edges[0].data.customConfiguration !== edges[1].data.customConfiguration,
+          && edges[0].data.protocols[0] !== edges[1].data.protocols[0],
       }
     }, { templates })
 
@@ -401,8 +439,11 @@ test.describe('star and graph layout helpers', () => {
         nodeProtocolIds: nodes.map(node => node.data.protocols[0].id),
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: edges.map(edge => edge.data.protocols[0].id),
-        copiedNodeData: nodes.every(node => node.data.customConfiguration.nested.value === 'node-template'),
-        copiedEdgeData: edges.every(edge => edge.data.customConfiguration.fidelity === 0.91),
+        copiedNodeData: nodes.every(node => (
+          node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
+          && node.data.protocols[0].parameters[0].value === 7
+        )),
+        copiedEdgeData: edges.every(edge => edge.data.protocols[0].parameters[0].value === 5),
       }
     }, { templates })
 
@@ -458,7 +499,7 @@ test.describe('star and graph layout helpers', () => {
     await page.evaluate(() => {
       const app = document.querySelector('#app')?.__vue_app__
       const projectData = app._instance.setupState.projectData
-      delete projectData.net.edges[0].data.protocols
+      projectData.net.edges[0].data.protocols = []
       window.__unrelatedLayoutEntities = {
         firstNode: projectData.net.nodes[2],
         secondNode: projectData.net.nodes[3],

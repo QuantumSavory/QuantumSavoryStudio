@@ -1,11 +1,11 @@
-import { summarizeProject } from '../utils/projectCodec'
+import { summarizeProject } from '../utils/projectDocument.js'
 
 // ProjectStore.js
 // Abstraction for saving/loading project data (localStorage for now)
 
-const STORAGE_PREFIX = 'cqn_project_'
-const METADATA_INDEX_KEY = 'cqn_projects_metadata_index'
-const RECENT_PROJECT_NAME_KEY = 'recentProjectName'
+const STORAGE_PREFIX = 'cqn_v2_project_'
+const METADATA_INDEX_KEY = 'cqn_v2_projects_metadata_index'
+const RECENT_PROJECT_NAME_KEY = 'cqn_v2_recent_project_name'
 
 export default class ProjectStore {
   static getRecentProjectName() {

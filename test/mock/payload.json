@@ -1,118 +1,95 @@
 {
-    "name": "PR15",
-    "net": {
-        "nodes": [
+  "name": "PR15",
+  "simulationConfig": {
+    "qubitRepresentation": "QuantumOpticsRepr",
+    "qumodeRepresentation": "QuantumOpticsRepr"
+  },
+  "variables": [],
+  "net": {
+    "nodes": [
+      {
+        "id": "node1",
+        "name": "Node 1",
+        "position": [-98.5795, 39.8283],
+        "data": {
+          "type": "City",
+          "slots": [
             {
-                "id": "node1",
-                "name": "Node 1",
-                "position": [
-                    -98.5795,
-                    39.8283
-                ],
-                "data": {
-                    "type": "city",
-                    "slots": [
-                        {
-                            "id": "slot1",
-                            "type": "qubit",
-                            "backgroundNoise": {
-                                "type": "Depolarization",
-                                "parameters": [
-                                    { "name": "τ", "value": 0.2 }
-                                ]
-                            },
-                            "lastOperationTime": 0.123,
-                            "assignment": true,
-                            "isLocked": false,
-                            "representationType": "default"
-                        },
-                        {
-                            "id": "slot2",
-                            "type": "qubit",
-                            "backgroundNoise": {
-                                "type": "T1Decay",
-                                "parameters": [
-                                    { "name": "t1", "value": 5.0 }
-                                ]
-                            },
-                            "lastOperationTime": 2.123,
-                            "assignment": false,
-                            "isLocked": true,
-                            "representationType": "default"
-                        }
-                    ],
-                    "protocols": [
-                        {
-                            "id": "floatprot_0_1",
-                            "type": "QuantumSavory.ProtocolZoo.CutoffProt",
-                            "parameters": [
-                                {
-                                    "name": "retention_time",
-                                    "type": "Float64",
-                                    "value": 0.15
-                                },
-                                {
-                                    "name": "announce",
-                                    "type": "Bool",
-                                    "value": true
-                                }
-                            ]
-                        },
-                        {
-                            "id": "floatprot_1_1",
-                            "type": "QuantumSavory.ProtocolZoo.SwapperProt",
-                            "parameters": [
-                                {
-                                    "name": "local_busy_time",
-                                    "type": "Float64",
-                                    "value": 1
-                                },
-                                {
-                                    "name": "rounds",
-                                    "type": "Int64",
-                                    "value": "2"
-                                },
-                                {
-                                    "name": "agelimit",
-                                    "type": "Union{Nothing, Float64}",
-                                    "value": "3"
-                                }
-                            ]
-                        }
-                    ]
-                }
+              "id": "slot1",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "Depolarization",
+                "parameters": [
+                  { "name": "τ", "type": "Float64", "value": 0.2 }
+                ]
+              }
             },
             {
-                "id": "node2",
-                "name": "Node 2",
-                "position": [
-                    -92.3612382812498,
-                    37.128283391405205
-                ],
-                "data": {
-                    "type": "City",
-                    "slots": [],
-                    "protocols": []
-                }
+              "id": "slot2",
+              "type": "Qubit",
+              "backgroundNoise": {
+                "type": "T1Decay",
+                "parameters": [
+                  { "name": "t1", "type": "Float64", "value": 5.0 }
+                ]
+              }
             }
-        ],
-        "edges": [
+          ],
+          "protocols": [
             {
-                "id": "edge1",
-                "source": "node1",
-                "target": "node2",
-                "data": {
-                    "type": "connection",
-                    "protocols": [
-                        {
-                            "id": "edgeprot_0_1",
-                            "type": "QuantumSavory.ProtocolZoo.EntanglementConsumer",
-                            "parameters": []
-                        }
-                    ]
-                }
+              "id": "floatprot_0_1",
+              "type": "QuantumSavory.ProtocolZoo.CutoffProt",
+              "parameters": [
+                { "name": "retention_time", "type": "Float64", "value": 0.15 },
+                { "name": "announce", "type": "Bool", "value": true }
+              ]
+            },
+            {
+              "id": "floatprot_1_1",
+              "type": "QuantumSavory.ProtocolZoo.SwapperProt",
+              "parameters": [
+                { "name": "local_busy_time", "type": "Float64", "value": 1 },
+                { "name": "rounds", "type": "Int64", "value": 2 },
+                { "name": "agelimit", "type": "Float64", "value": 3 }
+              ]
             }
-        ],
-        "protocols": []
-    }
+          ]
+        }
+      },
+      {
+        "id": "node2",
+        "name": "Node 2",
+        "position": [-92.3612382812498, 37.128283391405205],
+        "data": {
+          "type": "City",
+          "slots": [],
+          "protocols": []
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge1",
+        "source": "node1",
+        "target": "node2",
+        "isLogic": false,
+        "data": {
+          "type": "connection",
+          "protocols": [
+            {
+              "id": "edgeprot_0_1",
+              "type": "QuantumSavory.ProtocolZoo.EntanglementConsumer",
+              "parameters": []
+            }
+          ],
+          "distanceMeters": 1000.0,
+          "propagationDelaySeconds": 0.0000049,
+          "refractiveIndex": 1.468,
+          "lossDbPerKm": 0.2,
+          "transmissivity": 0.95
+        }
+      }
+    ],
+    "protocols": []
+  }
 }

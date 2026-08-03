@@ -22,9 +22,8 @@ export const KNOWN_PARAMETER_TYPES = [
 ]
 
 export const VARIABLE_PARAMETER_TYPES = [
-  'default',
-  'Int64',
   'Float64',
+  'Int64',
   'Bool',
   'String',
   'Function',
@@ -161,7 +160,7 @@ export function buildParameterInputOptions(
 }
 
 export function buildVariableInputOptions() {
-  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES)
+  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES, { required: true })
 }
 
 export function findParameterInputOption(inputType, metadata, id) {

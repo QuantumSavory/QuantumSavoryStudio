@@ -23,6 +23,7 @@ function serviceFor(project, options = {}) {
     getProject: () => project,
     idGenerator: prefix => `${prefix}_${++nextId}`,
     defaultBackgroundNoise: () => ({ type: 'NoNoise', parameters: [] }),
+    backgroundCatalog: () => [{ type: 'NoNoise', parameters: [] }],
     ...options,
   })
 }
@@ -155,7 +156,12 @@ describe('DesignCommandService', () => {
 
   it('edits a slot-only node template and gives new nodes independent slot copies', async () => {
     const project = createEmptyProject('Template defaults')
-    const service = serviceFor(project)
+    const service = serviceFor(project, {
+      backgroundCatalog: () => ['NoNoise', 'ThermalNoise', 'UpdatedNoise'].map(type => ({
+        type,
+        parameters: [],
+      })),
+    })
 
     await service.execute({
       operations: [
@@ -538,7 +544,13 @@ describe('DesignCommandService', () => {
     project.annotations.push(annotation)
     const slot = nodeA.data.slots[0]
 
-    await serviceFor(project).execute({
+    await serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{ type: 'NodeProtocol', parameters: [] }],
+        edge: [{ type: 'EdgeProtocol', parameters: [] }],
+        floating: [{ type: 'FloatingProtocol', parameters: [] }],
+      }),
+    }).execute({
       operations: [{
         kind: 'design.update',
         value: { description: 'Reconciled' },
@@ -883,9 +895,6 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.protocols[0].parameters)
       .toContainEqual(expect.objectContaining({ name: 'rounds', value: null }))
-    project.net.nodes[0].data.protocols[0].parameters
-      .find(parameter => parameter.name === 'tag').type = 'Any'
-
     await service.execute({
       operations: [{
         kind: 'protocols.update',
@@ -898,8 +907,8 @@ describe('DesignCommandService', () => {
             { name: 'rounds', type: 'Int64', value: 3 },
             {
               name: 'tag',
-              type: 'DataType',
-              selectedType: 'DataType',
+              type: 'Nothing',
+              selectedType: 'Nothing',
               value: 'nothing',
             },
           ],
@@ -910,7 +919,7 @@ describe('DesignCommandService', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'enabled', type: 'Bool', value: true }),
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
-        expect.objectContaining({ name: 'tag', type: 'Any', value: 'nothing' }),
+        expect.objectContaining({ name: 'tag', selectedType: 'Nothing', value: 'nothing' }),
       ]),
     )
 
@@ -943,13 +952,21 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
 
-    await service.execute({
+    await expect(service.execute({
       operations: [{
         kind: 'variables.create',
         value: { name: 'optional_rate', type: 'Float64', value: null },
       }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+
+    await service.execute({
+      operations: [{ kind: 'variables.create', value: { name: 'initial_rate' } }],
     })
-    expect(project.variables[0]).toMatchObject({ name: 'optional_rate', value: null })
+    expect(project.variables[0]).toMatchObject({
+      name: 'initial_rate',
+      type: 'Float64',
+      value: 0,
+    })
 
     await expect(service.execute({
       operations: [{
@@ -962,30 +979,21 @@ describe('DesignCommandService', () => {
     expect(project.variables).toHaveLength(1)
   })
 
-  it('uses constructor descriptors to admit Default-valued Variable links', async () => {
-    const project = createEmptyProject('Default Variables')
+  it('rejects Default and null Variables before constructor linking', async () => {
+    const project = createEmptyProject('Concrete Variables')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'A',
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    project.variables.push(
-      new Variable({
-        id: 'variable_default',
-        name: 'default value',
-        type: 'default',
-        selectedType: 'default',
-        value: null,
-      }),
-      new Variable({
-        id: 'variable_label',
-        name: 'label',
-        type: 'String',
-        selectedType: 'String',
-        value: 'not an integer',
-      }),
-    )
+    project.variables.push(new Variable({
+      id: 'variable_label',
+      name: 'label',
+      type: 'String',
+      selectedType: 'String',
+      value: 'not an integer',
+    }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
@@ -1014,17 +1022,18 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    await createWithVariable('Example.OptionalProtocol', 'variable_default')
-    expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
-      selectedType: 'default',
-      value: { kind: 'variable', id: 'variable_default' },
-    })
-    await expect(
-      createWithVariable('Example.RequiredProtocol', 'variable_default'),
-    ).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Required parameter rounds cannot use a Default-valued Variable.',
-    })
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        value: { name: 'default value', type: 'default', value: null },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        value: { name: 'null value', type: 'Float64', value: null },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
     await expect(
       createWithVariable('Example.RequiredProtocol', 'variable_label'),
     ).rejects.toMatchObject({
@@ -1191,7 +1200,7 @@ describe('DesignCommandService', () => {
       value: expression,
     })
     const protocol = project.net.nodes[0].data.protocols[0]
-    expect(protocol.parameters[0].selectedType).toBe('Float64')
+    expect(protocol.parameters[0].selectedType).toBe('expression:Float64')
 
     await service.execute({
       operations: [{

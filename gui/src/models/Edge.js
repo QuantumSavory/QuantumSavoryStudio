@@ -21,7 +21,11 @@ export default class Edge {
     this.id = id
     this.source = source
     this.target = target
-    this.data = { ...data }
+    this.data = {
+      type: 'connection',
+      protocols: [],
+      ...data,
+    }
     this.isLogic = isLogic
     if (this.isLogic) {
       delete this.data.curvePoints

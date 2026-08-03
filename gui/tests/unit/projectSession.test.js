@@ -1,11 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, watch } from 'vue'
-import { createEmptyProject, encodeStoredProject } from '../../src/utils/projectCodec'
+import { createEmptyProject, encodeProject } from '../../src/utils/projectDocument.js'
 import { useProjectSession } from '../../src/composables/useProjectSession'
 
 function createHarness({
   projects = {},
-  confirmVersionMismatch = vi.fn(() => true),
   destroySimulation = vi.fn(async () => ({ success: true })),
   beforeProjectReplacement = vi.fn(async () => {})
 } = {}) {
@@ -32,14 +31,12 @@ function createHarness({
     openProject: vi.fn((name, data) => records.set(name, data)),
     deleteProject: vi.fn(name => records.delete(name)),
     listProjects: vi.fn(() => [...records.keys()]),
-    getRecentProjectName: vi.fn(() => window.localStorage.getItem('recentProjectName')),
-    setRecentProjectName: vi.fn(name => window.localStorage.setItem('recentProjectName', name)),
-    clearRecentProjectName: vi.fn(() => window.localStorage.removeItem('recentProjectName'))
+    getRecentProjectName: vi.fn(() => window.localStorage.getItem('cqn_v2_recent_project_name')),
+    setRecentProjectName: vi.fn(name => window.localStorage.setItem('cqn_v2_recent_project_name', name)),
+    clearRecentProjectName: vi.fn(() => window.localStorage.removeItem('cqn_v2_recent_project_name'))
   }
   const api = {
-    getDefaultBgNoise: () => ({ type: 'default', parameters: [] }),
-    getPlatformInfo: () => ({ versions: { julia: '1.12', quantumSavory: '0.7', app: '1.6' } }),
-    fetchPlatformInfo: vi.fn(),
+    config: { value: { protocolTypes: {}, bgNoiseOptions: [] } },
     destroySimulation
   }
   const addLog = vi.fn()
@@ -66,7 +63,6 @@ function createHarness({
     hideSlotState: calls.hide,
     syncLegacyProjectData: calls.syncLegacy,
     beforeProjectReplacement,
-    confirmVersionMismatch,
     showError,
     store,
     api
@@ -121,7 +117,7 @@ describe('project session', () => {
     const target = createEmptyProject('B')
     target.annotations.push(nextAnnotation)
     const harness = createHarness({
-      projects: { B: encodeStoredProject(target, { name: 'B' }) },
+      projects: { B: encodeProject(target) },
     })
     harness.projectData.value.annotations.push(oldAnnotation)
     const observedAnnotationIds = []
@@ -147,7 +143,7 @@ describe('project session', () => {
     expect(harness.calls.reset).toHaveBeenCalledOnce()
     expect(harness.calls.closeWindows).toHaveBeenCalledOnce()
     expect(harness.store.setRecentProjectName).toHaveBeenCalledWith('B')
-    expect(window.localStorage.getItem('recentProjectName')).toBe('B')
+    expect(window.localStorage.getItem('cqn_v2_recent_project_name')).toBe('B')
   })
 
   it('awaits collaboration teardown before replacing the active project', async () => {
@@ -168,7 +164,7 @@ describe('project session', () => {
   })
 
   it('rejects a duplicate Save As without changing either project', async () => {
-    const storedTarget = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const storedTarget = encodeProject(createEmptyProject('B'))
     const harness = createHarness({ projects: { B: storedTarget } })
     const activeProject = harness.projectData.value
 
@@ -186,7 +182,7 @@ describe('project session', () => {
   })
 
   it('overwrites a different existing project only when explicitly requested', async () => {
-    const storedTarget = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const storedTarget = encodeProject(createEmptyProject('B'))
     const harness = createHarness({ projects: { B: storedTarget } })
     harness.projectData.value.description = 'Replacement'
 
@@ -195,13 +191,9 @@ describe('project session', () => {
     expect(harness.records.get('B').description).toBe('Replacement')
   })
 
-  it('does not tear down the current session when version confirmation is declined', async () => {
-    const stored = encodeStoredProject(createEmptyProject('B'), {
-      name: 'B',
-      map: { position: [5, 6], zoom: 7 },
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
-    })
-    const harness = createHarness({ projects: { B: stored }, confirmVersionMismatch: vi.fn(() => false) })
+  it('does not tear down the current session for an unsupported project version', async () => {
+    const stored = { ...encodeProject(createEmptyProject('B')), schemaVersion: 1 }
+    const harness = createHarness({ projects: { B: stored } })
     expect(await harness.session.open('B')).toBe(false)
     expect(harness.currentProjectName.value).toBe('A')
     expect(harness.projectData.value.name).toBe('A')
@@ -211,26 +203,25 @@ describe('project session', () => {
   })
 
   it('allows only the newest overlapping open to commit', async () => {
-    let resolveFirstConfirmation
-    const firstConfirmation = new Promise(resolve => { resolveFirstConfirmation = resolve })
-    const projectA = encodeStoredProject(createEmptyProject('Old'), {
-      name: 'Old',
+    let releaseOld
+    const projectA = encodeProject(createEmptyProject('Old'), {
       map: { position: [1, 1], zoom: 2 },
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
     })
-    const projectB = encodeStoredProject(createEmptyProject('Newest'), {
-      name: 'Newest',
-      map: { position: [8, 9], zoom: 10 }
+    const projectB = encodeProject(createEmptyProject('Newest'), {
+      map: { position: [8, 9], zoom: 10 },
     })
     const harness = createHarness({
       projects: { Old: projectA, Newest: projectB },
-      confirmVersionMismatch: vi.fn(() => firstConfirmation)
+      destroySimulation: vi.fn(name => name === 'Old'
+        ? new Promise(resolve => { releaseOld = resolve })
+        : Promise.resolve({ success: true }))
     })
 
     const first = harness.session.open('Old')
+    await vi.waitFor(() => expect(releaseOld).toBeTypeOf('function'))
     const second = harness.session.open('Newest')
     expect(await second).toBe(true)
-    resolveFirstConfirmation(true)
+    releaseOld({ success: true })
     expect(await first).toBe(false)
     expect(harness.currentProjectName.value).toBe('Newest')
     expect(harness.projectData.value.name).toBe('Newest')
@@ -240,7 +231,7 @@ describe('project session', () => {
   it('exposes preparing and committing phases for application loading feedback', async () => {
     let resolveDestroy
     const destroySimulation = vi.fn(() => new Promise(resolve => { resolveDestroy = resolve }))
-    const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const stored = encodeProject(createEmptyProject('B'))
     const harness = createHarness({ projects: { B: stored }, destroySimulation })
 
     const pending = harness.session.open('B')
@@ -260,7 +251,7 @@ describe('project session', () => {
   it('clears a canceled transition phase when Save As supersedes an open', async () => {
     let resolveDestroy
     const destroySimulation = vi.fn(() => new Promise(resolve => { resolveDestroy = resolve }))
-    const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const stored = encodeProject(createEmptyProject('B'))
     const harness = createHarness({ projects: { B: stored }, destroySimulation })
 
     const pendingOpen = harness.session.open('B')
@@ -279,8 +270,8 @@ describe('project session', () => {
   it('clears a canceled transition phase when deleting the active project', async () => {
     let resolveDestroy
     const destroySimulation = vi.fn(() => new Promise(resolve => { resolveDestroy = resolve }))
-    const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
-    const active = encodeStoredProject(createEmptyProject('A'), { name: 'A' })
+    const stored = encodeProject(createEmptyProject('B'))
+    const active = encodeProject(createEmptyProject('A'))
     const harness = createHarness({ projects: { A: active, B: stored }, destroySimulation })
 
     const pendingOpen = harness.session.open('B')
@@ -297,7 +288,7 @@ describe('project session', () => {
   })
 
   it('logs simulation cleanup only when the backend reports success', async () => {
-    const stored = encodeStoredProject(createEmptyProject('B'), { name: 'B' })
+    const stored = encodeProject(createEmptyProject('B'))
     const success = createHarness({ projects: { B: stored } })
     expect(await success.session.open('B')).toBe(true)
     expect(success.addLog).toHaveBeenCalledWith(
@@ -319,7 +310,7 @@ describe('project session', () => {
   })
 
   it('deleting the active project performs complete teardown and commits an empty session', async () => {
-    const harness = createHarness({ projects: { A: encodeStoredProject(createEmptyProject('A'), { name: 'A' }) } })
+    const harness = createHarness({ projects: { A: encodeProject(createEmptyProject('A')) } })
     expect(await harness.session.delete('A', { confirmed: true })).toBe(true)
     expect(harness.currentProjectName.value).toBe('')
     expect(harness.projectData.value).toEqual(createEmptyProject())
@@ -333,19 +324,13 @@ describe('project session', () => {
     expect(harness.store.clearRecentProjectName).toHaveBeenCalledOnce()
   })
 
-  it('does not overwrite an existing project when an imported version is declined', async () => {
-    const original = encodeStoredProject(createEmptyProject('B'), {
-      name: 'B',
-      platformInfo: { versions: { julia: '1.12', quantumSavory: '0.7', app: '1.6' } }
-    })
-    const imported = encodeStoredProject(createEmptyProject('Imported B'), {
-      name: 'Imported B',
-      platformInfo: { versions: { julia: '2.0', quantumSavory: '0.7', app: '1.6' } }
-    })
-    const harness = createHarness({
-      projects: { B: original },
-      confirmVersionMismatch: vi.fn(() => false)
-    })
+  it('does not overwrite an existing project when an imported version is unsupported', async () => {
+    const original = encodeProject(createEmptyProject('B'))
+    const imported = {
+      ...encodeProject(createEmptyProject('Imported B')),
+      schemaVersion: 1,
+    }
+    const harness = createHarness({ projects: { B: original } })
 
     expect(await harness.session.importProject(imported, ' B ')).toBe(false)
     expect(harness.records.get('B')).toEqual(original)

@@ -44,7 +44,7 @@ const DEFAULT_SIMULATION_TIME = 1.0
 const DEFAULT_SIMULATION_TIME_STEP = 0.1
 const HEX_COLOR = /^#[0-9a-f]{6}$/
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
-const TRANSIENT_SLOT_FIELDS = new Set([
+export const TRANSIENT_SLOT_FIELDS = new Set([
   'isLocked',
   'assignment',
   'lastOperationTime',
@@ -900,7 +900,7 @@ function encodeDocument(project, context) {
   const variableById = verifyVariableLinks(variables, [])
   const document = {
     schemaVersion: PROJECT_SCHEMA_VERSION,
-    name: normalizeProjectName(source.name),
+    name: normalizeProjectName(context.name ?? source.name),
     description: string(source.description, '/description'),
     annotations: array(source.annotations, '/annotations').map((annotation, index) => (
       canonicalAnnotation(annotation, pointer('/annotations', index), ids, { strict: false })
@@ -977,7 +977,11 @@ export function createEmptyProject(name = DEFAULT_PROJECT_NAME) {
       nodes: [],
       edges: [],
       protocols: [],
-      physicalConfig: deepClone(DEFAULT_PHYSICAL_CONFIG),
+      physicalConfig: {
+        refractiveIndex: DEFAULT_PHYSICAL_CONFIG.refractiveIndex,
+        lossDbPerKm: DEFAULT_PHYSICAL_CONFIG.lossDbPerKm,
+        nodeTemplate: { slots: [] },
+      },
     },
   }
 }

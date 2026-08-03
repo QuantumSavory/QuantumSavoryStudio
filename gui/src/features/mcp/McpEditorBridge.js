@@ -28,6 +28,7 @@ export class McpEditorBridge {
     getProject,
     getProjectName,
     getSimulationName,
+    getProjectDocumentContext = () => ({}),
     designCommands,
     validateDesign,
     simulationController,
@@ -38,6 +39,7 @@ export class McpEditorBridge {
     this.getProject = getProject
     this.getProjectName = getProjectName
     this.getSimulationName = getSimulationName
+    this.getProjectDocumentContext = getProjectDocumentContext
     this.designCommands = designCommands
     this.validateDesign = validateDesign
     this.simulationController = simulationController
@@ -83,7 +85,10 @@ export class McpEditorBridge {
 
   async bindCurrentProject() {
     await this.unbind({ bestEffort: false })
-    const encoded = await encodeCanonicalDesign(this.getProject())
+    const encoded = await encodeCanonicalDesign(
+      this.getProject(),
+      this.getProjectDocumentContext(),
+    )
     this.generation += 1
     const response = await this.client.bind({
       editor_id: this.editorId,
@@ -209,7 +214,10 @@ export class McpEditorBridge {
         if (payload.type === 'flush') {
           result = { summary: 'Editor drafts flushed.' }
         } else if (payload.type === 'design_get') {
-          const encoded = await encodeCanonicalDesign(this.getProject())
+          const encoded = await encodeCanonicalDesign(
+            this.getProject(),
+            this.getProjectDocumentContext(),
+          )
           result = {
             project_name: this.getProjectName(),
             hash: encoded.hash,
@@ -239,7 +247,10 @@ export class McpEditorBridge {
         } else {
           throw new Error(`Unknown browser command type: ${payload.type}`)
         }
-        const encoded = await encodeCanonicalDesign(this.getProject())
+        const encoded = await encodeCanonicalDesign(
+          this.getProject(),
+          this.getProjectDocumentContext(),
+        )
         const canonicalChanged = encoded.hash !== this.hash
         documentChanged ||= canonicalChanged
         const response = await this.client.commit({
@@ -290,7 +301,10 @@ export class McpEditorBridge {
 
   async publishGuiCommit(summary = 'GUI design change') {
     if (!this.binding) return
-    const encoded = await encodeCanonicalDesign(this.getProject())
+    const encoded = await encodeCanonicalDesign(
+      this.getProject(),
+      this.getProjectDocumentContext(),
+    )
     if (encoded.hash === this.hash) return
     const response = await this.client.commit({
       ...this.bindingIdentity(),

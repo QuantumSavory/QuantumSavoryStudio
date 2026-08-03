@@ -75,10 +75,12 @@ import { isEntangledStateStillValid } from './utils/SlotConnectionUtils.js'
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
-  createEmptyProject,
+  createEmptyProject
+} from './utils/projectDocument.js'
+import {
   toScriptExportPayloadFromSimulationPayload,
   toSimulationPayload
-} from './utils/projectCodec.js'
+} from './utils/simulationPayload.js'
 import { UI_SERVICES_KEY } from './composables/uiServices.js'
 import { registerLegacyBridge, syncLegacyProjectData } from './utils/legacyBridge.js'
 import { generateRepeaterChain } from './utils/repeaterChain.js'
@@ -250,8 +252,18 @@ function resolveConfirmation(result) {
   request?.resolve(result)
 }
 
+function projectDocumentContext() {
+  return {
+    protocolCatalog: () => api.config.value.protocolTypes || {},
+    backgroundCatalog: () => api.config.value.bgNoiseOptions || [],
+  }
+}
+
 // Minimized project data - cleans up project data for API calls
-const minimizedProjectData = computed(() => toSimulationPayload(projectData.value))
+const minimizedProjectData = computed(() => toSimulationPayload(
+  projectData.value,
+  projectDocumentContext(),
+))
 const exportScriptPayload = computed(() => toScriptExportPayloadFromSimulationPayload(
   minimizedProjectData.value,
   projectData.value.simulationConfig
@@ -525,9 +537,10 @@ mcpBridge = new McpEditorBridge({
   getSimulationName: () => api.getScopedSimulationName(
     currentProjectName.value || projectData.value.name
   ),
+  getProjectDocumentContext: projectDocumentContext,
   designCommands,
   validateDesign: project => {
-    const validation = validatePayload(toSimulationPayload(project))
+    const validation = validatePayload(toSimulationPayload(project, projectDocumentContext()))
     return {
       valid: validation.success,
       issues: validation.success
@@ -822,6 +835,7 @@ const {
   addLog,
   importIntoSession: importProjectIntoSession,
   serializeProjectData,
+  deserializeProjectData,
   showAlert
 })
 

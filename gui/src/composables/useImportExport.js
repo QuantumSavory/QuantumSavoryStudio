@@ -1,5 +1,4 @@
 import ProjectStore from '../models/ProjectStore'
-import { normalizeAnnotations } from '../utils/annotationGeometry'
 
 /**
  * useImportExport - Composable for import/export operations
@@ -12,6 +11,7 @@ export function useImportExport({
   addLog,
   importIntoSession,
   serializeProjectData,
+  deserializeProjectData,
   showAlert = (title, message) => window.alert(`${title}: ${message}`)
 }) {
   function importProject() {
@@ -42,55 +42,14 @@ export function useImportExport({
   }
 
   async function validateAndProcessImport(jsonData) {
-    if (typeof jsonData.name !== 'string' || !jsonData.name.trim()) {
-      showAlert('Import failed', 'Invalid project structure: Missing or invalid "name" property.')
-      return
-    }
-    
-    if (!jsonData.net || typeof jsonData.net !== 'object') {
-      showAlert('Import failed', 'Invalid project structure: Missing or invalid "net" property.')
-      return
-    }
-    
-    const net = jsonData.net
-    if (!Array.isArray(net.nodes)) {
-      showAlert('Import failed', 'Invalid project structure: "net.nodes" must be an array.')
-      return
-    }
-    
-    if (!Array.isArray(net.edges)) {
-      showAlert('Import failed', 'Invalid project structure: "net.edges" must be an array.')
-      return
-    }
-    
-    if (!Array.isArray(net.protocols)) {
-      showAlert('Import failed', 'Invalid project structure: "net.protocols" must be an array.')
-      return
-    }
-
-    if (jsonData.variables !== undefined && !Array.isArray(jsonData.variables)) {
-      showAlert('Import failed', 'Invalid project structure: "variables" must be an array when present.')
-      return
-    }
-
-    if (jsonData.description !== undefined && typeof jsonData.description !== 'string') {
-      showAlert('Import failed', 'Invalid project structure: "description" must be a string when present.')
-      return
-    }
-
-    let annotations
     try {
-      annotations = normalizeAnnotations(jsonData.annotations)
+      deserializeProjectData(jsonData)
     } catch (error) {
-      showAlert('Import failed', `Invalid project structure: ${error.message}`)
+      showAlert('Import failed', error.message)
       return
     }
 
-    const normalizedData = {
-      ...jsonData,
-      name: jsonData.name.trim(),
-      annotations,
-    }
+    const normalizedData = structuredClone(jsonData)
     const existingProjects = ProjectStore.listProjects()
     if (existingProjects.includes(normalizedData.name)) {
       importedProjectData.value = normalizedData
@@ -106,8 +65,6 @@ export function useImportExport({
       const projectDataToImport = {
         ...jsonData,
         name: finalName.trim(),
-        description: jsonData.description ?? '',
-        annotations: jsonData.annotations,
       }
       
       const opened = await importIntoSession(projectDataToImport, projectDataToImport.name)

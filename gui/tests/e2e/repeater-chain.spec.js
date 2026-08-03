@@ -19,6 +19,38 @@ const TAG_CATALOG = {
   unsafe_evaluation: false,
 }
 
+const TEMPLATE_BACKGROUND_TYPES = [{
+  type: 'TestBackgroundNoise',
+  doc: 'Background used to verify deep template cloning.',
+  parameters: [{ field: 'strength', type: 'Float64', doc: 'Noise strength.' }],
+}]
+
+const TEMPLATE_PROTOCOL_TYPES = [{
+  type: 'TestNodeProtocol',
+  doc: 'Node protocol used to verify deep template cloning.',
+  group: 'node',
+  virtual: false,
+  parameters: [{ field: 'rounds', type: 'Int64', doc: 'Round count.' }],
+}, {
+  type: 'TestEdgeProtocol',
+  doc: 'Edge protocol used to verify deep template cloning.',
+  group: 'edge',
+  virtual: false,
+  parameters: [{ field: 'attempts', type: 'Int64', doc: 'Attempt count.' }],
+}, ...['StartNodeProtocol', 'EndNodeProtocol', 'TemplateNodeProtocol'].map(type => ({
+  type,
+  doc: 'Node protocol retained while automation protocols are replaced.',
+  group: 'node',
+  virtual: false,
+  parameters: [{ field: 'marker', type: 'String', doc: 'Test marker.' }],
+})), {
+  type: 'TemplateEdgeProtocol',
+  doc: 'Edge protocol retained while automation protocols are replaced.',
+  group: 'edge',
+  virtual: false,
+  parameters: [{ field: 'marker', type: 'String', doc: 'Test marker.' }],
+}]
+
 const REPEATER_AUTOMATION_PROTOCOL_TYPES = [{
   type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
   doc: 'Generate entanglement between two nodes.',
@@ -74,7 +106,7 @@ async function mockBackendMetadata(page, {
   await page.route('**/background_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { background_types: [] },
+    json: { background_types: TEMPLATE_BACKGROUND_TYPES },
   }))
   await page.route('**/states_zoo_types', route => route.fulfill({
     status: 200,
@@ -89,7 +121,7 @@ async function mockBackendMetadata(page, {
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { protocol_types: protocolTypes },
+    json: { protocol_types: [...TEMPLATE_PROTOCOL_TYPES, ...protocolTypes] },
   }))
   await page.route('**/tag_types', route => {
     tagCatalogState.requests += 1
@@ -231,24 +263,40 @@ test.describe('Layout Tools repeater chain generator', () => {
       const templateNode = projectData.net.nodes.find(node => node.name === 'Node 3')
       const templateEdge = projectData.net.edges[0]
 
-      templateNode.data.customConfiguration = { nested: { value: 42 } }
       templateNode.data.slots.push({
         id: 'slot_template',
         type: 'Qubit',
-        backgroundNoise: { type: 'custom', parameters: [{ value: 0.25 }] },
+        backgroundNoise: {
+          type: 'TestBackgroundNoise',
+          parameters: [{
+            field: 'strength',
+            type: 'Float64',
+            selectedType: 'Float64',
+            value: 0.25,
+          }],
+        },
         assignment: false,
         isLocked: false,
       })
       templateNode.data.protocols.push({
         id: 'protocol_node_template',
         type: 'TestNodeProtocol',
-        parameters: [{ name: 'rounds', type: 'Int64', value: 7 }],
+        parameters: [{
+          name: 'rounds',
+          type: 'Int64',
+          selectedType: 'Int64',
+          value: 7,
+        }],
       })
-      templateEdge.data.customConfiguration = { fidelity: 0.91 }
       templateEdge.data.protocols.push({
         id: 'protocol_edge_template',
         type: 'TestEdgeProtocol',
-        parameters: [{ name: 'attempts', type: 'Int64', value: 5 }],
+        parameters: [{
+          name: 'attempts',
+          type: 'Int64',
+          selectedType: 'Int64',
+          value: 5,
+        }],
       })
 
       return { nodeId: templateNode.id, edgeId: templateEdge.id }
@@ -296,18 +344,17 @@ test.describe('Layout Tools repeater chain generator', () => {
         edgeIds: edges.map(edge => edge.id),
         edgeProtocolIds: chainEdges.map(edge => edge.data.protocols[0].id),
         nodeConfigurationCopied: repeaters.every(node =>
-          node.data.customConfiguration.nested.value === 42
-          && node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
+          node.data.slots[0].backgroundNoise.parameters[0].value === 0.25
           && node.data.protocols[0].parameters[0].value === 7
         ),
-        edgeConfigurationCopied: chainEdges.every(edge =>
-          edge.data.customConfiguration.fidelity === 0.91
-          && edge.data.protocols[0].parameters[0].value === 5
-        ),
+        edgeConfigurationCopied: chainEdges.every(edge => (
+          edge.data.protocols[0].parameters[0].value === 5
+        )),
         independentNodeData: repeaters[0].data !== repeaters[1].data
-          && repeaters[0].data.customConfiguration !== repeaters[1].data.customConfiguration,
+          && repeaters[0].data.slots[0] !== repeaters[1].data.slots[0]
+          && repeaters[0].data.protocols[0] !== repeaters[1].data.protocols[0],
         independentEdgeData: chainEdges[0].data !== chainEdges[1].data
-          && chainEdges[0].data.customConfiguration !== chainEdges[1].data.customConfiguration,
+          && chainEdges[0].data.protocols[0] !== chainEdges[1].data.protocols[0],
       }
     }, { templateIds })
 
@@ -430,7 +477,12 @@ test.describe('Layout Tools repeater chain generator', () => {
       startNode.data.protocols.push({
         id: 'protocol_start_unrelated',
         type: 'StartNodeProtocol',
-        parameters: [{ name: 'marker', type: 'String', value: 'keep-start' }],
+        parameters: [{
+          name: 'marker',
+          type: 'String',
+          selectedType: 'String',
+          value: 'keep-start',
+        }],
       })
       startNode.data.protocols.push(tracker('protocol_start_tracker_first'))
       startNode.data.protocols.push(tracker('protocol_start_tracker_duplicate'))
@@ -438,7 +490,12 @@ test.describe('Layout Tools repeater chain generator', () => {
       endNode.data.protocols.push({
         id: 'protocol_end_unrelated',
         type: 'EndNodeProtocol',
-        parameters: [{ name: 'marker', type: 'String', value: 'keep-end' }],
+        parameters: [{
+          name: 'marker',
+          type: 'String',
+          selectedType: 'String',
+          value: 'keep-end',
+        }],
       })
       endNode.data.protocols.push(tracker('protocol_end_tracker_first'))
       endNode.data.protocols.push(tracker('protocol_end_tracker_duplicate'))
@@ -446,7 +503,12 @@ test.describe('Layout Tools repeater chain generator', () => {
       templateNode.data.protocols.push({
         id: 'protocol_template_unrelated',
         type: 'TemplateNodeProtocol',
-        parameters: [{ name: 'marker', type: 'String', value: 'keep-repeater' }],
+        parameters: [{
+          name: 'marker',
+          type: 'String',
+          selectedType: 'String',
+          value: 'keep-repeater',
+        }],
       })
       templateNode.data.protocols.push(swapper('protocol_swapper_first', 'minimum', 'first'))
       templateNode.data.protocols.push(swapper('protocol_swapper_duplicate', 'maximum', 'duplicate'))
@@ -456,17 +518,32 @@ test.describe('Layout Tools repeater chain generator', () => {
       templateEdge.data.protocols.push({
         id: 'protocol_edge_unrelated',
         type: 'TemplateEdgeProtocol',
-        parameters: [{ name: 'marker', type: 'String', value: 'keep-edge' }],
+        parameters: [{
+          name: 'marker',
+          type: 'String',
+          selectedType: 'String',
+          value: 'keep-edge',
+        }],
       })
       templateEdge.data.protocols.push({
         id: 'protocol_entangler_first',
         type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-        parameters: [{ name: 'success_prob', type: 'Float64', value: 0.35 }],
+        parameters: [{
+          name: 'success_prob',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 0.35,
+        }],
       })
       templateEdge.data.protocols.push({
         id: 'protocol_entangler_duplicate',
         type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-        parameters: [{ name: 'success_prob', type: 'Float64', value: 0.95 }],
+        parameters: [{
+          name: 'success_prob',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 0.95,
+        }],
       })
 
       return {
@@ -718,7 +795,8 @@ test.describe('Layout Tools repeater chain generator', () => {
         type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
         parameters: [{
           name: 'tag',
-          type: 'Any',
+          type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
+          selectedType: 'DataType',
           value: savedTag,
         }],
       })
@@ -766,7 +844,7 @@ test.describe('Layout Tools repeater chain generator', () => {
     expect(generatedTags).toHaveLength(3)
     expect(generatedTags).toEqual(Array.from({ length: 3 }, () => ({
       name: 'tag',
-      type: 'Any',
+      type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
       selectedType: 'DataType',
       value: TAG_ALPHA,
     })))

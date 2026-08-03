@@ -11,10 +11,10 @@ import Variable, {
 } from '../../models/Variable.js'
 import { generateUUid, setEdgeCorrectNodeOrder } from '../../utils/Utils.js'
 import {
-  decodeDesignDocument,
-  encodeDesignDocument,
+  decodeProject,
+  encodeProject,
   TRANSIENT_SLOT_FIELDS,
-} from '../../utils/projectCodec.js'
+} from '../../utils/projectDocument.js'
 import {
   INVALID_EDGE_GEOMETRY_REASON,
   assertEdgeGeometries,
@@ -131,6 +131,15 @@ function byId(collection, id, label) {
 
 function replaceArray(target, source) {
   target.splice(0, target.length, ...source)
+}
+
+function retainLivePresentation(target, source) {
+  if (Array.isArray(target)) {
+    target.forEach((value, index) => retainLivePresentation(value, source?.[index]))
+  } else if (record(target) && record(source)) {
+    if (typeof source.latex === 'string') target.latex = source.latex
+    Object.keys(target).forEach(key => retainLivePresentation(target[key], source[key]))
+  }
 }
 
 function syncPlainObject(target, source, retainedFields = new Set()) {
@@ -395,6 +404,13 @@ export class DesignCommandService {
     this.installHandlers()
   }
 
+  projectDocumentContext() {
+    return {
+      protocolCatalog: this.protocolCatalog,
+      backgroundCatalog: this.backgroundCatalog,
+    }
+  }
+
   register(kind, handler, { affectsSimulation = true } = {}) {
     if (this.handlers.has(kind)) throw new Error(`Duplicate design command handler: ${kind}`)
     this.handlers.set(kind, { handler, affectsSimulation })
@@ -499,11 +515,11 @@ export class DesignCommandService {
     // fails, and generators may destructively rebuild topology. The candidate
     // isolates those partial changes; the second codec pass applies shared
     // structural normalization, and reconciliation is the atomic commit boundary.
-    const candidate = decodeDesignDocument(encodeDesignDocument(live), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const documentContext = this.projectDocumentContext()
+    const candidate = decodeProject(
+      encodeProject(live, documentContext),
+      documentContext,
+    ).project
     const context = {
       origin,
       aliases: new Map(),
@@ -529,11 +545,11 @@ export class DesignCommandService {
     } catch (error) {
       throw invalidEdgeGeometry(error)
     }
-    const validatedCandidate = decodeDesignDocument(encodeDesignDocument(candidate), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const validatedCandidate = decodeProject(
+      encodeProject(candidate, documentContext),
+      documentContext,
+    ).project
+    retainLivePresentation(validatedCandidate, candidate)
     reconcileDesignDocument(live, validatedCandidate)
     this.clearDeletedSelection(context.deletedIds)
     this.markDirty()
@@ -1574,8 +1590,11 @@ export class DesignCommandService {
         candidate.inputKind === 'numeric-expression'
         && candidate.wireType === value.type
       ))
-    } else if (value.value == null || value.value === '' || value.value === 'default') {
-      option = options[0]
+    } else if (
+      !Object.hasOwn(value, 'type')
+      && !Object.hasOwn(value, 'value')
+    ) {
+      option = options.find(candidate => candidate.id === 'Float64')
     } else {
       option = options.find(candidate => candidate.id === value.type)
         || inferParameterInputOption(options, value)
@@ -1584,7 +1603,7 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', 'Variable input type is unsupported.')
     }
 
-    const semanticType = option.wireType || 'default'
+    const semanticType = option.wireType
     if (
       Object.hasOwn(value, 'type')
       && value.type !== semanticType
@@ -1605,10 +1624,10 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
     const option = this.effectiveVariableDescriptor(value)
-    const type = option.wireType || 'default'
+    const type = option.wireType
     const variableValue = await this.requireTypedValue(
       option,
-      Object.hasOwn(value, 'value') ? value.value : null,
+      Object.hasOwn(value, 'value') ? value.value : 0,
       `Variable ${value.name || id}`,
       { placement: 'variable' },
     )
@@ -1663,7 +1682,7 @@ export class DesignCommandService {
           : {}),
       }
       const option = this.effectiveVariableDescriptor(proposed)
-      variable.type = option.wireType || 'default'
+      variable.type = option.wireType
       variable.selectedType = option.id
       variable.value = await this.requireTypedValue(
         option,

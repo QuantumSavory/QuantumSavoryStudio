@@ -3,30 +3,10 @@ import ProjectStore from '../models/ProjectStore'
 import { api as sharedApi } from '../utils/ApiConnector'
 import {
   createEmptyProject,
-  decodeStoredProject,
-  encodeStoredProject,
+  decodeProject,
+  encodeProject,
   normalizeProjectName
-} from '../utils/projectCodec'
-
-function majorVersion(version) {
-  return typeof version === 'string' ? version.split('.')[0] : null
-}
-
-export function compareProjectVersions(projectVersions, currentVersions) {
-  if (!projectVersions || !currentVersions) return null
-  const labels = [
-    ['Julia', 'julia'],
-    ['QuantumSavory', 'quantumSavory'],
-    ['App', 'app']
-  ]
-  const mismatches = labels.flatMap(([label, key]) => {
-    const saved = projectVersions[key]
-    const current = currentVersions[key]
-    if (!saved || !current || majorVersion(saved) === majorVersion(current)) return []
-    return [`${label}: ${saved} vs ${current}`]
-  })
-  return mismatches.length ? mismatches : null
-}
+} from '../utils/projectDocument.js'
 
 export function useProjectSession({
   projectData,
@@ -50,7 +30,6 @@ export function useProjectSession({
   hideSlotState = () => {},
   syncLegacyProjectData = () => {},
   beforeProjectReplacement = () => {},
-  confirmVersionMismatch = message => window.confirm(message),
   confirmDelete = message => window.confirm(message),
   showError = message => window.alert(message),
   store = ProjectStore,
@@ -75,37 +54,28 @@ export function useProjectSession({
     return name
   }
 
-  function codecContext(storageName) {
+  function codecContext() {
     return {
-      storageName,
-      defaultBackgroundNoise: () => api.getDefaultBgNoise(),
+      protocolCatalog: () => api.config?.value?.protocolTypes || {},
+      backgroundCatalog: () => api.config?.value?.bgNoiseOptions || [],
       defaultMapCenter,
       defaultMapZoom,
-      minimumTime: 1.0,
-      minimumTimeStep
     }
   }
 
-  function currentPlatformInfo() {
-    const platformInfo = api.getPlatformInfo()
-    return platformInfo && typeof platformInfo === 'object' ? platformInfo : null
-  }
-
   function serializeProjectData(name = currentProjectName.value) {
-    return encodeStoredProject(projectData.value, {
+    return encodeProject(projectData.value, {
+      ...codecContext(),
       name,
       map: {
         position: [...mapCenter.value],
         zoom: mapZoom.value
-      },
-      platformInfo: currentPlatformInfo(),
-      defaultMapCenter,
-      defaultMapZoom
+      }
     })
   }
 
-  function deserializeProjectData(data, storageName = data?.name) {
-    return decodeStoredProject(data, codecContext(storageName)).project
+  function deserializeProjectData(data) {
+    return decodeProject(data, codecContext()).project
   }
 
   function stopSessionActivity() {
@@ -116,43 +86,24 @@ export function useProjectSession({
     hideSlotState?.()
   }
 
-  async function ensurePlatformInfo() {
-    if (!currentPlatformInfo()) {
-      await api.fetchPlatformInfo()
-    }
-    return currentPlatformInfo()
-  }
-
-  async function preflightProject(raw, name) {
-    const platformInfo = await ensurePlatformInfo()
-    const decoded = decodeStoredProject(raw, codecContext(name))
-    const mismatch = compareProjectVersions(decoded.platformInfo?.versions, platformInfo?.versions)
-    if (mismatch) {
-      const accepted = await confirmVersionMismatch(
-        `This project (${name}) was saved with a different version of the software, which could affect simulation behavior.\n\n${mismatch.join('\n')}\n\nDo you want to proceed anyway?`
-      )
-      if (!accepted) return null
-    }
-    return { ...decoded, platformInfo }
+  async function preflightProject(raw) {
+    return decodeProject(raw, codecContext())
   }
 
   async function preflightStoredProject(name) {
     const raw = store.loadProject(name)
     if (!raw) throw new Error(`Failed to load project: ${name}`)
-    return preflightProject(raw, name)
+    return preflightProject(raw)
   }
 
   async function commitCandidate({ name, decoded, demo, persist, generation }) {
     if (generation !== transitionGeneration.value) return false
 
     if (persist) {
-      const encoded = encodeStoredProject(decoded.project, {
+      const encoded = encodeProject(decoded.project, {
+        ...codecContext(),
         name,
         map: decoded.map,
-        uiGlobal: decoded.uiGlobal,
-        platformInfo: decoded.platformInfo || currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
       })
       store.openProject(name, encoded)
       store.setRecentProjectName(name)
@@ -224,11 +175,7 @@ export function useProjectSession({
     transitionPhase.value = 'preparing'
     try {
       const name = canonicalName(demoData?.name || 'Demo Project')
-      const platformInfo = await ensurePlatformInfo()
-      const decoded = decodeStoredProject(
-        { ...demoData, platformInfo },
-        codecContext(name)
-      )
+      const decoded = decodeProject(demoData, codecContext())
       if (generation !== transitionGeneration.value) return false
 
       transitionPhase.value = 'committing'
@@ -265,12 +212,10 @@ export function useProjectSession({
       if (replacementBarrier) await replacementBarrier
       if (generation !== transitionGeneration.value) return false
       const project = createEmptyProject(name)
-      const encoded = encodeStoredProject(project, {
+      const encoded = encodeProject(project, {
+        ...codecContext(),
         name,
         map: { position: [...defaultMapCenter], zoom: defaultMapZoom },
-        platformInfo: currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
       })
       store.saveProject(name, encoded)
       store.setRecentProjectName(name)
@@ -317,12 +262,10 @@ export function useProjectSession({
       cancelTransition()
       const replacementBarrier = projectReplacementBarrier()
       if (replacementBarrier) await replacementBarrier
-      const encoded = encodeStoredProject(projectData.value, {
+      const encoded = encodeProject(projectData.value, {
+        ...codecContext(),
         name,
         map: { position: [...mapCenter.value], zoom: mapZoom.value },
-        platformInfo: currentPlatformInfo(),
-        defaultMapCenter,
-        defaultMapZoom
       })
       store.saveProject(name, encoded)
       store.setRecentProjectName(name)
@@ -375,7 +318,7 @@ export function useProjectSession({
     const generation = ++transitionGeneration.value
     transitionPhase.value = 'preparing'
     try {
-      const candidate = await preflightProject({ ...data, name }, name)
+      const candidate = await preflightProject({ ...data, name })
       if (!candidate || generation !== transitionGeneration.value) return false
 
       transitionPhase.value = 'committing'

@@ -264,7 +264,6 @@ test.describe('Default-first numeric expression inputs', () => {
     expect(await serializedParameter(page)).toEqual({
       name: 'delay_scale',
       type: 'Float64',
-      selectedType: 'expression:Float64',
       value: { kind: 'numeric_expression', source: 'delay / 4' },
     })
     expect(await serializedParameter(page, true)).toEqual({
@@ -281,7 +280,6 @@ test.describe('Default-first numeric expression inputs', () => {
     expect(stored.net.edges[0].data.protocols[0].parameters[0]).toEqual({
       name: 'delay_scale',
       type: 'Float64',
-      selectedType: 'expression:Float64',
       value: { kind: 'numeric_expression', source: 'delay / 4' },
     })
 

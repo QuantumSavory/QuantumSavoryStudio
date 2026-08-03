@@ -2276,6 +2276,72 @@
       @test result["name"] == "PR15"
   end
 
+  @testset "Canonical Simulation Payload Admission" begin
+    failure(payload) = try
+      WebQuantumSavory.validate_payload(payload)
+      nothing
+    catch error
+      error
+    end
+
+    @test WebQuantumSavory.validate_payload(deepcopy(test_payload))["success"]
+    malformed = Dict{String,Any}[]
+
+    extra_root = deepcopy(test_payload)
+    extra_root["description"] = "project-only"
+    push!(malformed, extra_root)
+
+    missing_variables = deepcopy(test_payload)
+    delete!(missing_variables, "variables")
+    push!(malformed, missing_variables)
+
+    string_background = deepcopy(test_payload)
+    string_background["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = "default"
+    push!(malformed, string_background)
+
+    parameter_extra = deepcopy(test_payload)
+    parameter_extra["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["doc"] = "forged"
+    push!(malformed, parameter_extra)
+
+    coerced_integer = deepcopy(test_payload)
+    coerced_integer["net"]["nodes"][1]["data"]["protocols"][2]["parameters"][2]["value"] = "2"
+    push!(malformed, coerced_integer)
+
+    forged_wire_type = deepcopy(test_payload)
+    forged_wire_type["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["type"] = "String"
+    forged_wire_type["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["value"] = "0.15"
+    push!(malformed, forged_wire_type)
+
+    duplicate_id = deepcopy(test_payload)
+    duplicate_id["net"]["nodes"][1]["data"]["slots"][1]["id"] = "node1"
+    push!(malformed, duplicate_id)
+
+    for value in (nothing, 9_007_199_254_740_992, Inf)
+      invalid_variable = deepcopy(test_payload)
+      push!(invalid_variable["variables"], Dict(
+        "id" => "variable-invalid",
+        "name" => "invalid",
+        "type" => value isa Integer ? "Int64" : "Float64",
+        "value" => value,
+      ))
+      push!(malformed, invalid_variable)
+    end
+
+    malformed_reference = deepcopy(test_payload)
+    malformed_reference["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["value"] = Dict(
+      "kind" => "variable",
+      "id" => "missing-variable",
+      "preview" => 0.15,
+    )
+    push!(malformed, malformed_reference)
+
+    for payload in malformed
+      error = failure(payload)
+      @test error isa WebQuantumSavory.APIError
+      @test error.status_code == 400
+    end
+  end
+
   @testset "Payload Validation" begin
       result = WebQuantumSavory.validate_payload(test_payload)
       @test result["success"] == true

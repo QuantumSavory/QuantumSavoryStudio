@@ -581,6 +581,17 @@ function _require_catalog_parameters(
   ))
 end
 
+function _catalog_parameter_wire_types(metadata)
+  semantics = _named_tag_parameter_semantics(metadata.type)
+  semantics === nothing || return Set(
+    semantics.nullable ? ("DataType", "Nothing") : ("DataType",),
+  )
+  parsed_type = only(parse_pt_type([metadata])).type
+  types = parsed_type isa AbstractVector ? string.(parsed_type) : [string(parsed_type)]
+  "Function" in types && push!(types, "Lambda")
+  return Set(types)
+end
+
 """
 Validate catalog placement and constructor values before construction.
 
@@ -680,6 +691,15 @@ function _validate_catalog_constructors(
 
     for parameter in parameters
       parameter_name = parameter.name
+      selected_type = _required_nonempty_string(
+        parameter.definition,
+        "type",
+        "$location parameter '$parameter_name'",
+      )
+      metadata = get(_catalog_parameter_metadata(catalog_entry), parameter_name, nothing)
+      selected_type in _catalog_parameter_wire_types(metadata) || throw(validation_error(
+        "$location parameter '$parameter_name' type '$selected_type' is not a catalog wire type",
+      ))
       parameter.produces_value || continue
       value = parameter.value
       context = "$location parameter '$parameter_name'"
@@ -1054,8 +1074,287 @@ function extract_payload(payload = nothing, raw_payload = nothing)
   throw(validation_error("No valid JSON payload found", Dict{String, Any}("raw_payload_type" => string(typeof(raw_payload)))))
 end
 
+const _MAX_SAFE_JSON_INTEGER = 9_007_199_254_740_991
+
+function _contract_number(value, context; integer=false)
+  value isa Real && !(value isa Bool) && isfinite(value) ||
+    throw(validation_error("$context must be a finite number"))
+  integer && !isinteger(value) &&
+    throw(validation_error("$context must be an integer"))
+  isinteger(value) && abs(value) > _MAX_SAFE_JSON_INTEGER &&
+    throw(validation_error("$context must be a JavaScript-safe integer"))
+  return value
+end
+
+function _opaque_json_value(value, context)
+  if value === nothing || value isa AbstractString || value isa Bool
+    return value
+  elseif value isa Real
+    _contract_number(value, context)
+  elseif value isa AbstractVector
+    foreach(enumerate(value)) do (index, item)
+      _opaque_json_value(item, "$context[$index]")
+    end
+  elseif _is_object_like(value)
+    foreach(pairs(value)) do (key, item)
+      _opaque_json_value(item, "$context.$key")
+    end
+  else
+    throw(validation_error("$context must be a finite JSON value"))
+  end
+  return value
+end
+
+function _contract_typed_value(value, raw_type_name::AbstractString, context; variable=false)
+  type_name = String(raw_type_name)
+  if _is_object_like(value)
+    kind = get(value, "kind", nothing)
+    if !variable && kind == "variable"
+      _require_exact_object_fields(value, ("kind", "id"); context)
+      _required_nonempty_string(value, "id", context)
+      return
+    elseif kind == NUMERIC_EXPRESSION_KIND
+      type_name in NUMERIC_EXPRESSION_TARGETS || throw(validation_error(
+        "$context numeric expression requires Float64 or Int64",
+      ))
+      _parse_numeric_expression(value; context)
+      return
+    elseif kind == "states_zoo"
+      _is_symbolic_wire_type(type_name) || throw(validation_error(
+        "$context States Zoo value requires a Symbolic type",
+      ))
+      _require_exact_object_fields(
+        value,
+        ("kind", "state_type", "parameters");
+        context,
+      )
+      _required_nonempty_string(value, "state_type", context)
+      parameters = value["parameters"]
+      _is_object_like(parameters) || throw(validation_error(
+        "$context States Zoo parameters must be an object",
+      ))
+      foreach(pairs(parameters)) do (name, parameter)
+        _contract_number(parameter, "$context.parameters.$name")
+      end
+      return
+    elseif type_name == "Any"
+      _opaque_json_value(value, context)
+      return
+    end
+    throw(validation_error("$context contains an unsupported tagged value"))
+  end
+
+  value === nothing && throw(validation_error("$context must not be null"))
+  if type_name in ("Int", "Int64")
+    _contract_number(value, context; integer=true)
+  elseif type_name == "Float64"
+    _contract_number(value, context)
+  elseif type_name == "Bool"
+    value isa Bool || throw(validation_error("$context must be a boolean"))
+  elseif type_name in ("String", "DataType", "Function", "Lambda") ||
+      _is_symbolic_wire_type(type_name)
+    value isa AbstractString && !isempty(strip(value)) ||
+      throw(validation_error("$context must be a nonblank string"))
+    lowercase(strip(value)) == "default" && type_name != "String" &&
+      throw(validation_error("$context must not use the default sentinel"))
+  elseif type_name == "Nothing"
+    value == "nothing" || throw(validation_error(
+      "$context must use the 'nothing' sentinel",
+    ))
+  elseif type_name in ("Wildcard", "QuantumSavory.Wildcard")
+    value == "Wildcard" || throw(validation_error(
+      "$context must use the 'Wildcard' sentinel",
+    ))
+  elseif type_name in ("Vector{Int64}", "Vector{Float64}")
+    value isa AbstractVector || throw(validation_error("$context must be an array"))
+    foreach(enumerate(value)) do (index, item)
+      _contract_number(item, "$context[$index]"; integer=type_name == "Vector{Int64}")
+    end
+  elseif type_name == "Any"
+    _opaque_json_value(value, context)
+  else
+    throw(validation_error("$context uses unsupported wire type '$type_name'"))
+  end
+end
+
+_is_symbolic_wire_type(type_name) = type_name == "Symbolic" ||
+  startswith(type_name, "SymbolicUtils.Symbolic{") ||
+  startswith(type_name, "QuantumSymbolics.SymQObj{")
+
+function _admit_assignment_array(parameters, context)
+  parameters isa AbstractVector || throw(validation_error("$context must be an array"))
+  names = Set{String}()
+  for (index, parameter) in enumerate(parameters)
+    item_context = "$context[$index]"
+    _require_exact_object_fields(parameter, ("name", "type", "value"); context=item_context)
+    name = _required_nonempty_string(parameter, "name", item_context)
+    name in names && throw(validation_error("$context contains duplicate assignment '$name'"))
+    push!(names, name)
+    type_name = _required_nonempty_string(parameter, "type", item_context)
+    _contract_typed_value(parameter["value"], type_name, "$item_context.value")
+  end
+end
+
+function _admit_protocol(protocol, context, ids)
+  _require_exact_object_fields(protocol, ("id", "type", "parameters"); context)
+  id = _required_nonempty_string(protocol, "id", context)
+  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+  push!(ids, id)
+  _required_nonempty_string(protocol, "type", context)
+  _admit_assignment_array(protocol["parameters"], "$context.parameters")
+end
+
+function _admit_slot(slot, context, ids)
+  _require_exact_object_fields(slot, ("id", "type", "backgroundNoise"); context)
+  id = _required_nonempty_string(slot, "id", context)
+  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+  push!(ids, id)
+  _required_nonempty_string(slot, "type", context)
+  noise = slot["backgroundNoise"]
+  _require_exact_object_fields(noise, ("type", "parameters"); context="$context.backgroundNoise")
+  noise_type = _required_nonempty_string(noise, "type", "$context.backgroundNoise")
+  _admit_assignment_array(noise["parameters"], "$context.backgroundNoise.parameters")
+  noise_type == "default" && !isempty(noise["parameters"]) && throw(validation_error(
+    "$context default background noise must have no parameters",
+  ))
+end
+
+function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapshot())
+  _require_exact_object_fields(
+    payload,
+    ("name", "simulationConfig", "variables", "net");
+    context="Simulation payload",
+  )
+  _required_nonempty_string(payload, "name", "Simulation payload")
+  config = payload["simulationConfig"]
+  _require_exact_object_fields(
+    config,
+    ("qubitRepresentation", "qumodeRepresentation"),
+    ("time", "timeStep");
+    context="Simulation configuration",
+  )
+  haskey(config, "time") == haskey(config, "timeStep") || throw(validation_error(
+    "Simulation configuration time and timeStep must be supplied together",
+  ))
+  _required_nonempty_string(config, "qubitRepresentation", "Simulation configuration")
+  _required_nonempty_string(config, "qumodeRepresentation", "Simulation configuration")
+  for field in ("time", "timeStep")
+    haskey(config, field) || continue
+    _contract_number(config[field], "Simulation configuration.$field")
+    config[field] > 0 || throw(validation_error("Simulation configuration.$field must be positive"))
+  end
+
+  ids = Set{String}()
+  names = Set{String}()
+  variable_by_id = Dict{String,Any}()
+  variables = payload["variables"]
+  variables isa AbstractVector || throw(validation_error("Variables must be an array"))
+  for (index, variable) in enumerate(variables)
+    context = "Variable $index"
+    _require_exact_object_fields(
+      variable,
+      ("id", "name", "type", "value"),
+      ("statesZooTraceSourceId",);
+      context,
+    )
+    id = _required_nonempty_string(variable, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id)
+    variable_by_id[id] = variable
+    name = _required_nonempty_string(variable, "name", context)
+    name in names && throw(validation_error("Duplicate variable name: '$name'"))
+    push!(names, name)
+    type_name = _required_nonempty_string(variable, "type", context)
+    if lowercase(type_name) == "default" || type_name in ("Any", "DataType")
+      throw(validation_error("$context requires a concrete supported type"))
+    end
+    _contract_typed_value(variable["value"], type_name, "$context.value"; variable=true)
+    haskey(variable, "statesZooTraceSourceId") &&
+      _required_nonempty_string(variable, "statesZooTraceSourceId", context)
+  end
+  for (id, variable) in variable_by_id
+    haskey(variable, "statesZooTraceSourceId") || continue
+    source_id = String(variable["statesZooTraceSourceId"])
+    source = get(variable_by_id, source_id, nothing)
+    valid = source !== nothing && id == "$(source_id)_tr" &&
+      _is_object_like(source["value"]) &&
+      get(source["value"], "kind", nothing) == "states_zoo"
+    valid ||
+      throw(validation_error("Variable '$id' has invalid States Zoo trace linkage"))
+  end
+
+  net = payload["net"]
+  _require_exact_object_fields(net, ("nodes", "edges", "protocols"); context="Network")
+  nodes, edges, protocols = (net[field] for field in ("nodes", "edges", "protocols"))
+  all(value -> value isa AbstractVector, (nodes, edges, protocols)) ||
+    throw(validation_error("Network collections must be arrays"))
+  node_ids = Set{String}()
+  for (index, node) in enumerate(nodes)
+    context = "Node $index"
+    _require_exact_object_fields(node, ("id", "name", "position", "data"); context)
+    id = _required_nonempty_string(node, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id); push!(node_ids, id)
+    _required_nonempty_string(node, "name", context)
+    position = node["position"]
+    position isa AbstractVector && length(position) == 2 ||
+      throw(validation_error("$context position must contain two numbers"))
+    foreach(enumerate(position)) do (coordinate, value)
+      _contract_number(value, "$context.position[$coordinate]")
+    end
+    data = node["data"]
+    _require_exact_object_fields(data, ("type", "slots", "protocols"); context="$context data")
+    _required_nonempty_string(data, "type", "$context data")
+    data["slots"] isa AbstractVector || throw(validation_error("$context slots must be an array"))
+    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    foreach(enumerate(data["slots"])) do (slot_index, slot)
+      _admit_slot(slot, "$context slot $slot_index", ids)
+      slot_type = String(slot["type"])
+      _resolve_slot_catalog_entry(slot_type, catalogs) === nothing && throw(validation_error(
+        "$context slot $slot_index has unknown slot type '$slot_type'",
+      ))
+    end
+    foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
+      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+    end
+  end
+  for (index, edge) in enumerate(edges)
+    context = "Edge $index"
+    _require_exact_object_fields(edge, ("id", "source", "target", "isLogic", "data"); context)
+    id = _required_nonempty_string(edge, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id)
+    source = _required_nonempty_string(edge, "source", context)
+    target = _required_nonempty_string(edge, "target", context)
+    source in node_ids && target in node_ids || throw(validation_error(
+      "$context endpoints must reference existing nodes",
+    ))
+    source == target && throw(validation_error("$context endpoints must be distinct"))
+    edge["isLogic"] isa Bool || throw(validation_error("$context isLogic must be a boolean"))
+    data = edge["data"]
+    fields = edge["isLogic"] ? ("type", "protocols") : (
+      "type", "protocols", "distanceMeters", "propagationDelaySeconds",
+      "refractiveIndex", "lossDbPerKm", "transmissivity",
+    )
+    _require_exact_object_fields(data, fields; context="$context data")
+    _required_nonempty_string(data, "type", "$context data")
+    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
+      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+    end
+    edge["isLogic"] || foreach(fields[3:end]) do field
+      _contract_number(data[field], "$context data.$field")
+    end
+  end
+  foreach(enumerate(protocols)) do (index, protocol)
+    _admit_protocol(protocol, "Floating protocol $index", ids)
+  end
+  return payload
+end
+
 function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
   try
+    _admit_simulation_payload(payload; catalogs)
     # Validate top-level structure
     if !haskey(payload, "name")
       throw(validation_error("Missing required field: 'name' must be present"))

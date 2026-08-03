@@ -72,6 +72,16 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   }],
 }
 
+const TRACE_CONSUMER_PROTOCOL_TYPE = {
+  type: 'TestProtocols.TraceConsumer',
+  doc: 'Floating protocol used to exercise generated trace references.',
+  parameters: [{
+    field: 'trace',
+    type: 'Float64',
+    doc: 'Generated trace value.',
+  }],
+}
+
 async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
     status: 200,
@@ -91,7 +101,7 @@ async function mockConfiguration(page, { previewHandler } = {}) {
   await page.route('**/protocol_types', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    json: { protocol_types: [SYMBOLIC_PROTOCOL_TYPE] },
+    json: { protocol_types: [SYMBOLIC_PROTOCOL_TYPE, TRACE_CONSUMER_PROTOCOL_TYPE] },
   }))
   await page.route('**/states_zoo_types', route => route.fulfill({
     status: 200,
@@ -427,7 +437,6 @@ test.describe('States Zoo variables', () => {
       id: traceId,
       name: 'heralded_pair_tr',
       type: 'Float64',
-      selectedType: 'Float64',
       value: 0.125,
       statesZooTraceSourceId: stateId,
     })
@@ -443,14 +452,20 @@ test.describe('States Zoo variables', () => {
       return variables?.filter(variable => variable.id === id).length
     }, traceId)).toBe(1)
 
-    await page.evaluate(id => {
+    await page.evaluate(({ id, protocolType }) => {
       const projectData = document.querySelector('#app')?.__vue_app__?._instance?.setupState
         ?.projectData
-      projectData.net.protocols.push({
+      projectData.net.protocols = [...projectData.net.protocols, {
         id: 'trace_consumer',
-        parameters: [{ value: { kind: 'variable', id } }],
-      })
-    }, traceId)
+        type: protocolType,
+        parameters: [{
+          name: 'trace',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: { kind: 'variable', id },
+        }],
+      }]
+    }, { id: traceId, protocolType: TRACE_CONSUMER_PROTOCOL_TYPE.type })
     const unweightedOption = reloadedRow.locator(
       '.states-zoo-type-select option[value="DepolarizedBellPair"]',
     )
@@ -464,7 +479,9 @@ test.describe('States Zoo variables', () => {
     await page.evaluate(() => {
       const protocols = document.querySelector('#app')?.__vue_app__?._instance?.setupState
         ?.projectData?.net?.protocols
-      protocols.splice(protocols.findIndex(protocol => protocol.id === 'trace_consumer'), 1)
+      protocols.splice(0, protocols.length, ...protocols.filter(protocol => (
+        protocol.id !== 'trace_consumer'
+      )))
     })
     await expect(unweightedOption).not.toHaveAttribute('disabled')
     await expect(reloadedDelete).toBeEnabled()
@@ -633,7 +650,6 @@ test.describe('States Zoo variables', () => {
       id: variableId,
       name: 'saved_state',
       type: 'Symbolic',
-      selectedType: 'Symbolic',
       value: {
         kind: 'states_zoo',
         state_type: 'DepolarizedBellPair',
@@ -649,21 +665,23 @@ test.describe('States Zoo variables', () => {
     await expect(reloadedRow.locator('.states-zoo-type-select')).toHaveValue('DepolarizedBellPair')
     await expect(reloadedRow.locator('.states-zoo-parameter-input')).toHaveValue('0.75')
 
-    const importedProject = {
-      name: 'Imported States Zoo Project',
-      variables: [{
-        id: 'variable_imported_zoo',
-        name: 'imported_state',
-        type: 'Symbolic',
-        value: {
-          kind: 'states_zoo',
-          state_type: 'DepolarizedBellPair',
-          parameters: { p: 0.25 },
-        },
-      }],
-      simulationConfig: { time: 1, timeStep: 0.1 },
-      net: { nodes: [], edges: [], protocols: [] },
-    }
+    const importedProject = await page.evaluate(() => {
+      const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+      return {
+        ...setup.serializeProjectData(),
+        name: 'Imported States Zoo Project',
+        variables: [{
+          id: 'variable_imported_zoo',
+          name: 'imported_state',
+          type: 'Symbolic',
+          value: {
+            kind: 'states_zoo',
+            state_type: 'DepolarizedBellPair',
+            parameters: { p: 0.25 },
+          },
+        }],
+      }
+    })
     await page.locator('.hamburger-btn').click()
     const fileChooserPromise = page.waitForEvent('filechooser')
     await page.getByText('Import', { exact: true }).click()

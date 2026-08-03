@@ -1,4 +1,4 @@
-import { encodeDesignDocument } from '../../utils/projectCodec.js'
+import { encodeProject } from '../../utils/projectDocument.js'
 
 function sortValue(value) {
   if (Array.isArray(value)) return value.map(sortValue)
@@ -10,12 +10,12 @@ function sortValue(value) {
   return value
 }
 
-export function canonicalDesignJson(project) {
-  return JSON.stringify(sortValue(encodeDesignDocument(project)))
+export function canonicalDesignJson(project, context = {}) {
+  return JSON.stringify(sortValue(encodeProject(project, context)))
 }
 
-export async function encodeCanonicalDesign(project) {
-  const json = canonicalDesignJson(project)
+export async function encodeCanonicalDesign(project, context = {}) {
+  const json = canonicalDesignJson(project, context)
   if (!globalThis.crypto?.subtle) {
     throw new Error('SHA-256 is unavailable in this browser context.')
   }
