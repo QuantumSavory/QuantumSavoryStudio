@@ -45,7 +45,7 @@ Useful focused commands:
 (cd test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true \
   julia --project=. runtests.jl test_unit)
 (cd test && julia --project=. runtests.jl test_mcp_unit test_sidecar_supervisor)
-npm --prefix gui run test:unit -- tests/unit/projectCodec.test.js
+npm --prefix gui run test:unit -- tests/unit/projectDocumentV2.test.js
 ```
 
 Do not run `test/runtests.jl` with no selectors as a standalone unit command: it also

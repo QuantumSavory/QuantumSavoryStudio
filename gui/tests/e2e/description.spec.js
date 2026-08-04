@@ -158,24 +158,37 @@ test.describe('Project description', () => {
     await expect.poll(() => pastedImage.evaluate(image => image.complete && image.naturalWidth === 1)).toBe(true)
   })
 
-  test('persists only in full saved and exported JSON, while legacy and import paths are normalized', async ({ page }) => {
+  test('persists only in canonical saved, exported, and imported v2 JSON', async ({ page }) => {
     const defaults = await page.evaluate(() => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       const initialDescription = setup.projectData.description
       setup.createNewProject('Description Persistence Test')
       const newDescription = setup.projectData.description
-      const legacy = setup.deserializeProjectData({
-        name: 'Legacy Project',
-        variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
-      })
-      return { initialDescription, newDescription, legacyDescription: legacy.description }
+      let legacyError
+      try {
+        setup.deserializeProjectData({
+          name: 'Legacy Project',
+          variables: [],
+          simulationConfig: { time: 1, timeStep: 0.1 },
+          net: { nodes: [], edges: [], protocols: [] },
+        })
+      } catch (error) {
+        legacyError = {
+          code: error.code,
+          contract: error.details?.contract,
+          supportedVersions: error.details?.supported_versions,
+        }
+      }
+      return { initialDescription, newDescription, legacyError }
     })
     expect(defaults).toEqual({
       initialDescription: '',
       newDescription: '',
-      legacyDescription: '',
+      legacyError: {
+        code: 'UNSUPPORTED_VERSION',
+        contract: 'project',
+        supportedVersions: [2],
+      },
     })
 
     await page.getByRole('tab', { name: 'Description' }).click()
@@ -189,7 +202,7 @@ test.describe('Project description', () => {
       setup.saveProject()
       const full = setup.serializeProjectData()
       const minimized = setup.minimizedProjectData?.value ?? setup.minimizedProjectData
-      const saved = JSON.parse(localStorage.getItem('cqn_project_Description Persistence Test'))
+      const saved = JSON.parse(localStorage.getItem('cqn_v2_project_Description Persistence Test'))
       return {
         live: setup.projectData.description,
         fullDescription: full.description,
@@ -214,32 +227,35 @@ test.describe('Project description', () => {
     const exported = JSON.parse(await readFile(await download.path(), 'utf8'))
     expect(exported.description).toBe(MARKDOWN_DESCRIPTION)
 
+    const importTemplate = await page.evaluate(() => {
+      const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+      return setup.serializeProjectData()
+    })
     const invalidImport = {
+      ...importTemplate,
       name: 'Invalid Description Import',
       description: ['not', 'a', 'string'],
-      variables: [],
-      net: { nodes: [], edges: [], protocols: [] },
     }
     await page.evaluate(project => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       setup.validateAndProcessImport(project)
     }, invalidImport)
     let appDialog = page.getByRole('dialog', { name: 'Import failed' })
-    await expect(appDialog).toContainText('Invalid project structure: "description" must be a string when present.')
+    await expect(appDialog).toContainText('Invalid project document at /description')
     await appDialog.getByRole('button', { name: 'OK' }).click()
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('cqn_project_Invalid Description Import'))).toBeNull()
+    await expect.poll(() => page.evaluate(() => (
+      localStorage.getItem('cqn_v2_project_Invalid Description Import')
+    ))).toBeNull()
 
     const importedDescription = '# Imported\n\nWith $a+b$.'
-    await page.evaluate(({ description }) => {
+    await page.evaluate(({ project, description }) => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       setup.validateAndProcessImport({
+        ...project,
         name: 'Imported Description Project',
         description,
-        variables: [],
-        simulationConfig: { time: 1, timeStep: 0.1 },
-        net: { nodes: [], edges: [], protocols: [] },
       })
-    }, { description: importedDescription })
+    }, { project: importTemplate, description: importedDescription })
     appDialog = page.getByRole('dialog', { name: 'Project imported' })
     await expect(appDialog).toContainText('Project "Imported Description Project" imported successfully!')
     await appDialog.getByRole('button', { name: 'OK' }).click()
@@ -249,7 +265,7 @@ test.describe('Project description', () => {
       return setup.projectData.description
     })).toBe(importedDescription)
     await expect.poll(() => page.evaluate(() => {
-      const stored = JSON.parse(localStorage.getItem('cqn_project_Imported Description Project'))
+      const stored = JSON.parse(localStorage.getItem('cqn_v2_project_Imported Description Project'))
       return stored.description
     })).toBe(importedDescription)
   })

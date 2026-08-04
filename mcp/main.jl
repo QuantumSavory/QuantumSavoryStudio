@@ -1,14 +1,46 @@
 using Base64
 using HTTP
 using JSON3
+using JSONSchema
 using Logging
 using ModelContextProtocol
 
 include(joinpath(@__DIR__, "src", "single_session_http_transport.jl"))
 
 const CONTRACT_FILE = normpath(
-  joinpath(@__DIR__, "..", "contracts", "mcp", "v1", "tools.json"),
+  joinpath(@__DIR__, "..", "contracts", "mcp", "contract.json"),
 )
+
+const SUPPORTED_INPUT_SCHEMA_KEYWORDS = Set([
+  "\$ref",
+  "additionalItems",
+  "additionalProperties",
+  "allOf",
+  "anyOf",
+  "const",
+  "default",
+  "definitions",
+  "enum",
+  "exclusiveMinimum",
+  "items",
+  "maximum",
+  "maxItems",
+  "minItems",
+  "minLength",
+  "minProperties",
+  "minimum",
+  "not",
+  "oneOf",
+  "pattern",
+  "properties",
+  "required",
+  "type",
+  "uniqueItems",
+])
+
+const SCHEMA_MAP_KEYWORDS = Set(["definitions", "properties"])
+const SCHEMA_SINGLE_KEYWORDS = Set(["additionalItems", "additionalProperties", "items", "not"])
+const SCHEMA_ARRAY_KEYWORDS = Set(["allOf", "anyOf", "oneOf"])
 
 function plain_dictionary(value)
   value isa AbstractDict || return Dict{String,Any}()
@@ -20,10 +52,109 @@ plain_value(value) = JSON3.read(JSON3.write(value))
 function startup_configuration()
   eof(stdin) && error("Missing parent startup configuration")
   configuration = plain_dictionary(JSON3.read(readline(stdin)))
-  for key in ("port", "bridge_url", "contract_version", "capability")
+  for key in ("port", "bridge_url", "capability")
     haskey(configuration, key) || error("Missing startup configuration field: $key")
   end
   configuration
+end
+
+function validate_schema_keywords!(schema, path="#")
+  schema isa Bool && return schema
+  schema isa AbstractDict || error("MCP input schema at $path must be an object or Boolean")
+  for (raw_keyword, value) in schema
+    keyword = string(raw_keyword)
+    keyword in SUPPORTED_INPUT_SCHEMA_KEYWORDS || error(
+      "Unsupported MCP input-schema keyword '$keyword' at $path",
+    )
+    if keyword in SCHEMA_MAP_KEYWORDS
+      value isa AbstractDict || error("MCP schema keyword '$keyword' at $path must be an object")
+      for (name, nested) in value
+        validate_schema_keywords!(nested, "$path/$keyword/$(string(name))")
+      end
+    elseif keyword in SCHEMA_ARRAY_KEYWORDS
+      value isa AbstractVector || error("MCP schema keyword '$keyword' at $path must be an array")
+      for (index, nested) in enumerate(value)
+        validate_schema_keywords!(nested, "$path/$keyword/$(index - 1)")
+      end
+    elseif keyword == "items" && value isa AbstractVector
+      for (index, nested) in enumerate(value)
+        validate_schema_keywords!(nested, "$path/items/$(index - 1)")
+      end
+    elseif keyword in SCHEMA_SINGLE_KEYWORDS && (value isa AbstractDict || value isa Bool)
+      validate_schema_keywords!(value, "$path/$keyword")
+    end
+  end
+  return schema
+end
+
+function load_contract()
+  return plain_dictionary(JSON3.read(read(CONTRACT_FILE, String)))
+end
+
+function compile_input_schemas(contract)
+  validators = Dict{String,JSONSchema.Schema}()
+  for tool in contract["tools"]
+    tool_name = string(tool["name"])
+    haskey(validators, tool_name) && error("Duplicate MCP tool name: $tool_name")
+    schema = plain_dictionary(tool["input_schema"])
+    validate_schema_keywords!(schema, "#/tools/$tool_name/input_schema")
+    validators[tool_name] = JSONSchema.Schema(schema)
+  end
+  return validators
+end
+
+# JSONSchema exposes no path accessor. Couple this adapter to the exact package
+# pin so an incompatible issue shape fails instead of silently collapsing to `/`.
+function json_pointer_path(issue::JSONSchema.SingleIssue)
+  segments = String[]
+  for matched in eachmatch(r"\[([^\]]+)\]", issue.path)
+    segment = matched.captures[1]
+    index = tryparse(Int, segment)
+    push!(segments, index === nothing ? segment : string(index - 1))
+  end
+  if issue.reason == "required"
+    issue.x isa AbstractDict || error("JSONSchema required issue has a non-object instance")
+    issue.val isa AbstractVector || error("JSONSchema required issue has a non-array schema value")
+    missing = sort!(String[
+      string(field)
+      for field in issue.val
+      if !haskey(issue.x, string(field)) && !haskey(issue.x, Symbol(string(field)))
+    ])
+    isempty(missing) || push!(segments, first(missing))
+  end
+  escaped = replace.(segments, "~" => "~0", "/" => "~1")
+  return isempty(escaped) ? "/" : "/$(join(escaped, '/'))"
+end
+
+function invalid_arguments_result(issue)
+  path = json_pointer_path(issue)
+  structured = Dict{String,Any}(
+    "code" => "VALIDATION_FAILED",
+    "message" => "Tool arguments do not match the MCP contract at $path.",
+    "retryable" => false,
+    "details" => Dict{String,Any}("contract_path" => path),
+  )
+  return CallToolResult(
+    content=[Dict{String,Any}(
+      "type" => "text",
+      "text" => JSON3.write(structured),
+    )],
+    is_error=true,
+    structured_content=structured,
+  )
+end
+
+function validated_tool_call(
+  result_handler,
+  configuration,
+  tool_name,
+  validator,
+  arguments,
+)
+  normalized = arguments isa AbstractDict ? plain_dictionary(arguments) : plain_value(arguments)
+  issue = JSONSchema.validate(validator, normalized)
+  issue === nothing || return invalid_arguments_result(issue)
+  return result_handler(configuration, tool_name, normalized)
 end
 
 function backend_error_payload(body)
@@ -86,9 +217,8 @@ function tool_result(configuration, tool_name, arguments)
 end
 
 function load_tools(configuration; result_handler=tool_result)
-  contract = plain_dictionary(JSON3.read(read(CONTRACT_FILE, String)))
-  Int(contract["contract_version"]) == Int(configuration["contract_version"]) ||
-    error("MCP contract version mismatch")
+  contract = load_contract()
+  validators = compile_input_schemas(contract)
   output_schema = plain_dictionary(contract["default_output_schema"])
   return map(contract["tools"]) do tool
     tool_name = string(tool["name"])
@@ -98,7 +228,13 @@ function load_tools(configuration; result_handler=tool_result)
       input_schema=plain_dictionary(tool["input_schema"]),
       output_schema=plain_dictionary(get(tool, "output_schema", output_schema)),
       annotations=plain_dictionary(get(tool, "annotations", Dict{String,Any}())),
-      handler=arguments -> result_handler(configuration, tool_name, arguments),
+      handler=arguments -> validated_tool_call(
+        result_handler,
+        configuration,
+        tool_name,
+        validators[tool_name],
+        arguments,
+      ),
     )
   end
 end

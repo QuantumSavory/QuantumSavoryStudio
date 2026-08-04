@@ -104,7 +104,10 @@ test.describe('Local MCP collaboration', () => {
       }, sessionId)
       expect(tools.response.status).toBe(200)
       const toolNames = tools.body.result.tools.map(tool => tool.name)
-      expect(toolNames).toContain('topology_edit')
+      expect(toolNames).toHaveLength(15)
+      expect(toolNames).toContain('design_edit')
+      expect(toolNames).not.toContain('topology_edit')
+      expect(toolNames).not.toContain('design_transaction')
       expect(toolNames).toContain('simulation_run')
 
       const callTool = async (name, args = {}) => {
@@ -121,27 +124,36 @@ test.describe('Local MCP collaboration', () => {
       const initialDesign = await callTool('design_get')
       expect(initialDesign.isError).toBe(false)
       expect(initialDesign.structuredContent.revision).toBe(0)
+      expect(initialDesign.structuredContent.document).toMatchObject({
+        schemaVersion: 2,
+        name: 'MCP Browser E2E',
+        annotations: [],
+        variables: [],
+        simulationConfig: expect.any(Object),
+        net: expect.any(Object),
+      })
+      expect(initialDesign.structuredContent.document).not.toHaveProperty('map')
 
-      const topology = await callTool('topology_edit', {
+      const topology = await callTool('design_edit', {
         operation_id: 'browser-e2e-topology',
         expected_revision: 0,
-        actions: [
+        operations: [
           {
-            action: 'create_node',
-            client_ref: 'left',
+            kind: 'topology.create_node',
+            id: 'node-left',
             value: { name: 'Agent Left', position: [-10, 0] },
           },
           {
-            action: 'create_node',
-            client_ref: 'right',
+            kind: 'topology.create_node',
+            id: 'node-right',
             value: { name: 'Agent Right', position: [10, 0] },
           },
           {
-            action: 'create_edge',
-            client_ref: 'link',
+            kind: 'topology.create_edge',
+            id: 'edge-link',
             value: {
-              source: { client_ref: 'left' },
-              target: { client_ref: 'right' },
+              source: 'node-left',
+              target: 'node-right',
               isLogic: false,
             },
           },
@@ -149,29 +161,26 @@ test.describe('Local MCP collaboration', () => {
       })
       expect(topology.isError).toBe(false)
       expect(topology.structuredContent.revision).toBe(1)
-      expect(topology.structuredContent.created_ids).toMatchObject({
-        left: expect.any(String),
-        right: expect.any(String),
-        link: expect.any(String),
-      })
+      expect(topology.structuredContent.affected_ids)
+        .toEqual(expect.arrayContaining(['node-left', 'node-right', 'edge-link']))
       await expect(page.locator('.node-list-item')).toHaveCount(2)
       await expect(page.locator('.node-list-item')).toContainText(['Agent Left', 'Agent Right'])
       await expect(page.locator('.edge-list-item')).toHaveCount(1)
 
-      const slots = await callTool('slots_edit', {
+      const slots = await callTool('design_edit', {
         operation_id: 'browser-e2e-slots',
         expected_revision: 1,
-        actions: [
+        operations: [
           {
-            action: 'create',
-            node_id: topology.structuredContent.created_ids.left,
-            client_ref: 'left-slot',
+            kind: 'slots.create',
+            id: 'slot-left',
+            node_id: 'node-left',
             value: { type: 'Qubit' },
           },
           {
-            action: 'create',
-            node_id: topology.structuredContent.created_ids.right,
-            client_ref: 'right-slot',
+            kind: 'slots.create',
+            id: 'slot-right',
+            node_id: 'node-right',
             value: { type: 'Qubit' },
           },
         ],
@@ -186,14 +195,14 @@ test.describe('Local MCP collaboration', () => {
         entry.placement === 'edge' && entry.type.endsWith('.EntanglerProt')
       ))
       expect(entangler).toBeTruthy()
-      const protocol = await callTool('protocols_edit', {
+      const protocol = await callTool('design_edit', {
         operation_id: 'browser-e2e-protocol',
         expected_revision: 2,
-        actions: [{
-          action: 'create',
+        operations: [{
+          kind: 'protocols.create',
+          id: 'protocol-entangler',
           placement: 'edge',
-          owner_id: topology.structuredContent.created_ids.link,
-          client_ref: 'entangler',
+          owner_id: 'edge-link',
           value: { type: entangler.type },
         }],
       })
@@ -223,12 +232,12 @@ test.describe('Local MCP collaboration', () => {
       expect(activity.map(entry => entry.summary))
         .not.toContain('Unclassified GUI design change')
 
-      const stale = await callTool('topology_edit', {
+      const stale = await callTool('design_edit', {
         operation_id: 'browser-e2e-stale',
         expected_revision: 3,
-        actions: [{
-          action: 'update_node',
-          node_id: topology.structuredContent.created_ids.left,
+        operations: [{
+          kind: 'topology.update_node',
+          node_id: 'node-left',
           value: { name: 'Stale Agent Left' },
         }],
       })
@@ -267,7 +276,7 @@ test.describe('Local MCP collaboration', () => {
       expect(reset.isError).toBe(false)
       await expect(page.locator('#runnerPanel .stop-btn')).toBeDisabled()
 
-      await expect(panel.locator('.mcp-activity')).toContainText('topology_edit', {
+      await expect(panel.locator('.mcp-activity')).toContainText('design_edit', {
         timeout: 10_000,
       })
       await expect(panel.locator('.mcp-activity')).toContainText('simulation_reset')

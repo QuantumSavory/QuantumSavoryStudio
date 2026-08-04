@@ -1,8 +1,5 @@
 import { generateUUid } from '../../utils/Utils.js'
-import {
-  encodeCanonicalDesign,
-  selectCanonicalDesignSections,
-} from './canonicalDesign.js'
+import { encodeCanonicalDesign } from './canonicalDesign.js'
 import { MCP_CONTRACT_VERSION } from './contractRegistry.js'
 
 const HEARTBEAT_INTERVAL = 2_000
@@ -28,6 +25,7 @@ export class McpEditorBridge {
     getProject,
     getProjectName,
     getSimulationName,
+    getProjectDocumentContext = () => ({}),
     designCommands,
     validateDesign,
     simulationController,
@@ -38,6 +36,7 @@ export class McpEditorBridge {
     this.getProject = getProject
     this.getProjectName = getProjectName
     this.getSimulationName = getSimulationName
+    this.getProjectDocumentContext = getProjectDocumentContext
     this.designCommands = designCommands
     this.validateDesign = validateDesign
     this.simulationController = simulationController
@@ -83,7 +82,10 @@ export class McpEditorBridge {
 
   async bindCurrentProject() {
     await this.unbind({ bestEffort: false })
-    const encoded = await encodeCanonicalDesign(this.getProject())
+    const encoded = await encodeCanonicalDesign(
+      this.getProject(),
+      this.getProjectDocumentContext(),
+    )
     this.generation += 1
     const response = await this.client.bind({
       editor_id: this.editorId,
@@ -209,20 +211,23 @@ export class McpEditorBridge {
         if (payload.type === 'flush') {
           result = { summary: 'Editor drafts flushed.' }
         } else if (payload.type === 'design_get') {
-          const encoded = await encodeCanonicalDesign(this.getProject())
+          const encoded = await encodeCanonicalDesign(
+            this.getProject(),
+            this.getProjectDocumentContext(),
+          )
           result = {
             project_name: this.getProjectName(),
             hash: encoded.hash,
-            document: selectCanonicalDesignSections(encoded.document, payload.sections),
+            document: encoded.document,
           }
         } else if (payload.type === 'validate') {
           result = await this.validateDesign(this.getProject())
-        } else if (payload.type === 'design_command') {
-          result = await this.designCommands.executeToolNow(
-            payload.tool,
-            payload.arguments,
-            { origin: 'mcp' },
-          )
+        } else if (payload.type === 'design_edit') {
+          result = await this.designCommands.executeNow({
+            operations: payload.arguments.operations,
+            origin: 'mcp',
+            operationId: payload.arguments.operation_id,
+          })
           documentChanged = true
           durableActionApplied = true
         } else if (payload.type === 'simulation_action') {
@@ -239,7 +244,10 @@ export class McpEditorBridge {
         } else {
           throw new Error(`Unknown browser command type: ${payload.type}`)
         }
-        const encoded = await encodeCanonicalDesign(this.getProject())
+        const encoded = await encodeCanonicalDesign(
+          this.getProject(),
+          this.getProjectDocumentContext(),
+        )
         const canonicalChanged = encoded.hash !== this.hash
         documentChanged ||= canonicalChanged
         const response = await this.client.commit({
@@ -290,7 +298,10 @@ export class McpEditorBridge {
 
   async publishGuiCommit(summary = 'GUI design change') {
     if (!this.binding) return
-    const encoded = await encodeCanonicalDesign(this.getProject())
+    const encoded = await encodeCanonicalDesign(
+      this.getProject(),
+      this.getProjectDocumentContext(),
+    )
     if (encoded.hash === this.hash) return
     const response = await this.client.commit({
       ...this.bindingIdentity(),

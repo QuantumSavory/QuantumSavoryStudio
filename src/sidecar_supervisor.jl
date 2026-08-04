@@ -703,7 +703,6 @@ function start_sidecar!(
     startup = Dict(
       "port" => configuration.port,
       "bridge_url" => _backend_bridge_url(configuration),
-      "contract_version" => MCP_CONTRACT_VERSION,
       "capability" => generation.capability,
     )
     write_startup(generation, startup)

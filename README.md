@@ -94,11 +94,47 @@ bound browser tab and one MCP session are supported. Project transitions
 automatically unbind the current design. Use `simulation_reset` before changing
 simulation-affecting design state after preparation.
 
-The versioned tool contract is in `contracts/mcp/v1/tools.json`. New authoring
-tools must first gain a shared `DesignCommandService` handler and migrate the
-equivalent GUI action to that handler. Simulation lifecycle tools must continue
-to use the browser controller, while simulation reads and HTTP routes share
-the Julia `SimulationService`.
+The sole versioned tool contract is `contracts/mcp/contract.json`. Its current
+`contract_version` is 2, and the frontend, backend, and sidecar all derive that value
+from the file. The sidecar compiles every input schema at startup and validates each
+call before backend dispatch; malformed arguments return `VALIDATION_FAILED` with a
+stable contract path.
+
+MCP v2 advertises 15 tools. Its single authoring tool, `design_edit`, atomically applies
+one or more of the same 25 operation kinds registered for GUI authoring. Creation
+operations require caller-chosen unique IDs, and later operations reference those IDs
+directly. `design_get` returns the complete canonical project-v2 document with the
+local-only map viewport omitted. Simulation lifecycle tools continue to use the browser
+controller, while simulation reads and HTTP routes share the Julia
+`SimulationService`.
+
+## Project document v2
+
+Saved projects, JSON import/export, bundled demos, and MCP snapshots share one
+executable project-document codec. Only integer `schemaVersion: 2` is accepted. Missing,
+Boolean, string, fractional, v1, and future versions fail first with
+`UNSUPPORTED_VERSION`; no v1 import or storage migration is provided.
+
+The canonical root requires `schemaVersion`, `name`, `description`, `annotations`,
+`variables`, `simulationConfig`, and `net`. The only optional project-local root field
+is the closed `map: {position, zoom}` viewport; omission selects the default viewport,
+`null` is invalid, and MCP snapshots omit it. Nested functional records are closed, so
+missing fields, extra fields, aliases, coercions, unsafe integers, nonfinite numbers,
+and noncanonical tagged values fail with `INVALID_PROJECT` and the first JSON-pointer
+path.
+
+Constructor assignments persist sparsely as `{name, type, value}` using the selected
+catalog wire type; omission of an optional assignment lets the simulator constructor
+apply its default. Variables always store a concrete non-null type and value. No
+background noise is represented only as `{"type":"default","parameters":[]}`.
+Frontend previews, catalog metadata, runtime state, platform information, and software
+version confirmations are not project fields.
+
+Browser persistence uses only `cqn_v2_project_*`,
+`cqn_v2_projects_metadata_index`, and `cqn_v2_recent_project_name`. Older `cqn_*` keys
+are neither scanned nor removed, so they remain untouched and invisible. HTTP simulation
+and script-export payloads reuse the same sparse assignments, concrete Variables, and
+background sentinel while excluding project-only fields.
 
 ## API Overview
 
@@ -190,7 +226,7 @@ The best way to explore the API is through the interactive Swagger documentation
 ### Physical Links
 
 Layout Tools stores global material defaults for refractive index and fiber
-loss. New and legacy projects resolve missing loss to **0.2 dB/km**, a
+loss. New project-v2 documents begin with loss **0.2 dB/km**, a
 representative attenuation for modern telecom single-mode fiber near the
 1550-nm window ([Corning SMF-28 Ultra specification](https://www.corning.com/media/worldwide/coc/documents/Fiber/product-information-sheets/PI-1424-AEN.pdf)).
 Each physical edge may override distance, refractive index, propagation delay,
@@ -214,12 +250,11 @@ per-edge loss; resetting transmissivity restores automatic calculation. Manual
 delay is independent, while distance overrides affect both automatic delay and
 automatic transmissivity. Map badges remain limited to distance and delay.
 
-Schema-v1 project JSON persists only material/link overrides in
+Project-v2 JSON persists only nullable material/link overrides in
 `data.physicalOverrides`; it never stores derived physical values. Minimized
 simulator and script-export payloads resolve `distanceMeters`,
 `propagationDelaySeconds`, `refractiveIndex`, `lossDbPerKm`, and
-`transmissivity` for physical edges. The additive loss and transmissivity
-fields may be omitted or `null` by legacy API clients.
+`transmissivity` for physical edges.
 
 ### Protocol Inputs and Numeric Expressions
 
@@ -244,12 +279,12 @@ contain only advertised editable parameters; the backend supplies simulation,
 network, and attachment arguments.
 
 Optional constructor parameters begin with a **Default** choice. Default stores no
-value and omits the keyword from simulator and script-export payloads, so the
-QuantumSavory constructor applies its own default. Required parameters omit Default,
-start on the first supported concrete choice with an incomplete value, and must be
-populated before the protocol can be committed. A required parameter also rejects a
-Variable whose value is Default. Catalog `defaultValue` metadata is help text only;
-a new project does not copy it into the draft. Choosing an explicit literal,
+assignment and omits the keyword from project, simulator, and script-export payloads,
+so the QuantumSavory constructor applies its own default. Required parameters omit
+Default, start on the first supported concrete choice with an incomplete value, and
+must be populated before the protocol can be committed. Variables always have a
+concrete type and value. Catalog `defaultValue` metadata is help text only; a new
+project does not copy it into the draft. Choosing an explicit literal,
 function, tag, or expression starts an empty editor and requires a valid value before
 it is committed.
 

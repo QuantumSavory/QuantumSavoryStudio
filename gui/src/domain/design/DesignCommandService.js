@@ -11,10 +11,10 @@ import Variable, {
 } from '../../models/Variable.js'
 import { generateUUid, setEdgeCorrectNodeOrder } from '../../utils/Utils.js'
 import {
-  decodeDesignDocument,
-  encodeDesignDocument,
+  decodeProject,
+  encodeProject,
   TRANSIENT_SLOT_FIELDS,
-} from '../../utils/projectCodec.js'
+} from '../../utils/projectDocument.js'
 import {
   INVALID_EDGE_GEOMETRY_REASON,
   assertEdgeGeometries,
@@ -38,6 +38,7 @@ import {
 import {
   createProtocolFromDefinition,
   deepClone,
+  protocolSimpleName,
 } from '../../utils/protocolConstructors.js'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import {
@@ -50,7 +51,6 @@ import {
 } from '../../utils/representations.js'
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
-const RUNTIME_SLOT_FIELDS = new Set(TRANSIENT_SLOT_FIELDS)
 export const DUPLICATE_PHYSICAL_EDGE_REASON = 'DUPLICATE_PHYSICAL_EDGE'
 
 export class DesignCommandError extends Error {
@@ -133,6 +133,15 @@ function replaceArray(target, source) {
   target.splice(0, target.length, ...source)
 }
 
+function retainLivePresentation(target, source) {
+  if (Array.isArray(target)) {
+    target.forEach((value, index) => retainLivePresentation(value, source?.[index]))
+  } else if (record(target) && record(source)) {
+    if (typeof source.latex === 'string') target.latex = source.latex
+    Object.keys(target).forEach(key => retainLivePresentation(target[key], source[key]))
+  }
+}
+
 function syncPlainObject(target, source, retainedFields = new Set()) {
   Object.keys(target).forEach(key => {
     if (!Object.hasOwn(source, key) && !retainedFields.has(key)) delete target[key]
@@ -168,7 +177,7 @@ function reconcileSlots(target, source) {
   const next = source.map(sourceItem => {
     const targetItem = retained.get(sourceItem.id)
     if (!targetItem) return sourceItem
-    syncPlainObject(targetItem, sourceItem, RUNTIME_SLOT_FIELDS)
+    syncPlainObject(targetItem, sourceItem, TRANSIENT_SLOT_FIELDS)
     return targetItem
   })
   replaceArray(target, next)
@@ -284,37 +293,6 @@ export function reconcileDesignDocument(live, candidate) {
   return live
 }
 
-function resolveAlias(value, aliases) {
-  if (record(value) && typeof value.client_ref === 'string') {
-    const resolved = aliases.get(value.client_ref)
-    if (!resolved) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Unknown client_ref: ${value.client_ref}`,
-      )
-    }
-    return resolved
-  }
-  return value
-}
-
-function resolveOperationAliases(operation, aliases) {
-  const visit = (value, { root = false } = {}) => {
-    if (Array.isArray(value)) return value.map(item => visit(item))
-    if (!record(value)) return value
-    if (!root && Object.keys(value).length === 1 && typeof value.client_ref === 'string') {
-      return resolveAlias(value, aliases)
-    }
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [
-        key,
-        root && key === 'client_ref' ? nested : visit(nested),
-      ]),
-    )
-  }
-  return visit(operation, { root: true })
-}
-
 function protocolCollection(project, operation) {
   const placement = operation.placement
   if (placement === 'floating') return project.net.protocols
@@ -327,31 +305,27 @@ function protocolCollection(project, operation) {
   throw new DesignCommandError('VALIDATION_FAILED', 'Protocol placement is required.')
 }
 
-function operationFromAction(tool, action) {
-  if (typeof action?.kind === 'string') return action
-  const name = action?.action
-  if (typeof name !== 'string') {
-    throw new DesignCommandError('VALIDATION_FAILED', 'Every action requires kind or action.')
+function durableDesignIds(project) {
+  const ids = new Set()
+  const add = value => {
+    if (typeof value?.id === 'string') ids.add(value.id)
   }
-  const prefixes = {
-    design_update: 'design',
-    topology_edit: 'topology',
-    slots_edit: 'slots',
-    protocols_edit: 'protocols',
-    variables_edit: 'variables',
-    states_edit: 'states',
-    annotations_edit: 'annotations',
-    network_generate: 'network',
+  const addProtocols = protocols => (protocols || []).forEach(add)
+  for (const variable of project.variables || []) add(variable)
+  for (const annotation of project.annotations || []) add(annotation)
+  for (const slot of project.net?.physicalConfig?.nodeTemplate?.slots || []) add(slot)
+  for (const node of project.net?.nodes || []) {
+    add(node)
+    for (const slot of node.data?.slots || []) add(slot)
+    addProtocols(node.data?.protocols)
   }
-  const { action: _action, ...operation } = action
-  return { ...operation, kind: `${prefixes[tool]}.${name}` }
-}
-
-export function operationsForTool(tool, argumentsObject) {
-  if (tool === 'design_transaction') {
-    return Array.isArray(argumentsObject.operations) ? argumentsObject.operations : []
+  for (const edge of project.net?.edges || []) {
+    add(edge)
+    for (const point of edge.data?.curvePoints || []) add(point)
+    addProtocols(edge.data?.protocols)
   }
-  return (argumentsObject.actions || []).map(action => operationFromAction(tool, action))
+  addProtocols(project.net?.protocols)
+  return ids
 }
 
 export class DesignCommandService {
@@ -393,6 +367,13 @@ export class DesignCommandService {
     this.queue = Promise.resolve()
     this.handlers = new Map()
     this.installHandlers()
+  }
+
+  projectDocumentContext() {
+    return {
+      protocolCatalog: this.protocolCatalog,
+      backgroundCatalog: this.backgroundCatalog,
+    }
   }
 
   register(kind, handler, { affectsSimulation = true } = {}) {
@@ -458,22 +439,6 @@ export class DesignCommandService {
     await this.queue
   }
 
-  async executeTool(tool, argumentsObject, options = {}) {
-    return this.execute({
-      operations: operationsForTool(tool, argumentsObject),
-      operationId: argumentsObject.operation_id,
-      ...options,
-    })
-  }
-
-  async executeToolNow(tool, argumentsObject, options = {}) {
-    return this.executeNow({
-      operations: operationsForTool(tool, argumentsObject),
-      operationId: argumentsObject.operation_id,
-      ...options,
-    })
-  }
-
   async executeNow({ operations, origin, operationId }) {
     if (!Array.isArray(operations) || operations.length === 0) {
       throw new DesignCommandError('VALIDATION_FAILED', 'At least one operation is required.')
@@ -499,25 +464,19 @@ export class DesignCommandService {
     // fails, and generators may destructively rebuild topology. The candidate
     // isolates those partial changes; the second codec pass applies shared
     // structural normalization, and reconciliation is the atomic commit boundary.
-    const candidate = decodeDesignDocument(encodeDesignDocument(live), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const documentContext = this.projectDocumentContext()
+    const candidate = decodeProject(
+      encodeProject(live, documentContext),
+      documentContext,
+    ).project
     const context = {
       origin,
-      aliases: new Map(),
-      createdIds: {},
       affectedIds: new Set(),
       deletedIds: new Set(),
       warnings: [],
     }
     for (const { operation, registration } of normalized) {
-      await registration.handler(
-        candidate,
-        resolveOperationAliases(operation, context.aliases),
-        context,
-      )
+      await registration.handler(candidate, operation, context)
     }
     const affectedEdges = candidate.net.edges.filter(edge => (
       context.affectedIds.has(edge.id)
@@ -529,18 +488,17 @@ export class DesignCommandService {
     } catch (error) {
       throw invalidEdgeGeometry(error)
     }
-    const validatedCandidate = decodeDesignDocument(encodeDesignDocument(candidate), {
-      defaultBackgroundNoise: this.defaultBackgroundNoise,
-      minimumTime: 0,
-      minimumTimeStep: 0,
-    })
+    const validatedCandidate = decodeProject(
+      encodeProject(candidate, documentContext),
+      documentContext,
+    ).project
+    retainLivePresentation(validatedCandidate, candidate)
     reconcileDesignDocument(live, validatedCandidate)
     this.clearDeletedSelection(context.deletedIds)
     this.markDirty()
     const result = {
       operation_id: operationId,
       summary: `${origin === 'mcp' ? 'Agent' : 'GUI'} applied ${operations.length} design operation${operations.length === 1 ? '' : 's'}.`,
-      created_ids: context.createdIds,
       affected_ids: [...context.affectedIds],
       deleted_ids: [...context.deletedIds],
       warnings: context.warnings,
@@ -554,27 +512,17 @@ export class DesignCommandService {
     return Object.hasOwn(value, 'simulationConfig') || Object.hasOwn(value, 'physicalConfig')
   }
 
-  assignId(prefix, operation, context) {
-    if (
-      context.origin === 'mcp'
-      && (Object.hasOwn(operation, 'id') || Object.hasOwn(operation.value || {}, 'id'))
-    ) {
+  assignId(prefix, project, operation, context, { allowGenerated = false } = {}) {
+    const supplied = operation.id ?? operation.value?.id
+    if (context.origin === 'mcp' && supplied == null && !allowGenerated) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
-        'Created IDs are allocated by the browser; use client_ref to reference new objects.',
+        `${prefix} ID is required for MCP creation operations.`,
       )
     }
-    const id = operation.id || operation.value?.id || this.idGenerator(prefix)
-    requireString(id, `${prefix} ID`)
-    if (operation.client_ref) {
-      if (context.aliases.has(operation.client_ref)) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Duplicate client_ref: ${operation.client_ref}`,
-        )
-      }
-      context.aliases.set(operation.client_ref, id)
-      context.createdIds[operation.client_ref] = id
+    const id = requireString(supplied ?? this.idGenerator(prefix), `${prefix} ID`)
+    if (durableDesignIds(project).has(id)) {
+      throw new DesignCommandError('VALIDATION_FAILED', `Durable ID already exists: ${id}`)
     }
     context.affectedIds.add(id)
     return id
@@ -661,7 +609,7 @@ export class DesignCommandService {
 
   async createNode(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('node', operation, context)
+    const id = this.assignId('node', project, operation, context)
     if (project.net.nodes.some(node => node.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Node ID already exists: ${id}`)
     }
@@ -679,7 +627,7 @@ export class DesignCommandService {
     // so `self` and node-name lookups use the concrete destination context.
     project.net.nodes.push(node)
     for (const templateSlot of this.templateSlots(project)) {
-      const slotId = this.assignId('slot', {}, context)
+      const slotId = this.assignId('slot', project, {}, context, { allowGenerated: true })
       if (
         this.allSlots(project).some(slot => slot.id === slotId)
         || node.data.slots.some(slot => slot.id === slotId)
@@ -694,7 +642,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         ),
         isLocked: false,
@@ -704,7 +651,7 @@ export class DesignCommandService {
   }
 
   updateNode(project, operation, context) {
-    const id = resolveAlias(operation.id || operation.node_id, context.aliases)
+    const id = operation.id || operation.node_id
     const node = byId(project.net.nodes, id, 'Node')
     const value = operation.value || operation
     if (Object.hasOwn(value, 'name')) node.name = requireString(value.name, 'Node name')
@@ -720,7 +667,7 @@ export class DesignCommandService {
       if (Object.keys(value.data).some(key => key !== 'type')) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
-          'Node slots and protocols must use their specialist operations.',
+          'Node slots and protocols must use their dedicated operations.',
         )
       }
       node.data = { ...node.data, ...deepClone(value.data) }
@@ -729,7 +676,7 @@ export class DesignCommandService {
   }
 
   removeNode(project, operation, context) {
-    const id = resolveAlias(operation.id || operation.node_id, context.aliases)
+    const id = operation.id || operation.node_id
     const node = byId(project.net.nodes, id, 'Node')
     const removedEdges = project.net.edges.filter(edge => edge.source === node || edge.target === node)
     project.net.edges = project.net.edges.filter(edge => edge.source !== node && edge.target !== node)
@@ -739,7 +686,7 @@ export class DesignCommandService {
   }
 
   reorderNode(project, operation, context) {
-    const id = resolveAlias(operation.id || operation.node_id, context.aliases)
+    const id = operation.id || operation.node_id
     const index = project.net.nodes.findIndex(node => node.id === id)
     if (index < 0) byId(project.net.nodes, id, 'Node')
     const toIndex = Number(operation.to_index)
@@ -754,12 +701,12 @@ export class DesignCommandService {
 
   createEdge(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('edge', operation, context)
+    const id = this.assignId('edge', project, operation, context)
     if (project.net.edges.some(edge => edge.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Edge ID already exists: ${id}`)
     }
-    const sourceId = resolveAlias(value.source, context.aliases)
-    const targetId = resolveAlias(value.target, context.aliases)
+    const sourceId = value.source
+    const targetId = value.target
     const source = byId(project.net.nodes, sourceId, 'Source node')
     const target = byId(project.net.nodes, targetId, 'Target node')
     if (source === target) {
@@ -797,20 +744,20 @@ export class DesignCommandService {
   }
 
   updateEdge(project, operation, context) {
-    const id = resolveAlias(operation.id || operation.edge_id, context.aliases)
+    const id = operation.id || operation.edge_id
     const edge = byId(project.net.edges, id, 'Edge')
     const value = operation.value || operation
     if (Object.hasOwn(value, 'source')) {
       edge.source = byId(
         project.net.nodes,
-        resolveAlias(value.source, context.aliases),
+        value.source,
         'Source node',
       )
     }
     if (Object.hasOwn(value, 'target')) {
       edge.target = byId(
         project.net.nodes,
-        resolveAlias(value.target, context.aliases),
+        value.target,
         'Target node',
       )
     }
@@ -828,7 +775,7 @@ export class DesignCommandService {
       if (Object.keys(value.data).some(key => !allowedDataFields.has(key))) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
-          'Edge protocols must use protocol specialist operations.',
+          'Edge protocols must use protocol operations.',
         )
       }
       edge.data = { ...edge.data, ...deepClone(value.data) }
@@ -853,7 +800,7 @@ export class DesignCommandService {
   }
 
   removeEdge(project, operation, context) {
-    const id = resolveAlias(operation.id || operation.edge_id, context.aliases)
+    const id = operation.id || operation.edge_id
     byId(project.net.edges, id, 'Edge')
     project.net.edges = project.net.edges.filter(edge => edge.id !== id)
     context.deletedIds.add(id)
@@ -884,7 +831,7 @@ export class DesignCommandService {
   }
 
   async createSlotIn(collection, prefix, project, operation, context) {
-    const id = this.assignId(prefix, operation, context)
+    const id = this.assignId(prefix, project, operation, context)
     if (this.allSlots(project).some(slot => slot.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Slot ID already exists: ${id}`)
     }
@@ -896,6 +843,7 @@ export class DesignCommandService {
         project,
         ownerId: operation.template === true ? null : operation.node_id,
         template: operation.template === true,
+        canonicalAssignments: context.origin === 'mcp',
       },
     )
     collection.push({
@@ -918,6 +866,7 @@ export class DesignCommandService {
           project,
           ownerId: operation.template === true ? null : operation.node_id,
           template: operation.template === true,
+          canonicalAssignments: context.origin === 'mcp',
         },
       )
     }
@@ -1201,7 +1150,7 @@ export class DesignCommandService {
       project = this.getProject(),
       ownerId = null,
       template = false,
-      allowLegacyLiteral = false,
+      canonicalAssignments = false,
     } = {},
   ) {
     if (!record(noise)) {
@@ -1219,6 +1168,15 @@ export class DesignCommandService {
         'Background noise parameters must be an array.',
       )
     }
+    if (type === 'default') {
+      if (noise.parameters.length !== 0) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          'Default background noise must use an empty parameter list.',
+        )
+      }
+      return { type: 'default', parameters: [] }
+    }
     if (!definition && noise.parameters.some(parameter => (
       (
         record(parameter?.value)
@@ -1232,26 +1190,26 @@ export class DesignCommandService {
       )
     }
     if (!definition) {
-      if (catalog.length > 0 && !allowLegacyLiteral) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Unknown background noise type: ${type}`,
-        )
-      }
-      return deepClone(noise)
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `Unknown background noise type: ${type}`,
+      )
     }
 
     const parameters = await this.constructorParameters(
       project,
       definition,
-      noise.parameters,
+      noise.parameters.map(parameter => ({
+        ...parameter,
+        field: parameter?.field ?? parameter?.name,
+      })),
       {
         identity: 'field',
         label: 'Background noise',
         placement: 'node',
         ownerId,
         template,
-        rejectMetadataMismatch: true,
+        requireWireType: canonicalAssignments,
         defaults: (definition.parameters || []).map(parameter => ({
           ...deepClone(parameter),
           field: String(parameter.field),
@@ -1270,7 +1228,7 @@ export class DesignCommandService {
   async createProtocol(project, operation, context) {
     const collection = protocolCollection(project, operation)
     const value = operation.value || operation
-    const id = this.assignId('protocol', operation, context)
+    const id = this.assignId('protocol', project, operation, context)
     const allProtocols = [
       ...project.net.protocols,
       ...project.net.nodes.flatMap(node => node.data.protocols),
@@ -1306,6 +1264,7 @@ export class DesignCommandService {
         operation.placement,
         null,
         operation.owner_id,
+        context.origin === 'mcp',
       ),
     }
     collection.push(new FloatingProtocol({ id, ...constructor }))
@@ -1360,6 +1319,7 @@ export class DesignCommandService {
         operation.placement,
         preservedParameterTypes,
         operation.owner_id,
+        context.origin === 'mcp',
       )
     }
     context.affectedIds.add(protocol.id)
@@ -1372,6 +1332,7 @@ export class DesignCommandService {
     placement,
     preservedTypes = null,
     ownerId = null,
+    requireWireType = false,
   ) {
     const defaults = createProtocolFromDefinition(definition).parameters
     return this.constructorParameters(project, definition, supplied, {
@@ -1381,6 +1342,7 @@ export class DesignCommandService {
       ownerId,
       preservedTypes,
       defaults,
+      requireWireType,
     })
   }
 
@@ -1402,7 +1364,7 @@ export class DesignCommandService {
       template = false,
       preservedTypes = null,
       defaults = [],
-      rejectMetadataMismatch = false,
+      requireWireType = false,
     } = {},
   ) {
     const canonicalDefaults = deepClone(defaults)
@@ -1450,35 +1412,25 @@ export class DesignCommandService {
         continue
       }
       const parameterDefinition = definitions.get(parameterName)
-      if (
-        rejectMetadataMismatch
-        && Object.hasOwn(suppliedParameter, 'type')
-        && JSON.stringify(suppliedParameter.type) !== JSON.stringify(parameterDefinition.type)
-      ) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${label} parameter metadata does not match the catalog: ${parameterName}`,
-        )
-      }
       let normalizedValue
       let normalizedSelectedType
       if (isVariableReference(suppliedParameter.value)) {
         const variable = byId(project.variables, suppliedParameter.value.id, 'Variable')
-        const assignmentType = variable.selectedType === 'default'
-          ? 'default'
-          : variable.type
         const linkedOption = parameterInputOptionForVariable(
           parameterDefinition.type,
           parameterDefinition,
           variable,
         )
         if (!linkedOption) {
-          const message = parameterDefinition.required === true && assignmentType === 'default'
-            ? `Required parameter ${parameterName} cannot use a Default-valued Variable.`
-            : `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`
           throw new DesignCommandError(
             'VALIDATION_FAILED',
-            message,
+            `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
+          )
+        }
+        if (requireWireType && suppliedParameter.type !== linkedOption.wireType) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${label} parameter ${parameterName} must use wire type ${linkedOption.wireType}.`,
           )
         }
         normalizedSelectedType = linkedOption.id
@@ -1509,6 +1461,12 @@ export class DesignCommandService {
           suppliedParameter,
           parameterDefinition,
         )
+        if (requireWireType && suppliedParameter.type !== effectiveType.wireType) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${label} parameter ${parameterName} must use wire type ${effectiveType.wireType}.`,
+          )
+        }
         normalizedValue = await this.requireTypedValue(
           effectiveType,
           suppliedParameter.value,
@@ -1574,8 +1532,11 @@ export class DesignCommandService {
         candidate.inputKind === 'numeric-expression'
         && candidate.wireType === value.type
       ))
-    } else if (value.value == null || value.value === '' || value.value === 'default') {
-      option = options[0]
+    } else if (
+      !Object.hasOwn(value, 'type')
+      && !Object.hasOwn(value, 'value')
+    ) {
+      option = options.find(candidate => candidate.id === 'Float64')
     } else {
       option = options.find(candidate => candidate.id === value.type)
         || inferParameterInputOption(options, value)
@@ -1584,11 +1545,10 @@ export class DesignCommandService {
       throw new DesignCommandError('VALIDATION_FAILED', 'Variable input type is unsupported.')
     }
 
-    const semanticType = option.wireType || 'default'
+    const semanticType = option.wireType
     if (
       Object.hasOwn(value, 'type')
       && value.type !== semanticType
-      && (Object.hasOwn(value, 'selectedType') || option.inputKind !== 'default')
     ) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1600,15 +1560,15 @@ export class DesignCommandService {
 
   async createVariable(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('variable', operation, context)
+    const id = this.assignId('variable', project, operation, context)
     if (project.variables.some(variable => variable.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
     const option = this.effectiveVariableDescriptor(value)
-    const type = option.wireType || 'default'
+    const type = option.wireType
     const variableValue = await this.requireTypedValue(
       option,
-      Object.hasOwn(value, 'value') ? value.value : null,
+      Object.hasOwn(value, 'value') ? value.value : 0,
       `Variable ${value.name || id}`,
       { placement: 'variable' },
     )
@@ -1630,7 +1590,7 @@ export class DesignCommandService {
     if (isStatesZooVariable(variable)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
-        'States Zoo variables must use state specialist operations.',
+        'States Zoo variables must use state operations.',
       )
     }
     const value = operation.value || operation
@@ -1663,7 +1623,7 @@ export class DesignCommandService {
           : {}),
       }
       const option = this.effectiveVariableDescriptor(proposed)
-      variable.type = option.wireType || 'default'
+      variable.type = option.wireType
       variable.selectedType = option.id
       variable.value = await this.requireTypedValue(
         option,
@@ -1799,7 +1759,7 @@ export class DesignCommandService {
   async createState(project, operation, context) {
     const value = operation.value || operation
     const definition = this.stateDefinition(value.state_type)
-    const id = this.assignId('variable', operation, context)
+    const id = this.assignId('variable', project, operation, context)
     if (project.variables.some(variable => variable.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
@@ -1854,7 +1814,7 @@ export class DesignCommandService {
 
   createAnnotation(project, operation, context) {
     const value = operation.value || operation
-    const id = this.assignId('annotation', operation, context)
+    const id = this.assignId('annotation', project, operation, context)
     if (project.annotations.some(annotation => annotation.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Annotation ID already exists: ${id}`)
     }
@@ -1879,7 +1839,6 @@ export class DesignCommandService {
       kind: _kind,
       id: _id,
       annotation_id: _annotationId,
-      client_ref: _clientRef,
       ...changes
     } = value
     syncPlainObject(annotation, { ...annotation, ...deepClone(changes) })
@@ -1893,13 +1852,88 @@ export class DesignCommandService {
     context.deletedIds.add(id)
   }
 
+  async mcpRepeaterOptions(project, options) {
+    if (!Object.hasOwn(options, 'automation')) return options
+    if (!record(options.automation)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'Repeater protocol automation settings must be an object.',
+      )
+    }
+    const targets = {
+      entangler: {
+        placement: 'edge',
+        simpleName: 'EntanglerProt',
+        ownerId: options.templateEdgeId,
+      },
+      swapper: {
+        placement: 'node',
+        simpleName: 'SwapperProt',
+        ownerId: options.templateNodeId,
+      },
+      tracker: {
+        placement: 'node',
+        simpleName: 'EntanglementTracker',
+        ownerId: options.templateNodeId,
+      },
+    }
+    const automation = {}
+    for (const [name, target] of Object.entries(targets)) {
+      const setting = options.automation[name]
+      if (setting === undefined) continue
+      const normalized = { enabled: setting.enabled === true }
+      if (name === 'swapper' && Object.hasOwn(setting, 'predicateStrategy')) {
+        normalized.predicateStrategy = setting.predicateStrategy
+      }
+      if (normalized.enabled) {
+        const definition = (this.protocolCatalog()?.[target.placement] || [])
+          .find(candidate => protocolSimpleName(candidate) === target.simpleName)
+        if (!definition) {
+          throw new DesignCommandError(
+            'VALIDATION_FAILED',
+            `${target.simpleName} is unavailable in the live protocol catalog.`,
+          )
+        }
+        normalized.definition = definition
+        normalized.protocol = {
+          type: definition.type,
+          parameters: await this.protocolParameters(
+            project,
+            definition,
+            setting.parameters,
+            target.placement,
+            null,
+            target.ownerId,
+            true,
+          ),
+        }
+      }
+      automation[name] = normalized
+    }
+    return { ...options, automation }
+  }
+
   async generateNetwork(project, operation, context) {
     const value = operation.value || operation
-    const generator = this.generators[value.generator || value.type]
+    const generatorName = value.generator || value.type
+    const generator = this.generators[generatorName]
     if (typeof generator !== 'function') {
-      throw new DesignCommandError('VALIDATION_FAILED', `Unknown network generator: ${value.generator || value.type}`)
+      throw new DesignCommandError('VALIDATION_FAILED', `Unknown network generator: ${generatorName}`)
     }
-    const result = await generator(project.net, deepClone(value.options || value))
+    let options = deepClone(value.options || value)
+    if (context.origin === 'mcp' && generatorName === 'repeater_chain') {
+      options = await this.mcpRepeaterOptions(project, options)
+    }
+    let result
+    try {
+      result = await generator(project.net, options)
+    } catch (error) {
+      if (error instanceof DesignCommandError) throw error
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        error?.message || `The ${generatorName} generator rejected its options.`,
+      )
+    }
     // Layout generators clone representative template values. Revalidate each
     // cloned assignment after its destination node has a stable position in
     // the candidate network, then commit the transaction only if all pass.
@@ -1910,7 +1944,6 @@ export class DesignCommandService {
           {
             project,
             ownerId: node.id,
-            allowLegacyLiteral: true,
           },
         )
       }

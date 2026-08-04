@@ -141,13 +141,10 @@ function _physical_edge_number(
   return number
 end
 
-"""Return the validated physical properties carried by a minimized edge.
+"""Return the validated physical properties carried by a simulation edge.
 
-Legacy payloads predate distance, refractive-index, loss, and transmissivity
-metadata, so those values remain unknown while propagation delay retains the
-established zero default. Route geometry and manual overrides remain frontend
-storage concerns; the backend validates resolved values without recomputing or
-cross-checking frontend formulas.
+Route geometry and manual overrides remain frontend storage concerns; the
+backend validates resolved values without recomputing frontend formulas.
 """
 function _physical_edge_properties(edge, context::String="Physical edge")
   edge_data = get(edge, "data", Dict{String,Any}())
@@ -351,64 +348,18 @@ function _parse_numeric_expression_test_request(payload)
   return (; expression, target_type, placement, context=(; node_names, edge_context))
 end
 
-"""
-Parse and validate top-level simulation variable definitions.
-
-The field is optional for backward compatibility. Values remain unconverted;
-conversion happens for each protocol assignment so context-sensitive function
-references and fresh wildcard values keep their existing behavior.
-"""
+"""Hydrate the already-admitted concrete simulation Variables."""
 function _parse_variables(payload)
-  raw_variables = haskey(payload, "variables") ? payload["variables"] : Any[]
-  raw_variables isa AbstractVector || throw(validation_error(
-    "Field 'variables' must be an array",
-    Dict{String,Any}("variables_type" => string(typeof(raw_variables))),
-  ))
-
   variables = Dict{String,Variable}()
-  variable_names = Set{String}()
-
-  for (index, raw_variable) in enumerate(raw_variables)
-    context = "Variable $index"
-    _is_object_like(raw_variable) || throw(validation_error(
-      "$context must be an object",
-      Dict{String,Any}("received_type" => string(typeof(raw_variable))),
-    ))
-
-    id = _required_nonempty_string(raw_variable, "id", context)
-    name = _required_nonempty_string(raw_variable, "name", context)
-    variable_type = _required_nonempty_string(raw_variable, "type", context)
-    haskey(raw_variable, "value") || throw(validation_error("$context missing required field: 'value'"))
-    value = raw_variable["value"]
-
-    haskey(variables, id) && throw(validation_error(
-      "Duplicate variable ID: '$id'",
-      Dict{String,Any}("variable_id" => id),
-    ))
-    name in variable_names && throw(validation_error(
-      "Duplicate variable name: '$name'",
-      Dict{String,Any}("variable_name" => name),
-    ))
-
-    permits_null = lowercase(variable_type) == "default" ||
-      variable_type in ("Nothing", "Wildcard", "QuantumSavory.Wildcard")
-    value === nothing && !permits_null && throw(validation_error(
-      "$context field 'value' must not be null for type '$variable_type'",
-      Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-    ))
-    numeric_expression = _parse_numeric_expression(value; context=context)
-    if numeric_expression !== nothing &&
-       !(variable_type in NUMERIC_EXPRESSION_TARGETS)
-      throw(validation_error(
-        "$context numeric expression requires variable type 'Float64' or 'Int64'",
-        Dict{String,Any}("variable_id" => id, "variable_type" => variable_type),
-      ))
-    end
-
-    variables[id] = Variable(id, name, variable_type, value)
-    push!(variable_names, name)
+  for raw_variable in payload["variables"]
+    id = String(raw_variable["id"])
+    variables[id] = Variable(
+      id,
+      String(raw_variable["name"]),
+      String(raw_variable["type"]),
+      raw_variable["value"],
+    )
   end
-
   return variables
 end
 
@@ -501,8 +452,7 @@ function _collect_background_definitions(payload)
     slots isa AbstractVector || continue
     for (slot_index, slot) in enumerate(slots)
       _is_object_like(slot) || continue
-      background = get(slot, "backgroundNoise", nothing)
-      background === nothing && continue
+      background = slot["backgroundNoise"]
       push!(
         definitions,
         (background, "node $node_index slot $slot_index background"),
@@ -511,9 +461,6 @@ function _collect_background_definitions(payload)
   end
   return definitions
 end
-
-_constructor_parameter_value_is_blank(value) = value === nothing ||
-  (value isa AbstractString && isempty(strip(String(value))))
 
 """Validate constructor parameter names once before caller-specific value handling."""
 function _validated_catalog_parameters(
@@ -550,13 +497,11 @@ function _validated_catalog_parameters(
         "constructor_type" => string(constructor_type),
       ),
     ))
-    value = get(parameter, "value", nothing)
     push!(validated, (
       definition=parameter,
       name=name,
       declared_type=declared_parameter_types[name],
-      value=value,
-      produces_value=!_constructor_parameter_value_is_blank(value),
+      value=parameter["value"],
     ))
   end
   return validated
@@ -579,6 +524,18 @@ function _require_catalog_parameters(
     "$context is missing required parameter(s): $(join(missing_required, ", "))",
     error_details,
   ))
+end
+
+function _catalog_parameter_wire_types(metadata)
+  semantics = _named_tag_parameter_semantics(metadata.type)
+  semantics === nothing || return Set(
+    semantics.nullable ? ("DataType", "Nothing") : ("DataType",),
+  )
+  parsed_type = only(parse_pt_type([metadata])).type
+  types = parsed_type isa AbstractVector ? string.(parsed_type) : [string(parsed_type)]
+  types = replace.(types, "QuantumSavory.Wildcard" => "Wildcard")
+  "Function" in types && push!(types, "Lambda")
+  return Set(types)
 end
 
 """
@@ -618,22 +575,6 @@ function _validate_catalog_constructors(
     definition = constructor.definition
     location = constructor.location
     kind = constructor.kind
-    if definition isa AbstractString
-      kind === :protocol && throw(validation_error(
-        "$location must be a catalog-backed object",
-      ))
-      String(definition) == "default" && continue
-      catalog_entry = _resolve_background_catalog_entry(String(definition), catalogs)
-      catalog_entry === nothing && throw(validation_error(
-        "Unknown background noise type: '$(definition)'",
-      ))
-      _require_catalog_parameters(
-        _required_catalog_parameters(catalog_entry),
-        Set{String}(),
-        "Background noise '$(definition)'",
-      )
-      continue
-    end
     _is_object_like(definition) || throw(validation_error(
       "$location must be a catalog-backed object",
     ))
@@ -680,7 +621,15 @@ function _validate_catalog_constructors(
 
     for parameter in parameters
       parameter_name = parameter.name
-      parameter.produces_value || continue
+      selected_type = _required_nonempty_string(
+        parameter.definition,
+        "type",
+        "$location parameter '$parameter_name'",
+      )
+      metadata = get(_catalog_parameter_metadata(catalog_entry), parameter_name, nothing)
+      selected_type in _catalog_parameter_wire_types(metadata) || throw(validation_error(
+        "$location parameter '$parameter_name' type '$selected_type' is not a catalog wire type",
+      ))
       value = parameter.value
       context = "$location parameter '$parameter_name'"
       declared_type = parameter.declared_type
@@ -721,16 +670,6 @@ function _validate_catalog_constructors(
           "Named tag type parameters cannot use variables",
           Dict{String,Any}("parameter_name" => parameter_name),
         ))
-      if _variable_uses_constructor_default(variable)
-        parameter_name in required_parameters && throw(validation_error(
-          "Required $kind_label parameter '$parameter_name' cannot use a Default-valued Variable",
-          Dict{String,Any}(
-            "parameter_name" => parameter_name,
-            "variable_id" => variable.id,
-          ),
-        ))
-        continue
-      end
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $context",
@@ -869,7 +808,6 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
   variable_type isa AbstractString || return false
   variable_name = String(variable_type)
   isempty(variable_name) && return false
-  lowercase(variable_name) == "default" && return true
 
   members = try
     Base.uniontypes(declared_type)
@@ -889,22 +827,12 @@ function _parameter_type_supports_variable_type(declared_type, variable_type)
       ) || startswith(variable_name, "SymbolicUtils.Symbolic{") ||
         startswith(variable_name, "QuantumSymbolics.SymQObj{")
     elseif member === QuantumSavory.Wildcard
-      return variable_name in ("Wildcard", "QuantumSavory.Wildcard")
+      return variable_name == "Wildcard"
     elseif member in (Int, Int64)
       return variable_name in ("Int", "Int64")
     end
     return member_name == variable_name
   end
-end
-
-"""Whether a Variable requests omission of its assigned constructor keyword."""
-function _variable_uses_constructor_default(variable)
-  variable_type = lowercase(strip(String(variable.type)))
-  return variable_type == "default" || (
-    variable_type == "function" &&
-    variable.value isa AbstractString &&
-    lowercase(strip(String(variable.value))) == "default"
-  )
 end
 
 """Choose a value-compatible member while staying inside an authoritative union type."""
@@ -1054,132 +982,310 @@ function extract_payload(payload = nothing, raw_payload = nothing)
   throw(validation_error("No valid JSON payload found", Dict{String, Any}("raw_payload_type" => string(typeof(raw_payload)))))
 end
 
+const _MAX_SAFE_JSON_INTEGER = 9_007_199_254_740_991
+
+function _contract_number(value, context; integer=false)
+  value isa Real && !(value isa Bool) && isfinite(value) ||
+    throw(validation_error("$context must be a finite number"))
+  integer && !isinteger(value) &&
+    throw(validation_error("$context must be an integer"))
+  isinteger(value) && abs(value) > _MAX_SAFE_JSON_INTEGER &&
+    throw(validation_error("$context must be a JavaScript-safe integer"))
+  return value
+end
+
+function _opaque_json_value(value, context)
+  if value === nothing || value isa AbstractString || value isa Bool
+    return value
+  elseif value isa Real
+    _contract_number(value, context)
+  elseif value isa AbstractVector
+    foreach(enumerate(value)) do (index, item)
+      _opaque_json_value(item, "$context[$index]")
+    end
+  elseif _is_object_like(value)
+    foreach(pairs(value)) do (key, item)
+      _opaque_json_value(item, "$context.$key")
+    end
+  else
+    throw(validation_error("$context must be a finite JSON value"))
+  end
+  return value
+end
+
+function _contract_typed_value(value, raw_type_name::AbstractString, context; variable=false)
+  type_name = String(raw_type_name)
+  if _is_object_like(value)
+    kind = get(value, "kind", nothing)
+    if !variable && kind == "variable"
+      _require_exact_object_fields(value, ("kind", "id"); context)
+      _required_nonempty_string(value, "id", context)
+      return
+    elseif kind == NUMERIC_EXPRESSION_KIND
+      type_name in NUMERIC_EXPRESSION_TARGETS || throw(validation_error(
+        "$context numeric expression requires Float64 or Int64",
+      ))
+      _parse_numeric_expression(value; context)
+      return
+    elseif kind == "states_zoo"
+      _is_symbolic_wire_type(type_name) || throw(validation_error(
+        "$context States Zoo value requires a Symbolic type",
+      ))
+      _require_exact_object_fields(
+        value,
+        ("kind", "state_type", "parameters");
+        context,
+      )
+      _required_nonempty_string(value, "state_type", context)
+      parameters = value["parameters"]
+      _is_object_like(parameters) || throw(validation_error(
+        "$context States Zoo parameters must be an object",
+      ))
+      foreach(pairs(parameters)) do (name, parameter)
+        _contract_number(parameter, "$context.parameters.$name")
+      end
+      return
+    elseif type_name == "Any"
+      _opaque_json_value(value, context)
+      return
+    end
+    throw(validation_error("$context contains an unsupported tagged value"))
+  end
+
+  value === nothing && throw(validation_error("$context must not be null"))
+  if type_name in ("Int", "Int64")
+    _contract_number(value, context; integer=true)
+  elseif type_name == "Float64"
+    _contract_number(value, context)
+  elseif type_name == "Bool"
+    value isa Bool || throw(validation_error("$context must be a boolean"))
+  elseif type_name in ("String", "DataType", "Function", "Lambda") ||
+      _is_symbolic_wire_type(type_name)
+    value isa AbstractString && !isempty(strip(value)) ||
+      throw(validation_error("$context must be a nonblank string"))
+    lowercase(strip(value)) == "default" && type_name != "String" &&
+      throw(validation_error("$context must not use the default sentinel"))
+  elseif type_name == "Nothing"
+    value == "nothing" || throw(validation_error(
+      "$context must use the 'nothing' sentinel",
+    ))
+  elseif type_name == "Wildcard"
+    value == "Wildcard" || throw(validation_error(
+      "$context must use the 'Wildcard' sentinel",
+    ))
+  elseif type_name in ("Vector{Int64}", "Vector{Float64}")
+    value isa AbstractVector || throw(validation_error("$context must be an array"))
+    foreach(enumerate(value)) do (index, item)
+      _contract_number(item, "$context[$index]"; integer=type_name == "Vector{Int64}")
+    end
+  elseif type_name == "Any"
+    _opaque_json_value(value, context)
+  else
+    throw(validation_error("$context uses unsupported wire type '$type_name'"))
+  end
+end
+
+_is_symbolic_wire_type(type_name) = type_name == "Symbolic" ||
+  startswith(type_name, "SymbolicUtils.Symbolic{") ||
+  startswith(type_name, "QuantumSymbolics.SymQObj{")
+
+function _admit_assignment_array(parameters, context)
+  parameters isa AbstractVector || throw(validation_error("$context must be an array"))
+  names = Set{String}()
+  for (index, parameter) in enumerate(parameters)
+    item_context = "$context[$index]"
+    _require_exact_object_fields(parameter, ("name", "type", "value"); context=item_context)
+    name = _required_nonempty_string(parameter, "name", item_context)
+    name in names && throw(validation_error("$context contains duplicate assignment '$name'"))
+    push!(names, name)
+    type_name = _required_nonempty_string(parameter, "type", item_context)
+    _contract_typed_value(parameter["value"], type_name, "$item_context.value")
+  end
+end
+
+function _admit_protocol(protocol, context, ids)
+  _require_exact_object_fields(protocol, ("id", "type", "parameters"); context)
+  id = _required_nonempty_string(protocol, "id", context)
+  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+  push!(ids, id)
+  _required_nonempty_string(protocol, "type", context)
+  _admit_assignment_array(protocol["parameters"], "$context.parameters")
+end
+
+function _admit_slot(slot, context, ids)
+  _require_exact_object_fields(slot, ("id", "type", "backgroundNoise"); context)
+  id = _required_nonempty_string(slot, "id", context)
+  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+  push!(ids, id)
+  _required_nonempty_string(slot, "type", context)
+  noise = slot["backgroundNoise"]
+  _require_exact_object_fields(noise, ("type", "parameters"); context="$context.backgroundNoise")
+  noise_type = _required_nonempty_string(noise, "type", "$context.backgroundNoise")
+  _admit_assignment_array(noise["parameters"], "$context.backgroundNoise.parameters")
+  noise_type == "default" && !isempty(noise["parameters"]) && throw(validation_error(
+    "$context default background noise must have no parameters",
+  ))
+end
+
+function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapshot())
+  _require_exact_object_fields(
+    payload,
+    ("name", "simulationConfig", "variables", "net");
+    context="Simulation payload",
+  )
+  _required_nonempty_string(payload, "name", "Simulation payload")
+  config = payload["simulationConfig"]
+  _require_exact_object_fields(
+    config,
+    ("qubitRepresentation", "qumodeRepresentation"),
+    ("time", "timeStep");
+    context="Simulation configuration",
+  )
+  haskey(config, "time") == haskey(config, "timeStep") || throw(validation_error(
+    "Simulation configuration time and timeStep must be supplied together",
+  ))
+  _required_nonempty_string(config, "qubitRepresentation", "Simulation configuration")
+  _required_nonempty_string(config, "qumodeRepresentation", "Simulation configuration")
+  for field in ("time", "timeStep")
+    haskey(config, field) || continue
+    _contract_number(config[field], "Simulation configuration.$field")
+    config[field] > 0 || throw(validation_error("Simulation configuration.$field must be positive"))
+  end
+
+  ids = Set{String}()
+  names = Set{String}()
+  variable_by_id = Dict{String,Any}()
+  variables = payload["variables"]
+  variables isa AbstractVector || throw(validation_error("Variables must be an array"))
+  for (index, variable) in enumerate(variables)
+    context = "Variable $index"
+    _require_exact_object_fields(
+      variable,
+      ("id", "name", "type", "value"),
+      ("statesZooTraceSourceId",);
+      context,
+    )
+    id = _required_nonempty_string(variable, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id)
+    variable_by_id[id] = variable
+    name = _required_nonempty_string(variable, "name", context)
+    name in names && throw(validation_error("Duplicate variable name: '$name'"))
+    push!(names, name)
+    type_name = _required_nonempty_string(variable, "type", context)
+    if lowercase(type_name) == "default" || type_name in ("Any", "DataType")
+      throw(validation_error("$context requires a concrete supported type"))
+    end
+    _contract_typed_value(variable["value"], type_name, "$context.value"; variable=true)
+    haskey(variable, "statesZooTraceSourceId") &&
+      _required_nonempty_string(variable, "statesZooTraceSourceId", context)
+  end
+  for (id, variable) in variable_by_id
+    haskey(variable, "statesZooTraceSourceId") || continue
+    source_id = String(variable["statesZooTraceSourceId"])
+    source = get(variable_by_id, source_id, nothing)
+    valid = source !== nothing && id == "$(source_id)_tr" &&
+      _is_object_like(source["value"]) &&
+      get(source["value"], "kind", nothing) == "states_zoo"
+    valid ||
+      throw(validation_error("Variable '$id' has invalid States Zoo trace linkage"))
+  end
+
+  net = payload["net"]
+  _require_exact_object_fields(net, ("nodes", "edges", "protocols"); context="Network")
+  nodes, edges, protocols = (net[field] for field in ("nodes", "edges", "protocols"))
+  all(value -> value isa AbstractVector, (nodes, edges, protocols)) ||
+    throw(validation_error("Network collections must be arrays"))
+  node_ids = Set{String}()
+  for (index, node) in enumerate(nodes)
+    context = "Node $index"
+    _require_exact_object_fields(node, ("id", "name", "position", "data"); context)
+    id = _required_nonempty_string(node, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id); push!(node_ids, id)
+    _required_nonempty_string(node, "name", context)
+    position = node["position"]
+    position isa AbstractVector && length(position) == 2 ||
+      throw(validation_error("$context position must contain two numbers"))
+    foreach(enumerate(position)) do (coordinate, value)
+      _contract_number(value, "$context.position[$coordinate]")
+    end
+    data = node["data"]
+    _require_exact_object_fields(data, ("type", "slots", "protocols"); context="$context data")
+    _required_nonempty_string(data, "type", "$context data")
+    data["slots"] isa AbstractVector || throw(validation_error("$context slots must be an array"))
+    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    foreach(enumerate(data["slots"])) do (slot_index, slot)
+      _admit_slot(slot, "$context slot $slot_index", ids)
+      slot_type = String(slot["type"])
+      _resolve_slot_catalog_entry(slot_type, catalogs) === nothing && throw(validation_error(
+        "$context slot $slot_index has unknown slot type '$slot_type'",
+      ))
+    end
+    foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
+      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+    end
+  end
+  for (index, edge) in enumerate(edges)
+    context = "Edge $index"
+    _require_exact_object_fields(edge, ("id", "source", "target", "isLogic", "data"); context)
+    id = _required_nonempty_string(edge, "id", context)
+    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    push!(ids, id)
+    source = _required_nonempty_string(edge, "source", context)
+    target = _required_nonempty_string(edge, "target", context)
+    source in node_ids && target in node_ids || throw(validation_error(
+      "$context endpoints must reference existing nodes",
+    ))
+    source == target && throw(validation_error("$context endpoints must be distinct"))
+    edge["isLogic"] isa Bool || throw(validation_error("$context isLogic must be a boolean"))
+    data = edge["data"]
+    fields = edge["isLogic"] ? ("type", "protocols") : (
+      "type", "protocols", "distanceMeters", "propagationDelaySeconds",
+      "refractiveIndex", "lossDbPerKm", "transmissivity",
+    )
+    _require_exact_object_fields(data, fields; context="$context data")
+    _required_nonempty_string(data, "type", "$context data")
+    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
+      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+    end
+    edge["isLogic"] || foreach(fields[3:end]) do field
+      _contract_number(data[field], "$context data.$field")
+    end
+  end
+  foreach(enumerate(protocols)) do (index, protocol)
+    _admit_protocol(protocol, "Floating protocol $index", ids)
+  end
+  return payload
+end
+
 function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
   try
-    # Validate top-level structure
-    if !haskey(payload, "name")
-      throw(validation_error("Missing required field: 'name' must be present"))
-    end
-
-    if !haskey(payload, "net")
-      throw(validation_error("Missing required field: 'net' must be present"))
-    end
-
+    _admit_simulation_payload(payload; catalogs)
     representation_config(payload)
-
     net = payload["net"]
-
-    # Validate net structure
-    if !haskey(net, "nodes") || !haskey(net, "edges")
-      throw(validation_error("Missing required fields in 'net': 'nodes' and 'edges' must be present"))
-    end
-
-    nodes = net["nodes"]
-    edges = net["edges"]
-
-    # Validate that nodes and edges are arrays, accepting any AbstractVector
-    if !isa(nodes, AbstractVector)
-      throw(validation_error("Field 'nodes' must be an array", Dict{String, Any}("nodes_type" => string(typeof(nodes)))))
-    end
-
-    if !isa(edges, AbstractVector)
-      throw(validation_error("Field 'edges' must be an array", Dict{String, Any}("edges_type" => string(typeof(edges)))))
-    end
-
-    # Normalize to plain Vectors to avoid type cracks downstream
-    nodes = _to_vector(nodes)
-    edges = _to_vector(edges)
-
-    # Validate each node structure
-    node_ids = Set{String}()
-    for (i, node) in enumerate(nodes)
-      # Check required node fields
-      if !haskey(node, "id")
-        throw(validation_error("Node $i missing required field: 'id'"))
-      end
-
-      if !haskey(node, "name")
-        throw(validation_error("Node $i missing required field: 'name'"))
-      end
-
-      if !haskey(node, "position")
-        throw(validation_error("Node $i missing required field: 'position'"))
-      end
-
-      if !haskey(node, "data")
-        throw(validation_error("Node $i missing required field: 'data'"))
-      end
-
-      # Check for duplicate node IDs
-      node_id = string(node["id"])
-      if node_id in node_ids
-        throw(validation_error("Duplicate node ID: '$node_id'"))
-      end
-      push!(node_ids, node_id)
-    end
-
-    # Validate each edge structure
-    edge_connections = []
+    nodes = _to_vector(net["nodes"])
+    edges = _to_vector(net["edges"])
+    node_ids = Set(String(node["id"]) for node in nodes)
+    edge_connections = Dict{String,String}[]
     physical_endpoint_pairs = Set{Tuple{String,String}}()
-    for (i, edge) in enumerate(edges)
-      # Check required edge fields
-      if !haskey(edge, "id")
-        throw(validation_error("Edge $i missing required field: 'id'"))
-      end
-
-      if !haskey(edge, "source")
-        throw(validation_error("Edge $i missing required field: 'source'"))
-      end
-
-      if !haskey(edge, "target")
-        throw(validation_error("Edge $i missing required field: 'target'"))
-      end
-
-      if haskey(edge, "isLogic") && !(edge["isLogic"] isa Bool)
-        throw(validation_error("Edge $i field 'isLogic' must be a boolean"))
-      end
-
-      # Validate source and target reference existing nodes
-      source = string(edge["source"])
-      target = string(edge["target"])
-
-      if !(source in node_ids)
-        throw(validation_error("Edge $i references non-existent source node: '$source'"))
-      end
-
-      if !(target in node_ids)
-        throw(validation_error("Edge $i references non-existent target node: '$target'"))
-      end
-
-      if _is_virtual_edge(edge)
-        edge_data = get(edge, "data", Dict{String,Any}())
-        _is_object_like(edge_data) || throw(validation_error(
-          "Virtual edge $i data must be an object",
-        ))
-        protocols = get(edge_data, "protocols", Any[])
-        protocols isa AbstractVector || throw(validation_error(
-          "Virtual edge $i protocols must be an array",
-        ))
-      else
+    for (index, edge) in enumerate(edges)
+      source = String(edge["source"])
+      target = String(edge["target"])
+      if !_is_virtual_edge(edge)
         endpoint_pair = minmax(source, target)
         endpoint_pair in physical_endpoint_pairs && throw(validation_error(
           "Duplicate physical edge endpoints: '$source' and '$target'",
         ))
         push!(physical_endpoint_pairs, endpoint_pair)
-        _physical_edge_delay(edge, "Physical edge $i")
+        _physical_edge_delay(edge, "Physical edge $index")
       end
-
       push!(edge_connections, Dict("source" => source, "target" => target))
     end
-
-    # Variables are optional for legacy projects. When present, validate both
-    # their definitions and every tagged protocol-parameter reference before
-    # creating backend state.
     variables = _parse_variables(payload)
     _validate_catalog_constructors(payload, variables; catalogs)
-
-    # Prepare success response with graph info
-    response = Dict(
+    return Dict(
       "success" => true,
       "message" => "Network graph parsed successfully",
       "data" => payload,
@@ -1192,11 +1298,7 @@ function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
         "edges" => edges
       )
     )
-
-    return response
-
   catch e
-    # Re-throw validation errors, wrap unexpected errors
     if isa(e, APIError)
       rethrow(e)
     else
@@ -1259,14 +1361,12 @@ function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapsho
       push!(traits, slot_type())
       push!(representations, construct_representation(default_representations, slot_type))
 
-      # Instantiate background noise (supports string or object with parameters)
-      noise_def = get(slot_data, "backgroundNoise", nothing)
+      noise_def = slot_data["backgroundNoise"]
       background_context = Dict{Symbol,Any}(
         :node => node_index,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
-      background = noise_def === nothing ? nothing :
-        _instantiate_noise(noise_def, background_context; variables, catalogs)
+      background = _instantiate_noise(noise_def, background_context; variables, catalogs)
       push!(background_noise, background)
     end
 
@@ -1290,73 +1390,46 @@ function get_network_time_tracker(network)
   get_time_tracker(network)
 end
 
-# Instantiate a background noise from either a String name or an object.
+# Instantiate a canonical catalog-backed background-noise object.
 function _instantiate_noise(
   noise_def,
   ctx::Dict{Symbol,Any}=Dict{Symbol,Any}();
   variables=Dict{String,Variable}(),
   catalogs=_constructor_catalog_snapshot(),
 )
-  # String form: "Depolarization" or any available background type name
-  if isa(noise_def, AbstractString)
-    if String(noise_def) == "default"
-      return nothing # this now means no noise
-    end
-
-    catalog_entry = _resolve_background_catalog_entry(String(noise_def), catalogs)
-    catalog_entry === nothing && error("Unknown background noise type: $(noise_def)")
-    T = catalog_entry.type
-    return T()
-  end
-
-  # Object form: { type: String, parameters: [ { name, value } ] }
-  if isa(noise_def, AbstractDict) || startswith(string(typeof(noise_def)), "JSON3.Object")
-    tstr = get(noise_def, "type", nothing)
-    tstr === nothing && error("Noise object missing 'type'")
-    
-    # Handle "default" type as no noise
-    if String(tstr) == "default"
-      return nothing
-    end
-    
-    catalog_entry = _resolve_background_catalog_entry(String(tstr), catalogs)
-    catalog_entry === nothing && error("Unknown background noise type: $(tstr)")
-    T = catalog_entry.type
-
-    raw_params = Vector{Any}(get(noise_def, "parameters", Any[]))
-    kwargs, variable_assignments = _constructor_parameter_kwargs(
-      raw_params,
-      T,
-      ctx;
-      variables,
-      parameter_context="background noise parameter",
-      declared_parameter_types=_catalog_parameter_types(catalog_entry),
-      constructor_parameter_metadata=_catalog_parameter_metadata(catalog_entry),
-      required_parameters=_required_catalog_parameters(catalog_entry),
+  tstr = String(noise_def["type"])
+  tstr == "default" && return nothing
+  catalog_entry = _resolve_background_catalog_entry(tstr, catalogs)
+  catalog_entry === nothing && error("Unknown background noise type: $tstr")
+  T = catalog_entry.type
+  kwargs, variable_assignments = _constructor_parameter_kwargs(
+    Vector{Any}(noise_def["parameters"]),
+    T,
+    ctx;
+    variables,
+    parameter_context="background noise parameter",
+    declared_parameter_types=_catalog_parameter_types(catalog_entry),
+    constructor_parameter_metadata=_catalog_parameter_metadata(catalog_entry),
+    required_parameters=_required_catalog_parameters(catalog_entry),
+  )
+  isempty(variable_assignments) && return T(; (k => v for (k, v) in kwargs)...)
+  try
+    return T(; (k => v for (k, v) in kwargs)...)
+  catch error
+    error isa APIError && rethrow(error)
+    parameter_names = join(
+      (assignment["parameter_name"] for assignment in variable_assignments),
+      ", ",
     )
-
-    isempty(variable_assignments) &&
-      return T(; (k => v for (k, v) in kwargs)...)
-    try
-      return T(; (k => v for (k, v) in kwargs)...)
-    catch error
-      error isa APIError && rethrow(error)
-      parameter_names = join(
-        (assignment["parameter_name"] for assignment in variable_assignments),
-        ", ",
-      )
-      throw(validation_error(
-        "Failed to instantiate background noise with variable-backed parameter(s): $parameter_names",
-        Dict{String,Any}(
-          "background_type" => string(T),
-          "variable_assignments" => variable_assignments,
-          "constructor_error" => sprint(showerror, error),
-        ),
-      ))
-    end
+    throw(validation_error(
+      "Failed to instantiate background noise with variable-backed parameter(s): $parameter_names",
+      Dict{String,Any}(
+        "background_type" => string(T),
+        "variable_assignments" => variable_assignments,
+        "constructor_error" => sprint(showerror, error),
+      ),
+    ))
   end
-
-  error("Unsupported backgroundNoise definition (expected object or nothing): $(typeof(noise_def))")
 end
 
 """
@@ -1679,7 +1752,6 @@ function _constructor_parameter_kwargs(
 
   for parameter in parameters
     original_name = parameter.name
-    parameter.produces_value || continue
     value = parameter.value
 
     name = Symbol(original_name)
@@ -1716,7 +1788,6 @@ function _constructor_parameter_kwargs(
           "parameter_name" => original_name,
         ),
       ))
-      _variable_uses_constructor_default(variable) && continue
       _parameter_type_supports_variable_type(declared_type, variable.type) ||
         throw(validation_error(
           "Variable '$(variable.name)' is incompatible with $parameter_context '$original_name'",

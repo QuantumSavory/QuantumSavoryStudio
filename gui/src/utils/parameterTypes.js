@@ -22,15 +22,14 @@ export const KNOWN_PARAMETER_TYPES = [
 ]
 
 export const VARIABLE_PARAMETER_TYPES = [
-  'default',
-  'Int64',
   'Float64',
+  'Int64',
   'Bool',
   'String',
   'Function',
   'Lambda',
   'Symbolic',
-  'QuantumSavory.Wildcard',
+  'Wildcard',
   'Vector{Int64}',
   'Vector{Float64}',
   'Nothing'
@@ -117,7 +116,8 @@ export function buildParameterInputOptions(
     return options
   }
 
-  for (const declaredType of declaredTypes) {
+  for (const catalogType of declaredTypes) {
+    const declaredType = isWildcardType(catalogType) ? 'Wildcard' : catalogType
     if (declaredType === 'default') continue
     if (declaredType === 'Function') {
       options.push(
@@ -161,7 +161,7 @@ export function buildParameterInputOptions(
 }
 
 export function buildVariableInputOptions() {
-  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES)
+  return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES, { required: true })
 }
 
 export function findParameterInputOption(inputType, metadata, id) {
@@ -183,12 +183,7 @@ export function parameterInputOptionForVariable(inputType, metadata, variable) {
   const exact = options.find(option => option.id === selectedType && option.enabled)
   if (exact) return exact
 
-  const semanticType = variable?.selectedType === 'default'
-    ? 'default'
-    : variable?.type
-  if (semanticType === 'default') {
-    return options.find(option => option.inputKind === 'default') || null
-  }
+  const semanticType = variable?.type
   return options.find(option => (
     option.enabled
     && option.inputKind !== 'default'
@@ -365,7 +360,6 @@ export function parameterTypeIsKnown(type) {
  */
 export function parameterTypeSupportsVariableType(parameterType, variableType) {
   if (typeof variableType !== 'string' || variableType.length === 0) return false
-  if (variableType.toLowerCase() === 'default') return true
 
   const declaredTypes = Array.isArray(parameterType) ? parameterType : [parameterType]
   return declaredTypes.some(declaredType => {
@@ -375,7 +369,7 @@ export function parameterTypeSupportsVariableType(parameterType, variableType) {
       return variableType === 'Function' || variableType === 'Lambda'
     }
     if (isSymbolicType(declaredType)) return isSymbolicType(variableType)
-    if (isWildcardType(declaredType)) return isWildcardType(variableType)
+    if (isWildcardType(declaredType)) return variableType === 'Wildcard'
     if (declaredType === 'Int') return variableType === 'Int' || variableType === 'Int64'
     if (declaredType === 'Int64') return variableType === 'Int' || variableType === 'Int64'
     return declaredType === variableType

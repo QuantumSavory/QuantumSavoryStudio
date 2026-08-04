@@ -105,7 +105,7 @@ describe('panic project download', () => {
 
   it('uses the canonical object serializer and falls back to its project name', () => {
     const project = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: 'Canonical Project',
       description: 'complete project',
       net: { nodes: [{ id: 'node-1' }], edges: [], protocols: [] },
@@ -118,7 +118,7 @@ describe('panic project download', () => {
   })
 
   it('preserves valid JSON returned directly by the canonical serializer', () => {
-    const serialized = '{"name":"String Project","schemaVersion":1}'
+    const serialized = '{"name":"String Project","schemaVersion":2}'
     expect(createPanicProjectDownload(() => serialized)).toEqual({
       content: serialized,
       filename: 'String-Project-panic.json',

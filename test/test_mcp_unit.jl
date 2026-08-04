@@ -11,9 +11,128 @@
       "project_name" => "Project",
       "simulation_name" => "user_Project",
       "contract_version" => WebQuantumSavory.MCP_CONTRACT_VERSION,
-      "snapshot" => Dict("name" => "Project", "net" => Dict()),
+      "snapshot" => Dict(
+        "schemaVersion" => 2,
+        "name" => "Project",
+        "description" => "",
+        "annotations" => Any[],
+        "variables" => Any[],
+        "simulationConfig" => Dict(
+          "time" => 1.0,
+          "timeStep" => 0.1,
+          "qubitRepresentation" => "QuantumOpticsRepr",
+          "qumodeRepresentation" => "QuantumOpticsRepr",
+        ),
+        "net" => Dict(
+          "nodes" => Any[],
+          "edges" => Any[],
+          "protocols" => Any[],
+          "physicalConfig" => Dict(
+            "refractiveIndex" => 1.468,
+            "lossDbPerKm" => 0.2,
+            "nodeTemplate" => Dict("slots" => Any[]),
+          ),
+        ),
+      ),
       "hash" => "initial-hash",
     )
+  end
+
+  @testset "contract version authority" begin
+    contract = WebQuantumSavory.JSON.parsefile(WebQuantumSavory.MCP_CONTRACT_FILE)
+    @test WebQuantumSavory.MCP_CONTRACT_VERSION == contract["contract_version"]
+    @test WebQuantumSavory.MCP_CONTRACT_VERSION == 2
+  end
+
+  @testset "binding admits the MCP version before inspecting other fields" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    WebQuantumSavory.bind_editor!(hub, binding_request())
+    original_binding = hub.binding
+    original_snapshot = deepcopy(hub.snapshot)
+    original_hash = hub.snapshot_hash
+    original_revision = hub.revision
+
+    for received_version in Any[nothing, true, "2", 1, 3, 2.5]
+      request = Dict{String,Any}(
+        "contract_version" => received_version,
+        "editor_id" => "",
+        "generation" => 0.5,
+        "project_name" => "",
+        "simulation_name" => "",
+        "snapshot" => nothing,
+        "hash" => "",
+      )
+      received_version === nothing && delete!(request, "contract_version")
+      mismatch = try
+        WebQuantumSavory.bind_editor!(hub, request)
+        nothing
+      catch error
+        error
+      end
+
+      @test mismatch isa WebQuantumSavory.APIError
+      @test mismatch.error_code == "UNSUPPORTED_VERSION"
+      @test mismatch.details["details"] == Dict{String,Any}(
+        "contract" => "mcp",
+        "received_version" => received_version,
+        "supported_versions" => [2],
+      )
+      @test hub.binding === original_binding
+      @test hub.snapshot == original_snapshot
+      @test hub.snapshot_hash == original_hash
+      @test hub.revision == original_revision
+    end
+  end
+
+  @testset "design_edit dispatch preserves the canonical operation envelope" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    operations = Any[Dict(
+      "kind" => "topology.create_node",
+      "id" => "node-direct",
+      "value" => Dict("position" => Any[0, 0]),
+    )]
+    waiting = @async WebQuantumSavory.dispatch_mcp_tool!(
+      "design_edit",
+      Dict(
+        "operation_id" => "direct-edit",
+        "expected_revision" => 0,
+        "operations" => operations,
+      );
+      hub,
+    )
+    command = WebQuantumSavory.next_browser_command!(hub, owner; timeout_seconds=1)
+    @test command["payload"] == Dict(
+      "type" => "design_edit",
+      "arguments" => Dict(
+        "operation_id" => "direct-edit",
+        "expected_revision" => 0,
+        "operations" => operations,
+      ),
+    )
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => command["command_id"],
+        "operation_id" => "direct-edit",
+        "base_revision" => 0,
+        "success" => true,
+        "document_changed" => true,
+        "snapshot" => binding_request()["snapshot"],
+        "hash" => "direct-edit-hash",
+        "result" => Dict(
+          "summary" => "Agent applied 1 design operation.",
+          "affected_ids" => ["node-direct"],
+          "deleted_ids" => Any[],
+        ),
+      ),
+    )
+    @test fetch(waiting)["revision"] == 1
   end
 
   @testset "strict feature configuration" begin
@@ -182,7 +301,7 @@
     waiting = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="expires-before-delivery",
         expected_revision=0,
         mutates_design=true,
@@ -214,7 +333,7 @@
     delivered_wait = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="expires-after-delivery",
         expected_revision=0,
         mutates_design=true,
@@ -266,9 +385,11 @@
     waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
       Dict(
-        "type" => "design_command",
-        "tool" => "topology_edit",
-        "arguments" => Dict(),
+        "type" => "design_edit",
+        "arguments" => Dict(
+          "operation_id" => "stable-operation",
+          "operations" => Any[],
+        ),
       );
       operation_id="stable-operation",
       expected_revision=0,
@@ -303,7 +424,7 @@
 
     concurrently_waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="concurrent-retry",
       expected_revision=1,
       mutates_design=true,
@@ -311,7 +432,7 @@
     )
     retry_waiting = @async WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="concurrent-retry",
       expected_revision=1,
       mutates_design=true,
@@ -346,7 +467,7 @@
 
     cached = WebQuantumSavory.enqueue_browser_command!(
       hub,
-      Dict("type" => "design_command");
+      Dict("type" => "design_edit");
       operation_id="stable-operation",
       expected_revision=0,
       mutates_design=true,
@@ -358,7 +479,7 @@
     conflict = try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="new-operation",
         expected_revision=1,
         mutates_design=true,
@@ -383,7 +504,7 @@
     waiting = @async try
       WebQuantumSavory.enqueue_browser_command!(
         hub,
-        Dict("type" => "design_command");
+        Dict("type" => "design_edit");
         operation_id="stale-success",
         expected_revision=0,
         mutates_design=true,
@@ -443,7 +564,7 @@
       waiting = @async try
         WebQuantumSavory.enqueue_browser_command!(
           hub,
-          Dict("type" => "design_command");
+          Dict("type" => "design_edit");
           operation_id="mismatch-operation",
           expected_revision=0,
           mutates_design=true,

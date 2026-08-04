@@ -74,7 +74,6 @@
           <span>Value</span>
           <div class="variable-value-input">
             <TypedValueInput
-              v-if="draftFor(variable).selectedType !== 'default'"
               :parameter="draftFor(variable)"
               :type="draftFor(variable).selectedType"
               :disabled="disabled"
@@ -157,9 +156,9 @@ function addVariable() {
     kind: 'variables.create',
     value: {
       name: nextVariableName(),
-      type: 'default',
-      selectedType: 'default',
-      value: null,
+      type: 'Float64',
+      selectedType: 'Float64',
+      value: 0,
     },
   }])
 }
@@ -182,10 +181,10 @@ function onOptionChanged(variable, selectedType) {
   const draft = draftFor(variable)
   const option = optionById(selectedType)
   draft.selectedType = option.id
-  draft.type = option.wireType || 'default'
+  draft.type = option.wireType
   draft._inputDirty = true
   resetValueForType(draft, option.id)
-  if (['default', 'boolean', 'intrinsic'].includes(option.inputKind)) {
+  if (['boolean', 'intrinsic'].includes(option.inputKind)) {
     commitDraftValue(variable)
   }
 }
@@ -208,9 +207,6 @@ function initialSelectedType(variable) {
       option.inputKind === 'numeric-expression' && option.wireType === variable.type
     ))
     if (expression) return expression.id
-  }
-  if (variable.value == null || variable.value === '' || variable.value === 'default') {
-    return 'default'
   }
   const selected = variableInputOptions.find(option => option.id === variable.selectedType)
   if (selected) return selected.id

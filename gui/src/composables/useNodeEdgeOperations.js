@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { generateUUid } from '../utils/Utils'
-import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../utils/projectCodec'
+import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '../utils/projectDocument.js'
 import { DUPLICATE_PHYSICAL_EDGE_REASON } from '../domain/design/DesignCommandService'
 import { SIMULATION_EDITING_LOCK_MESSAGE } from './uiServices'
 

@@ -187,6 +187,7 @@ function createProjectWithSymbolicProtocol(page) {
     parameters: [{
       name: 'observable',
       type: 'Symbolic',
+      selectedType: 'default',
       value: null,
     }],
   })
@@ -200,6 +201,7 @@ async function createProjectWithCustomFunctionProtocol(page) {
     parameters: [{
       name: 'callback',
       type: 'Function',
+      selectedType: 'default',
       value: null,
     }],
   })
@@ -446,10 +448,7 @@ test.describe('Code editor lifecycle', () => {
       type: 'Lambda',
       value: VALID_FUNCTION_SOURCE,
     }
-    expect(serializedVariables.full).toEqual({
-      ...expectedVariable,
-      selectedType: 'Lambda',
-    })
+    expect(serializedVariables.full).toEqual(expectedVariable)
     expect(serializedVariables.minimized).toEqual(expectedVariable)
   })
 })

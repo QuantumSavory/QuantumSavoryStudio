@@ -20,9 +20,9 @@ session and never replaces browser authority.
 
 ```text
 stored/imported project
-  -> project codec
+  -> executable project-v2 document codec
   -> one live project graph in App.vue
-     -> collaboration projection for MCP
+     -> canonical map-free snapshot for MCP
      -> minimized simulation payload for the API
      -> script-export payload
      -> Vue/MapLibre presentation
@@ -36,7 +36,8 @@ derived or coordinated boundaries.
 
 | Concern | Owner |
 | --- | --- |
-| Stored documents and derived payload projections | `projectCodec.js` |
+| Stored/imported documents and MCP snapshots | `projectDocument.js` |
+| Simulation and script-export payloads | `simulationPayload.js` |
 | Browser-local named persistence | `ProjectStore` |
 | Project-session transitions and teardown | `useProjectSession` |
 | Atomic transport-neutral authoring operations | `DesignCommandService` |
@@ -69,7 +70,8 @@ edges, or reactive updates.
 
 - **Mount/composition:** [`gui/src/main.js`](../../../gui/src/main.js) and
   [`gui/src/App.vue`](../../../gui/src/App.vue).
-- **Codec:** [`gui/src/utils/projectCodec.js`](../../../gui/src/utils/projectCodec.js).
+- **Project document codec:** [`gui/src/utils/projectDocument.js`](../../../gui/src/utils/projectDocument.js).
+- **Simulation projections:** [`gui/src/utils/simulationPayload.js`](../../../gui/src/utils/simulationPayload.js).
 - **Authoring boundary:** [`gui/src/domain/design/DesignCommandService.js`](../../../gui/src/domain/design/DesignCommandService.js).
 - **Session boundary:** [`gui/src/composables/useProjectSession.js`](../../../gui/src/composables/useProjectSession.js).
 

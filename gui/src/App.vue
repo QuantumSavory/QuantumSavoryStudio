@@ -75,12 +75,13 @@ import { isEntangledStateStillValid } from './utils/SlotConnectionUtils.js'
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
-  createEmptyProject,
+  createEmptyProject
+} from './utils/projectDocument.js'
+import {
   toScriptExportPayloadFromSimulationPayload,
   toSimulationPayload
-} from './utils/projectCodec.js'
+} from './utils/simulationPayload.js'
 import { UI_SERVICES_KEY } from './composables/uiServices.js'
-import { registerLegacyBridge, syncLegacyProjectData } from './utils/legacyBridge.js'
 import { generateRepeaterChain } from './utils/repeaterChain.js'
 import { generateStarNetwork } from './utils/starNetwork.js'
 import { generateGraphNetwork, GRAPH_TOPOLOGIES } from './utils/graphNetwork.js'
@@ -250,8 +251,18 @@ function resolveConfirmation(result) {
   request?.resolve(result)
 }
 
+function projectDocumentContext() {
+  return {
+    protocolCatalog: () => api.config.value.protocolTypes || {},
+    backgroundCatalog: () => api.config.value.bgNoiseOptions || [],
+  }
+}
+
 // Minimized project data - cleans up project data for API calls
-const minimizedProjectData = computed(() => toSimulationPayload(projectData.value))
+const minimizedProjectData = computed(() => toSimulationPayload(
+  projectData.value,
+  projectDocumentContext(),
+))
 const exportScriptPayload = computed(() => toScriptExportPayloadFromSimulationPayload(
   minimizedProjectData.value,
   projectData.value.simulationConfig
@@ -276,13 +287,6 @@ provide(UI_SERVICES_KEY, {
   getProjectData: () => projectData.value,
   getDialogFallbackFocus: () => menuButtonRef.value,
   showAlert,
-  showResultsView,
-  showEntangledSlots,
-  hideSlotState
-})
-
-const disposeLegacyBridge = registerLegacyBridge({
-  getProjectData: () => projectData.value,
   showResultsView,
   showEntangledSlots,
   hideSlotState
@@ -525,9 +529,10 @@ mcpBridge = new McpEditorBridge({
   getSimulationName: () => api.getScopedSimulationName(
     currentProjectName.value || projectData.value.name
   ),
+  getProjectDocumentContext: projectDocumentContext,
   designCommands,
   validateDesign: project => {
-    const validation = validatePayload(toSimulationPayload(project))
+    const validation = validatePayload(toSimulationPayload(project, projectDocumentContext()))
     return {
       valid: validation.success,
       issues: validation.success
@@ -658,24 +663,17 @@ const {
   getSimulationStatus,
   defaultMapCenter: DEFAULT_MAP_CENTER,
   defaultMapZoom: DEFAULT_MAP_ZOOM,
-  minimumTimeStep: TIME_STEP,
   markAsSaved: () => markAsSavedRef.value?.(),
   resetSimulation,
   stopPolling,
   stopAlivePolling,
   closeAllResultWindows,
   hideSlotState,
-  syncLegacyProjectData,
   beforeProjectReplacement: () => (
     mcpBridge?.binding
       ? mcpBridge.unbind({ bestEffort: true })
       : undefined
   ),
-  confirmVersionMismatch: message => confirmAction({
-    title: 'Project version mismatch',
-    message,
-    confirmButtonText: 'Open project'
-  }),
   confirmDelete: message => confirmAction({
     title: 'Delete project',
     message,
@@ -822,6 +820,7 @@ const {
   addLog,
   importIntoSession: importProjectIntoSession,
   serializeProjectData,
+  deserializeProjectData,
   showAlert
 })
 
@@ -1290,7 +1289,7 @@ function executePendingAction(action) {
 onMounted( async () => {
   // Capture the startup restore target before any await. A user can create or
   // open a project while platform metadata is loading; that newer session must
-  // not be replaced by a late read of `recentProjectName`.
+  // not be replaced by a late read of recent-project storage.
   const startupRecentProjectName = ProjectStore.getRecentProjectName()
   const startupTransitionGeneration = projectTransitionGeneration.value
 
@@ -1302,15 +1301,6 @@ onMounted( async () => {
     api.fetchSimulationLogGroups()
   ])
   applicationMetadataPending.value = false
-  // One-time migration: ensure metadata index exists for existing projects
-  const metadataIndex = ProjectStore.getMetadataIndex()
-  const existingProjects = ProjectStore.listProjects()
-  
-  // If index is empty but projects exist, rebuild it
-  if (Object.keys(metadataIndex).length === 0 && existingProjects.length > 0) {
-    ProjectStore.rebuildMetadataIndex()
-  }
-  
   // Restore only if no user-initiated project transition won the startup race.
   if (
     startupRecentProjectName
@@ -1351,7 +1341,6 @@ onUnmounted(() => {
   mcpBridge.dispose()
   disposeProjectSession()
   disposeSimulationController()
-  disposeLegacyBridge()
 })
 </script>
 

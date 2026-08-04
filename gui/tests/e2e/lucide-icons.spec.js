@@ -54,13 +54,30 @@ test('renders Lucide artwork across application and third-party controls', async
   await mockBackend(page)
   await page.addInitScript(() => {
     localStorage.clear()
-    localStorage.setItem('cqn_project_Icon Fixture', JSON.stringify({
+    localStorage.setItem('cqn_v2_project_Icon Fixture', JSON.stringify({
+      schemaVersion: 2,
       name: 'Icon Fixture',
+      description: '',
+      annotations: [],
       variables: [],
-      simulationConfig: { time: 1, timeStep: 0.1 },
-      net: { nodes: [], edges: [], protocols: [] },
+      simulationConfig: {
+        time: 1,
+        timeStep: 0.1,
+        qubitRepresentation: 'QuantumOpticsRepr',
+        qumodeRepresentation: 'QuantumOpticsRepr',
+      },
+      net: {
+        nodes: [],
+        edges: [],
+        protocols: [],
+        physicalConfig: {
+          refractiveIndex: 1.5,
+          lossDbPerKm: 0.2,
+          nodeTemplate: { slots: [] },
+        },
+      },
     }))
-    localStorage.setItem('cqn_projects_metadata_index', JSON.stringify({
+    localStorage.setItem('cqn_v2_projects_metadata_index', JSON.stringify({
       'Icon Fixture': {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-02T00:00:00.000Z',

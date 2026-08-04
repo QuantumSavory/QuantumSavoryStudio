@@ -42,6 +42,40 @@ function _startup_warmup_protocols(payload)
   return protocols
 end
 
+"""Project the bundled project-v2 demo onto the strict simulation transport."""
+function _startup_warmup_simulation_payload(project)
+  net = deepcopy(project["net"])
+  physical_config = pop!(net, "physicalConfig")
+  for edge in net["edges"]
+    data = edge["data"]
+    if edge["isLogic"]
+      edge["data"] = Dict("type" => data["type"], "protocols" => data["protocols"])
+      continue
+    end
+    distance = 1.0
+    refractive_index = Float64(physical_config["refractiveIndex"])
+    loss = Float64(physical_config["lossDbPerKm"])
+    edge["data"] = Dict(
+      "type" => data["type"],
+      "protocols" => data["protocols"],
+      "distanceMeters" => distance,
+      "propagationDelaySeconds" => distance * refractive_index / 299_792_458,
+      "refractiveIndex" => refractive_index,
+      "lossDbPerKm" => loss,
+      "transmissivity" => 10^(-(loss * distance / 1000) / 10),
+    )
+  end
+  return Dict(
+    "name" => project["name"],
+    "simulationConfig" => Dict(
+      "qubitRepresentation" => project["simulationConfig"]["qubitRepresentation"],
+      "qumodeRepresentation" => project["simulationConfig"]["qumodeRepresentation"],
+    ),
+    "variables" => project["variables"],
+    "net" => net,
+  )
+end
+
 """
 Give the latest demo a private name and make its entangler deterministic.
 
@@ -57,12 +91,16 @@ function _configure_startup_warmup_demo!(payload)
     protocol_type = String(get(protocol, "type", ""))
     endswith(protocol_type, ".EntanglerProt") || continue
 
-    parameter = findfirst(
+    parameter_index = findfirst(
       candidate -> get(candidate, "name", nothing) == "success_prob",
       get(protocol, "parameters", Any[]),
     )
-    parameter === nothing && error("Bundled EntanglerProt has no success_prob parameter")
-    protocol["parameters"][parameter]["value"] = 1.0
+    assignment = Dict("name" => "success_prob", "type" => "Float64", "value" => 1.0)
+    if parameter_index === nothing
+      push!(protocol["parameters"], assignment)
+    else
+      protocol["parameters"][parameter_index] = assignment
+    end
     configured_entanglers += 1
   end
 
@@ -138,7 +176,10 @@ function _run_startup_warmup!(;
 )
   return Logging.with_logger(Logging.NullLogger()) do
     demo_path = _latest_startup_warmup_demo(demos_dir)
-    payload = _configure_startup_warmup_demo!(JSON.parsefile(demo_path))
+    project = JSON.parsefile(demo_path)
+    payload = _configure_startup_warmup_demo!(
+      _startup_warmup_simulation_payload(project),
+    )
     warmup_state = nothing
 
     try

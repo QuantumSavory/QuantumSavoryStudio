@@ -45,6 +45,8 @@ async function openEntanglerEditor(page, projectName) {
       parameters: [{
         name: 'chooseslotA',
         type: ['Int64', 'Function'],
+        selectedType: 'default',
+        value: null,
       }],
     })
   })

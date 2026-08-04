@@ -63,8 +63,9 @@ is declared.
 
 Named projects are stored only in browser `localStorage`. Neither local-storage key
 names nor saved-project schemas carry backward- or forward-compatibility guarantees
-between releases. A schema difference or malformed/missing schema marker produces a
-clear warning and a best-effort open attempt; it is not a hard compatibility gate.
+between releases. The current boundary admits only exact project-v2 documents; a
+missing, malformed, old, or future schema version is a hard compatibility failure and
+no migration is attempted. The v2 storage namespace does not scan or alter older keys.
 
 ## Anchors
 

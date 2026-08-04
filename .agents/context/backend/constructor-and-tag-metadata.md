@@ -33,10 +33,10 @@ QuantumSavory constructor member
 ```
 
 Frontend descriptor IDs are UI choices, not Julia types on the wire. Optional Default
-selection omits the keyword so Julia applies its own default. A field with
-`required=true` must produce an explicit constructor keyword and cannot consume a
-Default-valued Variable. Metadata `defaultValue` is documentation rather than fresh
-draft state.
+selection omits the sparse `{name, type, value}` assignment so Julia applies its own
+default. A field with `required=true` must produce an explicit constructor keyword;
+Variables always carry a concrete supported type and non-null value. Metadata
+`defaultValue` is documentation rather than fresh draft state.
 
 ## Placement and physical context
 

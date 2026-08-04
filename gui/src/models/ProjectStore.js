@@ -1,11 +1,11 @@
-import { summarizeProject } from '../utils/projectCodec'
+import { summarizeProject } from '../utils/projectDocument.js'
 
 // ProjectStore.js
 // Abstraction for saving/loading project data (localStorage for now)
 
-const STORAGE_PREFIX = 'cqn_project_'
-const METADATA_INDEX_KEY = 'cqn_projects_metadata_index'
-const RECENT_PROJECT_NAME_KEY = 'recentProjectName'
+const STORAGE_PREFIX = 'cqn_v2_project_'
+const METADATA_INDEX_KEY = 'cqn_v2_projects_metadata_index'
+const RECENT_PROJECT_NAME_KEY = 'cqn_v2_recent_project_name'
 
 export default class ProjectStore {
   static getRecentProjectName() {
@@ -156,31 +156,4 @@ export default class ProjectStore {
     }))
   }
 
-  // Rebuild metadata index from existing projects (utility function)
-  static rebuildMetadataIndex() {
-    const projectNames = this.listProjects()
-    const existingIndex = this.getMetadataIndex()
-    const newIndex = {}
-    const now = new Date().toISOString()
-    
-    projectNames.forEach(name => {
-      const projectData = this.loadProject(name)
-      const existingMetadata = existingIndex[name] || {}
-      
-      if (projectData) {
-        const summary = summarizeProject(projectData)
-        
-        newIndex[name] = {
-          // For legacy projects, try to get timestamps from old format, otherwise use existing or defaults
-          createdAt: projectData.uiGlobal?.createdAt || projectData.createdAt || existingMetadata.createdAt || now,
-          updatedAt: projectData.uiGlobal?.updatedAt || projectData.updatedAt || existingMetadata.updatedAt || now,
-          openedAt: projectData.uiGlobal?.openedAt || projectData.openedAt || existingMetadata.openedAt || null,
-          ...summary
-        }
-      }
-    })
-    
-    this.saveMetadataIndex(newIndex)
-    return newIndex
-  }
 }

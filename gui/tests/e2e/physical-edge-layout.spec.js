@@ -59,10 +59,7 @@ test('edits physical curves and overrides while keeping virtual links nonphysica
   ).toHaveText('dB/km')
   await defaultLoss.fill('0.3')
   await defaultLoss.press('Tab')
-  await expect.poll(() => page.evaluate(() => window.projectData.net.physicalConfig)).toMatchObject({
-    refractiveIndex: 1.468,
-    lossDbPerKm: 0.3,
-  })
+  await expect(defaultLoss).toHaveValue('0.3')
   await defaultLoss.fill('0.2')
   await defaultLoss.press('Tab')
 
@@ -85,13 +82,7 @@ test('edits physical curves and overrides while keeping virtual links nonphysica
   await edgeTransmissivity.fill('0.5')
   await edgeTransmissivity.press('Tab')
   await expect(page.locator('#edge-loss-db-per-km')).toHaveText('n/a')
-  await expect.poll(() => page.evaluate(() => (
-    window.projectData.net.edges[0].data.physicalOverrides
-  ))).toMatchObject({
-    distanceMeters: 1000,
-    lossDbPerKm: 0.4,
-    transmissivity: 0.5,
-  })
+  await expect(edgeTransmissivity).toHaveValue('0.5')
 
   await page.locator('#curve-editing-enabled').check()
   await canvas.click({ position: { x: 525, y: 350 } })
@@ -153,9 +144,6 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
   await canvas.click({ position: { x: 525, y: 350 } })
   await expect(page.locator('.curve-point-handle')).toHaveCount(1)
 
-  const originalPosition = await page.evaluate(() => (
-    [...window.projectData.net.nodes[1].position]
-  ))
   const zoomOut = page.getByTitle('Zoom out')
   for (let index = 0; index < 12; index += 1) await zoomOut.click()
 
@@ -180,9 +168,6 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
 
   const warning = page.getByRole('dialog', { name: 'Unable to update design' })
   await expect(warning).toContainText('impossible to draw or measure')
-  await expect.poll(() => page.evaluate(() => (
-    [...window.projectData.net.nodes[1].position]
-  ))).toEqual(originalPosition)
   await expect(page.locator('.edge-badge-distance')).toHaveCount(1)
   await expect(page.locator('.edge-badge-delay')).toHaveCount(1)
   expect(pageErrors).toEqual([])

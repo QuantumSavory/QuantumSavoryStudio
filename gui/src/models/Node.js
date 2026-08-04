@@ -13,7 +13,7 @@ export default class Node {
    * @param {Array<number>} options.position - [longitude, latitude] coordinates
    * @param {Object} [options.data={}] - Additional data associated with the node
    */
-  constructor({ id, name, position, data = { slots:[]} }) {
+  constructor({ id, name, position, data = {} }) {
     if (!id || !isMapPosition(position)) {
       throw new Error('Node requires id and valid position [longitude, latitude]')
     }
@@ -21,12 +21,11 @@ export default class Node {
     this.id = id
     this.name = name || `Node ${id}`
     this.position = [...position] // Clone to prevent external mutations
-    this.data = { ...data } // Clone to prevent external mutations
-    if( !this.data.slots ){
-      this.data.slots = []
-    }
-    if( !this.data.protocols ){
-      this.data.protocols = []
+    this.data = {
+      type: 'City',
+      slots: [],
+      protocols: [],
+      ...data,
     }
   }
 

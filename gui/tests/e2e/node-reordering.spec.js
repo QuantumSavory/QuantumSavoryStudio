@@ -166,8 +166,8 @@ test('reorders node IDs without replacing selection, endpoints, map markers, or 
   await page.click('.hamburger-btn')
   await page.getByText('Save', { exact: true }).click()
   const stored = await page.evaluate(name => {
-    const project = JSON.parse(localStorage.getItem(`cqn_project_${name}`))
-    localStorage.setItem('recentProjectName', name)
+    const project = JSON.parse(localStorage.getItem(`cqn_v2_project_${name}`))
+    localStorage.setItem('cqn_v2_recent_project_name', name)
     return {
       nodeOrder: project.net.nodes.map(node => node.id),
       edgeEndpoints: [project.net.edges[0].source, project.net.edges[0].target],

@@ -1,0 +1,2319 @@
+{
+  "contract_version": 2,
+  "default_output_schema": {
+    "type": "object"
+  },
+  "tools": [
+    {
+      "name": "design_get",
+      "description": "Flush the bound editor and return the complete canonical project-v2 document, revision, and hash.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_validate",
+      "description": "Flush the bound editor and validate the complete visible design against live catalogs.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalog_list",
+      "description": "List live slot, noise, protocol, States Zoo, function, annotation, and generator catalogs.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "background_noise",
+              "slots",
+              "protocols",
+              "states",
+              "known_functions",
+              "annotations",
+              "generators"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "catalog_get",
+      "description": "Get documentation, placement, defaults, and parameters for one live catalog entry.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "kind",
+          "type"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "background_noise",
+              "slots",
+              "protocols",
+              "states",
+              "known_functions",
+              "annotations",
+              "generators"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "design_edit",
+      "description": "Apply one or more GUI design operations atomically at the expected collaboration revision.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "expected_revision",
+          "operations"
+        ],
+        "properties": {
+          "operation_id": {
+            "$ref": "#/definitions/id"
+          },
+          "expected_revision": {
+            "$ref": "#/definitions/index"
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "design.update"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/designUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.create_node"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/nodeCreate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "node_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.update_node"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/nodeUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "node_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.remove_node"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "node_id",
+                    "to_index"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.reorder_node"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "to_index": {
+                      "$ref": "#/definitions/index"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.create_edge"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/edgeCreate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "edge_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.update_edge"
+                    },
+                    "edge_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/edgeUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "edge_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "topology.remove_edge"
+                    },
+                    "edge_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "slots.create"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "template": {
+                      "const": true
+                    },
+                    "value": {
+                      "$ref": "#/definitions/slotValue"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "node_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "template"
+                      ]
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "slot_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "slots.update"
+                    },
+                    "slot_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "template": {
+                      "const": true
+                    },
+                    "value": {
+                      "$ref": "#/definitions/slotValue"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "node_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "template"
+                      ]
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "slot_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "slots.remove"
+                    },
+                    "slot_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "template": {
+                      "const": true
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "node_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "template"
+                      ]
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "slot_id",
+                    "to_index"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "slots.reorder"
+                    },
+                    "slot_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "node_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "template": {
+                      "const": true
+                    },
+                    "to_index": {
+                      "$ref": "#/definitions/index"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "required": [
+                        "node_id"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "template"
+                      ]
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "placement",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "protocols.create"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "placement": {
+                      "$ref": "#/definitions/placement"
+                    },
+                    "owner_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/protocolCreate"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "placement": {
+                          "const": "floating"
+                        }
+                      },
+                      "not": {
+                        "required": [
+                          "owner_id"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "owner_id"
+                      ],
+                      "properties": {
+                        "placement": {
+                          "enum": [
+                            "node",
+                            "edge"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "placement",
+                    "protocol_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "protocols.update"
+                    },
+                    "placement": {
+                      "$ref": "#/definitions/placement"
+                    },
+                    "owner_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "protocol_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/protocolUpdate"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "placement": {
+                          "const": "floating"
+                        }
+                      },
+                      "not": {
+                        "required": [
+                          "owner_id"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "owner_id"
+                      ],
+                      "properties": {
+                        "placement": {
+                          "enum": [
+                            "node",
+                            "edge"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "placement",
+                    "protocol_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "protocols.remove"
+                    },
+                    "placement": {
+                      "$ref": "#/definitions/placement"
+                    },
+                    "owner_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "protocol_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "placement": {
+                          "const": "floating"
+                        }
+                      },
+                      "not": {
+                        "required": [
+                          "owner_id"
+                        ]
+                      }
+                    },
+                    {
+                      "required": [
+                        "owner_id"
+                      ],
+                      "properties": {
+                        "placement": {
+                          "enum": [
+                            "node",
+                            "edge"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "variables.create"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/variableCreate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "variable_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "variables.update"
+                    },
+                    "variable_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/variableUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "variable_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "variables.remove"
+                    },
+                    "variable_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "states.create"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/stateCreate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "variable_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "states.update"
+                    },
+                    "variable_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/stateUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "variable_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "states.remove"
+                    },
+                    "variable_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "annotations.create"
+                    },
+                    "id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/annotationCreate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "annotation_id",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "annotations.update"
+                    },
+                    "annotation_id": {
+                      "$ref": "#/definitions/id"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/annotationUpdate"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "annotation_id"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "annotations.remove"
+                    },
+                    "annotation_id": {
+                      "$ref": "#/definitions/id"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "network.generate"
+                    },
+                    "value": {
+                      "$ref": "#/definitions/networkGenerate"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "definitions": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "safeInteger": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "jsonNumber": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/safeInteger"
+              },
+              {
+                "type": "number",
+                "not": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "opaqueJson": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/definitions/jsonNumber"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/opaqueJson"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/definitions/opaqueJson"
+                }
+              }
+            ]
+          },
+          "position": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": [
+              {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              }
+            ],
+            "additionalItems": false
+          },
+          "variableReference": {
+            "type": "object",
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "const": "variable"
+              },
+              "id": {
+                "$ref": "#/definitions/id"
+              }
+            },
+            "additionalProperties": false
+          },
+          "numericExpression": {
+            "type": "object",
+            "required": [
+              "kind",
+              "source"
+            ],
+            "properties": {
+              "kind": {
+                "const": "numeric_expression"
+              },
+              "source": {
+                "$ref": "#/definitions/id"
+              }
+            },
+            "additionalProperties": false
+          },
+          "statesZooValue": {
+            "type": "object",
+            "required": [
+              "kind",
+              "state_type",
+              "parameters"
+            ],
+            "properties": {
+              "kind": {
+                "const": "states_zoo"
+              },
+              "state_type": {
+                "$ref": "#/definitions/id"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/definitions/jsonNumber"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "assignment": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/definitions/id"
+                  },
+                  "type": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/id"
+                      },
+                      {
+                        "not": {
+                          "const": "default"
+                        }
+                      }
+                    ]
+                  },
+                  "value": {}
+                },
+                "additionalProperties": false
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "Int",
+                          "Int64"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/definitions/safeInteger"
+                          },
+                          {
+                            "$ref": "#/definitions/numericExpression"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Float64"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/definitions/jsonNumber"
+                          },
+                          {
+                            "$ref": "#/definitions/numericExpression"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Bool"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "String"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/definitions/id"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Nothing"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "const": "nothing"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Wildcard"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "const": "Wildcard"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "DataType",
+                          "Function",
+                          "Lambda"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/definitions/id"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "anyOf": [
+                          {
+                            "const": "Symbolic"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^SymbolicUtils\\.Symbolic\\{"
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "^QuantumSymbolics\\.SymQObj\\{"
+                          }
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/definitions/id"
+                          },
+                          {
+                            "$ref": "#/definitions/statesZooValue"
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Vector{Int64}"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/definitions/safeInteger"
+                            }
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Vector{Float64}"
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/definitions/jsonNumber"
+                            }
+                          },
+                          {
+                            "$ref": "#/definitions/variableReference"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "type": {
+                        "const": "Any"
+                      },
+                      "value": {
+                        "$ref": "#/definitions/opaqueJson"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "assignmentArray": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/assignment"
+            }
+          },
+          "backgroundNoise": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "parameters"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "default"
+                  },
+                  "parameters": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "parameters"
+                ],
+                "properties": {
+                  "type": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/id"
+                      },
+                      {
+                        "not": {
+                          "const": "default"
+                        }
+                      }
+                    ]
+                  },
+                  "parameters": {
+                    "$ref": "#/definitions/assignmentArray"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "curvePoint": {
+            "type": "object",
+            "required": [
+              "id",
+              "position",
+              "type"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "position": {
+                "$ref": "#/definitions/position"
+              },
+              "type": {
+                "enum": [
+                  "smooth",
+                  "sharp"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "physicalOverrides": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "distanceMeters",
+              "refractiveIndex",
+              "delaySeconds",
+              "lossDbPerKm",
+              "transmissivity"
+            ],
+            "properties": {
+              "distanceMeters": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "refractiveIndex": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "delaySeconds": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "lossDbPerKm": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "transmissivity": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "designUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "simulationConfig": {
+                "type": "object",
+                "minProperties": 1,
+                "properties": {
+                  "time": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  },
+                  "timeStep": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  },
+                  "qubitRepresentation": {
+                    "enum": [
+                      "QuantumOpticsRepr",
+                      "QuantumMCRepr",
+                      "CliffordRepr"
+                    ]
+                  },
+                  "qumodeRepresentation": {
+                    "enum": [
+                      "QuantumOpticsRepr",
+                      "QuantumMCRepr",
+                      "GabsRepr"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "physicalConfig": {
+                "type": "object",
+                "minProperties": 1,
+                "properties": {
+                  "refractiveIndex": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "exclusiveMinimum": 0
+                      }
+                    ]
+                  },
+                  "lossDbPerKm": {
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "minimum": 0
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "nodeCreate": {
+            "type": "object",
+            "required": [
+              "position"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "position": {
+                "$ref": "#/definitions/position"
+              }
+            },
+            "additionalProperties": false
+          },
+          "nodeUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/id"
+              },
+              "position": {
+                "$ref": "#/definitions/position"
+              },
+              "data": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "$ref": "#/definitions/id"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "edgeData": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "curvePoints": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/curvePoint"
+                }
+              },
+              "physicalOverrides": {
+                "$ref": "#/definitions/physicalOverrides"
+              }
+            },
+            "additionalProperties": false
+          },
+          "edgeCreate": {
+            "type": "object",
+            "required": [
+              "source",
+              "target"
+            ],
+            "properties": {
+              "source": {
+                "$ref": "#/definitions/id"
+              },
+              "target": {
+                "$ref": "#/definitions/id"
+              },
+              "isLogic": {
+                "type": "boolean"
+              },
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "data": {
+                "$ref": "#/definitions/edgeData"
+              }
+            },
+            "additionalProperties": false
+          },
+          "edgeUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "source": {
+                "$ref": "#/definitions/id"
+              },
+              "target": {
+                "$ref": "#/definitions/id"
+              },
+              "data": {
+                "$ref": "#/definitions/edgeData"
+              }
+            },
+            "additionalProperties": false
+          },
+          "slotValue": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "backgroundNoise": {
+                "$ref": "#/definitions/backgroundNoise"
+              }
+            },
+            "additionalProperties": false
+          },
+          "placement": {
+            "enum": [
+              "node",
+              "edge",
+              "floating"
+            ]
+          },
+          "protocolCreate": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "parameters": {
+                "$ref": "#/definitions/assignmentArray"
+              }
+            },
+            "additionalProperties": false
+          },
+          "protocolUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/id"
+              },
+              "parameters": {
+                "$ref": "#/definitions/assignmentArray"
+              }
+            },
+            "additionalProperties": false
+          },
+          "variableTypeValue": {
+            "anyOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "Int64"
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/safeInteger"
+                      },
+                      {
+                        "$ref": "#/definitions/numericExpression"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Float64"
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/jsonNumber"
+                      },
+                      {
+                        "$ref": "#/definitions/numericExpression"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Bool"
+                  },
+                  "value": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "String",
+                      "Function",
+                      "Lambda",
+                      "Symbolic"
+                    ]
+                  },
+                  "value": {
+                    "$ref": "#/definitions/id"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Nothing"
+                  },
+                  "value": {
+                    "const": "nothing"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Wildcard"
+                  },
+                  "value": {
+                    "const": "Wildcard"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Vector{Int64}"
+                  },
+                  "value": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/safeInteger"
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "Vector{Float64}"
+                  },
+                  "value": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/jsonNumber"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "variableCreate": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/definitions/id"
+                  },
+                  "type": {
+                    "$ref": "#/definitions/id"
+                  },
+                  "value": {}
+                },
+                "additionalProperties": false
+              },
+              {
+                "$ref": "#/definitions/variableTypeValue"
+              }
+            ]
+          },
+          "variableUpdate": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/definitions/id"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "value"
+                    ],
+                    "properties": {
+                      "name": {
+                        "$ref": "#/definitions/id"
+                      },
+                      "type": {
+                        "$ref": "#/definitions/id"
+                      },
+                      "value": {}
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "$ref": "#/definitions/variableTypeValue"
+                  }
+                ]
+              }
+            ]
+          },
+          "stateParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/jsonNumber"
+            }
+          },
+          "stateCreate": {
+            "type": "object",
+            "required": [
+              "name",
+              "state_type",
+              "parameters"
+            ],
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/id"
+              },
+              "state_type": {
+                "$ref": "#/definitions/id"
+              },
+              "parameters": {
+                "$ref": "#/definitions/stateParameters"
+              }
+            },
+            "additionalProperties": false
+          },
+          "stateUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/id"
+              },
+              "state_type": {
+                "$ref": "#/definitions/id"
+              },
+              "parameters": {
+                "$ref": "#/definitions/stateParameters"
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotationBounds": {
+            "type": "object",
+            "required": [
+              "west",
+              "south",
+              "east",
+              "north"
+            ],
+            "properties": {
+              "west": {
+                "$ref": "#/definitions/jsonNumber"
+              },
+              "south": {
+                "$ref": "#/definitions/jsonNumber"
+              },
+              "east": {
+                "$ref": "#/definitions/jsonNumber"
+              },
+              "north": {
+                "$ref": "#/definitions/jsonNumber"
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotationArea": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "freeCorner"
+            ],
+            "properties": {
+              "freeCorner": {
+                "$ref": "#/definitions/position"
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotationCreate": {
+            "type": "object",
+            "required": [
+              "bounds"
+            ],
+            "properties": {
+              "markdown": {
+                "type": "string"
+              },
+              "bounds": {
+                "$ref": "#/definitions/annotationBounds"
+              },
+              "backgroundColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "borderColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "area": {
+                "$ref": "#/definitions/annotationArea"
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotationUpdate": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "markdown": {
+                "type": "string"
+              },
+              "bounds": {
+                "$ref": "#/definitions/annotationBounds"
+              },
+              "backgroundColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "borderColor": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              },
+              "area": {
+                "$ref": "#/definitions/annotationArea"
+              }
+            },
+            "additionalProperties": false
+          },
+          "automationSetting": {
+            "type": "object",
+            "required": [
+              "enabled"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "parameters": {
+                "$ref": "#/definitions/assignmentArray"
+              }
+            },
+            "additionalProperties": false
+          },
+          "swapperAutomationSetting": {
+            "type": "object",
+            "required": [
+              "enabled"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "parameters": {
+                "$ref": "#/definitions/assignmentArray"
+              },
+              "predicateStrategy": {
+                "enum": [
+                  "template",
+                  "eager",
+                  "sequential-forward",
+                  "sequential-backward",
+                  "binary-tree"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "repeaterAutomation": {
+            "type": "object",
+            "properties": {
+              "entangler": {
+                "$ref": "#/definitions/automationSetting"
+              },
+              "swapper": {
+                "$ref": "#/definitions/swapperAutomationSetting"
+              },
+              "tracker": {
+                "$ref": "#/definitions/automationSetting"
+              }
+            },
+            "additionalProperties": false
+          },
+          "repeaterOptions": {
+            "type": "object",
+            "required": [
+              "startNodeId",
+              "endNodeId",
+              "templateNodeId",
+              "templateEdgeId",
+              "repeaterCount"
+            ],
+            "properties": {
+              "startNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "endNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "templateNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "templateEdgeId": {
+                "$ref": "#/definitions/id"
+              },
+              "repeaterCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "createVirtualEdge": {
+                "type": "boolean"
+              },
+              "automation": {
+                "$ref": "#/definitions/repeaterAutomation"
+              }
+            },
+            "additionalProperties": false
+          },
+          "starOptions": {
+            "type": "object",
+            "required": [
+              "centerNodeId",
+              "peripheralNodeId",
+              "templateEdgeId",
+              "peripheralCount"
+            ],
+            "properties": {
+              "centerNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "peripheralNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "templateEdgeId": {
+                "$ref": "#/definitions/id"
+              },
+              "peripheralCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              }
+            },
+            "additionalProperties": false
+          },
+          "gridOptions": {
+            "type": "object",
+            "required": [
+              "templateNodeId",
+              "templateEdgeId",
+              "xCount",
+              "yCount"
+            ],
+            "properties": {
+              "templateNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "templateEdgeId": {
+                "$ref": "#/definitions/id"
+              },
+              "xCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "yCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              }
+            },
+            "additionalProperties": false
+          },
+          "allToAllOptions": {
+            "type": "object",
+            "required": [
+              "templateNodeId",
+              "templateEdgeId",
+              "nodeCount"
+            ],
+            "properties": {
+              "templateNodeId": {
+                "$ref": "#/definitions/id"
+              },
+              "templateEdgeId": {
+                "$ref": "#/definitions/id"
+              },
+              "nodeCount": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 12
+              }
+            },
+            "additionalProperties": false
+          },
+          "networkGenerate": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "generator",
+                  "options"
+                ],
+                "properties": {
+                  "generator": {
+                    "const": "repeater_chain"
+                  },
+                  "options": {
+                    "$ref": "#/definitions/repeaterOptions"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "generator",
+                  "options"
+                ],
+                "properties": {
+                  "generator": {
+                    "const": "star"
+                  },
+                  "options": {
+                    "$ref": "#/definitions/starOptions"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "generator",
+                  "options"
+                ],
+                "properties": {
+                  "generator": {
+                    "const": "grid"
+                  },
+                  "options": {
+                    "$ref": "#/definitions/gridOptions"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "generator",
+                  "options"
+                ],
+                "properties": {
+                  "generator": {
+                    "const": "all_to_all"
+                  },
+                  "options": {
+                    "$ref": "#/definitions/allToAllOptions"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "simulation_prepare",
+      "description": "Flush, validate, parse, and prepare through the bound browser simulation controller.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_run",
+      "description": "Run one additional duration through the browser controller; poll simulation_status for progress.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "duration": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_pause",
+      "description": "Pause through the bound browser simulation controller.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_resume",
+      "description": "Resume toward the existing cumulative target through the browser controller.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_reset",
+      "description": "Destroy/reset the bound simulation and restore design editability without changing the design.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_status",
+      "description": "Return lifecycle phase, progress, target, and serialized bound simulation state.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_results",
+      "description": "Return the serialized bound simulation result summary.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_slot_result",
+      "description": "Return one bound simulation slot result and representation resource links.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "slot_id"
+        ],
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_protocol_result",
+      "description": "Return one bound simulation protocol result and representation resource links.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "protocol_id"
+        ],
+        "properties": {
+          "protocol_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "simulation_logs",
+      "description": "Return non-purging logs from the bound simulator.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

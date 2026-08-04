@@ -8,14 +8,17 @@ import {
   DUPLICATE_PHYSICAL_EDGE_REASON,
   DesignCommandError,
   DesignCommandService,
-  operationsForTool,
 } from '../../src/domain/design/DesignCommandService'
 import { INVALID_EDGE_GEOMETRY_REASON } from '../../src/utils/edgeGeometry'
 import {
   createEmptyProject,
-  encodeDesignDocument,
-  toSimulationPayload,
-} from '../../src/utils/projectCodec'
+  encodeProject,
+} from '../../src/utils/projectDocument'
+import { toSimulationPayload } from '../../src/utils/simulationPayload'
+
+const encodeDesignDocument = project => encodeProject(project, {
+  backgroundCatalog: () => [{ type: 'NoNoise', parameters: [] }],
+})
 
 function serviceFor(project, options = {}) {
   let nextId = 0
@@ -23,27 +26,12 @@ function serviceFor(project, options = {}) {
     getProject: () => project,
     idGenerator: prefix => `${prefix}_${++nextId}`,
     defaultBackgroundNoise: () => ({ type: 'NoNoise', parameters: [] }),
+    backgroundCatalog: () => [{ type: 'NoNoise', parameters: [] }],
     ...options,
   })
 }
 
 describe('DesignCommandService', () => {
-  it('compiles specialist and transaction calls to the same operations', () => {
-    const operations = [{
-      kind: 'topology.create_node',
-      client_ref: 'alice',
-      value: { name: 'Alice', position: [1, 2] },
-    }]
-    expect(operationsForTool('design_transaction', { operations })).toBe(operations)
-    expect(operationsForTool('topology_edit', {
-      actions: [{
-        action: 'create_node',
-        client_ref: 'alice',
-        value: { name: 'Alice', position: [1, 2] },
-      }],
-    })).toEqual(operations)
-  })
-
   it('validates partial physical-default updates through one design command', async () => {
     const project = createEmptyProject('Physical defaults')
     const service = serviceFor(project)
@@ -89,7 +77,7 @@ describe('DesignCommandService', () => {
     })
   })
 
-  it('resolves transaction-local references and preserves retained identities', async () => {
+  it('uses direct transaction-local IDs and preserves retained identities', async () => {
     const project = createEmptyProject('Transaction')
     const retainedNode = new Node({
       id: 'node_existing',
@@ -119,29 +107,34 @@ describe('DesignCommandService', () => {
       operations: [
         {
           kind: 'topology.create_node',
-          client_ref: 'alice',
+          id: 'node_alice',
           value: { name: 'Alice', position: [1, 2] },
         },
         {
           kind: 'topology.create_edge',
-          client_ref: 'link',
+          id: 'edge_link',
           value: {
-            source: { client_ref: 'alice' },
+            source: 'node_alice',
             target: 'node_existing',
           },
         },
         {
           kind: 'slots.create',
-          client_ref: 'memory',
-          node_id: { client_ref: 'alice' },
+          id: 'slot_memory',
+          node_id: 'node_alice',
           value: { type: 'Qubit' },
         },
       ],
     })
 
-    const alice = project.net.nodes.find(node => node.id === result.created_ids.alice)
-    const edge = project.net.edges.find(item => item.id === result.created_ids.link)
-    expect(alice.data.slots[0].id).toBe(result.created_ids.memory)
+    const alice = project.net.nodes.find(node => node.id === 'node_alice')
+    const edge = project.net.edges.find(item => item.id === 'edge_link')
+    expect(alice.data.slots[0].id).toBe('slot_memory')
+    expect(result.affected_ids).toEqual(expect.arrayContaining([
+      'node_alice',
+      'edge_link',
+      'slot_memory',
+    ]))
     expect(new Set([edge.source, edge.target])).toEqual(new Set([alice, retainedNode]))
     expect(project.net.nodes[0]).toBe(retainedNode)
     expect(project.net.nodes[0].data.slots[0]).toBe(retainedSlot)
@@ -155,7 +148,12 @@ describe('DesignCommandService', () => {
 
   it('edits a slot-only node template and gives new nodes independent slot copies', async () => {
     const project = createEmptyProject('Template defaults')
-    const service = serviceFor(project)
+    const service = serviceFor(project, {
+      backgroundCatalog: () => ['NoNoise', 'ThermalNoise', 'UpdatedNoise'].map(type => ({
+        type,
+        parameters: [],
+      })),
+    })
 
     await service.execute({
       operations: [
@@ -322,6 +320,93 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
       message: expect.stringContaining('protocol or background parameters'),
+    })
+  })
+
+  it('hydrates sparse MCP assignments and repeater automation from live catalogs', async () => {
+    const project = createEmptyProject('Sparse agent constructors')
+    project.net.nodes.push(new Node({
+      id: 'node_template',
+      name: 'Template',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const generator = vi.fn(async () => ({ generatedNodes: [], generatedEdges: [] }))
+    const service = serviceFor(project, {
+      backgroundCatalog: () => [{
+        type: 'ThermalNoise',
+        parameters: [{ field: 'rate', type: 'Float64' }],
+      }],
+      protocolCatalog: () => ({
+        edge: [{
+          group: 'edge',
+          type: 'Example.EntanglerProt',
+          parameters: [{ field: 'enabled', type: 'Bool' }],
+        }],
+        node: [
+          { group: 'node', type: 'Example.SwapperProt', parameters: [] },
+          { group: 'node', type: 'Example.EntanglementTracker', parameters: [] },
+        ],
+        floating: [],
+      }),
+      generators: { repeater_chain: generator },
+    })
+
+    await service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'slots.create',
+        id: 'slot-agent',
+        node_id: 'node_template',
+        value: {
+          type: 'Qubit',
+          backgroundNoise: {
+            type: 'ThermalNoise',
+            parameters: [{ name: 'rate', type: 'Float64', value: 0.25 }],
+          },
+        },
+      }],
+    })
+    expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0])
+      .toMatchObject({ field: 'rate', selectedType: 'Float64', value: 0.25 })
+
+    await service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'network.generate',
+        value: {
+          generator: 'repeater_chain',
+          options: {
+            templateNodeId: 'node_template',
+            templateEdgeId: 'edge_template',
+            automation: {
+              entangler: {
+                enabled: true,
+                parameters: [{ name: 'enabled', type: 'Bool', value: true }],
+              },
+              swapper: { enabled: false, predicateStrategy: 'template' },
+            },
+          },
+        },
+      }],
+    })
+
+    const options = generator.mock.calls[0][1]
+    expect(options.automation.entangler).toMatchObject({
+      enabled: true,
+      definition: { type: 'Example.EntanglerProt' },
+      protocol: {
+        type: 'Example.EntanglerProt',
+        parameters: [expect.objectContaining({
+          name: 'enabled',
+          selectedType: 'Bool',
+          value: true,
+        })],
+      },
+    })
+    expect(options.automation.swapper).toEqual({
+      enabled: false,
+      predicateStrategy: 'template',
     })
   })
 
@@ -538,7 +623,13 @@ describe('DesignCommandService', () => {
     project.annotations.push(annotation)
     const slot = nodeA.data.slots[0]
 
-    await serviceFor(project).execute({
+    await serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{ type: 'NodeProtocol', parameters: [] }],
+        edge: [{ type: 'EdgeProtocol', parameters: [] }],
+        floating: [{ type: 'FloatingProtocol', parameters: [] }],
+      }),
+    }).execute({
       operations: [{
         kind: 'design.update',
         value: { description: 'Reconciled' },
@@ -626,31 +717,40 @@ describe('DesignCommandService', () => {
     expect(project.net.edges[1].target).toBe(nodeC)
   })
 
-  it('allocates MCP-created IDs in the browser and exposes client_ref aliases', async () => {
+  it('requires unique client-chosen IDs for MCP creation operations', async () => {
     const project = createEmptyProject('Agent IDs')
     const service = serviceFor(project)
 
-    const result = await service.execute({
-      origin: 'mcp',
-      operations: [{
-        kind: 'topology.create_node',
-        client_ref: 'alice',
-        value: { name: 'Alice', position: [-72, 42] },
-      }],
-    })
-
-    expect(result.created_ids).toEqual({ alice: 'node_1' })
-    expect(project.net.nodes[0].id).toBe('node_1')
-    await expect(service.execute({
+    await service.execute({
       origin: 'mcp',
       operations: [{
         kind: 'topology.create_node',
         id: 'agent-selected-id',
+        value: { name: 'Alice', position: [-72, 42] },
+      }],
+    })
+
+    expect(project.net.nodes[0].id).toBe('agent-selected-id')
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'topology.create_node',
         value: { name: 'Bob', position: [-71, 42] },
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('use client_ref'),
+      message: expect.stringContaining('ID is required'),
+    })
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'variables.create',
+        id: 'agent-selected-id',
+        value: { name: 'rate', type: 'Float64', value: 0 },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('Durable ID already exists'),
     })
   })
 
@@ -783,17 +883,6 @@ describe('DesignCommandService', () => {
       code: 'VALIDATION_FAILED',
       message: 'Unknown background noise type: LegacyNoise',
     })
-    await expect(service.requireBackgroundNoise({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
-    }, {
-      project,
-      allowLegacyLiteral: true,
-    })).resolves.toEqual({
-      type: 'LegacyNoise',
-      parameters: [{ value: 0.25 }],
-    })
-
     await service.execute({
       operations: [{
         kind: 'slots.create',
@@ -883,9 +972,6 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.protocols[0].parameters)
       .toContainEqual(expect.objectContaining({ name: 'rounds', value: null }))
-    project.net.nodes[0].data.protocols[0].parameters
-      .find(parameter => parameter.name === 'tag').type = 'Any'
-
     await service.execute({
       operations: [{
         kind: 'protocols.update',
@@ -898,8 +984,8 @@ describe('DesignCommandService', () => {
             { name: 'rounds', type: 'Int64', value: 3 },
             {
               name: 'tag',
-              type: 'DataType',
-              selectedType: 'DataType',
+              type: 'Nothing',
+              selectedType: 'Nothing',
               value: 'nothing',
             },
           ],
@@ -910,7 +996,7 @@ describe('DesignCommandService', () => {
       expect.arrayContaining([
         expect.objectContaining({ name: 'enabled', type: 'Bool', value: true }),
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
-        expect.objectContaining({ name: 'tag', type: 'Any', value: 'nothing' }),
+        expect.objectContaining({ name: 'tag', selectedType: 'Nothing', value: 'nothing' }),
       ]),
     )
 
@@ -943,13 +1029,21 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
 
-    await service.execute({
+    await expect(service.execute({
       operations: [{
         kind: 'variables.create',
         value: { name: 'optional_rate', type: 'Float64', value: null },
       }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+
+    await service.execute({
+      operations: [{ kind: 'variables.create', value: { name: 'initial_rate' } }],
     })
-    expect(project.variables[0]).toMatchObject({ name: 'optional_rate', value: null })
+    expect(project.variables[0]).toMatchObject({
+      name: 'initial_rate',
+      type: 'Float64',
+      value: 0,
+    })
 
     await expect(service.execute({
       operations: [{
@@ -962,30 +1056,21 @@ describe('DesignCommandService', () => {
     expect(project.variables).toHaveLength(1)
   })
 
-  it('uses constructor descriptors to admit Default-valued Variable links', async () => {
-    const project = createEmptyProject('Default Variables')
+  it('rejects Default and null Variables before constructor linking', async () => {
+    const project = createEmptyProject('Concrete Variables')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'A',
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    project.variables.push(
-      new Variable({
-        id: 'variable_default',
-        name: 'default value',
-        type: 'default',
-        selectedType: 'default',
-        value: null,
-      }),
-      new Variable({
-        id: 'variable_label',
-        name: 'label',
-        type: 'String',
-        selectedType: 'String',
-        value: 'not an integer',
-      }),
-    )
+    project.variables.push(new Variable({
+      id: 'variable_label',
+      name: 'label',
+      type: 'String',
+      selectedType: 'String',
+      value: 'not an integer',
+    }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
@@ -1014,17 +1099,18 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    await createWithVariable('Example.OptionalProtocol', 'variable_default')
-    expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
-      selectedType: 'default',
-      value: { kind: 'variable', id: 'variable_default' },
-    })
-    await expect(
-      createWithVariable('Example.RequiredProtocol', 'variable_default'),
-    ).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Required parameter rounds cannot use a Default-valued Variable.',
-    })
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        value: { name: 'default value', type: 'default', value: null },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.create',
+        value: { name: 'null value', type: 'Float64', value: null },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
     await expect(
       createWithVariable('Example.RequiredProtocol', 'variable_label'),
     ).rejects.toMatchObject({
@@ -1176,13 +1262,11 @@ describe('DesignCommandService', () => {
 
     const expression = { kind: 'numeric_expression', source: 'self / 2' }
     await service.execute({
-      operations: operationsForTool('variables_edit', {
-        actions: [{
-          action: 'update',
-          variable_id: 'variable_timeout',
-          value: { value: expression },
-        }],
-      }),
+      operations: [{
+        kind: 'variables.update',
+        variable_id: 'variable_timeout',
+        value: { value: expression },
+      }],
     })
 
     expect(project.variables[0]).toMatchObject({
@@ -1191,7 +1275,7 @@ describe('DesignCommandService', () => {
       value: expression,
     })
     const protocol = project.net.nodes[0].data.protocols[0]
-    expect(protocol.parameters[0].selectedType).toBe('Float64')
+    expect(protocol.parameters[0].selectedType).toBe('expression:Float64')
 
     await service.execute({
       operations: [{
@@ -1225,8 +1309,7 @@ describe('DesignCommandService', () => {
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    const service = serviceFor(project, {
-      protocolCatalog: () => ({
+    const protocolCatalog = {
         node: [{
           type: 'Example.OptionalProtocol',
           parameters: [{
@@ -1236,7 +1319,9 @@ describe('DesignCommandService', () => {
         }],
         edge: [],
         floating: [],
-      }),
+    }
+    const service = serviceFor(project, {
+      protocolCatalog: () => protocolCatalog,
     })
 
     await service.execute({
@@ -1255,7 +1340,7 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    expect(toSimulationPayload(project).net.nodes[0].data.protocols[0].parameters)
+    expect(toSimulationPayload(project, { protocolCatalog }).net.nodes[0].data.protocols[0].parameters)
       .toEqual([{
         name: 'retry_lock_time',
         type: 'Nothing',

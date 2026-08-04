@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import Variable from '../../src/models/Variable'
 import VariablesPanel from '../../src/components/panels/VariablesPanel.vue'
 import TypedValueInput from '../../src/components/panels/TypedValueInput.vue'
-import { createEmptyProject } from '../../src/utils/projectCodec'
+import { createEmptyProject } from '../../src/utils/projectDocument'
 import { api } from '../../src/utils/ApiConnector.js'
 
 afterEach(() => {
@@ -12,25 +12,25 @@ afterEach(() => {
 })
 
 describe('VariablesPanel', () => {
-  it('hides the value editor for the Default option', () => {
+  it('creates a concrete Float64 Variable immediately', async () => {
     const project = createEmptyProject('Variables')
-    project.variables.push(new Variable({
-      id: 'variable_default',
-      name: 'default_value',
-      type: 'default',
-      selectedType: 'default',
-      value: null,
-    }))
-
-    const wrapper = shallowMount(VariablesPanel, {
+    const wrapper = mount(VariablesPanel, {
       props: {
         variables: project.variables,
         projectData: project,
       },
     })
 
-    expect(wrapper.findComponent(TypedValueInput).exists()).toBe(false)
-    expect(wrapper.get('.variable-value-input').text()).toBe('')
+    await wrapper.get('.add-variable-button').trigger('click')
+    expect(wrapper.emitted('designOperations')).toEqual([[[{
+      kind: 'variables.create',
+      value: {
+        name: 'variable_1',
+        type: 'Float64',
+        selectedType: 'Float64',
+        value: 0,
+      },
+    }]]])
   })
 
   it('validates custom functions with deferred assignment context', () => {

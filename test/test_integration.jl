@@ -188,7 +188,12 @@
               "name" => "Left",
               "position" => [0.0, 0.0],
               "data" => Dict(
-                "slots" => [Dict("id" => "left-slot", "type" => "Qubit", "backgroundNoise" => nothing)],
+                "type" => "City",
+                "slots" => [Dict(
+                  "id" => "left-slot",
+                  "type" => "Qubit",
+                  "backgroundNoise" => Dict("type" => "default", "parameters" => Any[]),
+                )],
                 "protocols" => Any[],
               ),
             ),
@@ -197,7 +202,12 @@
               "name" => "Right",
               "position" => [1.0, 1.0],
               "data" => Dict(
-                "slots" => [Dict("id" => "right-slot", "type" => "Qubit", "backgroundNoise" => nothing)],
+                "type" => "City",
+                "slots" => [Dict(
+                  "id" => "right-slot",
+                  "type" => "Qubit",
+                  "backgroundNoise" => Dict("type" => "default", "parameters" => Any[]),
+                )],
                 "protocols" => Any[],
               ),
             ),
@@ -207,7 +217,16 @@
               "id" => "connection",
               "source" => "left-node",
               "target" => "right-node",
-              "data" => Dict("protocols" => Any[]),
+              "isLogic" => false,
+              "data" => Dict(
+                "type" => "connection",
+                "protocols" => Any[],
+                "distanceMeters" => 1000.0,
+                "propagationDelaySeconds" => 5.0e-6,
+                "refractiveIndex" => 1.5,
+                "lossDbPerKm" => 0.2,
+                "transmissivity" => 0.95,
+              ),
             ),
           ],
           "protocols" => Any[],
@@ -236,7 +255,7 @@
       invalid_data = parse_response(invalid_response)
       @test invalid_data["success"] == false
       @test invalid_data["error_code"] == "VALIDATION_ERROR"
-      @test occursin("positive finite", invalid_data["error"])
+      @test occursin("must be positive", invalid_data["error"])
 
       incompatible_payload = deepcopy(export_payload)
       incompatible_payload["simulationConfig"]["qubitRepresentation"] = "GabsRepr"
@@ -262,12 +281,12 @@
         name;
         entangler_tag=counterpart_id,
         consumer_tag=counterpart_id,
-        client_type="Float64",
       )
         payload = deepcopy(test_payload)
         payload["name"] = name
         payload["variables"] = Any[]
-        payload["simulationConfig"] = Dict("time" => 0.01, "timeStep" => 0.01)
+        payload["simulationConfig"]["time"] = 0.01
+        payload["simulationConfig"]["timeStep"] = 0.01
         protocols = payload["net"]["edges"][1]["data"]["protocols"]
         entangler = only(filter(
           protocol -> protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglerProt),
@@ -277,20 +296,16 @@
           protocol -> protocol["type"] == string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
           protocols,
         ))
-        entangler_parameter = only(filter(
-          parameter -> parameter["name"] == "tag",
-          entangler["parameters"],
+        push!(entangler["parameters"], Dict(
+          "name" => "tag",
+          "type" => entangler_tag == "nothing" ? "Nothing" : "DataType",
+          "value" => entangler_tag,
         ))
-        consumer_parameter = only(filter(
-          parameter -> parameter["name"] == "tag",
-          consumer["parameters"],
+        push!(consumer["parameters"], Dict(
+          "name" => "tag",
+          "type" => consumer_tag == "nothing" ? "Nothing" : "DataType",
+          "value" => consumer_tag,
         ))
-        # Deliberately stale/forged snapshots: authoritative constructor
-        # metadata must identify the semantic field on the running server.
-        entangler_parameter["type"] = client_type
-        entangler_parameter["value"] = entangler_tag
-        consumer_parameter["type"] = client_type
-        consumer_parameter["value"] = consumer_tag
         return payload
       end
 
@@ -329,14 +344,21 @@
         end
       end
 
+      invalid_wire_payload = tagged_protocol_payload(
+        "named-tag-http-consumer-nothing";
+        consumer_tag="nothing",
+      )
+      invalid_wire_response = make_request(
+        "POST",
+        "/parse_network_graph";
+        body=invalid_wire_payload,
+      )
+      @test invalid_wire_response.status == 400
+      invalid_wire_data = parse_response(invalid_wire_response)
+      @test invalid_wire_data["success"] == false
+      @test invalid_wire_data["error_code"] == "VALIDATION_ERROR"
+
       invalid_cases = [
-        (
-          "named-tag-http-consumer-nothing",
-          tagged_protocol_payload(
-            "named-tag-http-consumer-nothing";
-            consumer_tag="nothing",
-          ),
-        ),
         (
           "named-tag-http-short",
           tagged_protocol_payload(
@@ -587,8 +609,11 @@
       )]
 
       entangler = payload["net"]["edges"][1]["data"]["protocols"][1]
-      pairstate = only(filter(parameter -> parameter["name"] == "pairstate", entangler["parameters"]))
-      pairstate["value"] = Dict("kind" => "variable", "id" => "zoo_pair_state")
+      push!(entangler["parameters"], Dict(
+        "name" => "pairstate",
+        "type" => "Symbolic",
+        "value" => Dict("kind" => "variable", "id" => "zoo_pair_state"),
+      ))
 
       try
         create_response = make_request("POST", "/parse_network_graph"; body=payload)
@@ -616,7 +641,7 @@
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Missing required field: 'name' must be present"
+      @test data["error"] == "Simulation payload fields do not match the request schema"
 
       # Test missing net field
       invalid_payload = deepcopy(test_payload)
@@ -626,7 +651,7 @@
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Missing required field: 'net' must be present"
+      @test data["error"] == "Simulation payload fields do not match the request schema"
 
       # Test missing nodes field
       invalid_payload = deepcopy(test_payload)
@@ -636,7 +661,7 @@
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Missing required fields in 'net': 'nodes' and 'edges' must be present"
+      @test data["error"] == "Network fields do not match the request schema"
 
       # Test missing edges field
       invalid_payload = deepcopy(test_payload)
@@ -646,7 +671,7 @@
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Missing required fields in 'net': 'nodes' and 'edges' must be present"
+      @test data["error"] == "Network fields do not match the request schema"
   end
 
   @testset "Prepare Simulation - Success" begin

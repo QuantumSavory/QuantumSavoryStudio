@@ -2,15 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { useImportExport } from '../../src/composables/useImportExport'
 import ProjectStore from '../../src/models/ProjectStore'
+import {
+  createEmptyProject,
+  decodeProject,
+  encodeProject,
+} from '../../src/utils/projectDocument.js'
 
 function importProject(overrides = {}) {
-  return {
-    name: ' Imported Project ',
-    description: '',
-    variables: [],
-    net: { nodes: [], edges: [], protocols: [] },
-    ...overrides,
-  }
+  return { ...encodeProject(createEmptyProject('Imported Project')), ...overrides }
 }
 
 function createHarness() {
@@ -24,6 +23,7 @@ function createHarness() {
     addLog: vi.fn(),
     importIntoSession,
     serializeProjectData: vi.fn(),
+    deserializeProjectData: document => decodeProject(document).project,
     showAlert,
   })
   return { composable, importIntoSession, showAlert }
@@ -31,8 +31,8 @@ function createHarness() {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('project import annotations', () => {
-  it('validates and clones annotations without mutating imported input', async () => {
+describe('project-v2 import admission', () => {
+  it('validates and clones a canonical document without mutating imported input', async () => {
     vi.spyOn(ProjectStore, 'listProjects').mockReturnValue([])
     const harness = createHarness()
     const raw = importProject({
@@ -40,8 +40,8 @@ describe('project import annotations', () => {
         id: 'annotation_imported',
         markdown: 'Imported $x$',
         bounds: { west: -3, south: -2, east: 3, north: 2 },
-        backgroundColor: '#FFFFFF',
-        borderColor: '#123ABC',
+        backgroundColor: '#ffffff',
+        borderColor: '#123abc',
         area: { freeCorner: [4, 3] },
       }],
     })
@@ -63,33 +63,32 @@ describe('project import annotations', () => {
     expect(imported.annotations).not.toBe(raw.annotations)
   })
 
-  it('defaults legacy imports to an empty annotation collection', async () => {
-    vi.spyOn(ProjectStore, 'listProjects').mockReturnValue([])
+  it('rejects v1 before storage lookup or session work', async () => {
+    const listProjects = vi.spyOn(ProjectStore, 'listProjects').mockReturnValue([])
     const harness = createHarness()
-
-    expect(await harness.composable.validateAndProcessImport(importProject())).toBe(true)
-    expect(harness.importIntoSession.mock.calls[0][0].annotations).toEqual([])
-  })
-
-  it('rejects invalid annotation data before changing the session', async () => {
-    vi.spyOn(ProjectStore, 'listProjects').mockReturnValue([])
-    const harness = createHarness()
-    const raw = importProject({
-      annotations: [{
-        id: 'annotation_invalid',
-        markdown: '',
-        bounds: { west: 3, south: -2, east: -3, north: 2 },
-        backgroundColor: '#ffffff',
-        borderColor: '#000000',
-        area: null,
-      }],
-    })
+    const raw = { ...importProject(), schemaVersion: 1 }
 
     expect(await harness.composable.validateAndProcessImport(raw)).toBeUndefined()
+    expect(listProjects).not.toHaveBeenCalled()
     expect(harness.importIntoSession).not.toHaveBeenCalled()
     expect(harness.showAlert).toHaveBeenCalledWith(
       'Import failed',
-      expect.stringMatching(/annotation.*canonical and non-empty/i),
+      expect.stringMatching(/unsupported project contract version/i),
+    )
+  })
+
+  it('rejects noncanonical fields before changing the session', async () => {
+    const listProjects = vi.spyOn(ProjectStore, 'listProjects').mockReturnValue([])
+    const harness = createHarness()
+    const raw = { ...importProject(), runtimeState: {} }
+
+    await harness.composable.validateAndProcessImport(raw)
+
+    expect(listProjects).not.toHaveBeenCalled()
+    expect(harness.importIntoSession).not.toHaveBeenCalled()
+    expect(harness.showAlert).toHaveBeenCalledWith(
+      'Import failed',
+      expect.stringMatching(/\/runtimeState/),
     )
   })
 })

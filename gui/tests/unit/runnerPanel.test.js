@@ -182,9 +182,16 @@ describe('RunnerPanel representation controls', () => {
     )
   })
 
-  it('defaults legacy projects and locks representation changes after parsing', async () => {
+  it('locks representation changes after parsing', async () => {
     const wrapper = mountRunner({
-      projectData: { simulationConfig: { time: 1 } },
+      projectData: {
+        simulationConfig: {
+          time: 1,
+          timeStep: 0.1,
+          qubitRepresentation: 'QuantumOpticsRepr',
+          qumodeRepresentation: 'QuantumOpticsRepr',
+        },
+      },
       phase: 'parsed',
       capabilities: capabilities({ editingDisabled: true })
     })
