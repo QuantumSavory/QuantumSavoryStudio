@@ -38,6 +38,110 @@
   # Load test data
   test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload.json"))
 
+  @testset "Constructor transport recipes" begin
+    context = Dict{Symbol,Any}(
+      :node => 2,
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => Dict("A" => 1, "B" => 2),
+    )
+    entity = (kind="protocol", id="protocol-1", path="/net/protocols/0")
+
+    mutable_value = Any[Dict("value" => 1)]
+    literal = WebQuantumSavory._LiteralValue(mutable_value)
+    first_literal = WebQuantumSavory._materialize_transport_value(literal, context, WebQuantumSavory._VariableRecipe[])
+    second_literal = WebQuantumSavory._materialize_transport_value(literal, context, WebQuantumSavory._VariableRecipe[])
+    @test first_literal == second_literal == mutable_value
+    @test first_literal !== second_literal
+    @test first_literal[1] !== second_literal[1]
+
+    first_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._FreshWildcard(), context, WebQuantumSavory._VariableRecipe[],
+    )
+    second_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._FreshWildcard(), context, WebQuantumSavory._VariableRecipe[],
+    )
+    @test first_wildcard isa QuantumSavory.Wildcard
+    @test second_wildcard isa QuantumSavory.Wildcard
+    @test WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._NamedType(Int), context, WebQuantumSavory._VariableRecipe[],
+    ) === Int
+
+    numeric = WebQuantumSavory._NumericSource("self + 3", "Int64")
+    @test WebQuantumSavory._materialize_transport_value(
+      numeric, context, WebQuantumSavory._VariableRecipe[],
+    ) === Int64(5)
+    function_source = WebQuantumSavory._FunctionSource("value -> self + value")
+    contextual_function = WebQuantumSavory._materialize_transport_value(
+      function_source, context, WebQuantumSavory._VariableRecipe[],
+    )
+    @test contextual_function(4) == 6
+    symbolic = WebQuantumSavory._SymbolicSource("Z₁")
+    @test WebQuantumSavory._materialize_transport_value(
+      symbolic, context, WebQuantumSavory._VariableRecipe[],
+    ) !== nothing
+
+    zoo = WebQuantumSavory._normalize_states_zoo_value(
+      Dict(
+        "kind" => "states_zoo",
+        "state_type" => "DepolarizedBellPair",
+        "parameters" => Dict("p" => 2.0),
+      ),
+      "/variables/0/value",
+    )
+    @test WebQuantumSavory._materialize_transport_value(
+      zoo, context, WebQuantumSavory._VariableRecipe[],
+    ) isa QuantumSavory.StatesZoo.DepolarizedBellPair
+
+    variables = [WebQuantumSavory._VariableRecipe(
+      "variable-1",
+      "shared value",
+      "/variables/0",
+      "Int64",
+      WebQuantumSavory._LiteralValue(Int64(7)),
+    )]
+    @test WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._VariableUse(1), context, variables,
+    ) === Int64(7)
+
+    assignment = WebQuantumSavory._AssignmentRecipe(
+      "unknown_but_valid",
+      "/net/protocols/0/parameters/0",
+      "Int64",
+      WebQuantumSavory._LiteralValue(Int64(9)),
+    )
+    calls = Ref(0)
+    counting_constructor = function (; unknown_but_valid)
+      calls[] += 1
+      return unknown_but_valid
+    end
+    kwargs = WebQuantumSavory._materialize_assignments(
+      [assignment], context, variables, entity, "CountingConstructor",
+    )
+    @test WebQuantumSavory._invoke_constructor(
+      counting_constructor, kwargs, entity, "CountingConstructor", [assignment],
+    ) == 9
+    @test calls[] == 1
+
+    rejecting_calls = Ref(0)
+    rejecting_constructor = function (; unknown_but_valid)
+      rejecting_calls[] += 1
+      throw(DomainError(unknown_but_valid, "test rejection"))
+    end
+    rejection = try
+      WebQuantumSavory._invoke_constructor(
+        rejecting_constructor, kwargs, entity, "RejectingConstructor", [assignment],
+      )
+      nothing
+    catch error
+      error
+    end
+    @test rejection isa WebQuantumSavory.APIError
+    @test rejection.status_code == 422
+    @test rejection.error_code == "CONSTRUCTOR_REJECTED"
+    @test rejection.details["stage"] == "invoke"
+    @test rejection.details["exception_type"] == "DomainError"
+    @test rejecting_calls[] == 1
+  end
+
   @testset "Julia Script Export" begin
     payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
     payload["name"] = "../Export Demo?"

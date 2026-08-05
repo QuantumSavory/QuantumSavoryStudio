@@ -1281,8 +1281,7 @@ function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
       end
       push!(edge_connections, Dict("source" => source, "target" => target))
     end
-    variables = _parse_variables(payload)
-    _validate_catalog_constructors(payload, variables; catalogs)
+    _normalize_project_transport(payload; catalogs)
     return Dict(
       "success" => true,
       "message" => "Network graph parsed successfully",
@@ -1329,7 +1328,7 @@ function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapsho
   # Extract nodes from the validation result
   nodes = data["graph_info"]["nodes"]
   default_representations = representation_config(data["data"])
-  variables = _parse_variables(data["data"])
+  variables, _, _ = _normalize_variable_recipes(data["data"])
   node_name_to_index = _node_name_to_index(nodes)
 
   # Create array of Register objects based on slots data
@@ -1349,7 +1348,7 @@ function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapsho
     # Backgrounds are positional, so no-noise slots need explicit `nothing` entries.
     background_noise = Union{Nothing,QuantumSavory.AbstractBackground}[]
 
-    for slot_data in slots
+    for (slot_index, slot_data) in enumerate(slots)
       # Parse slot type dynamically
       slot_type_str = slot_data["type"]
       slot_type = _resolve_type_from_string(slot_type_str, :slot, catalogs)
@@ -1364,7 +1363,14 @@ function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapsho
         :node => node_index,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
-      background = _instantiate_noise(noise_def, background_context; variables, catalogs)
+      background = _instantiate_noise(
+        noise_def,
+        background_context;
+        variables,
+        catalogs,
+        path="/net/nodes/$(node_index - 1)/data/slots/$(slot_index - 1)/backgroundNoise",
+        entity_id=String(slot_data["id"]),
+      )
       push!(background_noise, background)
     end
 
@@ -1392,42 +1398,29 @@ end
 function _instantiate_noise(
   noise_def,
   ctx::Dict{Symbol,Any}=Dict{Symbol,Any}();
-  variables=Dict{String,Variable}(),
+  variables=_VariableRecipe[],
   catalogs=_constructor_catalog_snapshot(),
+  path::String="/backgroundNoise",
+  entity_id::String="background",
 )
   tstr = String(noise_def["type"])
   tstr == "default" && return nothing
-  catalog_entry = _resolve_background_catalog_entry(tstr, catalogs)
-  catalog_entry === nothing && error("Unknown background noise type: $tstr")
-  T = catalog_entry.type
-  kwargs, variable_assignments = _constructor_parameter_kwargs(
-    Vector{Any}(noise_def["parameters"]),
-    T,
-    ctx;
-    variables,
-    parameter_context="background noise parameter",
-    declared_parameter_types=_catalog_parameter_types(catalog_entry),
-    constructor_parameter_metadata=_catalog_parameter_metadata(catalog_entry),
-    required_parameters=_required_catalog_parameters(catalog_entry),
+  catalog_entry = _catalog_entry_by_wire_type(catalogs.backgrounds, tstr)
+  catalog_entry === nothing && _admission_error(
+    "Unknown background constructor '$tstr'",
+    _pointer_child(path, "type"),
   )
-  isempty(variable_assignments) && return T(; (k => v for (k, v) in kwargs)...)
-  try
-    return T(; (k => v for (k, v) in kwargs)...)
-  catch error
-    error isa APIError && rethrow(error)
-    parameter_names = join(
-      (assignment["parameter_name"] for assignment in variable_assignments),
-      ", ",
-    )
-    throw(validation_error(
-      "Failed to instantiate background noise with variable-backed parameter(s): $parameter_names",
-      Dict{String,Any}(
-        "background_type" => string(T),
-        "variable_assignments" => variable_assignments,
-        "constructor_error" => sprint(showerror, error),
-      ),
-    ))
-  end
+  variable_indices = Dict(variable.id => index for (index, variable) in enumerate(variables))
+  variable_types = Dict(variable.id => variable.wire_type for variable in variables)
+  recipes = _normalize_assignment_recipes(
+    noise_def["parameters"],
+    _pointer_child(path, "parameters"),
+    variable_indices,
+    variable_types,
+  )
+  entity = (kind="background", id=entity_id, path=path)
+  kwargs = _materialize_assignments(recipes, ctx, variables, entity, tstr)
+  return _invoke_constructor(catalog_entry.type, kwargs, entity, tstr, recipes)
 end
 
 """
@@ -1877,65 +1870,43 @@ function _instantiate_protocol(
   prot_def,
   ctx::Dict{Symbol,Any},
   state=nothing;
-  variables=Dict{String,Variable}(),
+  variables=_VariableRecipe[],
   catalogs=_constructor_catalog_snapshot(),
+  path::String="/protocol",
 )
-  # Handle both Dict{String,Any} and JSON3.Object types
-  tstr = get(prot_def, "type", nothing)
-  tstr === nothing && return nothing
-  catalog_entry = _resolve_protocol_catalog_entry(String(tstr), catalogs)
-  catalog_entry === nothing && return nothing
-  T = catalog_entry.type
-
-  declared_parameter_types = _catalog_parameter_types(catalog_entry)
-  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
-
-  params = Vector{Any}(get(prot_def, "parameters", Any[]))
-
-  kwargs = Dict{Symbol,Any}(:sim => ctx[:sim], :net => ctx[:net])
+  tstr = String(prot_def["type"])
+  catalog_entry = _catalog_entry_by_wire_type(catalogs.protocols, tstr)
+  catalog_entry === nothing && _admission_error(
+    "Unknown protocol constructor '$tstr'",
+    _pointer_child(path, "type"),
+  )
+  injected = Pair{Symbol,Any}[:sim => ctx[:sim], :net => ctx[:net]]
   for (keyword, value) in _protocol_attachment_pairs(
     catalog_entry,
     ctx;
     context="Protocol '$(catalog_entry.wire_type)'",
   )
-    kwargs[keyword] = value
+    push!(injected, keyword => value)
   end
-
-  parameter_kwargs, variable_assignments = _constructor_parameter_kwargs(
-    params,
-    T,
-    ctx,
-    state;
-    variables,
-    parameter_context="protocol parameter",
-    declared_parameter_types,
-    constructor_parameter_metadata,
-    required_parameters=_required_catalog_parameters(catalog_entry),
+  injected_names = Set(string(first(pair)) for pair in injected)
+  variable_indices = Dict(variable.id => index for (index, variable) in enumerate(variables))
+  variable_types = Dict(variable.id => variable.wire_type for variable in variables)
+  recipes = _normalize_assignment_recipes(
+    prot_def["parameters"],
+    _pointer_child(path, "parameters"),
+    variable_indices,
+    variable_types;
+    injected=injected_names,
   )
-  merge!(kwargs, parameter_kwargs)
-
-  # Instantiate with all keyword arguments
-  @info "Instantiating protocol" protocol_type=T kwargs=kwargs
-  # Preserve the existing constructor behavior for literal-only protocols.
-  # When variable-backed keywords were applied, translate constructor type or
-  # compatibility failures into a client-facing validation error instead of a
-  # generic 500 response.
-  isempty(variable_assignments) && return T(; (k => v for (k, v) in kwargs)...)
-
-  try
-    return T(; (k => v for (k, v) in kwargs)...)
-  catch e
-    isa(e, APIError) && rethrow(e)
-    parameter_names = join((assignment["parameter_name"] for assignment in variable_assignments), ", ")
-    throw(validation_error(
-      "Failed to instantiate protocol with variable-backed parameter(s): $parameter_names",
-      Dict{String,Any}(
-        "protocol_type" => string(T),
-        "variable_assignments" => variable_assignments,
-        "constructor_error" => sprint(showerror, e),
-      ),
-    ))
-  end
+  entity = (kind="protocol", id=String(prot_def["id"]), path=path)
+  user_kwargs = _materialize_assignments(recipes, ctx, variables, entity, tstr)
+  return _invoke_constructor(
+    catalog_entry.type,
+    vcat(injected, user_kwargs),
+    entity,
+    tstr,
+    recipes,
+  )
 end
 
 function simulation_is_running_exception(simulation_name)
