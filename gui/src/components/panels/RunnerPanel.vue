@@ -45,7 +45,6 @@ const emit = defineEmits([
   'pause',
   'resume',
   'stop',
-  'prepareNetworkGraph',
   'prepareSimulation',
   'updateSimulationTime',
   'updateSimulationConfig',
@@ -147,7 +146,6 @@ const representationsDisabled = computed(() => (
   || foregroundPending.value
 ))
 const foregroundStatus = computed(() => ({
-  parse: 'Parsing network graph',
   prepare: 'Preparing simulation',
   run: 'Starting simulation',
   pause: 'Pausing simulation',
@@ -168,10 +166,6 @@ function handleResume() {
 
 function handleStop() {
   emit('stop')
-}
-
-function handlePrepareNetworkGraph() {
-  emit('prepareNetworkGraph')
 }
 
 function handlePrepareSimulation() {
@@ -379,25 +373,10 @@ function commitSimulationTime(event) {
       <div class="advanced-buttons">
         <button 
           :disabled="!props.capabilities.canPrepare || pollingActive || foregroundPending"
-          class="prepare-network-graph-btn" 
-          @click="handlePrepareNetworkGraph"
-        >
-          Parse
-        </button>
-        <button 
-          :disabled="props.phase !== SimulationPhase.PARSED || pollingActive || foregroundPending"
           class="prepare-simulation-btn" 
           @click="handlePrepareSimulation"
         >
           Prepare
-        </button>
-        <button 
-          :disabled="!props.capabilities.canPrepare || pollingActive || foregroundPending"
-          class="reset-btn" 
-          @click="handlePrepareNetworkGraph"
-          title="Reset simulation (re-parse network graph)"
-        >
-          Reset
         </button>
       </div>
     </div>

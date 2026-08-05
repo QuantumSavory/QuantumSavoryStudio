@@ -14,8 +14,8 @@ WebQuantumSavory must not maintain a parallel list. The exact entries are depend
 data, so tests and documentation should inspect the catalog rather than freeze current
 member names.
 
-Constructor-consuming requests and standalone validation, construction, or script
-export operations take one fresh snapshot of all three upstream catalogs and pass it
+Constructor-consuming requests and script export take one fresh snapshot of upstream
+catalogs and pass it
 through every item-level lookup. The next operation reads upstream metadata again, so
 newly loaded extensions remain discoverable without repeated item-level scans or
 process-global mutable caches. The protocol projection preserves upstream `parameters`,
@@ -23,7 +23,7 @@ process-global mutable caches. The protocol projection preserves upstream `param
 attachment is renamed to the existing Web `floating` wire group. The opt-in
 `MockBrokenProtocol` entry is synthetic and diagnostic-only.
 
-The typed-input flow is:
+The authoring-only typed-input flow is:
 
 ```text
 QuantumSavory constructor member
@@ -34,9 +34,14 @@ QuantumSavory constructor member
 
 Frontend descriptor IDs are UI choices, not Julia types on the wire. Optional Default
 selection omits the sparse `{name, type, value}` assignment so Julia applies its own
-default. A field with `required=true` must produce an explicit constructor keyword;
-Variables always carry a concrete supported type and non-null value. Metadata
-`defaultValue` is documentation rather than fresh draft state.
+default. Required flags, Julia types, bounds, and `defaultValue` are presentation
+metadata rather than Web admission rules. Variables always carry a concrete supported
+wire codec and non-null value.
+
+QuantumSavory constructors are the sole authority for missing or unknown keywords,
+conversion, scalar domains, and cross-field semantics. Web normalization checks exact
+constructor IDs and transport support, then passes every supplied unknown-but-valid
+keyword unchanged. It never trial-constructs during admission or export.
 
 ## Placement and physical context
 
@@ -48,21 +53,20 @@ Protocol placement is part of the payload contract:
 
 Only protocols whose runtime metadata permits virtual placement may be attached to a
 virtual edge. The frontend resolves physical quantities and sends them with physical
-edges; backend validation checks bounds but does not recompute or cross-check the
-frontend formula.
+edges; backend admission checks finite operation inputs but does not copy constructor
+metadata ranges.
 
-Clients submit only upstream-advertised protocol parameters. Simulation, network, and
-attachment values are server-owned; private or injected fields are rejected like any
-other unknown parameter. Attachment metadata maps semantic roles (`node`, `node_a`,
-and `node_b`) to the constructor keywords advertised by QuantumSavory, so validation,
-runtime construction, and script export share one placement contract.
+Simulation, network, and attachment values are server-owned; user keywords that collide
+with those injected fields are rejected. Attachment metadata maps semantic roles
+(`node`, `node_a`, and `node_b`) to constructor keywords so runtime construction and
+script export share one placement contract.
 
 ## Named tags and live queries
 
-A constructor field is a named-tag-type field only when the authoritative Julia member
-is `Type{<:AbstractTag}` or that type unioned with `Nothing`. Do not infer the semantic
-from saved strings. Fully qualified catalog IDs are used for safe resolution, and
-nullability comes from current constructor metadata.
+Catalog member metadata may select the named-tag authoring widget when the Julia member
+is `Type{<:AbstractTag}` or that type unioned with `Nothing`. Fully qualified catalog
+IDs are used for safe resolution. The widget metadata is not a substitute for the
+constructor's acceptance decision.
 
 General tag tooling derives converter/signature choices from the runtime catalog and
 accepts only advertised primitive or type values. Tags and queries belong to live
@@ -79,7 +83,8 @@ an explicit dependency policy.
 ## Anchors
 
 - **Catalog adapter:** [`src/catalogs.jl`](../../../src/catalogs.jl).
-- **Validation/construction:** [`src/parser.jl`](../../../src/parser.jl).
+- **Admission:** [`src/parser.jl`](../../../src/parser.jl).
+- **Transport/construction:** [`src/constructor_transport.jl`](../../../src/constructor_transport.jl).
 - **Tag codec:** [`src/tag_metadata.jl`](../../../src/tag_metadata.jl).
 - **Dependency declaration:** [`Project.toml`](../../../Project.toml).
 - **Contract evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl) and

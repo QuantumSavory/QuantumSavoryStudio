@@ -2,7 +2,9 @@ import { webcrypto } from 'node:crypto'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { McpEditorBridge } from '../../src/features/mcp/McpEditorBridge'
+import { createSimulationControllerAdapter } from '../../src/features/mcp/simulationControllerAdapter'
 import Variable, { STATES_ZOO_VALUE_KIND } from '../../src/models/Variable'
+import { BrowserApiError } from '../../src/utils/ApiConnector'
 import { createEmptyProject } from '../../src/utils/projectDocument'
 
 beforeAll(() => {
@@ -37,6 +39,7 @@ function bridgeFixture(overrides = {}) {
     pause: vi.fn(async () => true),
     resume: vi.fn(async () => true),
     reset: vi.fn(async () => true),
+    ...overrides.simulationController,
   }
   const designCommands = {
     runExclusive: vi.fn(async work => work()),
@@ -115,9 +118,70 @@ describe('McpEditorBridge', () => {
       operation_id: 'prepare-1',
       success: true,
       document_changed: false,
-      result: { summary: 'Simulation prepare accepted.' },
+      result: {
+        summary: 'Simulation prepare accepted.',
+        prepared_revision: 0,
+      },
     }))
     expect(bridge.revision).toBe(1)
+    expect(bridge.preparedRevision).toBe(1)
+  })
+
+  it('preserves a reused browser API failure through the command acknowledgement', async () => {
+    const rawResponse = {
+      success: false,
+      error: 'Constructor rejected',
+      status_code: 422,
+      error_code: 'CONSTRUCTOR_REJECTED',
+      details: {
+        stage: 'invoke',
+        path: '/net/protocols/0',
+        replacement_committed: false,
+      },
+    }
+    const apiError = new BrowserApiError(
+      { status: 422 },
+      rawResponse,
+      'Prepare failed',
+    )
+    const lastError = apiError
+    const adapter = createSimulationControllerAdapter({
+      prepareSimulation: vi.fn(async () => false),
+      invalidatePreparedRevision: vi.fn(),
+      runSimulationWithSteps: vi.fn(async () => true),
+      pauseSimulation: vi.fn(async () => true),
+      resumeSimulation: vi.fn(async () => true),
+      stopSimulation: vi.fn(async () => true),
+      getLastError: () => lastError,
+    })
+    const { bridge, client } = bridgeFixture({ simulationController: adapter })
+    await bridge.initialize()
+
+    await bridge.handleCommand({
+      command_id: 'command-prepare-failure',
+      operation_id: 'prepare-failure',
+      binding_id: 'binding-1',
+      generation: 1,
+      base_revision: 0,
+      payload: { type: 'simulation_action', action: 'prepare' },
+    })
+
+    expect(client.commit).toHaveBeenLastCalledWith(expect.objectContaining({
+      command_id: 'command-prepare-failure',
+      success: false,
+      error: {
+        code: 'CONSTRUCTOR_REJECTED',
+        message: 'Constructor rejected',
+        retryable: false,
+        status: 422,
+        details: {
+          ...rawResponse.details,
+          http_status: 422,
+          raw_response: rawResponse,
+        },
+      },
+    }))
+    expect(bridge.preparedRevision).toBeNull()
   })
 
   it('unbinds its editor lease before stopping the listener', async () => {

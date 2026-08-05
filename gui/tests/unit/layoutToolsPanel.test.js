@@ -165,7 +165,6 @@ describe('layout tools physical settings', () => {
       value: {
         backgroundNoise: {
           type: 'ThermalNoise',
-          doc: 'Thermal background',
           parameters: [{
             field: 'rate',
             type: 'Float64',

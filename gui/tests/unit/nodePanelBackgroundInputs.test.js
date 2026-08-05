@@ -115,38 +115,18 @@ describe('NodePanel background constructor drafts', () => {
       ],
     })
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    vi.spyOn(api, 'validateNumericExpression').mockResolvedValue({
-      success: true,
-      results: {
-        deferred: false,
-        target_type: 'Float64',
-        value: '2.0',
-      },
-    })
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('uses concrete node context and clones validated add-many backgrounds', async () => {
+  it('clones serializable add-many background drafts', async () => {
     const wrapper = mountPanel()
     await wrapper.get('.menu-stub button:nth-child(2)').trigger('click')
     const form = wrapper.get('.add-n-slots-form')
     await form.get('.number-input').setValue('2')
     await configureBackgroundExpression(form, 'self + nodeid("Node A")')
-
-    expect(api.validateNumericExpression).toHaveBeenLastCalledWith(
-      'self + nodeid("Node A")',
-      'Float64',
-      'node',
-      expect.objectContaining({
-        context: {
-          node_names: ['Node A'],
-          self: 1,
-        },
-      }),
-    )
 
     await buttonNamed(form, 'Add 2 Slots').trigger('click')
     const operations = wrapper.emitted('design-operations').at(-1)[0]

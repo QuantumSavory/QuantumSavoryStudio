@@ -115,13 +115,10 @@ gap.
 
 ## Simulation run
 
-`simulation_run` should share GUI Play's readiness/capability, validation, parse,
-prepare, and start path, preserve actionable failure details, and record the prepared
-browser revision.
-
-The current browser relay already shares the controller, but the hub records
-`prepared_source_revision` only after explicit prepare. Direct-run revision recording is
-a known gap.
+`simulation_run` shares GUI Play's readiness, structural validation, atomic prepare, and
+start path while preserving actionable failure details. `simulation_prepare` advances
+`prepared_source_revision` only after the controller confirms success; failed prepares
+leave the prior revision untouched.
 
 ## Error and recovery categories
 

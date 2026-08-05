@@ -1,21 +1,12 @@
 module Sandbox
 
-using Latexify
 using Base
 using QuantumSavory
 using QuantumSavory.ProtocolZoo
 using ResumableFunctions
 using ConcurrentSim
-using ..WebQuantumSavory: NUMERIC_EXPRESSION_PLACEMENTS,
-                          NUMERIC_EXPRESSION_TARGETS,
-                          _assert_source_allowlisted,
-                          _cast_numeric_expression_result,
+using ..WebQuantumSavory: _assert_source_allowlisted,
                           _evaluate_function_source,
-                          _lowered_numeric_context_bindings,
-                          _node_name_to_index,
-                          _nodeid_resolver,
-                          _numeric_expression_result_string,
-                          _parse_complete_source,
                           _representative_source_context,
                           _source_context_expression,
                           require_unsafe_code_evaluation
@@ -156,77 +147,6 @@ function test_code(code_string::String; placement::Union{Nothing,String}=nothing
 end
 
 """
-Validate or evaluate one typed Julia numeric expression.
-
-Template protocol validation omits `context`, evaluates once with stable
-representative values, and returns that cast value with `deferred=true`.
-Variable validation lowers once; expressions whose resolved globals include an
-assignment binding are deferred without executing their body, while other
-Variables evaluate that same lowered form. Concrete requests evaluate once in
-the supplied lexical assignment context.
-"""
-function test_numeric_expression(
-    expression::AbstractString,
-    target_type::AbstractString,
-    placement::AbstractString;
-    context=nothing,
-)
-    require_unsafe_code_evaluation()
-
-    try
-        expression = String(expression)
-        target_type = String(target_type)
-        placement = String(placement)
-        target_type in NUMERIC_EXPRESSION_TARGETS || throw(ArgumentError(
-            "Numeric expression target type must be 'Float64' or 'Int64'",
-        ))
-        placement in NUMERIC_EXPRESSION_PLACEMENTS || throw(ArgumentError(
-            "Numeric expression placement must be 'node', 'edge', 'floating', or 'variable'",
-        ))
-
-        evaluation_module = Module()
-        parsed = _parse_complete_source(expression)
-        _assert_source_allowlisted(parsed)
-        results = Dict{Symbol,Any}(:target_type => target_type)
-
-        value = if placement == "variable"
-            lowered = Meta.lower(evaluation_module, parsed)
-            references = _lowered_numeric_context_bindings(lowered, evaluation_module)
-            if !isempty(references)
-                results[:deferred] = true
-                return true, results, nothing
-            end
-            results[:deferred] = false
-            Base.eval(evaluation_module, lowered)
-        else
-            source_context = if context === nothing
-                _representative_source_context(placement)
-            else
-                node_name_to_index = _node_name_to_index(context.node_names)
-                (
-                    nodeid=_nodeid_resolver(node_name_to_index),
-                    self_node_index=placement == "node" ? context.self : nothing,
-                    edge_context=placement == "edge" ? context.edge_context : nothing,
-                )
-            end
-            results[:deferred] = context === nothing
-            Base.eval(evaluation_module, _source_context_expression(
-                parsed,
-                source_context.nodeid,
-                source_context.self_node_index,
-                source_context.edge_context,
-            ))
-        end
-        cast_value = _cast_numeric_expression_result(value, target_type)
-        results[:value] = _numeric_expression_result_string(cast_value)
-        return true, results, nothing
-    catch error
-        return false, nothing, error
-    end
-end
-
-
-"""
 Evaluate a symbolic expression in a temporary module preloaded with
 QuantumSavory-related namespaces. This is namespace isolation, not a security
 sandbox. Returns a tuple of
@@ -260,31 +180,6 @@ function evaluate_symbolic_expression(expr::String)
     catch e
         return false, nothing, e
     end
-end
-
-
-"""
-Test and validate a symbolic expression, returning both the evaluated value and LaTeX representation.
-Uses `evaluate_symbolic_expression` internally for evaluation. Returns a tuple of
-(success::Bool, results::Union{Dict,Nothing}, error::Union{Nothing,Exception}).
-If successful, `results` is a Dict with keys `:value` (stringified value) and
-`:latex` (LaTeX string from `Latexify.latexify`).
-"""
-function test_symbolic_expression(expr::String)
-    success, value, error = evaluate_symbolic_expression(expr)
-    if !success
-        return false, nothing, error
-    end
-
-    # Convert to LaTeX string
-    latex_str = String(Latexify.latexify(value))
-
-    results = Dict(
-        :value => string(value),
-        :latex => latex_str,
-    )
-
-    return true, results, nothing
 end
 
 end

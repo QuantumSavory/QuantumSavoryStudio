@@ -778,10 +778,14 @@ function commit_browser_command!(
     success = get(request, "success", false) === true
     if !success
       browser_error = get(request, "error", Dict{String,Any}())
+      browser_status = get(browser_error, "status", 400)
+      browser_status isa Integer && !(browser_status isa Bool) ||
+        (browser_status = 400)
       error = Dict{String,Any}(
         "code" => string(get(browser_error, "code", "VALIDATION_FAILED")),
         "message" => string(get(browser_error, "message", "The browser rejected the command.")),
         "retryable" => get(browser_error, "retryable", false),
+        "status" => Int(browser_status),
         "details" => get(browser_error, "details", Dict{String,Any}()),
       )
       delete!(hub.pending, command_id)

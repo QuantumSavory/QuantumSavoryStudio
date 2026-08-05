@@ -52,8 +52,10 @@ Committed constructor assignments persist sparsely as exact
 is the selected catalog branch's exact `wireType`. Omitting an optional assignment means
 the simulator constructor supplies its default. Catalog type arrays, descriptor IDs,
 `selectedType`, `defaultValue`, documentation, errors, and previews are never persisted.
-Hydration resolves each sparse assignment against the current slot, background, or
-protocol catalogs; a missing required or unknown assignment is invalid.
+Hydration resolves the owning constructor ID but does not inspect catalog parameter
+membership, requiredness, types, defaults, or bounds. Unknown valid Julia keyword names
+remain canonical; missing or incompatible assignments are diagnosed only by the native
+constructor during prepare.
 
 Variables persist as concrete `{id, name, type, value}` records, plus only the existing
 optional States Zoo trace-source link. IDs and names are unique, values are non-null,

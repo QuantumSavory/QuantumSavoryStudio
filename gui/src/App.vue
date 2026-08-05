@@ -85,7 +85,6 @@ import { UI_SERVICES_KEY } from './composables/uiServices.js'
 import { generateRepeaterChain } from './utils/repeaterChain.js'
 import { generateStarNetwork } from './utils/starNetwork.js'
 import { generateGraphNetwork, GRAPH_TOPOLOGIES } from './utils/graphNetwork.js'
-import { isSymbolicType } from './utils/parameterTypes.js'
 import { DesignCommandService } from './domain/design/DesignCommandService.js'
 import { McpControlClient } from './features/mcp/McpControlClient.js'
 import { McpEditorBridge } from './features/mcp/McpEditorBridge.js'
@@ -363,8 +362,8 @@ const {
   targetSimulationTime,
   pollingActive,
   resetSimulation,
-  prepareNetworkGraph,
   prepareSimulation,
+  invalidatePreparedRevision,
   runSimulationWithSteps,
   pauseSimulation,
   resumeSimulation,
@@ -451,41 +450,6 @@ designCommands = new DesignCommandService({
   backgroundCatalog: () => api.config.value.bgNoiseOptions || [],
   protocolCatalog: () => api.config.value.protocolTypes || {},
   statesCatalog: () => api.config.value.statesZooTypes || [],
-  knownFunctions: () => api.getKnownFunctions(),
-  validateCodeValue: async (type, value, { placement } = {}) => {
-    if (!api.isUnsafeCodeEvaluationEnabled()) {
-      return {
-        valid: false,
-        message: 'Server-side Julia evaluation is disabled.',
-      }
-    }
-    const response = isSymbolicType(type)
-      ? await api.validateSymbolicFunction(value)
-      : await api.validateFunction(value, placement)
-    return {
-      valid: response?.success === true,
-      message: response?.error || 'The code value is invalid.',
-    }
-  },
-  validateNumericExpressionValue: async (
-    type,
-    source,
-    { placement, context } = {},
-  ) => {
-    if (!api.isUnsafeCodeEvaluationEnabled()) {
-      return {
-        valid: false,
-        message: 'Server-side Julia evaluation is disabled.',
-      }
-    }
-    const response = await api.validateNumericExpression(source, type, placement, { context })
-    return {
-      valid: response?.success === true,
-      value: response?.results?.value,
-      deferred: response?.results?.deferred === true,
-      message: response?.error?.message || response?.error || 'The numeric expression is invalid.',
-    }
-  },
   previewState: (stateType, parameters) => api.fetchStatesZooPreview(stateType, parameters),
   markDirty: () => markProjectDirtyRef.value(),
   generators: {
@@ -504,6 +468,7 @@ designCommands = new DesignCommandService({
     if (deletedIds.has(selectedItem.value?.id)) handleSelect(null, null)
   },
   onCommitted: async (result, { origin } = {}) => {
+    invalidatePreparedRevision()
     if (origin === 'gui' && mcpBridge?.binding) {
       try {
         await mcpBridge.publishGuiCommit(result.summary)
@@ -542,10 +507,12 @@ mcpBridge = new McpEditorBridge({
   },
   simulationController: createSimulationControllerAdapter({
     prepareSimulation,
+    invalidatePreparedRevision,
     runSimulationWithSteps,
     pauseSimulation,
     resumeSimulation,
-    stopSimulation
+    stopSimulation,
+    getLastError: () => simulationState.value.lastError
   }),
   flushEditors: async () => {
     if (designInteractionCount.value > 0) return { busy: true }
@@ -1471,7 +1438,6 @@ onUnmounted(() => {
                 @pause="pauseSimulation"
                 @resume="resumeSimulation"
                 @stop="stopSimulation"
-                @prepareNetworkGraph="prepareNetworkGraph" 
                 @prepareSimulation="prepareSimulation"
                 @updateSimulationTime="updateSimulationTime"
                 @updateSimulationConfig="updateSimulationConfig"

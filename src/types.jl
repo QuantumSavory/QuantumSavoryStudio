@@ -83,22 +83,7 @@ function _evaluate_function_source(
     return value
 end
 
-"""
-A globally-defined, typed simulation variable.
-
-`value` intentionally remains in its JSON-compatible form. Conversion is
-performed for each protocol assignment so context-dependent values (for
-example, predefined functions involving `self`) are resolved in the context of
-the protocol that uses the variable.
-"""
-struct Variable
-    id::String
-    name::String
-    type::String
-    value::Any
-end
-
-"""A reference from a protocol parameter to a global [`Variable`](@ref)."""
+"""A canonical constructor assignment's reference to a project Variable."""
 struct VariableReference
     id::String
 end
@@ -110,7 +95,6 @@ end
 
 const NUMERIC_EXPRESSION_KIND = "numeric_expression"
 const NUMERIC_EXPRESSION_TARGETS = ("Float64", "Int64")
-const NUMERIC_EXPRESSION_PLACEMENTS = ("node", "edge", "floating", "variable")
 
 """Parse the exact persisted numeric-expression tag, if present."""
 function _parse_numeric_expression(value; context::String="Value")
@@ -261,72 +245,6 @@ const _ALL_NUMERIC_CONTEXT_BINDINGS = Set{Symbol}([
     (descriptor.binding for descriptor in EDGE_ENDPOINT_CONTEXT_DESCRIPTORS)...,
 ])
 
-function _lowering_error(expression::Expr)
-    detail = isempty(expression.args) ? "Julia lowering failed" : first(expression.args)
-    detail isa Exception && throw(detail)
-    throw(ErrorException(string(detail)))
-end
-
-"""
-Collect assignment-context globals resolved by Julia's lowering pass.
-
-This inspects only globals belonging to the fresh evaluation module. Local
-bindings, keyword labels, property names, and hygienic macro identifiers have
-already been resolved by Julia. `@isdefined` lowers to `Core.isdefinedglobal`
-without a separate `GlobalRef` for the queried name, so recognize that call
-explicitly. A lowered error is never accepted as a deferred expression.
-"""
-function _lowered_numeric_context_bindings(lowered, evaluation_module::Module)
-    references = Set{Symbol}()
-    children(expression) = expression isa Core.CodeInfo ? expression.code :
-        expression isa Expr ? expression.args : ()
-    quoted_symbol(value) = value isa QuoteNode ? value.value : value
-
-    function assigned_global(expression)
-        expression isa Expr || return nothing
-        if expression.head === :call && length(expression.args) >= 3 &&
-           first(expression.args) === GlobalRef(Base, :setglobal!) &&
-           expression.args[2] === evaluation_module
-            name = quoted_symbol(expression.args[3])
-            return name isa Symbol ? name : nothing
-        end
-        target = expression.head in (:const, :method) && !isempty(expression.args) ?
-            first(expression.args) : nothing
-        return target isa GlobalRef && target.mod === evaluation_module ? target.name : nothing
-    end
-
-    assigned = Set{Symbol}()
-    function collect_assignments(expression)
-        name = assigned_global(expression)
-        name === nothing || push!(assigned, name)
-        foreach(collect_assignments, children(expression))
-    end
-    collect_assignments(lowered)
-
-    function visit(expression)
-        if expression isa GlobalRef
-            expression.mod === evaluation_module &&
-                expression.name in _ALL_NUMERIC_CONTEXT_BINDINGS &&
-                !(expression.name in assigned) &&
-                push!(references, expression.name)
-        elseif expression isa Expr
-            expression.head === :error && _lowering_error(expression)
-            if expression.head === :call && length(expression.args) >= 3 &&
-               first(expression.args) === GlobalRef(Core, :isdefinedglobal) &&
-               expression.args[2] === evaluation_module
-                name = quoted_symbol(expression.args[3])
-                name isa Symbol && name in _ALL_NUMERIC_CONTEXT_BINDINGS &&
-                    !(name in assigned) &&
-                    push!(references, name)
-            end
-        end
-        foreach(visit, children(expression))
-    end
-
-    visit(lowered)
-    return references
-end
-
 """Build the shared one-based node-name lookup from validated node order."""
 function _node_name_to_index(nodes)::Dict{String,Int}
     return Dict{String,Int}(
@@ -390,26 +308,7 @@ function _representative_source_context(placement::AbstractString)
     return (; nodeid=representative_nodeid, self_node_index, edge_context)
 end
 
-"""Return the one authoritative numeric target represented by a Julia type."""
-function _numeric_expression_target(raw_type)
-    members = try
-        Base.uniontypes(raw_type)
-    catch
-        Any[raw_type]
-    end
-    targets = unique(filter(
-        target -> target in NUMERIC_EXPRESSION_TARGETS,
-        string.(members),
-    ))
-    return length(targets) == 1 ? only(targets) : nothing
-end
-
-function _cast_numeric_expression_result(
-    value,
-    target_type::AbstractString;
-    minimum=nothing,
-    maximum=nothing,
-)
+function _cast_numeric_expression_result(value, target_type::AbstractString)
     target = String(target_type)
     target in NUMERIC_EXPRESSION_TARGETS || throw(ArgumentError(
         "Numeric expression target type must be 'Float64' or 'Int64'",
@@ -418,17 +317,7 @@ function _cast_numeric_expression_result(
         "Numeric expression must evaluate to a real number; got $(typeof(value))",
     ))
 
-    cast_value = target == "Float64" ? Float64(value) : Int64(value)
-    if cast_value isa AbstractFloat && !isfinite(cast_value)
-        throw(ArgumentError("Numeric expression must evaluate to a finite Float64"))
-    end
-    if minimum !== nothing && cast_value < minimum
-        throw(ArgumentError("Numeric expression result must be at least $minimum"))
-    end
-    if maximum !== nothing && cast_value > maximum
-        throw(ArgumentError("Numeric expression result must be at most $maximum"))
-    end
-    return cast_value
+    return target == "Float64" ? Float64(value) : Int64(value)
 end
 
 """Evaluate and cast numeric source in the assignment's fresh lexical context."""
@@ -438,8 +327,6 @@ function _evaluate_numeric_expression_source(
     node_name_to_index::Union{Nothing,Dict{String,Int}}=nothing,
     self_node_index::Union{Nothing,Int}=nothing,
     edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-    minimum=nothing,
-    maximum=nothing,
 )
     require_unsafe_code_evaluation()
     parsed = _parse_complete_source(source)
@@ -455,16 +342,8 @@ function _evaluate_numeric_expression_source(
         )
     end
     value = Base.eval(Module(), transform(parsed))
-    return _cast_numeric_expression_result(
-        value,
-        target_type;
-        minimum,
-        maximum,
-    )
+    return _cast_numeric_expression_result(value, target_type)
 end
-
-"""Serialize a cast numeric result without JSON number precision loss."""
-_numeric_expression_result_string(value::Union{Float64,Int64}) = repr(value)
 
 """
 Create a Lambda from a string representation in a temporary module.
@@ -497,44 +376,6 @@ function create_lambda(
     catch e
         detail = sprint(showerror, e)
         error("Failed to create lambda from string '$lambda_string': $detail")
-    end
-end
-
-"""
-Symbolic type - represents symbolic mathematical expressions
-"""
-abstract type Symbolic end
-
-"""
-Concrete implementation of Symbolic that wraps a validated symbolic expression
-"""
-struct SymbolicImpl <: Symbolic
-    expression::String
-    value::Any
-    latex::String
-end
-
-"""
-Create a Symbolic from a string expression using Sandbox.test_symbolic_expression for validation
-"""
-function create_symbolic(expression_string::String)
-    try
-        success, results, error = Sandbox.test_symbolic_expression(expression_string)
-        
-        if !success
-            error_msg = "Failed to validate symbolic expression '$expression_string': $error"
-            @warn error_msg
-            throw(ArgumentError(error_msg))
-        end
-        
-        return SymbolicImpl(
-            expression_string,
-            results[:value],
-            results[:latex]
-        )
-    catch e
-        @error "Segmentation fault or critical error in symbolic evaluation" expression=expression_string error=e
-        rethrow(e)
     end
 end
 

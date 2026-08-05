@@ -17,7 +17,6 @@ export const KNOWN_PARAMETER_TYPES = [
   'Vector{Int64}',
   'Vector{Float64}',
   'Lambda',
-  'SymbolicUtils.Symbolic',
   'default'
 ]
 
@@ -79,9 +78,9 @@ function uniqueDescriptors(options) {
 }
 
 /**
- * Convert authoritative Julia constructor metadata to the frontend input
- * contract. Optional fields begin with Default; required fields expose only
- * concrete choices.
+ * Convert Julia catalog metadata to transient frontend input widgets.
+ * Default is always available because constructor requiredness is not a Web
+ * admission rule; omission lets the native constructor decide.
  */
 export function buildParameterInputOptions(
   inputType,
@@ -90,14 +89,12 @@ export function buildParameterInputOptions(
 ) {
   const declaredTypes = Array.isArray(inputType) ? inputType : [inputType]
   const options = []
-  if (metadata?.required !== true) {
-    options.push(descriptor({
-      id: 'default',
-      label: 'Default',
-      inputKind: 'default',
-      wireType: null,
-    }))
-  }
+  options.push(descriptor({
+    id: 'default',
+    label: 'Default',
+    inputKind: 'default',
+    wireType: null,
+  }))
 
   if (metadata?.kind === 'named_tag_type') {
     if (metadata.nullable === true) {
@@ -164,33 +161,6 @@ export function buildVariableInputOptions() {
   return buildParameterInputOptions(VARIABLE_PARAMETER_TYPES, { required: true })
 }
 
-export function findParameterInputOption(inputType, metadata, id) {
-  return buildParameterInputOptions(inputType, metadata)
-    .find(option => option.id === id) || null
-}
-
-/**
- * Resolve a protocol-field descriptor for a compatible Variable.
- *
- * Variable semantic aliases such as `Symbolic` can be accepted by a more
- * specific authoritative Julia type such as `SymbolicUtils.Symbolic{Real}`.
- * Prefer the Variable's exact editor branch when the constructor exposes it
- * (especially numeric expressions), then fall back to semantic compatibility.
- */
-export function parameterInputOptionForVariable(inputType, metadata, variable) {
-  const options = buildParameterInputOptions(inputType, metadata)
-  const selectedType = variable?.selectedType || variable?.type
-  const exact = options.find(option => option.id === selectedType && option.enabled)
-  if (exact) return exact
-
-  const semanticType = variable?.type
-  return options.find(option => (
-    option.enabled
-    && option.inputKind !== 'default'
-    && parameterTypeSupportsVariableType(option.wireType, semanticType)
-  )) || null
-}
-
 export function getTypeOptionLabel(type) {
   if (isNumericExpressionOptionId(type)) {
     return `${numericExpressionTargetType(type)} Expression`
@@ -199,15 +169,13 @@ export function getTypeOptionLabel(type) {
 }
 
 export function isWildcardType(type) {
+  // QuantumSavory's catalog reports the Julia binding, while the canonical
+  // project codec is deliberately the shorter transport tag.
   return type === 'Wildcard' || type === 'QuantumSavory.Wildcard'
 }
 
 export function isSymbolicType(type) {
-  return typeof type === 'string' && (type === 'Symbolic'
-    || type === 'SymbolicUtils.Symbolic'
-    || type.startsWith('SymbolicUtils.Symbolic{')
-    || type === 'QuantumSymbolics.SymQObj'
-    || type.startsWith('QuantumSymbolics.SymQObj{'))
+  return type === 'Symbolic'
 }
 
 export function isCodeType(type) {
@@ -238,62 +206,9 @@ export function numericExpressionTargetType(id) {
   return isNumericExpressionOptionId(id) ? id.slice(NUMERIC_EXPRESSION_PREFIX.length) : null
 }
 
-export function inferParameterInputOption(options, parameter = {}) {
-  const selected = options.find(option => option.id === parameter.selectedType)
-  if (selected) return selected
-
-  const value = parameter.value
-  if (isNumericExpressionValue(value)) {
-    const expressionOption = options.find(option => (
-      option.inputKind === 'numeric-expression'
-    ))
-    if (expressionOption) return expressionOption
-  }
-  if (value == null || value === '' || value === 'default') return options[0]
-  if (value === 'nothing') {
-    return options.find(option => option.id === 'Nothing') || options[0]
-  }
-  if (value === 'Wildcard') {
-    return options.find(option => isWildcardType(option.id)) || options[0]
-  }
-  if (typeof value === 'boolean') {
-    return options.find(option => option.id === 'Bool') || options[0]
-  }
-  if (typeof value === 'number') {
-    if (Number.isInteger(value)) {
-      const integer = options.find(option => ['Int', 'Int64'].includes(option.id))
-      if (integer) return integer
-    }
-    return options.find(option => (
-      option.inputKind === 'number' && parameterTypeIsNumber(option.wireType)
-    )) || options[0]
-  }
-  if (Array.isArray(value)) {
-    return options.find(option => String(option.id).startsWith('Vector{')) || options[0]
-  }
-  if (typeof value === 'string') {
-    const numeric = options.find(option => {
-      if (option.inputKind !== 'number') return false
-      const parsed = parseNumericParameterValue(option.wireType, value, parameter)
-      return parsed.valid && !parsed.empty
-    })
-    if (numeric) return numeric
-    const namedTag = options.find(option => option.inputKind === 'named-tag')
-    if (namedTag && value.trim()) return namedTag
-    const predefined = options.find(option => option.id === 'Function')
-    if (predefined && value !== 'default') return predefined
-    return options.find(option => option.id === 'String')
-      || options.find(option => option.id === 'Lambda')
-      || options.find(option => isSymbolicType(option.id))
-      || options.find(option => option.inputKind === 'named-tag')
-      || options[0]
-  }
-  return options.find(option => option.inputKind !== 'default') || options[0]
-}
-
 /** Return whether one descriptor-backed draft contains a committed value. */
 export function parameterInputIsComplete(option, parameter = {}) {
-  if (!option?.enabled || parameter.error) return false
+  if (!option?.enabled) return false
   const value = parameter.value
 
   if (option.inputKind === 'default') return value === null
@@ -334,15 +249,11 @@ export function parseNumericParameterValue(type, rawValue, parameter = {}) {
 
   const value = Number(rawValue)
   const normalizedType = String(type || '').toLowerCase()
-  const minimum = Number(parameter.min)
-  const maximum = Number(parameter.max)
   const valid = Number.isFinite(value)
     && (
       (normalizedType !== 'int' && normalizedType !== 'int64')
       || Number.isInteger(value)
     )
-    && (!Number.isFinite(minimum) || value >= minimum)
-    && (!Number.isFinite(maximum) || value <= maximum)
 
   return {
     valid,
@@ -353,27 +264,6 @@ export function parseNumericParameterValue(type, rawValue, parameter = {}) {
 
 export function parameterTypeIsKnown(type) {
   return KNOWN_PARAMETER_TYPES.includes(type) || isWildcardType(type) || isSymbolicType(type)
-}
-
-/**
- * Whether a variable's concrete semantic type is accepted by a protocol field.
- */
-export function parameterTypeSupportsVariableType(parameterType, variableType) {
-  if (typeof variableType !== 'string' || variableType.length === 0) return false
-
-  const declaredTypes = Array.isArray(parameterType) ? parameterType : [parameterType]
-  return declaredTypes.some(declaredType => {
-    if (typeof declaredType !== 'string') return false
-    if (declaredType === 'Any') return true
-    if (declaredType === 'Function') {
-      return variableType === 'Function' || variableType === 'Lambda'
-    }
-    if (isSymbolicType(declaredType)) return isSymbolicType(variableType)
-    if (isWildcardType(declaredType)) return variableType === 'Wildcard'
-    if (declaredType === 'Int') return variableType === 'Int' || variableType === 'Int64'
-    if (declaredType === 'Int64') return variableType === 'Int' || variableType === 'Int64'
-    return declaredType === variableType
-  })
 }
 
 export function unknownParameterTypes(type) {

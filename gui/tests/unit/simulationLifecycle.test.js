@@ -21,7 +21,6 @@ describe('simulation lifecycle reducer', () => {
   })
 
   it.each([
-    ['created', SimulationPhase.PARSED],
     ['prepared', SimulationPhase.PREPARED],
     ['complete', SimulationPhase.COMPLETED],
     ['unknown', SimulationPhase.EMPTY]
@@ -32,24 +31,91 @@ describe('simulation lifecycle reducer', () => {
     })).toBe(expected)
   })
 
-  it('preserves parse/prepare facts through backend updates', () => {
+  it('transitions directly from empty to prepared', () => {
     let state = createSimulationState()
-    state = reduceSimulationState(state, { type: 'PARSED' })
-    expect(state).toMatchObject({ phase: SimulationPhase.PARSED, isParsed: true, isPrepared: false })
-    state = reduceSimulationState(state, { type: 'PREPARED' })
-    expect(state).toMatchObject({ phase: SimulationPhase.PREPARED, isParsed: true, isPrepared: true })
+    state = reduceSimulationState(state, { type: 'PREPARED', preparedRevision: 'revision-1' })
+    expect(state).toMatchObject({
+      phase: SimulationPhase.PREPARED,
+      isPrepared: true,
+      preparedRevision: 'revision-1'
+    })
     state = reduceSimulationState(state, {
       type: 'BACKEND_STATE',
       backendState: { simulation: { simulation_running: true } }
     })
-    expect(state).toMatchObject({ phase: SimulationPhase.RUNNING, isParsed: true, isPrepared: true })
+    expect(state).toMatchObject({ phase: SimulationPhase.RUNNING, isPrepared: true })
+  })
+
+  it('retains the previous healthy phase after prepare failure', () => {
+    const error = new Error('constructor rejected')
+    const firstFailure = reduceSimulationState(createSimulationState(), {
+      type: 'PREPARE_FAILED',
+      error
+    })
+    expect(firstFailure).toMatchObject({
+      phase: SimulationPhase.EMPTY,
+      backendState: null,
+      lastError: error
+    })
+
+    const prepared = reduceSimulationState(createSimulationState(), {
+      type: 'PREPARED',
+      backendState: { status: 'prepared' },
+      preparedRevision: 'revision-1'
+    })
+    const replacementFailure = reduceSimulationState(prepared, {
+      type: 'PREPARE_FAILED',
+      error
+    })
+    expect(replacementFailure).toMatchObject({
+      phase: SimulationPhase.PREPARED,
+      backendState: { status: 'prepared' },
+      preparedRevision: 'revision-1',
+      lastError: error
+    })
+  })
+
+  it.each([
+    [
+      { type: 'PREPARE_FAILED', error: 'source could not be evaluated' },
+      'source could not be evaluated'
+    ],
+    [
+      { type: 'PREPARE_FAILED', error: true },
+      'Simulation preparation failed'
+    ],
+    [
+      { type: 'REQUEST_FAILED', message: 'Backend connection failed' },
+      'Backend connection failed'
+    ],
+    [
+      { type: 'REQUEST_FAILED' },
+      'Backend request failed'
+    ]
+  ])('normalizes non-Error lifecycle failure payloads', (event, expectedMessage) => {
+    const state = reduceSimulationState(createSimulationState(), event)
+
+    expect(state.lastError).toBeInstanceOf(Error)
+    expect(state.lastError.message).toBe(expectedMessage)
+  })
+
+  it.each([
+    { type: 'FOREGROUND_REQUEST_STARTED', request: { id: 1, action: 'prepare' } },
+    { type: 'REQUEST' }
+  ])('clears a previous request failure when the next action starts', event => {
+    const failed = reduceSimulationState(createSimulationState(), {
+      type: 'REQUEST_FAILED',
+      message: 'old failure'
+    })
+    const started = reduceSimulationState(failed, event)
+
+    expect(started.lastError).toBeNull()
   })
 
   it('resets every lifecycle field together', () => {
     const running = {
       ...createSimulationState(),
       phase: SimulationPhase.RUNNING,
-      isParsed: true,
       isPrepared: true,
       cumulativeTargetTime: 4,
       pollingActive: true,
@@ -115,7 +181,7 @@ describe('simulation lifecycle reducer', () => {
     expect(simulationCapabilities(SimulationPhase.ERROR, false, true).canExploreTags).toBe(true)
     expect(simulationCapabilities(SimulationPhase.ERROR, false, false).canExploreTags).toBe(false)
     expect(simulationCapabilities(SimulationPhase.BLOCKED, false, true).canExploreTags).toBe(false)
-    expect(simulationCapabilities(SimulationPhase.PARSED, true, true).canExploreTags).toBe(false)
+    expect(simulationCapabilities(SimulationPhase.EMPTY, true, true).canExploreTags).toBe(false)
   })
 
   it('locks editing and foreground controls while a request is pending', () => {

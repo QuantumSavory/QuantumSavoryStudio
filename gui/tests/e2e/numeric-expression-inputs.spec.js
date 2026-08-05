@@ -28,8 +28,6 @@ const TEMPLATE_PROTOCOL_DEFINITION = {
 
 async function mockBackend(page, {
   evaluationEnabled = true,
-  numericRequests = [],
-  numericResponder = null,
 } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
     json: { known_functions: ['identity'] },
@@ -62,45 +60,6 @@ async function mockBackend(page, {
   await page.route('**/destroy_simulation', route => route.fulfill({
     json: { success: true },
   }))
-  await page.route('**/test_numeric_expression', async route => {
-    const request = route.request().postDataJSON()
-    numericRequests.push(request)
-    if (!evaluationEnabled) {
-      return route.fulfill({
-        status: 403,
-        json: {
-          success: false,
-          error: 'Server-side Julia evaluation is disabled.',
-          error_code: 'UNSAFE_EVALUATION_DISABLED',
-        },
-      })
-    }
-    if (numericResponder) {
-      const response = await numericResponder(request)
-      return route.fulfill({
-        status: response.status || 200,
-        json: response.json || response,
-      })
-    }
-
-    const deferred = request.placement === 'variable'
-      ? /\b(delay|distance|node_a|node_b|refractive_index|loss|transmissivity|self)\b/
-        .test(request.expression)
-      : request.context === undefined
-    const value = request.expression.includes('delay')
-      ? '2.5e-7'
-      : request.target_type === 'Int64' ? '8' : '0.125'
-    return route.fulfill({
-      json: {
-        success: true,
-        results: {
-          deferred,
-          target_type: request.target_type,
-          ...(!deferred || request.placement !== 'variable' ? { value } : {}),
-        },
-      },
-    })
-  })
 }
 
 async function loadApp(page) {
@@ -202,8 +161,11 @@ test.describe('Default-first numeric expression inputs', () => {
   test('rejects an empty explicit singleton and preserves a direct expression across save/reload', async ({
     page,
   }) => {
-    const numericRequests = []
-    await mockBackend(page, { numericRequests })
+    const previewRequests = []
+    page.on('request', request => {
+      if (request.url().endsWith('/test_numeric_expression')) previewRequests.push(request)
+    })
+    await mockBackend(page)
     await loadApp(page)
     await createProject(page, 'Numeric Expression Persistence')
     await createPhysicalEdge(page)
@@ -228,12 +190,11 @@ test.describe('Default-first numeric expression inputs', () => {
     const source = row.getByTestId('numeric-expression-source')
     await source.fill('delay / 2')
     await row.getByRole('button', { name: 'Validate delay_scale expression' }).click()
-    await expect(row.getByTestId('numeric-expression-result')).toHaveText('Result: 2.5e-7')
     const summary = row.getByTestId('numeric-expression-summary')
     await expect(summary.getByTestId('numeric-expression-source')).toHaveText('delay / 2')
     await expect(summary).toHaveAttribute(
       'aria-label',
-      /delay \/ 2; Result: 2\.5e-7/,
+      /delay \/ 2/,
     )
     await summary.focus()
     await summary.press('Enter')
@@ -242,24 +203,8 @@ test.describe('Default-first numeric expression inputs', () => {
     await row.getByTestId('numeric-expression-source').fill('delay / 4')
     await row.getByRole('button', { name: 'Validate delay_scale expression' }).click()
     await expect(summary.getByTestId('numeric-expression-source')).toHaveText('delay / 4')
-    await expect(summary.getByTestId('numeric-expression-result')).toHaveText('Result: 2.5e-7')
     await expect(summary).toBeFocused()
-
-    expect(numericRequests.at(-1)).toMatchObject({
-      expression: 'delay / 4',
-      target_type: 'Float64',
-      placement: 'edge',
-      context: {
-        node_names: ['Node 1', 'Node 2'],
-        node_a: 1,
-        node_b: 2,
-      },
-    })
-    expect(Number.isFinite(numericRequests.at(-1).context.distance)).toBe(true)
-    expect(Number.isFinite(numericRequests.at(-1).context.delay)).toBe(true)
-    expect(Number.isFinite(numericRequests.at(-1).context.refractive_index)).toBe(true)
-    expect(Number.isFinite(numericRequests.at(-1).context.loss)).toBe(true)
-    expect(Number.isFinite(numericRequests.at(-1).context.transmissivity)).toBe(true)
+    expect(previewRequests).toEqual([])
 
     expect(await serializedParameter(page)).toEqual({
       name: 'delay_scale',
@@ -283,7 +228,6 @@ test.describe('Default-first numeric expression inputs', () => {
       value: { kind: 'numeric_expression', source: 'delay / 4' },
     })
 
-    const requestsBeforeReload = numericRequests.length
     await page.reload()
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
     editor = await openProtocolEditor(page)
@@ -292,15 +236,17 @@ test.describe('Default-first numeric expression inputs', () => {
     await expect(selector).toHaveValue('expression:Float64')
     await expect(row.getByTestId('numeric-expression-summary')).toBeVisible()
     await expect(row.getByTestId('numeric-expression-source')).toHaveText('delay / 4')
-    await expect(row.getByTestId('numeric-expression-result')).toHaveText('Result: 2.5e-7')
     await row.getByTestId('numeric-expression-summary').click()
     await expect(row.getByTestId('numeric-expression-source')).toHaveValue('delay / 4')
-    expect(numericRequests.length).toBeGreaterThan(requestsBeforeReload)
+    expect(previewRequests).toEqual([])
   })
 
-  test('defers contextual Variables, then previews them against a concrete link', async ({ page }) => {
-    const numericRequests = []
-    await mockBackend(page, { numericRequests })
+  test('stores contextual Variables uniformly and displays their source at each link', async ({ page }) => {
+    const previewRequests = []
+    page.on('request', request => {
+      if (request.url().endsWith('/test_numeric_expression')) previewRequests.push(request)
+    })
+    await mockBackend(page)
     await loadApp(page)
     await createProject(page, 'Contextual Numeric Variable')
     await createPhysicalEdge(page)
@@ -316,24 +262,12 @@ test.describe('Default-first numeric expression inputs', () => {
 
     await source.fill('1 / 8')
     await variable.getByRole('button', { name: 'Validate edge_delay expression' }).click()
-    await expect(variable.getByTestId('numeric-expression-result')).toHaveText('Result: 0.125')
-    expect(numericRequests.at(-1)).toEqual({
-      expression: '1 / 8',
-      target_type: 'Float64',
-      placement: 'variable',
-    })
+    await expect(variable.getByTestId('numeric-expression-summary')).toBeVisible()
 
     await variable.getByTestId('numeric-expression-summary').click()
     await variable.getByTestId('numeric-expression-source').fill('delay / 2')
     await variable.getByRole('button', { name: 'Validate edge_delay expression' }).click()
-    await expect(variable.getByTestId('numeric-expression-deferred')).toHaveText(
-      'Evaluated when assigned.',
-    )
-    expect(numericRequests.at(-1)).toEqual({
-      expression: 'delay / 2',
-      target_type: 'Float64',
-      placement: 'variable',
-    })
+    await expect(variable.getByTestId('numeric-expression-source')).toHaveText('delay / 2')
 
     const variableId = await variable.getAttribute('data-variable-id')
     await page.locator('.edge-list-item').first().click()
@@ -345,26 +279,13 @@ test.describe('Default-first numeric expression inputs', () => {
 
     const linked = row.getByTestId('linked-numeric-expression')
     await expect(linked.getByTestId('numeric-expression-source')).toHaveText('delay / 2')
-    await expect(linked.getByTestId('numeric-expression-result')).toHaveText('Result: 2.5e-7')
-    expect(numericRequests.at(-1)).toMatchObject({
-      expression: 'delay / 2',
-      target_type: 'Float64',
-      placement: 'edge',
-      context: {
-        node_names: ['Node 1', 'Node 2'],
-        node_a: 1,
-        node_b: 2,
-      },
-    })
-    expect(Number.isFinite(numericRequests.at(-1).context.loss)).toBe(true)
-    expect(Number.isFinite(numericRequests.at(-1).context.transmissivity)).toBe(true)
+    expect(previewRequests).toEqual([])
   })
 
   test('keeps saved source visible while disabled and leaves numeric literals usable', async ({
     page,
   }) => {
-    const numericRequests = []
-    await mockBackend(page, { evaluationEnabled: false, numericRequests })
+    await mockBackend(page, { evaluationEnabled: false })
     await loadApp(page)
     await createProject(page, 'Disabled Numeric Expressions')
     await createPhysicalEdge(page)
@@ -379,14 +300,13 @@ test.describe('Default-first numeric expression inputs', () => {
     const row = parameterRow(editor, 'delay_scale')
     const selector = row.getByRole('combobox', { name: 'Input option for delay_scale' })
     await expect(selector).toHaveValue('expression:Float64')
-    await expect(row.getByTestId('numeric-expression-source')).toHaveValue('delay / 2')
-    await expect(row.getByTestId('numeric-expression-source')).toHaveAttribute('readonly')
+    await expect(row.getByTestId('numeric-expression-source')).toHaveText('delay / 2')
     await expect(row.getByTestId('numeric-expression-disabled')).toContainText(
       'server-side Julia evaluation is disabled',
     )
     await expect(row.getByRole('button', {
       name: 'Validate delay_scale expression',
-    })).toBeDisabled()
+    })).toHaveCount(0)
 
     await selector.selectOption('Float64')
     await expect(row.locator('input[type="number"]')).toBeEnabled()
@@ -397,14 +317,16 @@ test.describe('Default-first numeric expression inputs', () => {
       type: 'Float64',
       value: 0.25,
     })
-    expect(numericRequests).toEqual([])
   })
 
-  test('shows a representative layout-template result without assignment context', async ({
+  test('stores a layout-template recipe without evaluating assignment context', async ({
     page,
   }) => {
-    const numericRequests = []
-    await mockBackend(page, { numericRequests })
+    const previewRequests = []
+    page.on('request', request => {
+      if (request.url().endsWith('/test_numeric_expression')) previewRequests.push(request)
+    })
+    await mockBackend(page)
     await loadApp(page)
     await createProject(page, 'Template Numeric Expression')
 
@@ -420,40 +342,18 @@ test.describe('Default-first numeric expression inputs', () => {
     await row.getByTestId('numeric-expression-source').fill('delay / 2')
     await row.getByRole('button', { name: 'Validate delay_scale expression' }).click()
 
-    await expect(row.getByTestId('numeric-expression-deferred')).toHaveText(
-      'Representative result; evaluated again when assigned.',
-    )
-    await expect(row.getByTestId('numeric-expression-result')).toHaveText('Result: 2.5e-7')
-    expect(numericRequests.at(-1)).toEqual({
-      expression: 'delay / 2',
-      target_type: 'Float64',
-      placement: 'edge',
-    })
+    await expect(row.getByTestId('numeric-expression-source')).toHaveText('delay / 2')
+    expect(previewRequests).toEqual([])
   })
 
-  test('blocks Generate through edit, pending, and failure, then clones exact validated source', async ({
+  test('blocks Generate until a nonblank recipe is committed, then clones exact source', async ({
     page,
   }) => {
-    const numericRequests = []
-    let validationAttempt = 0
-    let resolveFirstValidation
-    await mockBackend(page, {
-      numericRequests,
-      numericResponder: request => {
-        validationAttempt += 1
-        if (validationAttempt === 1) {
-          return new Promise(resolve => { resolveFirstValidation = resolve })
-        }
-        return {
-          success: true,
-          results: {
-            deferred: true,
-            target_type: request.target_type,
-            value: '1.6666666666666665e-7',
-          },
-        }
-      },
+    const previewRequests = []
+    page.on('request', request => {
+      if (request.url().endsWith('/test_numeric_expression')) previewRequests.push(request)
     })
+    await mockBackend(page)
     await loadApp(page)
     await createProject(page, 'Validated Template Generation')
     await createRepeaterTemplate(page)
@@ -479,19 +379,14 @@ test.describe('Default-first numeric expression inputs', () => {
 
     const validate = row.getByRole('button', { name: 'Validate delay_scale expression' })
     await validate.click()
-    await expect(validate).toHaveText('Validating…')
-    await expect(validate).toBeDisabled()
-    await expect(generate).toBeDisabled()
-    resolveFirstValidation({ success: false, error: 'Representative validation failed.' })
-    await expect(row.getByTestId('numeric-expression-error'))
-      .toHaveText('Representative validation failed.')
-    await expect(generate).toBeDisabled()
+    await expect(generate).toBeEnabled()
 
+    await row.getByTestId('numeric-expression-summary').click()
     await source.fill('delay / 3')
-    await expect(generate).toBeDisabled()
+    // The prior committed recipe stays authoritative while this transient
+    // editor draft is open; preview state cannot invalidate it.
+    await expect(generate).toBeEnabled()
     await validate.click()
-    await expect(row.getByTestId('numeric-expression-result'))
-      .toHaveText('Result: 1.6666666666666665e-7')
     await expect(generate).toBeEnabled()
     await generate.click()
     await expect(dialog).toHaveCount(0)
@@ -507,10 +402,6 @@ test.describe('Default-first numeric expression inputs', () => {
       kind: 'numeric_expression',
       source: 'delay / 3',
     }))
-    expect(numericRequests.at(-1)).toEqual({
-      expression: 'delay / 3',
-      target_type: 'Float64',
-      placement: 'edge',
-    })
+    expect(previewRequests).toEqual([])
   })
 })

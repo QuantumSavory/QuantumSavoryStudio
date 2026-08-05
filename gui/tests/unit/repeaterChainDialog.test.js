@@ -43,13 +43,13 @@ const SWAPPER_DEFINITION = {
   parameters: [
     {
       field: 'nodeL',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      type: ['Wildcard', 'Int64', 'Function'],
       defaultValue: 'Wildcard',
       doc: 'Low-side node predicate.'
     },
     {
       field: 'nodeH',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      type: ['Wildcard', 'Int64', 'Function'],
       defaultValue: 'Wildcard',
       doc: 'High-side node predicate.'
     },
@@ -318,12 +318,12 @@ describe('RepeaterChainDialog protocol automation', () => {
         protocol('node-other', 'Example.OtherProtocol', []),
         protocol('swapper-first', 'Saved.Namespace.SwapperProt', [{
           name: 'nodeL',
-          type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+              type: ['Wildcard', 'Int64', 'Function'],
           selectedType: 'Lambda',
           value: 'x -> x == 11'
         }, {
           name: 'nodeH',
-          type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+              type: ['Wildcard', 'Int64', 'Function'],
           selectedType: 'Lambda',
           value: 'x -> x == 12'
         }, {
@@ -614,7 +614,7 @@ describe('RepeaterChainDialog protocol automation', () => {
     expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('blocks confirmation while an enabled constructor has a validation error', async () => {
+  it('does not treat stale preview errors as constructor validity', async () => {
     const fixture = makeFixture({
       edgeProtocols: [protocol('entangler-error', ENTANGLER_TYPE, [{
         name: 'success_prob',
@@ -627,13 +627,11 @@ describe('RepeaterChainDialog protocol automation', () => {
     await selectValidTemplate(wrapper)
     await wrapper.get('#chain-replace-entangler').setValue(true)
 
-    expect(wrapper.get('[role="alert"]').text()).toContain(
-      'Constructor field success_prob has a validation error.'
-    )
-    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
 
     await wrapper.get('#repeater-chain-form').trigger('submit')
-    expect(wrapper.emitted('confirm')).toBeUndefined()
+    expect(wrapper.emitted('confirm')).toHaveLength(1)
   })
 
   it('emits exactly one independent structured automation payload for a valid submission', async () => {
@@ -696,13 +694,13 @@ describe('RepeaterChainDialog protocol automation', () => {
             parameters: [
               {
                 name: 'nodeL',
-                type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+                type: ['Wildcard', 'Int64', 'Function'],
                 value: 'x -> (x < self && x >= nodeid("Repeater-1")) || x == nodeid("Start")',
                 selectedType: 'Lambda'
               },
               {
                 name: 'nodeH',
-                type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+                type: ['Wildcard', 'Int64', 'Function'],
                 value: 'x -> (x > self && x <= nodeid("Repeater-3")) || x == nodeid("End")',
                 selectedType: 'Lambda'
               },

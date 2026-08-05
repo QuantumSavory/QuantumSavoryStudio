@@ -52,16 +52,8 @@ describe('VariablesPanel', () => {
     expect(wrapper.getComponent(TypedValueInput).props('category')).toBe('variable')
   })
 
-  it('keeps incomplete expression edits draft-local and commits semantic type atomically', async () => {
+  it('keeps incomplete expression edits draft-local and commits the exact recipe atomically', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    vi.spyOn(api, 'validateNumericExpression').mockResolvedValue({
-      success: true,
-      results: {
-        deferred: false,
-        target_type: 'Float64',
-        value: '0.25',
-      },
-    })
     const project = createEmptyProject('Variables')
     project.variables.push(new Variable({
       id: 'variable_rate',

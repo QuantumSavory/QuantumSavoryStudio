@@ -1061,19 +1061,7 @@
                   {
                     "properties": {
                       "type": {
-                        "anyOf": [
-                          {
-                            "const": "Symbolic"
-                          },
-                          {
-                            "type": "string",
-                            "pattern": "^SymbolicUtils\\.Symbolic\\{"
-                          },
-                          {
-                            "type": "string",
-                            "pattern": "^QuantumSymbolics\\.SymQObj\\{"
-                          }
-                        ]
+                        "const": "Symbolic"
                       },
                       "value": {
                         "anyOf": [

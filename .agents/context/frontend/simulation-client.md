@@ -15,13 +15,13 @@ failure behavior. This reference records the current frontend controller and its
 
 The pure lifecycle reducer derives:
 
-`empty`, `parsed`, `prepared`, `running`, `paused`, `completed`, `blocked`, or `error`.
+`empty`, `prepared`, `running`, `paused`, `completed`, `blocked`, or `error`.
 
 It combines graph presence with nested backend simulation fields. Consumers use the
 derived capabilities for editing, Run/Pause/Resume/Stop, live tags, and foreground-work
 locks rather than reconstructing phase from top-level status or simulated time.
 
-Network/protocol editing locks after a successful parse and remains locked through every
+Network/protocol editing locks after a successful prepare and remains locked through every
 later nonempty simulation phase. Frontend-only annotations remain editable.
 
 ## API naming and time semantics
@@ -55,29 +55,24 @@ timer until its later not-found path. Do not repeat the old unconditional cleanu
 
 Run remains visible (disabled with explanation when no network exists), Pause replaces it
 while running, Resume appears while paused, and Stop follows lifecycle capability.
-Foreground parse/prepare/run/stop work immediately disables affected controls and shows
+Foreground prepare/run/stop work immediately disables affected controls and shows
 accessible progress.
 
-Live tag/query tooling is available only while the backend retains a usable parsed
+Live tag/query tooling is available only while the backend retains a usable prepared
 network. It is cleared for empty, blocked, purged, or execution-timeout states.
 
 GUI Play and MCP `simulation_run` should invoke the same readiness/capability,
-validation, parse, prepare, and start path while preserving structured actionable
-failure details. Current MCP dispatch reaches `runSimulationWithSteps` but bypasses
-`capabilities.canRun`, collapses `false` to a generic error, and does not record the
-implicit prepared revision.
+structural validation, atomic prepare, and start path while preserving structured
+actionable failure details. `simulation_prepare` records `prepared_revision` only after
+the browser controller reports success; editing clears that revision.
 
 ## Error boundary
 
-Failures delivered to or polled by the GUI should retain the backend classification or
-code, message, status, available details, and diagnostic payload in at least one Tools
-Log record across local and public profiles.
-
-Current behavior is not uniform. Newer metadata/tag/source calls throw on non-2xx
-responses through the shared JSON reader. Several legacy lifecycle/result calls parse or
-swallow transport failures and return `undefined` or fallback values. Startup uses
-settled capability requests and clears shell loading without one universal user-facing
-failure policy. These paths are known gaps, not conventions to copy.
+Lifecycle failures use `BrowserApiError` so the HTTP status, `error_code`, `details`, and
+raw response survive the controller, MCP bridge, and collaboration hub. The hub returns
+the original HTTP status and structured details to MCP callers. A failed first prepare
+remains `empty`; a failed replacement retains the previous healthy phase/backend state
+and sets `lastError`. Only an actual runtime panic enters `error`.
 
 ## Anchors
 

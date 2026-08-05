@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-async function mockBackend(page, parseRequests, { platformHandler } = {}) {
+async function mockBackend(page, prepareRequests, { platformHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({ json: { known_functions: [] } }))
   await page.route('**/background_types', route => route.fulfill({ json: { background_types: [] } }))
   await page.route('**/protocol_types', route => route.fulfill({ json: { protocol_types: [] } }))
@@ -20,9 +20,9 @@ async function mockBackend(page, parseRequests, { platformHandler } = {}) {
     json: { success: false, error_code: 'NOT_FOUND', message: 'Simulation not found' }
   }))
   await page.route('**/logs/**', route => route.fulfill({ json: { success: true, logs: [] } }))
-  await page.route('**/parse_network_graph', async route => {
-    parseRequests.push(route.request().postDataJSON())
-    await route.fulfill({ json: { success: true, message: 'Parsed' } })
+  await page.route('**/prepare_simulation', async route => {
+    prepareRequests.push(route.request().postDataJSON())
+    await route.fulfill({ json: { success: true, message: 'Prepared' } })
   })
 }
 
@@ -87,8 +87,8 @@ test('confirmed deletion immediately refreshes the open-project list', async ({ 
 })
 
 test('Save As keeps storage, document, reload, and simulation namespaces aligned', async ({ page }) => {
-  const parseRequests = []
-  await mockBackend(page, parseRequests)
+  const prepareRequests = []
+  await mockBackend(page, prepareRequests)
   await page.goto('/')
   await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
 
@@ -138,10 +138,10 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
     qumodeRepresentation: 'GabsRepr',
   })
 
-  await page.getByRole('button', { name: 'Parse', exact: true }).click()
-  await expect.poll(() => parseRequests.length).toBe(1)
-  expect(parseRequests[0].name).toMatch(/_Project B$/)
-  expect(parseRequests[0].simulationConfig).toEqual({
+  await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+  await expect.poll(() => prepareRequests.length).toBe(1)
+  expect(prepareRequests[0].name).toMatch(/_Project B$/)
+  expect(prepareRequests[0].simulationConfig).toEqual({
     qubitRepresentation: 'CliffordRepr',
     qumodeRepresentation: 'GabsRepr',
   })

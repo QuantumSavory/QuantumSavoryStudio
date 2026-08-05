@@ -45,8 +45,11 @@ _representation_object_like(value) =
 _representation_trait_name(trait) =
   trait === Qubit ? "Qubit" : trait === Qumode ? "Qumode" : string(trait)
 
-function _representation_choice(config, field, default, trait)
-  choice = get(config, field, default)
+function _representation_choice(config, field, trait)
+  haskey(config, field) || throw(validation_error(
+    "Simulation configuration field '$field' is required",
+  ))
+  choice = config[field]
   choice isa AbstractString || throw(validation_error(
     "Simulation configuration field '$field' must be a representation name",
   ))
@@ -69,15 +72,11 @@ function _representation_choice(config, field, default, trait)
 end
 
 """
-Return validated global representation defaults for a project payload.
-
-Projects created before these fields existed retain the QuantumOptics default.
+Return the validated representation choices from a canonical simulation payload.
 """
 function representation_config(payload)
   config = get(payload, "simulationConfig", nothing)
-  if config === nothing
-    config = Dict{String,Any}()
-  elseif !_representation_object_like(config)
+  if !_representation_object_like(config)
     throw(validation_error("Field 'simulationConfig' must be an object"))
   end
 
@@ -85,13 +84,11 @@ function representation_config(payload)
     qubit = _representation_choice(
       config,
       "qubitRepresentation",
-      DEFAULT_QUBIT_REPRESENTATION,
       Qubit,
     ),
     qumode = _representation_choice(
       config,
       "qumodeRepresentation",
-      DEFAULT_QUMODE_REPRESENTATION,
       Qumode,
     ),
   )
@@ -100,7 +97,7 @@ end
 function _representation_name(config, trait)
   trait === Qubit && return config.qubit
   trait === Qumode && return config.qumode
-  return DEFAULT_QUBIT_REPRESENTATION
+  throw(ArgumentError("Unsupported representation trait $(string(trait))"))
 end
 
 function construct_representation(config, trait)

@@ -243,7 +243,7 @@ test.describe('Layout Tools repeater chain generator', () => {
 
     await page.evaluate(() => {
       const app = document.querySelector('#app')?.__vue_app__
-      app._instance.setupState.simulationState.phase = 'parsed'
+      app._instance.setupState.simulationState.phase = 'prepared'
     })
     await expect(helper).toBeDisabled()
     await expect(page.getByText(
@@ -731,11 +731,11 @@ test.describe('Layout Tools repeater chain generator', () => {
       expect(repeater.unrelatedMarker).toBe('keep-repeater')
       expect(repeater.swapper.chooseL).toBe('minimum')
       expect(repeater.swapper.nodeL).toMatchObject({
-        selectedType: 'Lambda',
+        type: 'Lambda',
         value: eagerNodeL,
       })
       expect(repeater.swapper.nodeH).toMatchObject({
-        selectedType: 'Lambda',
+        type: 'Lambda',
         value: eagerNodeH,
       })
       expect(repeater.tracker.parameters).toEqual([])
@@ -844,8 +844,7 @@ test.describe('Layout Tools repeater chain generator', () => {
     expect(generatedTags).toHaveLength(3)
     expect(generatedTags).toEqual(Array.from({ length: 3 }, () => ({
       name: 'tag',
-      type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
-      selectedType: 'DataType',
+      type: 'DataType',
       value: TAG_ALPHA,
     })))
   })

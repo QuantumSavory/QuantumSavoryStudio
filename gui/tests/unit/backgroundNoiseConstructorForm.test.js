@@ -81,7 +81,7 @@ describe('BackgroundNoiseConstructorForm', () => {
     expect(wrapper.emitted('commit')).toHaveLength(1)
   })
 
-  it('links compatible Variables and restores the direct background value', async () => {
+  it('offers every Variable and restores the direct background value', async () => {
     const rate = {
       field: 'rate',
       type: 'Float64',
@@ -105,7 +105,7 @@ describe('BackgroundNoiseConstructorForm', () => {
 
     await wrapper.get('[aria-label="Set rate from a variable"]').trigger('click')
     expect(wrapper.get('.variable-selector').text()).toContain('rate (Float64)')
-    expect(wrapper.get('.variable-selector').text()).not.toContain('label')
+    expect(wrapper.get('.variable-selector').text()).toContain('label (String)')
     await wrapper.get('.variable-selector').setValue(variable.id)
 
     expect(rate.value).toBeInstanceOf(VariableReference)
@@ -114,16 +114,8 @@ describe('BackgroundNoiseConstructorForm', () => {
     expect(rate).toMatchObject({ selectedType: 'Float64', value: 0.25 })
   })
 
-  it('previews direct concrete and representative template expressions', async () => {
+  it('renders persisted expressions without constructor-gating previews', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    const validate = vi.spyOn(api, 'validateNumericExpression').mockResolvedValue({
-      success: true,
-      results: {
-        deferred: true,
-        target_type: 'Int64',
-        value: '2',
-      },
-    })
     const count = {
       field: 'count',
       type: 'Int64',
@@ -137,13 +129,6 @@ describe('BackgroundNoiseConstructorForm', () => {
     })
     await flushPromises()
 
-    expect(validate).toHaveBeenCalledWith(
-      'self + 1',
-      'Int64',
-      'node',
-      expect.objectContaining({ context }),
-    )
-    expect(wrapper.get('[data-testid="numeric-expression-result"]').text()).toContain('2')
     expect(wrapper.get('[data-testid="numeric-expression-summary"]').text())
       .toContain('self + 1')
 
@@ -156,13 +141,6 @@ describe('BackgroundNoiseConstructorForm', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="template-background-noise-constructor"]').exists())
       .toBe(true)
-    expect(validate).toHaveBeenLastCalledWith(
-      'self + 1',
-      'Int64',
-      'node',
-      expect.objectContaining({ context: undefined }),
-    )
-    expect(wrapper.get('[data-testid="numeric-expression-deferred"]').text())
-      .toContain('Representative result')
+    expect(wrapper.find('[data-testid="numeric-expression-result"]').exists()).toBe(false)
   })
 })

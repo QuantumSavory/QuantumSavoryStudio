@@ -173,15 +173,9 @@ const selectableFunctions = computed(() => api.getKnownFunctions().filter(func =
   ['node', 'variable'].includes(props.category) || !func.endsWith('(self)')
 )))
 const codeEditorOpen = ref(false)
-let codeValidationGeneration = 0
 const numericValueInvalid = computed(() => !parseNumericParameterValue(
   props.type,
   props.parameter.value,
-  {
-    ...props.parameter,
-    min: props.numericMinimum ?? props.parameter.min,
-    max: props.numericMaximum ?? props.parameter.max,
-  },
 ).valid)
 const codeDraftInvalid = computed(() => Boolean(props.parameter.error))
 
@@ -217,7 +211,6 @@ watch(
 function onCodeEditorValueChanged(value) {
   if (props.disabled) return
   props.parameter.value = value
-  codeValidationGeneration += 1
   props.parameter.error = markdownCodeBlock('Validate this code before continuing.')
 }
 
@@ -226,11 +219,7 @@ function openCodeEditor() {
 }
 
 function commitNumericLiteral() {
-  const parsed = parseNumericParameterValue(props.type, props.parameter.value, {
-    ...props.parameter,
-    min: props.numericMinimum ?? props.parameter.min,
-    max: props.numericMaximum ?? props.parameter.max,
-  })
+  const parsed = parseNumericParameterValue(props.type, props.parameter.value)
   if (parsed.valid && !parsed.empty) emit('commit')
 }
 
@@ -260,36 +249,10 @@ async function validateCode() {
     return false
   }
 
-  const generation = ++codeValidationGeneration
-  props.parameter.error = markdownCodeBlock('Code validation is in progress.')
-  let response
-  try {
-    response = isSymbolicType(props.type)
-      ? await api.validateSymbolicFunction(props.parameter.value)
-      : await api.validateFunction(props.parameter.value, props.category)
-  } catch (error) {
-    if (generation !== codeValidationGeneration) return false
-    codeEditorOpen.value = true
-    delete props.parameter.latex
-    props.parameter.error = markdownCodeBlock(error?.message || 'Validation failed')
-    return false
-  }
-
-  if (generation !== codeValidationGeneration) return false
-
-  if (response.success) {
-    delete props.parameter.error
-    if (isSymbolicType(props.type)) {
-      props.parameter.latex = response.results.latex.replace(/^\$+|\$+$/g, '')
-    }
-    codeEditorOpen.value = false
-    return true
-  }
-
-  codeEditorOpen.value = true
   delete props.parameter.latex
-  props.parameter.error = markdownCodeBlock(response.error)
-  return false
+  delete props.parameter.error
+  codeEditorOpen.value = false
+  return true
 }
 
 async function validateAndCommitCode() {

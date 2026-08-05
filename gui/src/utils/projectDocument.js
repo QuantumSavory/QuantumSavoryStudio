@@ -6,6 +6,7 @@ import Variable, {
   STATES_ZOO_VALUE_KIND,
   VARIABLE_REFERENCE_KIND,
   isNumericExpressionValue,
+  isVariableReference,
 } from '../models/Variable.js'
 import { setEdgeCorrectNodeOrder } from './Utils.js'
 import { normalizeAnnotation } from './annotationGeometry.js'
@@ -18,14 +19,10 @@ import {
   validatePhysicalParameterValue,
 } from './physicalParameters.js'
 import {
-  buildParameterInputOptions,
-  findParameterInputOption,
+  isNumericExpressionOptionId,
   isSymbolicType,
+  numericExpressionTargetType,
 } from './parameterTypes.js'
-import {
-  createProtocolFromDefinition,
-  deepClone,
-} from './protocolConstructors.js'
 import {
   DEFAULT_QUBIT_REPRESENTATION,
   DEFAULT_QUMODE_REPRESENTATION,
@@ -277,41 +274,15 @@ function backgroundCatalog(context) {
   return Array.isArray(configured) ? configured : []
 }
 
-function findProtocolDefinition(context, placement, type, path) {
-  const definition = (protocolCatalog(context)[placement] || [])
-    .find(candidate => candidate?.type === type)
-  if (!definition) fail(path, `protocol type is not in the ${placement} catalog: ${type}`)
-  return definition
+function assertProtocolInCatalog(context, placement, type, path) {
+  const exists = (protocolCatalog(context)[placement] || [])
+    .some(candidate => candidate?.type === type)
+  if (!exists) fail(path, `protocol type is not in the ${placement} catalog: ${type}`)
 }
 
-function findBackgroundDefinition(context, type, path) {
-  const definition = backgroundCatalog(context).find(candidate => candidate?.type === type)
-  if (!definition) fail(path, `background-noise type is not in the catalog: ${type}`)
-  return definition
-}
-
-function optionForAssignment(definition, assignment, variableById, path) {
-  const options = buildParameterInputOptions(definition.type, definition)
-    .filter(option => (
-      (option.enabled || option.wireType === 'Any')
-      && option.wireType === assignment.type
-    ))
-  const value = assignment.value
-  let selected
-  if (taggedKind(value) === NUMERIC_EXPRESSION_VALUE_KIND) {
-    selected = options.find(option => option.inputKind === 'numeric-expression')
-  } else if (taggedKind(value) === VARIABLE_REFERENCE_KIND) {
-    const variable = variableById.get(value.id)
-    selected = options.find(option => option.id === variable?.selectedType)
-      || options.find(option => option.inputKind !== 'numeric-expression')
-      || options[0]
-  } else {
-    selected = options.find(option => option.inputKind !== 'numeric-expression')
-  }
-  if (!selected) {
-    fail(pointer(path, 'type'), `wire type ${assignment.type} is not selected by the catalog`)
-  }
-  return selected
+function assertBackgroundInCatalog(context, type, path) {
+  const exists = backgroundCatalog(context).some(candidate => candidate?.type === type)
+  if (!exists) fail(path, `background-noise type is not in the catalog: ${type}`)
 }
 
 function canonicalAssignment(value, path) {
@@ -324,76 +295,57 @@ function canonicalAssignment(value, path) {
   }
 }
 
-function hydrateAssignments(targetParameters, definitions, rawAssignments, variableById, path, identity) {
-  const assignments = array(rawAssignments, path).map((assignment, index) => (
-    canonicalAssignment(assignment, pointer(path, index))
-  ))
+function canonicalAssignments(rawAssignments, path) {
   const seen = new Set()
-  const targets = new Map(targetParameters.map(parameter => [parameter[identity], parameter]))
-  const metadata = new Map(definitions.map(parameter => [parameter.field, parameter]))
-
-  assignments.forEach((assignment, index) => {
+  return array(rawAssignments, path).map((value, index) => {
     const assignmentPath = pointer(path, index)
+    const assignment = canonicalAssignment(value, assignmentPath)
     if (seen.has(assignment.name)) {
       fail(pointer(assignmentPath, 'name'), `duplicate constructor assignment: ${assignment.name}`)
     }
     seen.add(assignment.name)
-    const target = targets.get(assignment.name)
-    const definition = metadata.get(assignment.name)
-    if (!target || !definition) {
-      fail(pointer(assignmentPath, 'name'), `unknown constructor assignment: ${assignment.name}`)
-    }
-    const option = optionForAssignment(definition, assignment, variableById, assignmentPath)
-    target.selectedType = option.id
-    target.value = deepClone(assignment.value)
+    return assignment
   })
-
-  for (const definition of definitions) {
-    if (definition?.required === true && !seen.has(definition.field)) {
-      fail(path, `required constructor assignment is missing: ${definition.field}`)
-    }
-  }
-  return targetParameters
 }
 
-function liveAssignments(parameters, definitions, path, identity) {
+function draftWireType(parameter, path, variableById) {
+  if (isVariableReference(parameter.value)) {
+    const variable = variableById.get(parameter.value.id)
+    if (!variable) {
+      fail(pointer(pointer(path, 'value'), 'id'), `unknown Variable reference: ${parameter.value.id}`)
+    }
+    return variable.type
+  }
+  const selectedType = parameter.selectedType
+  if (isNumericExpressionOptionId(selectedType)) {
+    return numericExpressionTargetType(selectedType)
+  }
+  if (typeof selectedType === 'string' && selectedType && selectedType !== 'default') {
+    return selectedType
+  }
+  return string(parameter.type, pointer(path, 'type'), { nonblank: true })
+}
+
+function liveAssignments(parameters, path, identity, variableById) {
   const source = array(parameters, path)
-  const metadata = new Map(definitions.map(parameter => [parameter.field, parameter]))
   const seen = new Set()
   const assigned = []
   for (let index = 0; index < source.length; index += 1) {
-    const parameter = record(source[index], pointer(path, index))
-    const name = string(parameter[identity], pointer(pointer(path, index), identity), {
+    const parameterPath = pointer(path, index)
+    const parameter = record(source[index], parameterPath)
+    const name = string(parameter[identity] ?? parameter.name, pointer(parameterPath, identity), {
       nonblank: true,
     })
-    if (seen.has(name)) fail(pointer(pointer(path, index), identity), `duplicate assignment: ${name}`)
+    if (seen.has(name)) fail(pointer(parameterPath, identity), `duplicate assignment: ${name}`)
     seen.add(name)
-    const definition = metadata.get(name)
-    if (!definition) fail(pointer(pointer(path, index), identity), `unknown catalog field: ${name}`)
     const selectedType = parameter.selectedType
-    if (selectedType === 'default' || parameter.value === null) {
-      if (definition.required === true) {
-        fail(pointer(path, index), `required constructor assignment is incomplete: ${name}`)
-      }
-      continue
-    }
-    const option = findParameterInputOption(definition.type, definition, selectedType)
-    if ((!option?.enabled && option?.wireType !== 'Any') || !option?.wireType) {
-      fail(
-        pointer(pointer(path, index), 'selectedType'),
-        `selected catalog branch is invalid: ${String(selectedType)}`,
-      )
-    }
+    if (selectedType === 'default' || parameter.value === null) continue
+    const type = draftWireType(parameter, parameterPath, variableById)
     assigned.push({
       name,
-      type: option.wireType,
-      value: canonicalTypedValue(option.wireType, parameter.value, pointer(pointer(path, index), 'value')),
+      type,
+      value: canonicalTypedValue(type, parameter.value, pointer(parameterPath, 'value')),
     })
-  }
-  for (const definition of definitions) {
-    if (definition?.required === true && !seen.has(definition.field)) {
-      fail(path, `required constructor field is absent: ${definition.field}`)
-    }
   }
   return assigned
 }
@@ -402,47 +354,28 @@ function hydrateProtocol(value, placement, context, variableById, path, ids) {
   const source = exactKeys(value, ['id', 'type', 'parameters'], path)
   const id = uniqueId(source.id, pointer(path, 'id'), ids)
   const type = string(source.type, pointer(path, 'type'), { nonblank: true })
-  const definition = findProtocolDefinition(context, placement, type, pointer(path, 'type'))
-  const draft = createProtocolFromDefinition(definition)
-  hydrateAssignments(
-    draft.parameters,
-    definition.parameters,
-    source.parameters,
-    variableById,
-    pointer(path, 'parameters'),
-    'name',
-  )
-  return new FloatingProtocol({ id, type, parameters: draft.parameters })
+  assertProtocolInCatalog(context, placement, type, pointer(path, 'type'))
+  return new FloatingProtocol({
+    id,
+    type,
+    parameters: canonicalAssignments(source.parameters, pointer(path, 'parameters')),
+  })
 }
 
-function encodeProtocol(value, placement, context, path, ids) {
+function encodeProtocol(value, placement, context, variableById, path, ids) {
   const source = record(value, path)
   const type = string(source.type, pointer(path, 'type'), { nonblank: true })
-  const definition = findProtocolDefinition(context, placement, type, pointer(path, 'type'))
+  assertProtocolInCatalog(context, placement, type, pointer(path, 'type'))
   return {
     id: uniqueId(source.id, pointer(path, 'id'), ids),
     type,
     parameters: liveAssignments(
       source.parameters,
-      definition.parameters,
       pointer(path, 'parameters'),
       'name',
+      variableById,
     ),
   }
-}
-
-function backgroundParameters(definition) {
-  return definition.parameters.map(parameter => {
-    const options = buildParameterInputOptions(parameter.type, parameter)
-    const option = options.find(candidate => candidate.enabled) || options[0]
-    if (!option) fail('/', `background field has no supported branch: ${parameter.field}`)
-    return {
-      ...deepClone(parameter),
-      field: parameter.field,
-      selectedType: option.id,
-      value: null,
-    }
-  })
 }
 
 function hydrateBackground(value, context, variableById, path) {
@@ -454,20 +387,14 @@ function hydrateBackground(value, context, variableById, path) {
     }
     return { type: 'default', parameters: [] }
   }
-  const definition = findBackgroundDefinition(context, type, pointer(path, 'type'))
-  const parameters = backgroundParameters(definition)
-  hydrateAssignments(
-    parameters,
-    definition.parameters,
-    source.parameters,
-    variableById,
-    pointer(path, 'parameters'),
-    'field',
-  )
-  return { ...deepClone(definition), type, parameters }
+  assertBackgroundInCatalog(context, type, pointer(path, 'type'))
+  return {
+    type,
+    parameters: canonicalAssignments(source.parameters, pointer(path, 'parameters')),
+  }
 }
 
-function encodeBackground(value, context, path) {
+function encodeBackground(value, context, variableById, path) {
   const source = record(value, path)
   const type = string(source.type, pointer(path, 'type'), { nonblank: true })
   if (type === 'default') {
@@ -476,14 +403,14 @@ function encodeBackground(value, context, path) {
     }
     return { type: 'default', parameters: [] }
   }
-  const definition = findBackgroundDefinition(context, type, pointer(path, 'type'))
+  assertBackgroundInCatalog(context, type, pointer(path, 'type'))
   return {
     type,
     parameters: liveAssignments(
       source.parameters,
-      definition.parameters,
       pointer(path, 'parameters'),
       'field',
+      variableById,
     ),
   }
 }
@@ -590,12 +517,6 @@ function canonicalVariable(value, path, ids) {
   return result
 }
 
-function variableSelectedType(variable) {
-  return taggedKind(variable.value) === NUMERIC_EXPRESSION_VALUE_KIND
-    ? `expression:${variable.type}`
-    : variable.type
-}
-
 function hydrateVariables(values, ids) {
   const names = new Set()
   const variables = array(values, '/variables').map((value, index) => {
@@ -603,10 +524,7 @@ function hydrateVariables(values, ids) {
     const canonical = canonicalVariable(value, path, ids)
     if (names.has(canonical.name)) fail(pointer(path, 'name'), `duplicate Variable name: ${canonical.name}`)
     names.add(canonical.name)
-    return new Variable({
-      ...canonical,
-      selectedType: variableSelectedType(canonical),
-    })
+    return new Variable(canonical)
   })
   return variables
 }
@@ -633,9 +551,13 @@ function encodeVariables(values, ids) {
 
 function verifyVariableLinks(variables, assignments) {
   const variableById = new Map(variables.map(variable => [variable.id, variable]))
-  for (const { value, path } of assignments) {
-    if (taggedKind(value) === VARIABLE_REFERENCE_KIND && !variableById.has(value.id)) {
-      fail(pointer(path, 'id'), `unknown Variable reference: ${value.id}`)
+  for (const { type, value, path } of assignments) {
+    if (taggedKind(value) === VARIABLE_REFERENCE_KIND) {
+      const variable = variableById.get(value.id)
+      if (!variable) fail(pointer(path, 'id'), `unknown Variable reference: ${value.id}`)
+      if (type !== variable.type) {
+        fail(path, `Variable wire type ${variable.type} does not match assignment wire type ${type}`)
+      }
     }
   }
   for (let index = 0; index < variables.length; index += 1) {
@@ -644,6 +566,7 @@ function verifyVariableLinks(variables, assignments) {
     const source = variableById.get(variable.statesZooTraceSourceId)
     if (
       variable.id !== `${variable.statesZooTraceSourceId}_tr`
+      || variable.type !== 'Float64'
       || taggedKind(source?.value) !== STATES_ZOO_VALUE_KIND
     ) {
       fail(pointer(pointer('/variables', index), 'statesZooTraceSourceId'), 'invalid States Zoo trace linkage')
@@ -655,7 +578,11 @@ function verifyVariableLinks(variables, assignments) {
 function collectAssignments(document) {
   const result = []
   const visit = (parameters, base) => parameters.forEach((parameter, index) => {
-    result.push({ value: parameter.value, path: pointer(pointer(base, index), 'value') })
+    result.push({
+      type: parameter.type,
+      value: parameter.value,
+      path: pointer(pointer(base, index), 'value'),
+    })
   })
   for (let nodeIndex = 0; nodeIndex < document.net.nodes.length; nodeIndex += 1) {
     const node = document.net.nodes[nodeIndex]
@@ -752,7 +679,7 @@ function slots(values, context, variableById, path, ids, hydrate) {
       type: string(source.type, pointer(slotPath, 'type'), { nonblank: true }),
       backgroundNoise: hydrate
         ? hydrateBackground(source.backgroundNoise, context, variableById, pointer(slotPath, 'backgroundNoise'))
-        : encodeBackground(source.backgroundNoise, context, pointer(slotPath, 'backgroundNoise')),
+        : encodeBackground(source.backgroundNoise, context, variableById, pointer(slotPath, 'backgroundNoise')),
     }
     if (hydrate) return { ...result, isLocked: false, assignment: false }
     return result
@@ -787,7 +714,7 @@ function nodes(values, context, variableById, ids, hydrate) {
             const protocolPath = pointer(pointer(pointer(path, 'data'), 'protocols'), protocolIndex)
             return hydrate
               ? hydrateProtocol(protocol, 'node', context, variableById, protocolPath, ids)
-              : encodeProtocol(protocol, 'node', context, protocolPath, ids)
+              : encodeProtocol(protocol, 'node', context, variableById, protocolPath, ids)
           }),
       },
     }
@@ -832,7 +759,7 @@ function edges(values, nodesValue, context, variableById, ids, hydrate) {
           const protocolPath = pointer(pointer(dataPath, 'protocols'), protocolIndex)
           return hydrate
             ? hydrateProtocol(protocol, 'edge', context, variableById, protocolPath, ids)
-            : encodeProtocol(protocol, 'edge', context, protocolPath, ids)
+            : encodeProtocol(protocol, 'edge', context, variableById, protocolPath, ids)
         }),
     }
     if (!isLogic) {
@@ -882,7 +809,7 @@ function network(value, context, variableById, ids, hydrate) {
       const path = pointer('/net/protocols', index)
       return hydrate
         ? hydrateProtocol(protocol, 'floating', context, variableById, path, ids)
-        : encodeProtocol(protocol, 'floating', context, path, ids)
+        : encodeProtocol(protocol, 'floating', context, variableById, path, ids)
     }),
     physicalConfig: physicalConfig(
       source.physicalConfig,

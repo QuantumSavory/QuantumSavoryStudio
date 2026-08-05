@@ -14,10 +14,6 @@ import {
   validateProtocolConstructorDraft,
 } from '../../src/utils/protocolConstructors'
 import {
-  buildParameterInputOptions,
-  inferParameterInputOption,
-} from '../../src/utils/parameterTypes'
-import {
   SWAPPER_PREDICATE_STRATEGIES,
   buildSwapperPredicateSources,
   generateRepeaterChain,
@@ -80,10 +76,10 @@ function configuredProtocol(type, values = {}) {
     if (!Object.hasOwn(values, parameter.name)) return
     parameter.value = values[parameter.name]
     const metadata = definition.parameters.find(candidate => candidate.field === parameter.name)
-    const options = buildParameterInputOptions(metadata.type, metadata)
-    const candidate = { ...parameter }
-    delete candidate.selectedType
-    parameter.selectedType = inferParameterInputOption(options, candidate).id
+    const types = Array.isArray(metadata.type) ? metadata.type : [metadata.type]
+    parameter.selectedType = typeof parameter.value === 'number'
+      ? (types.includes('Int64') ? 'Int64' : 'Float64')
+      : (types.includes('Function') ? 'Function' : types[0])
   })
   return draft
 }
@@ -263,7 +259,7 @@ describe('protocol constructor helpers', () => {
       value: null,
     })
     expect(() => validateProtocolConstructorDraft(SWAPPER_DEFINITION, seeded))
-      .toThrow(/field rounds requires a complete Int64 Expression value/)
+      .toThrow(/field rounds requires a serializable value/)
   })
 
   it.each([
@@ -281,10 +277,10 @@ describe('protocol constructor helpers', () => {
       parameters: [{ name: 'value', selectedType, value }],
     }
     expect(() => validateProtocolConstructorDraft(definition, draft))
-      .toThrow(/field value requires a complete/)
+      .toThrow(/field value requires a serializable value/)
   })
 
-  it('accepts absent defaults and strict Variable references but rejects invalid drafts', () => {
+  it('accepts omissions, strict Variable references, and non-authoritative preview errors', () => {
     expect(validateProtocolConstructorDraft(ENTANGLER_DEFINITION, {
       type: ENTANGLER_TYPE,
       parameters: [],
@@ -297,7 +293,7 @@ describe('protocol constructor helpers', () => {
         value: { kind: 'variable', id: 'rate' },
       }],
     })).toBe(true)
-    expect(() => validateProtocolConstructorDraft(ENTANGLER_DEFINITION, {
+    expect(validateProtocolConstructorDraft(ENTANGLER_DEFINITION, {
       type: ENTANGLER_TYPE,
       parameters: [{
         name: 'success_prob',
@@ -305,7 +301,7 @@ describe('protocol constructor helpers', () => {
         value: { kind: 'numeric_expression', source: '1 / 2' },
         error: 'Expression validation is in progress',
       }],
-    })).toThrow(/field success_prob has a validation error/)
+    })).toBe(true)
   })
 })
 

@@ -28,13 +28,6 @@ const VALID_FUNCTION_SOURCE = `valid_callback = function (value)
   return value + 1
 end`
 
-const INVALID_FUNCTION_ERROR = [
-  'ParseError:',
-  '# Error @ none:1:9',
-  'invalid(',
-  '#       └ ── Expected `)` or `,`',
-].join('\n')
-
 async function mockConfiguration(page) {
   await page.route('**/known_functions', route => route.fulfill({
     status: 200,
@@ -79,55 +72,6 @@ async function mockConfiguration(page) {
     contentType: 'application/json',
     json: { success: false, message: 'Simulation not found' },
   }))
-  await page.route('**/test_symbolic_expression', route => {
-    const { expr } = route.request().postDataJSON()
-    if (expr === 'valid_untrusted_expression') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        json: {
-          success: true,
-          results: { value: expr, latex: '$\\href{javascript:alert(1)}{x}$' },
-        },
-      })
-    }
-
-    if (expr.startsWith('valid')) {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        json: {
-          success: true,
-          results: { value: expr, latex: '$x^{2}$' },
-        },
-      })
-    }
-
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      json: { success: false, error: 'Invalid symbolic expression' },
-    })
-  })
-  await page.route('**/test_code', route => {
-    const { code, placement } = route.request().postDataJSON()
-    if (code.startsWith('valid') && ['node', 'variable'].includes(placement)) {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        json: {
-          success: true,
-          results: { functions: ['valid_callback'], variables: {} },
-        },
-      })
-    }
-
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      json: { success: false, error: INVALID_FUNCTION_ERROR },
-    })
-  })
 }
 
 async function loadApp(page) {
@@ -299,14 +243,11 @@ async function expectCustomFunctionValidationLifecycle(
   await input.fill('invalid(')
   await valueEditor.locator('.validate-button').click()
 
-  const errorBadge = valueEditor.locator('.function-error-badge')
-  await expect(errorBadge).toContainText('Validation failed')
-  await expect(errorBadge).toHaveAttribute('role', 'alert')
-  await errorBadge.hover()
-  await expect(page.locator('.p-tooltip-text')).toContainText('ParseError:')
-  await expect(page.locator('.p-tooltip-text')).toContainText('Expected `)` or `,`')
+  const acceptedDraft = valueEditor.getByTestId('code-collapsed-view')
+  await expect(acceptedDraft).toBeVisible()
+  await expect(acceptedDraft.locator('.code-rendered-value')).toHaveText('invalid(')
+  await acceptedDraft.click()
   await expect(input).toBeVisible()
-  await expect(valueEditor.getByTestId('code-collapsed-view')).toHaveCount(0)
 
   await input.fill(VALID_FUNCTION_SOURCE)
   await valueEditor.locator('.validate-button').click()
@@ -331,7 +272,11 @@ test.describe('Code editor lifecycle', () => {
     await loadApp(page)
   })
 
-  test('hides a default protocol expression, then opens its explicit editor until valid', async ({ page }) => {
+  test('hides an omitted keyword and commits nonblank symbolic source without preview', async ({ page }) => {
+    const previewRequests = []
+    page.on('request', request => {
+      if (request.url().endsWith('/test_symbolic_expression')) previewRequests.push(request)
+    })
     const protocolEditor = await createProjectWithSymbolicProtocol(page)
     const optionSelector = protocolEditor.getByRole('combobox', {
       name: 'Input option for observable',
@@ -349,17 +294,18 @@ test.describe('Code editor lifecycle', () => {
     await expectEditorLayersAligned(valueEditor)
     await valueEditor.locator('.validate-button').click()
 
-    await expect(valueEditor.locator('.function-error-badge')).toContainText('Validation failed')
-    await expect(input).toBeVisible()
-    await expect(valueEditor.getByTestId('symbolic-collapsed-view')).toHaveCount(0)
+    const renderedResult = valueEditor.getByTestId('symbolic-collapsed-view')
+    await expect(renderedResult).toBeVisible()
+    await expect(renderedResult).toContainText('invalid(')
+    await expect(valueEditor.locator('.function-error-badge')).toHaveCount(0)
 
+    await renderedResult.click()
     await input.fill('valid_protocol_expression')
     await valueEditor.locator('.validate-button').click()
 
-    const renderedResult = valueEditor.getByTestId('symbolic-collapsed-view')
     await expect(renderedResult).toBeVisible()
-    await expect(renderedResult).toHaveAttribute('aria-label', 'Edit symbolic expression')
-    await expect(renderedResult.locator('.katex')).toBeVisible()
+    await expect(renderedResult).toHaveAttribute('aria-label', 'Enter symbolic expression')
+    await expect(renderedResult).toContainText('valid_protocol_expression')
     await expect(valueEditor.locator('textarea')).toHaveCount(0)
     await expect(valueEditor.locator('.validate-button')).toHaveCount(0)
 
@@ -369,8 +315,9 @@ test.describe('Code editor lifecycle', () => {
 
     await valueEditor.locator('textarea').fill('valid_untrusted_expression')
     await valueEditor.locator('.validate-button').click()
-    await expect(valueEditor.getByTestId('symbolic-collapsed-view').locator('.katex')).toBeVisible()
-    await expect(valueEditor.getByTestId('symbolic-collapsed-view').locator('a')).toHaveCount(0)
+    await expect(valueEditor.getByTestId('symbolic-collapsed-view'))
+      .toContainText('valid_untrusted_expression')
+    expect(previewRequests).toEqual([])
   })
 
   test('starts open for a new Symbolic variable and collapses after validation', async ({ page }) => {
@@ -391,7 +338,7 @@ test.describe('Code editor lifecycle', () => {
 
     const renderedResult = valueEditor.getByTestId('symbolic-collapsed-view')
     await expect(renderedResult).toBeVisible()
-    await expect(renderedResult.locator('.katex')).toBeVisible()
+    await expect(renderedResult).toContainText('valid_variable_expression')
     await expect(valueEditor.locator('textarea')).toHaveCount(0)
 
     await renderedResult.click()
@@ -422,7 +369,7 @@ test.describe('Code editor lifecycle', () => {
     })
   })
 
-  test('starts open for a new custom-function variable and collapses only after validation succeeds', async ({ page }) => {
+  test('starts open for a new custom-function variable and collapses after commit', async ({ page }) => {
     await page.getByRole('tab', { name: 'Variables' }).click()
     const variablesPanel = page.getByTestId('variables-panel')
     await variablesPanel.getByRole('button', { name: 'Add Variable' }).click()

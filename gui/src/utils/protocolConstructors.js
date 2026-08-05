@@ -1,7 +1,6 @@
 import {
   buildParameterInputOptions,
-  inferParameterInputOption,
-  parameterInputIsComplete,
+  isNumericExpressionValue,
 } from './parameterTypes.js'
 import { isVariableReference } from '../models/Variable.js'
 
@@ -96,10 +95,18 @@ function normalizeSeededParameter(parameter, definition) {
     normalized.value = null
     return normalized
   }
-  normalized.selectedType = inferParameterInputOption(
-    options,
-    { ...normalized, selectedType: undefined },
-  ).id
+  const option = isNumericExpressionValue(normalized.value)
+    ? options.find(candidate => (
+        candidate.inputKind === 'numeric-expression'
+        && candidate.wireType === normalized.type
+      ))
+    : options.find(candidate => (
+        candidate.enabled
+        && candidate.inputKind !== 'default'
+        && candidate.inputKind !== 'numeric-expression'
+        && (candidate.id === normalized.type || candidate.wireType === normalized.type)
+      ))
+  normalized.selectedType = option?.id || initialParameterInputOption(options)?.id
   return normalized
 }
 
@@ -110,15 +117,14 @@ function isStrictVariableReference(value) {
     && keys.length === 2 && keys[0] === 'id' && keys[1] === 'kind'
 }
 
-/** Validate a metadata-backed constructor draft before layout generation. */
+/** Validate only draft shape before layout generation. */
 export function validateProtocolConstructorDraft(definition, protocol = null) {
-  const definitions = definitionParameters(definition)
+  definitionParameters(definition)
   const parameters = protocol == null ? [] : protocol.parameters
   if (!Array.isArray(parameters)) {
     throw new Error(`The ${protocolSimpleName(definition)} constructor has no parameter list.`)
   }
 
-  const definitionsByName = new Map(definitions.map(parameter => [parameter?.field, parameter]))
   const supplied = new Set()
   for (const parameter of parameters) {
     const field = parameter?.name
@@ -128,31 +134,11 @@ export function validateProtocolConstructorDraft(definition, protocol = null) {
     if (supplied.has(field)) throw new Error(`Constructor field ${field} is duplicated.`)
     supplied.add(field)
 
-    const parameterDefinition = definitionsByName.get(field)
-    if (!parameterDefinition) throw new Error(`Constructor field ${field} is unknown.`)
-    if (parameter.error) throw new Error(`Constructor field ${field} has a validation error.`)
+    if (parameter.selectedType === 'default') continue
     if (isStrictVariableReference(parameter.value)) continue
-
-    const options = buildParameterInputOptions(
-      parameterDefinition.type,
-      parameterDefinition,
-    )
-    const option = Object.hasOwn(parameter, 'selectedType')
-      ? options.find(candidate => candidate.id === parameter.selectedType)
-      : inferParameterInputOption(options, parameter)
-    if (!option || !option.enabled) {
-      const status = option ? 'disabled' : 'unknown'
-      throw new Error(`Constructor field ${field} uses a ${status} input option.`)
+    if (parameter.value === null || parameter.value === undefined || parameter.value === '') {
+      throw new Error(`Constructor field ${field} requires a serializable value.`)
     }
-    if (!parameterInputIsComplete(option, parameter)) {
-      throw new Error(`Constructor field ${field} requires a complete ${option.label} value.`)
-    }
-  }
-  const missingRequired = definitions.filter(parameter => (
-    parameter?.required === true && !supplied.has(parameter.field)
-  ))
-  if (missingRequired.length) {
-    throw new Error(`Constructor field ${missingRequired[0].field} is required.`)
   }
   return true
 }
@@ -208,6 +194,45 @@ export function seedProtocolConstructor(definition, templateProtocol = null) {
     type: definition.type,
     parameters
   }
+}
+
+/** Build transient editor state for one canonical background-noise value. */
+export function seedBackgroundNoiseConstructor(definition, backgroundNoise = null) {
+  if (!isRecord(definition) || !Array.isArray(definition.parameters)) {
+    throw new Error('A runtime background-noise definition is required.')
+  }
+  const source = isRecord(backgroundNoise) ? deepClone(backgroundNoise) : {}
+  const sourceParameters = Array.isArray(source.parameters) ? source.parameters : []
+  const sourceByName = new Map(sourceParameters.map(parameter => [
+    parameter?.name ?? parameter?.field,
+    parameter,
+  ]))
+  const metadataNames = new Set(definition.parameters.map(parameter => parameter?.field))
+  const parameters = definition.parameters.map(parameter => {
+    const fallback = {
+      ...deepClone(parameter),
+      field: parameter.field,
+      selectedType: initialParameterInputOption(
+        buildParameterInputOptions(parameter.type, parameter),
+      )?.id,
+      value: null,
+    }
+    const configured = sourceByName.get(parameter.field)
+    return configured
+      ? {
+          ...fallback,
+          ...normalizeSeededParameter(configured, parameter),
+          field: parameter.field,
+        }
+      : fallback
+  })
+  sourceParameters.forEach(parameter => {
+    const name = parameter?.name ?? parameter?.field
+    if (!metadataNames.has(name)) {
+      parameters.push({ ...deepClone(parameter), field: name })
+    }
+  })
+  return { type: definition.type, parameters }
 }
 
 /** Create a fresh, deeply independent installed protocol from a constructor draft. */

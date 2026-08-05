@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiConnector } from '../../src/utils/ApiConnector'
+import { ApiConnector, BrowserApiError } from '../../src/utils/ApiConnector'
 
 const values = new Map()
 const storage = {
@@ -41,6 +41,44 @@ describe('ApiConnector project namespaces', () => {
     expect(connector.getScopedSimulationName('  Shared Project  ')).toBe(
       'user_Shared Project',
     )
+  })
+
+  it('sends the complete project to atomic prepare and preserves structured failures', async () => {
+    const connector = new ApiConnector('http://api.test')
+    const payload = {
+      name: 'Project',
+      simulationConfig: { time: 1 },
+      variables: [{ id: 'variable-1' }],
+      net: { nodes: [], edges: [], protocols: [] },
+    }
+    await connector.prepareSimulation(payload)
+    expect(fetch.mock.calls[0][0]).toBe('http://api.test/prepare_simulation')
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+      ...payload,
+      name: 'user_Project',
+    })
+
+    const failure = {
+      success: false,
+      error: 'Constructor rejected',
+      status_code: 422,
+      error_code: 'CONSTRUCTOR_REJECTED',
+      details: { stage: 'invoke', path: '/net/protocols/0' },
+    }
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 422,
+      json: async () => failure,
+    }))
+    const error = await connector.prepareSimulation(payload).catch(value => value)
+    expect(error).toBeInstanceOf(BrowserApiError)
+    expect(error).toMatchObject({
+      status: 422,
+      error_code: 'CONSTRUCTOR_REJECTED',
+      code: 'CONSTRUCTOR_REJECTED',
+      details: failure.details,
+      rawResponse: failure,
+    })
   })
 
   it('keeps established slot defaults when an older metadata response omits them', async () => {
@@ -87,36 +125,6 @@ describe('ApiConnector project namespaces', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
       code: '<(self)',
       placement: 'node'
-    })
-  })
-
-  it('sends exact concrete and template numeric-expression validation DTOs', async () => {
-    const connector = new ApiConnector('http://api.test')
-    const context = {
-      node_names: ['Alice', 'Bob'],
-      distance: 100,
-      delay: 5e-7,
-      refractive_index: 1.5,
-      loss: 0.2,
-      transmissivity: 0.95,
-      node_a: 1,
-      node_b: 2,
-    }
-
-    await connector.validateNumericExpression('delay / 2', 'Float64', 'edge', { context })
-    await connector.validateNumericExpression('delay / 2', 'Float64', 'edge')
-
-    expect(fetch.mock.calls[0][0]).toBe('http://api.test/test_numeric_expression')
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
-      expression: 'delay / 2',
-      target_type: 'Float64',
-      placement: 'edge',
-      context,
-    })
-    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
-      expression: 'delay / 2',
-      target_type: 'Float64',
-      placement: 'edge',
     })
   })
 

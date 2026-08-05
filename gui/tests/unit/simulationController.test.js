@@ -34,29 +34,33 @@ function createController(api) {
   return { controller, projectData, addLog, showPanic, stop: () => scope.stop() }
 }
 
+function currentPayloadRevision(projectData) {
+  return JSON.stringify({ name: projectData.value.name, net: projectData.value.net })
+}
+
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
 describe('simulation controller polling ownership', () => {
-  it('sets Parse pending synchronously, suppresses duplicates, and clears it on success', async () => {
-    const parseRequest = deferred()
+  it('sets Prepare pending synchronously, suppresses duplicates, and clears it on success', async () => {
+    const prepareRequest = deferred()
     const api = {
-      parseNetworkGraph: vi.fn(() => parseRequest.promise)
+      prepareSimulation: vi.fn(() => prepareRequest.promise)
     }
     const { controller, projectData, stop } = createController(api)
     projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
 
-    const first = controller.prepareNetworkGraph(false)
-    expect(controller.foregroundRequest.value).toMatchObject({ action: 'parse' })
+    const first = controller.prepareSimulation()
+    expect(controller.foregroundRequest.value).toMatchObject({ action: 'prepare' })
     expect(controller.capabilities.value).toMatchObject({ canPrepare: false, editingDisabled: true })
 
-    const duplicate = controller.prepareNetworkGraph(false)
+    const duplicate = controller.prepareSimulation()
     expect(await duplicate).toBe(false)
-    expect(api.parseNetworkGraph).toHaveBeenCalledTimes(1)
+    expect(api.prepareSimulation).toHaveBeenCalledTimes(1)
 
-    parseRequest.resolve({ success: true, state: { status: 'created' } })
+    prepareRequest.resolve({ success: true, state: { status: 'prepared' } })
     expect(await first).toBe(true)
     expect(controller.foregroundRequest.value).toBeNull()
     stop()
@@ -68,12 +72,6 @@ describe('simulation controller polling ownership', () => {
       prepareSimulation: vi.fn(() => prepareRequest.promise)
     }
     const { controller, stop } = createController(api)
-    controller.state.value = {
-      ...controller.state.value,
-      phase: 'parsed',
-      isParsed: true
-    }
-
     const pending = controller.prepareSimulation()
     expect(controller.foregroundRequest.value).toMatchObject({ action: 'prepare' })
     expect(await controller.prepareSimulation()).toBe(false)
@@ -81,7 +79,8 @@ describe('simulation controller polling ownership', () => {
     prepareRequest.resolve({ success: false, message: 'prepare failed' })
     expect(await pending).toBe(false)
     expect(controller.foregroundRequest.value).toBeNull()
-    expect(controller.phase.value).toBe('error')
+    expect(controller.phase.value).toBe('empty')
+    expect(controller.state.value.lastError).toBeInstanceOf(Error)
     stop()
   })
 
@@ -97,8 +96,8 @@ describe('simulation controller polling ownership', () => {
     controller.state.value = {
       ...controller.state.value,
       phase: 'prepared',
-      isParsed: true,
-      isPrepared: true
+      isPrepared: true,
+      preparedRevision: currentPayloadRevision(projectData)
     }
 
     const pending = controller.runSimulationWithSteps()
@@ -134,7 +133,6 @@ describe('simulation controller polling ownership', () => {
     controller.state.value = {
       ...controller.state.value,
       phase: 'running',
-      isParsed: true,
       isPrepared: true
     }
 
@@ -172,44 +170,44 @@ describe('simulation controller polling ownership', () => {
     const firstRequest = deferred()
     const secondRequest = deferred()
     const api = {
-      parseNetworkGraph: vi.fn()
+      prepareSimulation: vi.fn()
         .mockImplementationOnce(() => firstRequest.promise)
         .mockImplementationOnce(() => secondRequest.promise)
     }
     const { controller, projectData, stop } = createController(api)
     projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
 
-    const first = controller.prepareNetworkGraph(false)
+    const first = controller.prepareSimulation()
     const firstId = controller.foregroundRequest.value.id
     controller.resetSimulation()
     expect(controller.foregroundRequest.value).toBeNull()
 
-    const second = controller.prepareNetworkGraph(false)
+    const second = controller.prepareSimulation()
     const secondId = controller.foregroundRequest.value.id
     expect(secondId).toBeGreaterThan(firstId)
 
-    firstRequest.resolve({ success: true, state: { status: 'created' } })
+    firstRequest.resolve({ success: true, state: { status: 'prepared' } })
     expect(await first).toBe(false)
-    expect(controller.foregroundRequest.value).toMatchObject({ id: secondId, action: 'parse' })
+    expect(controller.foregroundRequest.value).toMatchObject({ id: secondId, action: 'prepare' })
 
-    secondRequest.resolve({ success: true, state: { status: 'created' } })
+    secondRequest.resolve({ success: true, state: { status: 'prepared' } })
     expect(await second).toBe(true)
     expect(controller.foregroundRequest.value).toBeNull()
     stop()
   })
 
   it('clears a pending foreground request when its scope is disposed', async () => {
-    const parseRequest = deferred()
-    const api = { parseNetworkGraph: vi.fn(() => parseRequest.promise) }
+    const prepareRequest = deferred()
+    const api = { prepareSimulation: vi.fn(() => prepareRequest.promise) }
     const { controller, projectData, stop } = createController(api)
     projectData.value.net.nodes.push({ id: 'node-1', data: { slots: [] } })
 
-    const pending = controller.prepareNetworkGraph(false)
+    const pending = controller.prepareSimulation()
     expect(controller.foregroundRequest.value).not.toBeNull()
     stop()
     expect(controller.foregroundRequest.value).toBeNull()
 
-    parseRequest.resolve({ success: true, state: { status: 'created' } })
+    prepareRequest.resolve({ success: true, state: { status: 'prepared' } })
     expect(await pending).toBe(false)
   })
 
@@ -444,7 +442,7 @@ describe('simulation controller polling ownership', () => {
 
   it('keeps tag exploration live for recoverable errors but disables it after timeout cleanup', async () => {
     const api = {
-      parseNetworkGraph: vi.fn(async () => ({ success: true, state: { status: 'created' } })),
+      prepareSimulation: vi.fn(async () => ({ success: true, state: { status: 'prepared' } })),
       getSimulationStatus: vi.fn()
         .mockResolvedValueOnce({
           success: true,
@@ -461,7 +459,7 @@ describe('simulation controller polling ownership', () => {
       data: { slots: [{ id: 'slot-1', isLocked: false, assignment: false }] }
     })
 
-    await controller.prepareNetworkGraph(false)
+    await controller.prepareSimulation()
     expect(controller.capabilities.value.canExploreTags).toBe(true)
 
     await controller.getSimulationStatus(false)

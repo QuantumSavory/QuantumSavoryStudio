@@ -30,28 +30,28 @@ mutations already use the service.
 
 ## Constructor descriptors
 
-Editable protocol parameters, background-noise parameters, and Variables use explicit
-descriptors containing an ID, label, input kind, wire type, and enabled state. The outer
-selector for an optional constructor parameter begins with Default. Default clears the
-draft value and omits the assignment from project and simulation payloads. A required
-protocol parameter omits Default, selects its first enabled concrete descriptor with an
-incomplete draft, and remains invalid until that value is complete. When none of its
-declared descriptors is supported, the required parameter retains its first disabled
-descriptor so the unsupported field is visible and invalid instead of blocking the
-editor. Variables always persist a concrete supported type and non-null value; new
-Variables begin as `Float64` value `0`.
+Editable protocol parameters, background-noise parameters, and Variables use transient
+descriptors containing an ID, label, input kind, wire type, and enabled state. Default
+clears the draft value and omits the assignment from project and simulation payloads.
+Catalog requiredness influences the initial widget choice only; it is not an authoring
+or admission rule. Variables always persist a concrete supported codec and non-null
+value; new Variables begin as `Float64` value `0`.
 
-`selectedType` stores a frontend descriptor ID; minimized data uses its base wire type.
-Unsupported choices remain visible but disabled. Switching branches clears the old
-value and transient validation state.
+`selectedType` exists only on a transient frontend draft and stores its descriptor ID;
+the canonical project assignment uses the descriptor's base wire type. Unsupported
+choices remain visible but disabled. Switching branches clears the old value and
+transient validation state.
 
-Constructor member metadata from the backend is authoritative for:
+Constructor catalog metadata is authoritative only for:
 
 - protocol placement and virtual-edge eligibility;
-- required protocol fields;
-- nullable unions and named-tag semantics;
-- field-compatible Variable assignment;
-- bounds and target types.
+- constructor identity and backend representation support;
+- widget selection, documentation, suggested defaults/ranges, and optional previews.
+
+QuantumSavory constructors are authoritative for keyword membership and requiredness,
+Julia conversion, scalar domains, and relational semantics. The editor shows all
+Variables rather than maintaining a constructor-compatibility matrix; the canonical
+assignment codec must exactly equal the referenced Variable codec.
 
 Never infer named-tag behavior from saved type strings or create a frontend-only protocol
 catalog.
@@ -59,35 +59,33 @@ catalog.
 `ConstructorForm` is the shared descriptor/validation/Variable-assignment core for
 protocols and background noise. Its thin wrappers differ in parameter identity
 (`name` versus `field`) and metadata lookup; protocol payloads contain no injected
-constructor fields. Do not fork background input rules. An installed background
-expression receives concrete node context. A layout template receives
-representative/deferred validation, and
-`DesignCommandService` must revalidate every cloned background against its destination
-node after candidate positions stabilize, aborting the whole generation if one fails.
+constructor fields. Do not fork background input rules. An installed or cloned
+background expression receives concrete node context only when its transport recipe is
+materialized during prepare.
 
 ## Draft and validation state
 
 Explicit literal, function, tag, symbolic, or numeric-expression modes begin empty and
-can commit only when complete. `parameter.error` is the shared submission blocker for
-dirty, blank, pending, disabled, missing-context, transport, bound, and source failures.
-Draft text, preview values/errors, requests, selected descriptor IDs, catalog metadata,
-and open/collapsed presentation state are editor-owned rather than project data. The
+can commit only when selected, serializable, and nonblank. Preview errors and catalog
+bounds are non-authoritative and do not reject a completed command. Draft text, preview
+values/errors, requests, selected descriptor IDs, catalog metadata, and open/collapsed
+presentation state are editor-owned rather than project data. The
 project-v2 codec persists each committed constructor assignment only as
 `{name, type, value}` and rejects additive preview or editor fields on import.
+MCP constructor edits must already use that exact assignment shape, and MCP Variable
+edits likewise reject draft-only `selectedType`.
 
 Numeric expressions persist only `{kind:"numeric_expression", source:"..."}` while
-retaining the declared numeric type. Linked Variables validate against each assignment
+retaining the declared numeric codec. Linked Variables render the same durable recipe
 without writing transient state back to the shared Variable. See
 [backend source evaluation](../backend/source-evaluation.md) for language and lexical
 semantics.
 
-The shared `.expression-editor` shell keeps fresh or failed manual inputs open; a
-successful validation commits and collapses to a source/result summary.
-`NumericExpressionInput` starts loaded durable source compact, refreshes its preview
-automatically, and reopens on failed revalidation. A linked numeric expression stays
-read-only and reports the assignment-specific result; its validation error belongs to
-the consuming parameter. Editor-open state, requests, previews, and deferred markers
-remain local to that editor lifecycle.
+The shared `.expression-editor` shell keeps fresh blank inputs open and collapses after
+a nonblank recipe is committed. Numeric and symbolic constructor editors do not call
+server preflight endpoints. A linked numeric expression stays read-only and displays
+its source. Editor-open state and any optional preview presentation remain local to that
+editor lifecycle.
 
 ## Tags and runtime metadata
 
@@ -98,8 +96,8 @@ background-persisted.
 
 ## States Zoo
 
-Structured state recipes remain in the unified Variables collection for compatible
-protocol parameters but are filtered from the ordinary Variables panel. Weighted
+Structured state recipes remain in the unified Variables collection and are filtered
+from the ordinary Variables panel. Weighted
 recipes own one generated trace companion and must not overwrite an unrelated variable
 on an ID/name collision. Backend registry and rendering rules live in
 [States Zoo and rendering](../backend/states-zoo-and-rendering.md).

@@ -19,10 +19,29 @@
   construction, and script export. Each constructor-consuming request or standalone
   validation, construction, or export operation takes one fresh constructor-catalog
   snapshot and reuses it for every item, avoiding repeated discovery and process-global
-  mutable caches. Protocol payloads now accept only advertised parameters, report
-  Boolean virtual-edge eligibility and required fields, and require explicit values for
-  required inputs while optional inputs retain Default. Legacy `chooseA`, `chooseB`,
-  `log`, and client-supplied attachment fields are rejected.
+  mutable caches. Catalog responses report Boolean virtual-edge eligibility and required
+  fields as authoring metadata. Canonical assignments may supply any valid,
+  non-injected Julia keyword or omit any keyword; the native QuantumSavory constructor
+  decides keyword membership and requiredness. Legacy `chooseA`, `chooseB`, `log`, and
+  client-supplied attachment fields are rejected.
+- Replaced the staged create/parse/prepare lifecycle with one atomic full-project
+  prepare. A complete private candidate is constructed and scheduled before publication;
+  failed admission, materialization, construction, or scheduling leaves the previous
+  prepared simulation untouched. The parse route, name-only prepare request, parsed
+  phase, and Parse action were removed from the backend, GUI, and MCP lifecycle.
+- Made QuantumSavory constructors the sole authority for constructor keyword, type,
+  default, domain, and cross-field semantics. The exact v2 constructor wire accepts only
+  the public `Symbolic` tag, omits defaults by omitting assignments, and removes the
+  ignored Genqo `Pᵈ` input without aliases or migration. Runtime materializes every
+  supplied transport value and invokes each constructor once; native constructor and
+  opt-in evaluation diagnostics are preserved in every deployment environment.
+- Rebuilt standalone Julia export from the same transport recipes without evaluating
+  project source or invoking constructors in the server. Variables render as uniform
+  placement-context factories, literals render directly as fresh Julia syntax, and
+  structurally valid projects with invalid constructor arguments export successfully
+  before failing natively when the generated script executes. Numeric and symbolic
+  constructor-preflight routes and their unused evaluators were removed; `/test_code`
+  remains for custom tag-query previews.
 
 ## 1.11.0 
 

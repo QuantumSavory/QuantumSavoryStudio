@@ -38,1052 +38,680 @@
   # Load test data
   test_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload.json"))
 
-  @testset "Julia Script Export" begin
-    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    payload["name"] = "../Export Demo?"
-    payload["simulationConfig"] = Dict(
-      "time" => 0.02,
-      "timeStep" => 0.01,
-      "qubitRepresentation" => "CliffordRepr",
-      "qumodeRepresentation" => "GabsRepr",
+  @testset "Constructor transport recipes" begin
+    context = Dict{Symbol,Any}(
+      :node => 2,
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => Dict("A" => 1, "B" => 2),
     )
-    payload["variables"] = Any[
+    entity = (kind="protocol", id="protocol-1", path="/net/protocols/0")
+
+    mutable_value = Any[Dict("value" => 1)]
+    literal = WebQuantumSavory._LiteralValue(mutable_value)
+    first_literal = WebQuantumSavory._materialize_transport_value(literal, context, WebQuantumSavory._VariableRecipe[])
+    second_literal = WebQuantumSavory._materialize_transport_value(literal, context, WebQuantumSavory._VariableRecipe[])
+    @test first_literal == second_literal == mutable_value
+    @test first_literal !== second_literal
+    @test first_literal[1] !== second_literal[1]
+
+    first_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._FreshWildcard(), context, WebQuantumSavory._VariableRecipe[],
+    )
+    second_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._FreshWildcard(), context, WebQuantumSavory._VariableRecipe[],
+    )
+    @test first_wildcard isa QuantumSavory.Wildcard
+    @test second_wildcard isa QuantumSavory.Wildcard
+    @test WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._NamedType(Int), context, WebQuantumSavory._VariableRecipe[],
+    ) === Int
+
+    numeric = WebQuantumSavory._NumericSource("self + 3", "Int64")
+    @test WebQuantumSavory._materialize_transport_value(
+      numeric, context, WebQuantumSavory._VariableRecipe[],
+    ) === Int64(5)
+    function_source = WebQuantumSavory._FunctionSource("value -> self + value")
+    contextual_function = WebQuantumSavory._materialize_transport_value(
+      function_source, context, WebQuantumSavory._VariableRecipe[],
+    )
+    @test contextual_function(4) == 6
+    symbolic = WebQuantumSavory._SymbolicSource("Z₁")
+    @test WebQuantumSavory._materialize_transport_value(
+      symbolic, context, WebQuantumSavory._VariableRecipe[],
+    ) !== nothing
+
+    zoo = WebQuantumSavory._normalize_states_zoo_value(
       Dict(
-        "id" => "state-variable",
-        "name" => "pair fidelity",
-        "type" => "Symbolic",
-        "value" => Dict(
-          "kind" => "states_zoo",
-          "state_type" => "DepolarizedBellPair",
-          "parameters" => Dict("p" => 0.9),
-        ),
+        "kind" => "states_zoo",
+        "state_type" => "DepolarizedBellPair",
+        "parameters" => Dict("p" => 2.0),
       ),
-      Dict(
-        "id" => "probability-variable",
-        "name" => "pair-fidelity",
-        "type" => "Float64",
-        "value" => 0.8,
+      "/variables/0/value",
+    )
+    @test WebQuantumSavory._materialize_transport_value(
+      zoo, context, WebQuantumSavory._VariableRecipe[],
+    ) isa QuantumSavory.StatesZoo.DepolarizedBellPair
+
+    variables = [WebQuantumSavory._VariableRecipe(
+      "variable-1",
+      "shared value",
+      "/variables/0",
+      "Int64",
+      WebQuantumSavory._LiteralValue(Int64(7)),
+    )]
+    @test WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._VariableUse(1), context, variables,
+    ) === Int64(7)
+
+    assignment = WebQuantumSavory._AssignmentRecipe(
+      "unknown_but_valid",
+      "/net/protocols/0/parameters/0",
+      "Int64",
+      WebQuantumSavory._LiteralValue(Int64(9)),
+    )
+    calls = Ref(0)
+    counting_constructor = function (; unknown_but_valid)
+      calls[] += 1
+      return unknown_but_valid
+    end
+    kwargs = WebQuantumSavory._materialize_assignments(
+      [assignment], context, variables, entity, "CountingConstructor",
+    )
+    @test WebQuantumSavory._invoke_constructor(
+      counting_constructor, kwargs, entity, "CountingConstructor", [assignment],
+    ) == 9
+    @test calls[] == 1
+
+    rejecting_calls = Ref(0)
+    rejecting_constructor = function (; unknown_but_valid)
+      rejecting_calls[] += 1
+      throw(DomainError(unknown_but_valid, "test rejection"))
+    end
+    rejection = try
+      WebQuantumSavory._invoke_constructor(
+        rejecting_constructor, kwargs, entity, "RejectingConstructor", [assignment],
+      )
+      nothing
+    catch error
+      error
+    end
+    @test rejection isa WebQuantumSavory.APIError
+    @test rejection.status_code == 422
+    @test rejection.error_code == "CONSTRUCTOR_REJECTED"
+    @test rejection.details["stage"] == "invoke"
+    @test rejection.details["exception_type"] == "DomainError"
+    @test rejecting_calls[] == 1
+
+    payload = deepcopy(test_payload)
+    payload["variables"] = Any[]
+    for node in payload["net"]["nodes"]
+      node["data"]["protocols"] = Any[]
+    end
+    for edge in payload["net"]["edges"]
+      edge["data"]["protocols"] = Any[]
+    end
+    payload["net"]["protocols"] = Any[
+      Dict("id" => "first", "type" => "Test.First", "parameters" => Any[]),
+      Dict("id" => "second", "type" => "Test.Second", "parameters" => Any[]),
+    ]
+    first_constructions = Ref(0)
+    second_constructions = Ref(0)
+    schedules = Ref(0)
+    first_constructor = function (; sim, net)
+      first_constructions[] += 1
+      return () -> (schedules[] += 1)
+    end
+    second_constructor = function (; sim, net)
+      second_constructions[] += 1
+      throw(DomainError(:second, "second constructor failed"))
+    end
+    misleading_metadata = [(
+      field=:invented_required_field,
+      type=Bool,
+      required=true,
+      default=nothing,
+      min=nothing,
+      max=nothing,
+      doc="Transport must ignore this metadata.",
+    )]
+    base_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+    protocol_entries = Any[
+      (
+        type=first_constructor,
+        wire_type="Test.First",
+        doc="",
+        attachment=:network,
+        group="floating",
+        attachment_fields=NamedTuple(),
+        parameters=misleading_metadata,
+        permits_virtual_edge=false,
       ),
-      Dict(
-        "id" => "weighted-state-variable_tr",
-        "name" => "weighted pair_tr",
-        "type" => "Float64",
-        "value" => 0.123,
-        "statesZooTraceSourceId" => "weighted-state-variable",
-      ),
-      Dict(
-        "id" => "weighted-state-variable",
-        "name" => "weighted pair",
-        "type" => "Symbolic",
-        "value" => Dict(
-          "kind" => "states_zoo",
-          "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
-        ),
-      ),
-      Dict(
-        "id" => "nested-state-variable",
-        "name" => "nested weighted pair",
-        "type" => "Symbolic",
-        "value" => Dict(
-          "kind" => "states_zoo",
-          "state_type" => "GenqoUnheraldedSPDCBellPairW",
-          "parameters" => Dict("ηᵈ" => 1, "ηᵗ" => 1, "N" => 0.1, "Pᵈ" => 1.0e-6),
-        ),
+      (
+        type=second_constructor,
+        wire_type="Test.Second",
+        doc="",
+        attachment=:network,
+        group="floating",
+        attachment_fields=NamedTuple(),
+        parameters=misleading_metadata,
+        permits_virtual_edge=false,
       ),
     ]
-
-    payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = Dict(
-      "type" => "T2Dephasing",
-      "parameters" => [Dict("name" => "t2", "type" => "Float64", "value" => 5)],
+    fake_catalogs = WebQuantumSavory._ConstructorCatalogSnapshot(
+      protocol_entries,
+      base_catalogs.backgrounds,
+      base_catalogs.slots,
     )
-    payload["net"]["edges"][1]["data"]["distanceMeters"] = 12_500.0
-    payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = 0.125
-    payload["net"]["edges"][1]["data"]["refractiveIndex"] = 1.5
-    payload["net"]["edges"][1]["data"]["lossDbPerKm"] = 0.2
-    payload["net"]["edges"][1]["data"]["transmissivity"] = 0.95
-    entangler = payload["net"]["edges"][1]["data"]["protocols"][1]
-    payload["net"]["edges"][1]["data"]["protocols"] = [entangler]
-    entangler["parameters"] = Any[
-      Dict(
-        "name" => "pairstate",
-        "type" => "Symbolic",
-        "value" => Dict("kind" => "variable", "id" => "state-variable"),
-      ),
+    WebQuantumSavory._normalize_project_transport(payload; catalogs=fake_catalogs)
+    construction_error = try
+      WebQuantumSavory._construct_protocol_instances(
+        payload,
+        nothing,
+        nothing;
+        catalogs=fake_catalogs,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test construction_error isa WebQuantumSavory.APIError
+    @test construction_error.error_code == "CONSTRUCTOR_REJECTED"
+    @test first_constructions[] == 1
+    @test second_constructions[] == 1
+    @test schedules[] == 0
+  end
+
+  @testset "Atomic simulation preparation" begin
+    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload["name"] = "atomic-preparation"
+    previous = WebQuantumSavory.State(
+      name="atomic-preparation",
+      payload=Dict{String,Any}("marker" => "healthy"),
+      simulation=ConcurrentSim.Simulation(),
+    )
+    service = WebQuantumSavory.SimulationService(
+      Dict("atomic-preparation" => previous),
+    )
+
+    rejected = deepcopy(payload)
+    push!(
+      rejected["net"]["edges"][1]["data"]["protocols"][1]["parameters"],
+      Dict("name" => "success_prob", "type" => "Float64", "value" => 0.0),
+    )
+    rejection = try
+      WebQuantumSavory.simulation_prepare!(service, rejected)
+      nothing
+    catch error
+      error
+    end
+    @test rejection isa WebQuantumSavory.APIError
+    @test rejection.status_code == 422
+    @test rejection.error_code == "CONSTRUCTOR_REJECTED"
+    @test rejection.details["replacement_committed"] === false
+    @test rejection.details["retained_previous"] === true
+    @test service.states["atomic-preparation"] === previous
+    @test previous.payload["marker"] == "healthy"
+
+    prepare_error(candidate; kwargs...) = try
+      WebQuantumSavory.simulation_prepare!(service, candidate; kwargs...)
+      nothing
+    catch error
+      error
+    end
+
+    invalid = deepcopy(payload)
+    invalid["variables"] = [Dict(
+      "id" => "legacy-symbolic",
+      "name" => "legacy symbolic",
+      "type" => "QuantumSavory.Symbolic",
+      "value" => "Z₁",
+    )]
+    admission_error = prepare_error(invalid)
+    @test admission_error.status_code == 400
+    @test admission_error.error_code == "VALIDATION_ERROR"
+    @test admission_error.details["stage"] == "admission"
+    @test admission_error.details["path"] == "/variables/0/type"
+    @test admission_error.details["replacement_committed"] === false
+    @test admission_error.details["retained_previous"] === true
+    @test service.states["atomic-preparation"] === previous
+
+    materialization = deepcopy(payload)
+    materialization["net"]["edges"][1]["data"]["protocols"][1]["parameters"] = [
       Dict(
         "name" => "success_prob",
         "type" => "Float64",
-        "value" => Dict("kind" => "variable", "id" => "weighted-state-variable_tr"),
+        "value" => Dict(
+          "kind" => "numeric_expression",
+          "source" => "Int64(1.5)",
+        ),
       ),
     ]
+    materialization_error = withenv(
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+    ) do
+      prepare_error(materialization)
+    end
+    @test materialization_error.status_code == 422
+    @test materialization_error.error_code == "PROJECT_MATERIALIZATION_FAILED"
+    @test materialization_error.details["replacement_committed"] === false
+    @test materialization_error.details["retained_previous"] === true
+    @test service.states["atomic-preparation"] === previous
+
+    policy_error = withenv(
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
+    ) do
+      prepare_error(materialization)
+    end
+    @test policy_error.status_code == 403
+    @test policy_error.error_code == WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
+    @test policy_error.details["replacement_committed"] === false
+    @test policy_error.details["retained_previous"] === true
+    @test service.states["atomic-preparation"] === previous
+
+    scheduling_payload = deepcopy(payload)
+    for node in scheduling_payload["net"]["nodes"]
+      empty!(node["data"]["protocols"])
+    end
+    for edge in scheduling_payload["net"]["edges"]
+      empty!(edge["data"]["protocols"])
+    end
+    scheduling_payload["net"]["protocols"] = [Dict(
+      "id" => "schedule-failure",
+      "type" => "Test.ScheduleFailure",
+      "parameters" => Any[],
+    )]
+    scheduling_constructor = (; sim, net) -> () -> error("schedule failure")
+    base_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+    scheduling_catalogs = WebQuantumSavory._ConstructorCatalogSnapshot(
+      Any[(
+        type=scheduling_constructor,
+        wire_type="Test.ScheduleFailure",
+        doc="",
+        attachment=:network,
+        group="floating",
+        attachment_fields=NamedTuple(),
+        parameters=Any[],
+        permits_virtual_edge=false,
+      )],
+      base_catalogs.backgrounds,
+      base_catalogs.slots,
+    )
+    scheduling_error = prepare_error(
+      scheduling_payload;
+      catalogs=scheduling_catalogs,
+    )
+    @test scheduling_error.status_code == 500
+    @test scheduling_error.error_code == "SERVER_ERROR"
+    @test scheduling_error.details["replacement_committed"] === false
+    @test scheduling_error.details["retained_previous"] === true
+    @test service.states["atomic-preparation"] === previous
+    @test previous.payload["marker"] == "healthy"
+
+    variable_rejected = deepcopy(rejected)
+    variable_rejected["variables"] = [Dict(
+      "id" => "zero-probability",
+      "name" => "zero probability",
+      "type" => "Float64",
+      "value" => 0.0,
+    )]
+    only(
+      variable_rejected["net"]["edges"][1]["data"]["protocols"][1]["parameters"],
+    )["value"] = Dict("kind" => "variable", "id" => "zero-probability")
+    variable_service = WebQuantumSavory.SimulationService(
+      Dict{String,WebQuantumSavory.State}(),
+    )
+    variable_rejection = try
+      WebQuantumSavory.simulation_prepare!(variable_service, variable_rejected)
+      nothing
+    catch error
+      error
+    end
+    @test variable_rejection.error_code == rejection.error_code == "CONSTRUCTOR_REJECTED"
+    for key in ("stage", "entity_kind", "entity_id", "path", "constructor_type",
+      "supplied_keywords", "exception_type", "cause")
+      @test variable_rejection.details[key] == rejection.details[key]
+    end
+    @test isempty(variable_service.states)
+
+    previous.is_running = true
+    builder_calls = Ref(0)
+    running_error = try
+      WebQuantumSavory.simulation_prepare!(
+        service,
+        payload;
+        builder=candidate_payload -> begin
+          builder_calls[] += 1
+          WebQuantumSavory.State(name=candidate_payload["name"])
+        end,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test running_error isa WebQuantumSavory.APIError
+    @test running_error.status_code == 409
+    @test running_error.error_code == "SIMULATION_RUNNING"
+    @test running_error.details["replacement_committed"] === false
+    @test running_error.details["retained_previous"] === true
+    @test builder_calls[] == 0
+    @test service.states["atomic-preparation"] === previous
+    previous.is_running = false
+
+    prepared = WebQuantumSavory.simulation_prepare!(service, payload)
+    @test service.states["atomic-preparation"] === prepared
+    @test prepared !== previous
+    @test prepared.payload === payload
+    @test prepared.simulation !== nothing
+    @test WebQuantumSavory._determine_status(prepared) == "prepared"
+    @test previous.payload === nothing
+    WebQuantumSavory.cleanup_state!(prepared)
+
+    empty_service = WebQuantumSavory.SimulationService(
+      Dict{String,WebQuantumSavory.State}(),
+    )
+    first_failure = try
+      WebQuantumSavory.simulation_prepare!(empty_service, rejected)
+      nothing
+    catch error
+      error
+    end
+    @test first_failure.details["replacement_committed"] === false
+    @test first_failure.details["retained_previous"] === false
+    @test isempty(empty_service.states)
+  end
+
+  @testset "Julia Script Export" begin
+    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload["name"] = "../Constructor First Export?"
+    payload["simulationConfig"]["time"] = 0.01
+    payload["simulationConfig"]["timeStep"] = 0.01
 
     state_names_before = Set(keys(WebQuantumSavory.STATE))
     script = WebQuantumSavory.generate_julia_script(payload)
     @test script == WebQuantumSavory.generate_julia_script(payload)
     @test Set(keys(WebQuantumSavory.STATE)) == state_names_before
-    @test WebQuantumSavory.generate_julia_script_export(payload)["filename"] == "export-demo.jl"
+    @test WebQuantumSavory.generate_julia_script_export(payload)["filename"] ==
+      "constructor-first-export.jl"
     @test Meta.parseall(script) isa Expr
-    script_lines = split(script, '\n')
-    @test occursin(
-      "Pkg.add([\"QuantumSavory\", \"Graphs\", \"ConcurrentSim\", " *
-      "\"ResumableFunctions\", \"CairoMakie\"])",
-      script,
-    )
-    for broad_import in (
-      "using QuantumSavory",
-      "using QuantumSavory.ProtocolZoo",
-      "using QuantumSavory.StatesZoo",
-      "using Graphs",
-      "using ConcurrentSim",
-      "using ResumableFunctions",
-      "using CairoMakie",
-      "using LinearAlgebra",
-    )
-      @test broad_import in script_lines
-    end
-    for generated_import in (
-      "using CairoMakie: Figure, activate!, record",
-      "using ConcurrentSim: @process, run",
-      "using Graphs: SimpleGraph, add_edge!",
-      "using LinearAlgebra: tr",
-      "using QuantumSavory: CliffordRepr, Qubit, Register, RegisterNet, " *
-      "T2Dephasing, express, get_time_tracker, registernetplot_axis",
-      "using QuantumSavory.ProtocolZoo: EntanglerProt",
-      "using QuantumSavory.StatesZoo: BarrettKokBellPairW, DepolarizedBellPair",
-      "using QuantumSavory.StatesZoo.Genqo: GenqoUnheraldedSPDCBellPairW",
-    )
-      @test generated_import in script_lines
-    end
-    @test occursin("# Variables", script)
-    @test occursin("variable_pair_fidelity = DepolarizedBellPair(0.9)", script)
-    @test occursin("variable_pair_fidelity_2 = 0.8", script)
-    @test occursin("variable_weighted_pair, variable_weighted_pair_tr = (let", script)
-    @test occursin("state = BarrettKokBellPairW(1, 1, 0, 1, 1)", script)
-    @test occursin("trace = abs(express(tr(state)))", script)
-    @test occursin("(state / trace, trace)", script)
-    @test occursin(
-      "state = GenqoUnheraldedSPDCBellPairW(1, 1, 0.1, 1.0e-6)",
-      script,
-    )
-    @test !occursin("variable_weighted_pair_tr = 0.123", script)
-    @test occursin("success_prob = variable_weighted_pair_tr", script)
-    @test occursin("T2Dephasing(; t2 = 5.0)", script)
-    @test occursin("# Registers", script)
-    @test occursin(
-      "representations = [CliffordRepr(), CliffordRepr()]",
-      script,
-    )
-    @test first(findfirst("# Resolve GUI node names", script)) <
-      first(findfirst("# Registers", script))
-    @test occursin(
-      "node_indices = Dict{String,Int}(\n" *
-      "    \"Amherst\" => 1,\n" *
-      "    \"Cambridge\" => 2,\n" *
-      ")\n" *
-      "nodeid(name::String)::Int = node_indices[name]",
-      script,
-    )
-    @test occursin("# Register network and simulation clock", script)
-    @test occursin("propagation_delays = Dict{Tuple{Int,Int},Float64}(", script)
-    @test occursin("    (1, 2) => 0.125,", script)
-    @test occursin("link_delay(src, dst) = propagation_delays[minmax(src, dst)]", script)
-    @test occursin(
-      "RegisterNet(graph, registers; names = [\"Amherst\", \"Cambridge\"], " *
-      "classical_delay = link_delay, quantum_delay = link_delay)",
-      script,
-    )
-    @test occursin("# Protocol construction and initialization", script)
-    @test occursin("nodeA = 1, nodeB = 2", script)
-    @test occursin("run(sim, simulation_duration)", script)
-    @test occursin("record(figure, animation_filename", script)
-    @test occursin("show(io, MIME\"image/png\"(), protocol)", script)
+    @test occursin("using QuantumSavory", script)
+    @test occursin("QuantumSavory.RegisterNet", script)
+    @test occursin("QuantumSavory.ProtocolZoo.EntanglerProt", script)
+    @test occursin("ConcurrentSim.run(sim, simulation_duration)", script)
+    @test occursin("CairoMakie.record", script)
+    @test occursin("MIME\"image/png\"()", script)
+    @test !occursin("using WebQuantumSavory", script)
 
-    virtual_payload = deepcopy(payload)
-    consumer = Dict(
-      "id" => "virtual-consumer",
-      "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
-      "parameters" => Any[],
-    )
-    push!(virtual_payload["net"]["edges"], Dict(
-      "id" => "virtual-edge",
-      "source" => virtual_payload["net"]["edges"][1]["target"],
-      "target" => virtual_payload["net"]["edges"][1]["source"],
-      "isLogic" => true,
-      "data" => Dict("type" => "connection", "protocols" => [consumer]),
-    ))
-    virtual_script = WebQuantumSavory.generate_julia_script(virtual_payload)
-    @test count(==("add_edge!(graph, 1, 2)"), eachline(IOBuffer(virtual_script))) == 1
-    @test occursin("virtual-consumer", virtual_script)
-    @test count(==("    (1, 2) => 0.125,"), eachline(IOBuffer(virtual_script))) == 1
-
-    mixed_representation_payload = deepcopy(payload)
-    mixed_representation_payload["net"]["nodes"][1]["data"]["slots"][1]["type"] = "Qumode"
-    mixed_representation_payload["simulationConfig"]["qubitRepresentation"] =
-      "QuantumOpticsRepr"
-    mixed_representation_script =
-      WebQuantumSavory.generate_julia_script(mixed_representation_payload)
-    @test occursin(
-      "representations = [" *
-      "GabsRepr(QuadBlockBasis), QuantumOpticsRepr()]",
-      mixed_representation_script,
-    )
-    mixed_representation_lines = split(mixed_representation_script, '\n')
-    @test "using QuantumSavory.Gabs: QuadBlockBasis" in mixed_representation_lines
-    @test any(
-      line -> startswith(line, "using QuantumSavory: ") &&
-        occursin("GabsRepr", line) &&
-        occursin("QuantumOpticsRepr", line),
-      mixed_representation_lines,
-    )
-    paused_mixed_representation_script = replace(
-      mixed_representation_script,
-      "\nrun(sim, simulation_duration)\n" =>
-        "\n# run(sim, simulation_duration)  # paused by the exporter test\n";
-      count=1,
-    )
-    mixed_representation_module = Module(gensym(:MixedRepresentationExport))
-    Core.eval(mixed_representation_module, :(using Base))
-    Base.include_string(
-      mixed_representation_module,
-      paused_mixed_representation_script,
-      "mixed-representation-export.jl",
-    )
-    mixed_registers = getfield(mixed_representation_module, :registers)
-    @test mixed_registers[1].reprs[1] isa QuantumSavory.GabsRepr
-    @test mixed_registers[1].reprs[2] isa QuantumSavory.QuantumOpticsRepr
-    @test getfield(mixed_representation_module, :QuadBlockBasis) ===
-      QuantumSavory.Gabs.QuadBlockBasis
-    @test getfield(mixed_representation_module, :QuantumOpticsRepr) ===
-      QuantumSavory.QuantumOpticsRepr
-
-    counterpart_id = "QuantumSavory.ProtocolZoo.EntanglementCounterpart"
-    tagged_payload = deepcopy(payload)
-    tagged_parameters = tagged_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    append!(tagged_parameters, Any[
-      Dict("name" => "tag", "type" => "DataType", "value" => counterpart_id),
-      Dict("name" => "attempt_time", "type" => "Float64", "value" => 0.125),
-    ])
-    tagged_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      WebQuantumSavory.generate_julia_script(tagged_payload)
-    end
-    @test tagged_script == WebQuantumSavory.generate_julia_script(tagged_payload)
-    @test occursin(
-      "using QuantumSavory.ProtocolZoo: EntanglementCounterpart, EntanglerProt",
-      tagged_script,
-    )
-    @test occursin("tag = EntanglementCounterpart", tagged_script)
-    @test occursin("attempt_time = 0.125", tagged_script)
-    @test !occursin("attempt_time = \"0.125\"", tagged_script)
-    @test Meta.parseall(tagged_script) isa Expr
-
-    symbolic_payload = deepcopy(tagged_payload)
-    symbolic_parameters =
-      symbolic_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    symbolic_pairstate = only(
-      parameter for parameter in symbolic_parameters if parameter["name"] == "pairstate"
-    )
-    symbolic_pairstate["type"] = "Symbolic"
-    symbolic_pairstate["value"] = Dict(
-      "kind" => "states_zoo",
-      "state_type" => "DepolarizedBellPair",
-      "parameters" => Dict("p" => 0.85),
-    )
-    symbolic_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      WebQuantumSavory.generate_julia_script(symbolic_payload)
-    end
-    @test occursin(
-      "pairstate = DepolarizedBellPair(0.85)",
-      symbolic_script,
-    )
-
-    lambda_payload = deepcopy(tagged_payload)
-    lambda_parameters = lambda_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    raw_context_lambda =
-      "slot -> (MessageBuffer; EntanglementConsumer; LinearAlgebra.tr; " *
-      "distance == 12500.0 && delay == 0.125 && refractive_index == 1.5 && " *
-      "loss == 0.2 && transmissivity == 0.95 && " *
-      "node_a == 1 && node_b == 2 && Base.length((slot,)) == 1 && slot > 0)"
-    append!(lambda_parameters, Any[
-      Dict("name" => "chooseslotA", "type" => "Lambda", "value" => raw_context_lambda),
-      Dict("name" => "chooseslotB", "type" => "Lambda", "value" => "slot -> slot > 0"),
-    ])
-    lambda_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-      WebQuantumSavory.generate_julia_script(lambda_payload)
-    end
-    @test lambda_script == WebQuantumSavory.generate_julia_script(lambda_payload)
-    @test occursin("chooseslotA = (let", lambda_script)
-    @test occursin("chooseslotB = (slot -> slot > 0)", lambda_script)
-    @test occursin(raw_context_lambda, lambda_script)
-    @test occursin("distance = 12500.0", lambda_script)
-    @test occursin("delay = 0.125", lambda_script)
-    @test occursin("refractive_index = 1.5", lambda_script)
-    @test occursin("loss = 0.2", lambda_script)
-    @test occursin("transmissivity = 0.95", lambda_script)
-    @test occursin("node_a = 1", lambda_script)
-    @test occursin("node_b = 2", lambda_script)
-    @test occursin("Base.length((slot,))", lambda_script)
-    @test occursin("slot -> slot > 0", lambda_script)
-    @test !occursin("function_value", lambda_script)
-    @test !occursin("isa Core.Function", lambda_script)
-    @test !occursin("nodeid = Base.getproperty", lambda_script)
-    @test Meta.parseall(lambda_script) isa Expr
-    lambda_import_lines = filter(
-      line -> startswith(line, "using ") && occursin(": ", line),
-      split(lambda_script, '\n'),
-    )
-    @test !any(line -> occursin("MessageBuffer", line), lambda_import_lines)
-    @test !any(line -> occursin("EntanglementConsumer", line), lambda_import_lines)
-    paused_lambda_script = replace(
-      lambda_script,
-      "\nrun(sim, simulation_duration)\n" =>
-        "\n# run(sim, simulation_duration)  # paused by the exporter test\n";
-      count=1,
-    )
-    lambda_module = Module(gensym(:LambdaExplicitImportExport))
-    Core.eval(lambda_module, :(using Base))
-    Base.include_string(
-      lambda_module,
-      paused_lambda_script,
-      "lambda-explicit-import-export.jl",
-    )
-    lambda_protocol = only(getfield(lambda_module, :protocols)).second
-    @test Base.invokelatest(lambda_protocol.chooseslotA, 7)
-    @test !Base.invokelatest(lambda_protocol.chooseslotA, -1)
-    @test Base.invokelatest(lambda_protocol.chooseslotB, 7)
-    @test lambda_protocol.tag === QuantumSavory.ProtocolZoo.EntanglementCounterpart
-
-    sparse_edge_function = WebQuantumSavory._script_custom_function_expression(
-      "slot -> transmissivity > 0 && nodeid(\"Amherst\") == 1 && slot > 0",
-      nothing,
-      "Sparse edge context";
-      edge_context=WebQuantumSavory._EdgeFunctionContext(
-        12_500.0,
-        0.125,
-        1.5,
-        0.2,
-        0.95,
-        1,
-        2,
-      ),
-    )
-    @test occursin("let\n    transmissivity = 0.95", sparse_edge_function)
-    for unused_binding in ("distance", "delay", "refractive_index", "loss", "node_a", "node_b")
-      @test !occursin("    $unused_binding =", sparse_edge_function)
-    end
-    @test !occursin("    nodeid =", sparse_edge_function)
-
-    for context_free_source in (
-      "let delay = 4; delay / 2; end",
-      "delay(x) = x + 1\ndelay(2)",
-      "distance -> distance",
-    )
-      parsed_source = WebQuantumSavory._parse_complete_source(context_free_source)
-      @test isempty(WebQuantumSavory._script_assignment_context_references(
-        parsed_source,
-      ))
-    end
-    parsed_outer_reference = WebQuantumSavory._parse_complete_source(
-      "(distance -> distance); distance",
-    )
-    @test WebQuantumSavory._script_assignment_context_references(
-      parsed_outer_reference,
-    ) == Set((:distance,))
-    parsed_default_reference = WebQuantumSavory._parse_complete_source(
-      "(distance=distance) -> distance",
-    )
-    @test WebQuantumSavory._script_assignment_context_references(
-      parsed_default_reference,
-    ) == Set((:distance,))
-    parsed_keyword_default_reference = WebQuantumSavory._parse_complete_source(
-      "(value; fallback=distance) -> fallback",
-    )
-    @test WebQuantumSavory._script_assignment_context_references(
-      parsed_keyword_default_reference,
-    ) == Set((:distance,))
-    parsed_parameter_shadow = WebQuantumSavory._parse_complete_source(
-      "fallback(distance; value=distance) = value\nfallback",
-    )
-    @test isempty(WebQuantumSavory._script_assignment_context_references(
-      parsed_parameter_shadow,
-    ))
-    parsed_generator_shadow = WebQuantumSavory._parse_complete_source(
-      "sum(delay for delay in (1, 2, 3))",
-    )
-    @test isempty(WebQuantumSavory._script_assignment_context_references(
-      parsed_generator_shadow,
-    ))
-    parsed_generator_reference = WebQuantumSavory._parse_complete_source(
-      "sum(value for value in 1:distance)",
-    )
-    @test WebQuantumSavory._script_assignment_context_references(
-      parsed_generator_reference,
-    ) == Set((:distance,))
-    for soft_scope_source in (
-      "f() = begin; while false; delay = 4; end; delay; end; f",
-      "f() = begin; try; delay = 4; catch; delay = 5; end; delay; end; f",
-    )
-      parsed_soft_scope = WebQuantumSavory._parse_complete_source(
-        soft_scope_source,
-      )
-      @test WebQuantumSavory._script_assignment_context_references(
-        parsed_soft_scope,
-      ) == Set((:delay,))
-    end
-    parsed_try_else = WebQuantumSavory._parse_complete_source(
-      "() -> try; 1; catch; 2; else; delay; end",
-    )
-    @test WebQuantumSavory._script_assignment_context_references(
-      parsed_try_else,
-    ) == Set((:delay,))
-
-    # Exported node functions must not gain edge-only values merely because the
-    # generated script has physical edges elsewhere.
-    node_only_expression = WebQuantumSavory._script_custom_function_expression(
-      "() -> (node_a, delay)",
-      1,
-      "Node-only context regression",
-    )
-    @test !occursin("node_a =", node_only_expression)
-    @test !occursin("delay =", node_only_expression)
-    node_only_module = Module(gensym(:NodeOnlyContextExport))
-    Core.eval(node_only_module, :(using Base))
-    node_only_function = Core.eval(node_only_module, Meta.parse(node_only_expression))
-    @test_throws UndefVarError node_only_function()
-
-    no_tag_payload = deepcopy(tagged_payload)
-    no_tag_parameters = no_tag_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    no_tag = only(parameter for parameter in no_tag_parameters if parameter["name"] == "tag")
-    no_tag["type"] = "Nothing"
-    no_tag["value"] = "nothing"
-    no_tag_script = WebQuantumSavory.generate_julia_script(no_tag_payload)
-    @test occursin("tag = nothing", no_tag_script)
-
-    function tag_export_error(value; client_type="DataType")
-      invalid_payload = deepcopy(tagged_payload)
-      invalid_parameters = invalid_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-      tag_index = findfirst(parameter -> parameter["name"] == "tag", invalid_parameters)
-      tag_parameter = Dict{String,Any}(invalid_parameters[tag_index])
-      invalid_parameters[tag_index] = tag_parameter
-      tag_parameter["type"] = client_type
-      tag_parameter["value"] = value
-      try
-        WebQuantumSavory.generate_julia_script(invalid_payload)
-        nothing
-      catch error
-        error
-      end
-    end
-
-    for invalid_id in ("EntanglementCounterpart", "Main.UnknownTag", "Core.Int64")
-      error = tag_export_error(invalid_id; client_type="DataType")
-      @test error isa WebQuantumSavory.APIError
-      @test occursin("not an advertised named AbstractTag type", error.message)
-    end
-    variable_tag_error = tag_export_error(Dict("kind" => "variable", "id" => "state-variable"))
-    @test variable_tag_error isa WebQuantumSavory.APIError
-    @test occursin("cannot use variable", variable_tag_error.message)
-
-    unknown_export_parameter = deepcopy(tagged_payload)
-    unknown_parameters = unknown_export_parameter["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    push!(unknown_parameters, Dict(
-      "name" => "forged_parameter",
-      "type" => "Float64",
-      "value" => 0.5,
-    ))
-    unknown_export_error = try
-      WebQuantumSavory.generate_julia_script(unknown_export_parameter)
-      nothing
-    catch error
-      error
-    end
-    @test unknown_export_error isa WebQuantumSavory.APIError
-    @test occursin(
-      "unknown protocol parameter 'forged_parameter'",
-      lowercase(unknown_export_error.message),
-    )
-
-    diagnostic_payload = deepcopy(payload)
-    diagnostic_payload["net"]["protocols"] = Any[
-      Dict(
-        "id" => "diagnostic-broken",
-        "type" => WebQuantumSavory.MOCK_BROKEN_PROTOCOL_TYPE,
-        "parameters" => Any[],
-      ),
-    ]
-    diagnostic_export_error = try
-      WebQuantumSavory.generate_julia_script(diagnostic_payload)
-      nothing
-    catch error
-      error
-    end
-    @test diagnostic_export_error isa WebQuantumSavory.APIError
-    if diagnostic_export_error isa WebQuantumSavory.APIError
-      @test diagnostic_export_error.status_code == 400
-      @test occursin("diagnostic-only", diagnostic_export_error.message)
-      @test occursin("cannot be exported", diagnostic_export_error.message)
-    end
-
-    generated_module = Module(gensym(:GeneratedExport))
+    generated_module = Module(gensym(:ValidConstructorFirstExport))
     Core.eval(generated_module, :(using Base))
-    Base.include_string(generated_module, script, "generated-export.jl")
-    generated_sim = getfield(generated_module, :sim)
-    @test ConcurrentSim.now(generated_sim) == 0.02
-    generated_network = getfield(generated_module, :network)
-    @test generated_network.names == ["Amherst", "Cambridge"]
-    @test QuantumSavory.name.(generated_network.registers) == ["Amherst", "Cambridge"]
-    generated_nodeid = getfield(generated_module, :nodeid)
-    @test generated_nodeid("Amherst") == 1
-    @test generated_nodeid("Cambridge") == 2
-    @test_throws KeyError generated_nodeid("Missing node")
-    generated_weighted_state = getfield(generated_module, :variable_weighted_pair)
-    @test abs(LinearAlgebra.tr(QuantumSavory.express(generated_weighted_state))) ≈ 1
-    generated_weighted_trace = getfield(generated_module, :variable_weighted_pair_tr)
-    @test generated_weighted_trace ≈ 0.5
-    generated_nested_state =
-      getfield(generated_module, :variable_nested_weighted_pair)
-    @test abs(LinearAlgebra.tr(QuantumSavory.express(generated_nested_state))) ≈ 1
-    generated_protocols = getfield(generated_module, :protocols)
-    @test length(generated_protocols) == 1
-    @test generated_protocols[1].second.success_prob ≈ generated_weighted_trace
+    Base.include_string(generated_module, script, "valid-constructor-first-export.jl")
+    @test length(getfield(generated_module, :registers)) == 2
+    @test length(getfield(generated_module, :protocols)) == 2
 
-    duplicate_name_payload = deepcopy(payload)
-    duplicate_name_payload["net"]["nodes"][2]["name"] = "Amherst"
-    duplicate_name_script = WebQuantumSavory.generate_julia_script(duplicate_name_payload)
-    @test occursin(
-      "node_indices = Dict{String,Int}(\n" *
-      "    \"Amherst\" => 1,\n" *
-      "    \"Amherst\" => 2,\n" *
-      ")",
-      duplicate_name_script,
-    )
-    duplicate_name_module = Module(gensym(:DuplicateNameExport))
-    Core.eval(duplicate_name_module, :(using Base))
-    Base.include_string(duplicate_name_module, duplicate_name_script, "duplicate-name-export.jl")
-    @test getfield(duplicate_name_module, :nodeid)("Amherst") == 2
-
-    contextual_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    contextual_payload["name"] = "Contextual Function Export"
-    contextual_payload["simulationConfig"]["time"] = 0.001
-    contextual_payload["simulationConfig"]["timeStep"] = 0.001
-    contextual_payload["variables"] = Any[
-      Dict{String,Any}(
-        "id" => "node-context-function",
-        "name" => "node context function",
-        "type" => "Lambda",
-        "value" => "candidates -> self * 100 + nodeid(\"Cambridge\") + first(candidates)",
+    transport_payload = deepcopy(payload)
+    transport_payload["name"] = "transport-recipes"
+    transport_payload["variables"] = Any[
+      Dict("id" => "literal", "name" => "literal rate", "type" => "Float64", "value" => 0.25),
+      Dict(
+        "id" => "numeric",
+        "name" => "contextual count",
+        "type" => "Int64",
+        "value" => Dict("kind" => "numeric_expression", "source" => "self + 1"),
       ),
-      Dict{String,Any}(
-        "id" => "global-node-function",
-        "name" => "global node function",
+      Dict("id" => "wildcard", "name" => "fresh wildcard", "type" => "Wildcard", "value" => "Wildcard"),
+      Dict("id" => "function", "name" => "known function", "type" => "Function", "value" => "minimum"),
+      Dict(
+        "id" => "lambda",
+        "name" => "custom function",
         "type" => "Lambda",
-        "value" => "candidates -> nodeid(\"Cambridge\") + first(candidates)",
+        "value" => "values -> first(values)",
       ),
-      Dict{String,Any}(
-        "id" => "global-rate",
-        "name" => "global rate",
-        "type" => "Float64",
+      Dict("id" => "symbolic", "name" => "symbolic source", "type" => "Symbolic", "value" => "Z₁"),
+      Dict(
+        "id" => "state",
+        "name" => "zoo state",
+        "type" => "Symbolic",
         "value" => Dict(
-          "kind" => "numeric_expression",
-          "source" => "nodeid(\"Cambridge\") / 4",
+          "kind" => "states_zoo",
+          "state_type" => "DepolarizedBellPair",
+          "parameters" => Dict("p" => 0.8),
         ),
       ),
-      Dict{String,Any}(
-        "id" => "shadowed-rate",
-        "name" => "shadowed rate",
-        "type" => "Float64",
+      Dict(
+        "id" => "weighted",
+        "name" => "weighted state",
+        "type" => "Symbolic",
         "value" => Dict(
-          "kind" => "numeric_expression",
-          "source" => "let delay = 4; delay / 2; end",
+          "kind" => "states_zoo",
+          "state_type" => "BarrettKokBellPairW",
+          "parameters" => Dict(
+            "ηᴬ" => 1.0,
+            "ηᴮ" => 1.0,
+            "Pᵈ" => 0.0,
+            "ηᵈ" => 1.0,
+            "𝒱" => 1.0,
+          ),
         ),
       ),
-      Dict{String,Any}(
-        "id" => "shadowed-function",
-        "name" => "shadowed function",
-        "type" => "Lambda",
-        "value" => "let distance = value -> value + 1; distance; end",
+      Dict(
+        "id" => "weighted_tr",
+        "name" => "weighted state trace",
+        "type" => "Float64",
+        "value" => 0.125,
+        "statesZooTraceSourceId" => "weighted",
       ),
     ]
-    contextual_payload["net"]["edges"][1]["data"]["protocols"] = Any[]
-    named_node_function = """function named_node_choice(candidates)
-        self * 1000 + nodeid("Amherst") + first(candidates)
-    end"""
-    for (node_index, node) in enumerate(contextual_payload["net"]["nodes"])
-      push!(node["data"]["protocols"], Dict(
-        "id" => "node-context-$node_index",
-        "type" => "QuantumSavory.ProtocolZoo.SwapperProt",
-        "parameters" => Any[
-          Dict(
-            "name" => "chooseL",
-            "type" => "Function",
-            "value" => Dict("kind" => "variable", "id" => "node-context-function"),
-          ),
-          Dict("name" => "chooseH", "type" => "Lambda", "value" => named_node_function),
-          Dict("name" => "rounds", "type" => "Int64", "value" => 0),
-        ],
-      ))
-    end
-
-    contextual_script = WebQuantumSavory.generate_julia_script(contextual_payload)
-    @test Meta.parseall(contextual_script) isa Expr
-    @test occursin(
-      "# GUI variable \"node context function\" is instantiated at each constructor assignment",
-      contextual_script,
-    )
-    @test !occursin("variable_node_context_function =", contextual_script)
-    @test occursin("let\n    self = 1", contextual_script)
-    @test occursin("let\n    self = 2", contextual_script)
-    @test length(findall("candidates -> self * 100 + nodeid", contextual_script)) == 2
-    @test length(findall("function named_node_choice", contextual_script)) == 2
-    @test occursin(
-      "variable_global_node_function = " *
-      "(candidates -> nodeid(\"Cambridge\") + first(candidates))",
-      contextual_script,
-    )
-    @test occursin(
-      "variable_global_rate = Base.Float64(nodeid(\"Cambridge\") / 4)",
-      contextual_script,
-    )
-    @test occursin(
-      "variable_shadowed_rate = Base.Float64(let delay = 4; delay / 2; end)",
-      contextual_script,
-    )
-    @test !occursin(
-      "# GUI variable \"shadowed rate\" is instantiated at each constructor assignment",
-      contextual_script,
-    )
-    @test occursin(
-      "variable_shadowed_function = " *
-      "(let distance = value -> value + 1; distance; end)",
-      contextual_script,
-    )
-    @test !occursin(
-      "# GUI variable \"shadowed function\" is instantiated at each constructor assignment",
-      contextual_script,
-    )
-    @test first(findfirst("nodeid(name::String)", contextual_script)) <
-      first(findfirst("variable_global_rate =", contextual_script))
-
-    lambda_default_payload = deepcopy(contextual_payload)
-    lambda_default_payload["variables"][1]["value"] = "default"
-    lambda_default_error = try
-      WebQuantumSavory.generate_julia_script(lambda_default_payload)
-      nothing
-    catch error
-      error
-    end
-    @test lambda_default_error isa WebQuantumSavory.APIError
-    @test occursin("must not use the default sentinel", lambda_default_error.message)
-
-    unused_nonstring_lambda_payload = deepcopy(contextual_payload)
-    unused_nonstring_lambda_payload["variables"][1]["value"] = 42
-    for node in unused_nonstring_lambda_payload["net"]["nodes"]
-      empty!(node["data"]["protocols"])
-    end
-    unused_nonstring_lambda_error = try
-      WebQuantumSavory.generate_julia_script(unused_nonstring_lambda_payload)
-      nothing
-    catch error
-      error
-    end
-    @test unused_nonstring_lambda_error isa WebQuantumSavory.APIError
-    @test occursin("string", unused_nonstring_lambda_error.message)
-
-    contextual_module = Module(gensym(:ContextualExport))
-    Core.eval(contextual_module, :(using Base))
-    Base.include_string(contextual_module, contextual_script, "contextual-export.jl")
-    contextual_protocols = Dict(getfield(contextual_module, :protocols))
-    node_one_protocol = contextual_protocols["node-context-1"]
-    node_two_protocol = contextual_protocols["node-context-2"]
-    @test Base.invokelatest(node_one_protocol.chooseL, [5]) == 107
-    @test Base.invokelatest(node_two_protocol.chooseL, [5]) == 207
-    @test Base.invokelatest(node_one_protocol.chooseH, [5]) == 1006
-    @test Base.invokelatest(node_two_protocol.chooseH, [5]) == 2006
-    @test getfield(contextual_module, :variable_shadowed_rate) == 2.0
-    @test Base.invokelatest(
-      getfield(contextual_module, :variable_shadowed_function),
-      2,
-    ) == 3
-
-    complete_source_expression = WebQuantumSavory._script_value_expression(
-      "Lambda",
-      "complete_choice(value) = self + value\ncomplete_choice\n# trailing comment",
-      "Complete-source custom function";
-      node_index=2,
-    )
-    complete_source_function = Core.eval(
-      contextual_module,
-      Meta.parse(complete_source_expression),
-    )
-    @test Base.invokelatest(complete_source_function, 3) == 5
-
-    nonfunction_source_expression = WebQuantumSavory._script_value_expression(
-      "Lambda",
-      "42",
-      "Non-function custom source";
-      node_index=2,
-    )
-    @test Core.eval(
-      contextual_module,
-      Meta.parse(nonfunction_source_expression),
-    ) == 42
-    @test !occursin("isa Core.Function", nonfunction_source_expression)
-
-    for context in ("Edge custom function", "Floating custom function")
-      nodeid_expression = WebQuantumSavory._script_value_expression(
-        "Lambda",
-        "value -> nodeid(\"Cambridge\") + value",
-        context,
-      )
-      nodeid_function = Core.eval(contextual_module, Meta.parse(nodeid_expression))
-      @test Base.invokelatest(nodeid_function, 3) == 5
-
-      unknown_name_expression = WebQuantumSavory._script_value_expression(
-        "Lambda",
-        "value -> nodeid(\"Missing node\") + value",
-        context,
-      )
-      unknown_name_function = Core.eval(contextual_module, Meta.parse(unknown_name_expression))
-      @test_throws KeyError Base.invokelatest(unknown_name_function, 3)
-
-      self_expression = WebQuantumSavory._script_value_expression(
-        "Lambda",
-        "value -> self + value",
-        context,
-      )
-      self_function = Core.eval(contextual_module, Meta.parse(self_expression))
-      @test_throws UndefVarError Base.invokelatest(self_function, 3)
-    end
-
-    virtual_edge_expression = WebQuantumSavory._script_value_expression(
-      "Lambda",
-      "() -> isnothing(distance) && isnothing(delay) && isnothing(refractive_index) && " *
-      "isnothing(loss) && isnothing(transmissivity) && " *
-      "node_a == 2 && node_b == 1",
-      "Virtual edge custom function";
-      edge_context=WebQuantumSavory._EdgeFunctionContext(
-        nothing,
-        nothing,
-        nothing,
-        nothing,
-        nothing,
-        2,
-        1,
+    entangler = transport_payload["net"]["edges"][1]["data"]["protocols"][1]
+    entangler["parameters"] = Any[
+      Dict(
+        "name" => "success_prob",
+        "type" => "Float64",
+        "value" => Dict("kind" => "variable", "id" => "literal"),
       ),
-    )
-    virtual_edge_function = Core.eval(
-      contextual_module,
-      Meta.parse(virtual_edge_expression),
-    )
-    @test Base.invokelatest(virtual_edge_function)
+      Dict(
+        "name" => "tag",
+        "type" => "DataType",
+        "value" => "QuantumSavory.ProtocolZoo.EntanglementCounterpart",
+      ),
+      Dict(
+        "name" => "chooseslotA",
+        "type" => "Function",
+        "value" => Dict("kind" => "variable", "id" => "function"),
+      ),
+      Dict(
+        "name" => "chooseslotB",
+        "type" => "Lambda",
+        "value" => Dict("kind" => "variable", "id" => "lambda"),
+      ),
+      Dict(
+        "name" => "pairstate",
+        "type" => "Symbolic",
+        "value" => Dict("kind" => "variable", "id" => "state"),
+      ),
+      Dict(
+        "name" => "numeric_extra",
+        "type" => "Int64",
+        "value" => Dict("kind" => "variable", "id" => "numeric"),
+      ),
+      Dict(
+        "name" => "wildcard_extra",
+        "type" => "Wildcard",
+        "value" => Dict("kind" => "variable", "id" => "wildcard"),
+      ),
+      Dict(
+        "name" => "symbolic_extra",
+        "type" => "Symbolic",
+        "value" => Dict("kind" => "variable", "id" => "symbolic"),
+      ),
+      Dict(
+        "name" => "weighted_extra",
+        "type" => "Symbolic",
+        "value" => Dict("kind" => "variable", "id" => "weighted"),
+      ),
+    ]
 
-    weighted_variable = only(filter(
-      variable -> variable["id"] == "weighted-state-variable",
-      payload["variables"],
+    transport_script = withenv(
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
+    ) do
+      WebQuantumSavory.generate_julia_script(transport_payload)
+    end
+    @test Meta.parseall(transport_script) isa Expr
+    @test occursin("uniform placement-context factories", transport_script)
+    @test occursin("Base.Float64(0.25)", transport_script)
+    @test !occursin("Base.deepcopy", transport_script)
+    @test occursin("QuantumSavory.Wildcard()", transport_script)
+    @test occursin("Base.minimum", transport_script)
+    @test occursin("values -> first(values)", transport_script)
+    @test occursin("Base.Int64((begin", transport_script)
+    @test occursin("QuantumSavory.StatesZoo.DepolarizedBellPair(0.8)", transport_script)
+    @test occursin("QuantumSavory.StatesZoo.BarrettKokBellPairW", transport_script)
+    @test occursin("variable_weighted_state_trace", transport_script)
+    @test !occursin("LinearAlgebra.tr(state)", transport_script)
+    @test occursin("Base.Float64(0.125)", transport_script)
+    @test !occursin("LinearAlgebra.tr(state)", transport_script)
+    @test occursin(
+      "QuantumSavory.ProtocolZoo.EntanglementCounterpart",
+      transport_script,
+    )
+    @test occursin("numeric_extra = variable_contextual_count(", transport_script)
+    @test occursin("wildcard_extra = variable_fresh_wildcard(", transport_script)
+
+    vector_expression = WebQuantumSavory._script_transport_expression(
+      WebQuantumSavory._LiteralValue(Int64[1, 2]),
+      "Vector{Int64}",
+      Dict{Symbol,Any}(),
+      WebQuantumSavory._VariableRecipe[],
+      String[];
+      in_factory=true,
+    )
+    @test vector_expression == "Base.Int64[1, 2]"
+    vector_factory = Core.eval(
+      Module(gensym(:LiteralFactory)),
+      Meta.parse("() -> $vector_expression"),
+    )
+    first_vector = Base.invokelatest(vector_factory)
+    second_vector = Base.invokelatest(vector_factory)
+    @test first_vector == second_vector == Int64[1, 2]
+    @test first_vector !== second_vector
+    push!(first_vector, 3)
+    @test second_vector == Int64[1, 2]
+
+    if !isdefined(Main, :WebQSExportCounting)
+      Base.include_string(Main, """
+      module WebQSExportCounting
+        using QuantumSavory
+        const calls = Ref(0)
+        struct CountingBackground <: QuantumSavory.AbstractBackground
+          value::Float64
+        end
+        function CountingBackground(; value)
+          calls[] += 1
+          return CountingBackground(Float64(value))
+        end
+      end
+      """, "webqs-export-counting.jl")
+    end
+    counting_module = getfield(Main, :WebQSExportCounting)
+    counting_module.calls[] = 0
+    base_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+    counting_backgrounds = copy(base_catalogs.backgrounds)
+    push!(counting_backgrounds, (
+      type=counting_module.CountingBackground,
+      wire_type="Test.CountingBackground",
+      doc="Counting export test constructor.",
+      parameters=[(
+        field=:invented,
+        type=String,
+        required=true,
+        default=nothing,
+        min=10,
+        max=20,
+        doc="Deliberately inaccurate metadata.",
+      )],
     ))
-    direct_weighted_expression = WebQuantumSavory._script_states_zoo_expression(
-      weighted_variable["value"],
-      "Direct weighted state",
+    counting_catalogs = WebQuantumSavory._ConstructorCatalogSnapshot(
+      base_catalogs.protocols,
+      counting_backgrounds,
+      base_catalogs.slots,
     )
-    @test !occursin("(state / trace, trace)", direct_weighted_expression)
-    direct_weighted_state = Core.eval(generated_module, Meta.parse(direct_weighted_expression))
-    @test abs(LinearAlgebra.tr(QuantumSavory.express(direct_weighted_state))) ≈ 1
+    counting_payload = deepcopy(payload)
+    counting_payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = Dict(
+      "type" => "Test.CountingBackground",
+      "parameters" => [
+        Dict("name" => "value", "type" => "Float64", "value" => -1.0),
+      ],
+    )
+    counting_script = WebQuantumSavory.generate_julia_script(
+      counting_payload;
+      catalogs=counting_catalogs,
+    )
+    @test counting_module.calls[] == 0
+    @test occursin("Main.WebQSExportCounting.CountingBackground", counting_script)
+    @test occursin("value = Base.Float64(-1.0)", counting_script)
 
-    function trace_ownership_error(mutate_companion!)
-      invalid_payload = deepcopy(payload)
-      companion = only(filter(
-        variable -> variable["id"] == "weighted-state-variable_tr",
-        invalid_payload["variables"],
-      ))
-      mutate_companion!(companion)
+    root_error(error) = error isa LoadError ? root_error(error.error) : error
+    function execution_error(invalid_payload, filename)
+      invalid_script = WebQuantumSavory.generate_julia_script(invalid_payload)
+      @test Meta.parseall(invalid_script) isa Expr
       try
-        WebQuantumSavory.generate_julia_script(invalid_payload)
+        generated = Module(gensym(:RejectedConstructorExport))
+        Core.eval(generated, :(using Base))
+        Base.include_string(generated, invalid_script, filename)
         return nothing
       catch error
-        return error
+        return root_error(error)
       end
     end
 
-    unknown_owner = trace_ownership_error(
-      companion -> (companion["statesZooTraceSourceId"] = "missing-state"),
-    )
-    @test unknown_owner isa WebQuantumSavory.APIError
-    @test occursin("invalid States Zoo trace linkage", unknown_owner.message)
-
-    unweighted_owner = trace_ownership_error(
-      companion -> (companion["statesZooTraceSourceId"] = "state-variable"),
-    )
-    @test unweighted_owner isa WebQuantumSavory.APIError
-    @test occursin("invalid States Zoo trace linkage", unweighted_owner.message)
-
-    mismatched_companion = trace_ownership_error(
-      companion -> (companion["name"] = "stale trace name"),
-    )
-    @test mismatched_companion isa WebQuantumSavory.APIError
-    @test occursin("does not match its weighted States Zoo owner", mismatched_companion.message)
-
-    invalid_config = deepcopy(payload)
-    invalid_config["simulationConfig"]["time"] = 0
-    invalid_config_error = try
-      WebQuantumSavory.generate_julia_script(invalid_config)
-      nothing
-    catch error
-      error
-    end
-    @test invalid_config_error isa WebQuantumSavory.APIError
-    @test invalid_config_error.status_code == 400
-    @test occursin("positive", invalid_config_error.message)
-
-    incompatible_representation = deepcopy(payload)
-    incompatible_representation["simulationConfig"]["qubitRepresentation"] = "GabsRepr"
-    incompatible_representation_error = try
-      WebQuantumSavory.generate_julia_script(incompatible_representation)
-      nothing
-    catch error
-      error
-    end
-    @test incompatible_representation_error isa WebQuantumSavory.APIError
-    @test incompatible_representation_error.status_code == 400
-    @test occursin("does not support Qubit slots", incompatible_representation_error.message)
-
-    unknown_representation = deepcopy(payload)
-    unknown_representation["simulationConfig"]["qumodeRepresentation"] = "UnknownRepr"
-    unknown_representation_error = try
-      WebQuantumSavory.generate_julia_script(unknown_representation)
-      nothing
-    catch error
-      error
-    end
-    @test unknown_representation_error isa WebQuantumSavory.APIError
-    @test unknown_representation_error.status_code == 400
-    @test occursin("Unknown representation", unknown_representation_error.message)
-
-    invalid_protocol = deepcopy(payload)
-    invalid_protocol["net"]["edges"][1]["data"]["protocols"][1]["type"] = "Main.NotAProtocol"
-    invalid_protocol_error = try
-      WebQuantumSavory.generate_julia_script(invalid_protocol)
-      nothing
-    catch error
-      error
-    end
-    @test invalid_protocol_error isa WebQuantumSavory.APIError
-    @test invalid_protocol_error.status_code == 400
-    @test occursin("unknown protocol type", lowercase(invalid_protocol_error.message))
-
-    empty_network_payload = deepcopy(payload)
-    empty_network_payload["name"] = "Empty Network"
-    empty!(empty_network_payload["net"]["nodes"])
-    empty!(empty_network_payload["net"]["edges"])
-    empty!(empty_network_payload["net"]["protocols"])
-    empty_network_error = try
-      WebQuantumSavory.generate_julia_script(empty_network_payload)
-      nothing
-    catch error
-      error
-    end
-    @test empty_network_error isa WebQuantumSavory.APIError
-    @test occursin("at least one node", empty_network_error.message)
-
-    empty_register_payload = deepcopy(empty_network_payload)
-    push!(empty_register_payload["net"]["nodes"], Dict(
-      "id" => "node",
-      "name" => "Node",
-      "position" => [0, 0],
-      "data" => Dict("type" => "City", "slots" => Any[], "protocols" => Any[]),
+    missing = deepcopy(payload)
+    empty!(missing["net"]["edges"][1]["data"]["protocols"])
+    push!(missing["net"]["nodes"][1]["data"]["protocols"], Dict(
+      "id" => "missing-required",
+      "type" => string(QuantumSavory.ProtocolZoo.SimpleSwitchDiscreteProt),
+      "parameters" => Any[],
     ))
-    empty_register_error = try
-      WebQuantumSavory.generate_julia_script(empty_register_payload)
-      nothing
-    catch error
-      error
-    end
-    @test empty_register_error isa WebQuantumSavory.APIError
-    @test occursin("at least one slot", empty_register_error.message)
+    @test execution_error(missing, "missing-required-export.jl") isa UndefKeywordError
 
-    wildcard_payload = deepcopy(payload)
-    push!(wildcard_payload["variables"], Dict(
-      "id" => "wildcard-variable",
-      "name" => "any remote node",
-      "type" => "Wildcard",
-      "value" => "Wildcard",
-    ))
-    push!(wildcard_payload["net"]["nodes"][1]["data"]["protocols"], Dict(
-      "id" => "wildcard-swapper",
-      "type" => "QuantumSavory.ProtocolZoo.SwapperProt",
-      "parameters" => [
-        Dict(
-          "name" => "nodeL",
-          "type" => "Wildcard",
-          "value" => Dict("kind" => "variable", "id" => "wildcard-variable"),
-        ),
-        Dict(
-          "name" => "nodeH",
-          "type" => "Wildcard",
-          "value" => "Wildcard",
-        ),
-      ],
-    ))
-    wildcard_script = WebQuantumSavory.generate_julia_script(wildcard_payload)
-    @test any(
-      line -> startswith(line, "using QuantumSavory: ") &&
-        occursin("Wildcard", line),
-      split(wildcard_script, '\n'),
-    )
-    @test occursin("variable_any_remote_node = (() -> Wildcard())", wildcard_script)
-    @test length(findall("variable_any_remote_node()", wildcard_script)) == 1
-    @test occursin("nodeH = Wildcard()", wildcard_script)
-    paused_wildcard_script = replace(
-      wildcard_script,
-      "\nrun(sim, simulation_duration)\n" =>
-        "\n# run(sim, simulation_duration)  # paused by the exporter test\n";
-      count=1,
-    )
-    wildcard_module = Module(gensym(:WildcardExplicitImportExport))
-    Core.eval(wildcard_module, :(using Base))
-    Base.include_string(
-      wildcard_module,
-      paused_wildcard_script,
-      "wildcard-explicit-import-export.jl",
-    )
-    wildcard_factory = getfield(wildcard_module, :variable_any_remote_node)
-    @test wildcard_factory() isa QuantumSavory.Wildcard
-
-    nested_protocol_payload = deepcopy(payload)
-    nested_protocol = nested_protocol_payload["net"]["edges"][1]["data"]["protocols"][1]
-    nested_protocol["id"] = "show"
-    nested_protocol["type"] = "QuantumSavory.ProtocolZoo.QTCP.LinkController"
-    nested_protocol["parameters"] = Any[]
-    nested_protocol_script = WebQuantumSavory.generate_julia_script(nested_protocol_payload)
-    @test "using QuantumSavory.ProtocolZoo.QTCP: LinkController" in
-      split(nested_protocol_script, '\n')
-    @test occursin(
-      "LinkController(; sim = sim, net = network, nodeA = 1, nodeB = 2)",
-      nested_protocol_script,
-    )
-    @test occursin("protocol_instance_show = LinkController", nested_protocol_script)
-    @test occursin("show(io, MIME\"image/png\"(), protocol)", nested_protocol_script)
-    paused_nested_protocol_script = replace(
-      nested_protocol_script,
-      "\nrun(sim, simulation_duration)\n" =>
-        "\n# run(sim, simulation_duration)  # paused by the exporter test\n";
-      count=1,
-    )
-    nested_protocol_module = Module(gensym(:NestedProtocolExplicitImportExport))
-    Core.eval(nested_protocol_module, :(using Base))
-    Base.include_string(
-      nested_protocol_module,
-      paused_nested_protocol_script,
-      "nested-protocol-explicit-import-export.jl",
-    )
-    @test only(getfield(nested_protocol_module, :protocols)).second isa
-      QuantumSavory.ProtocolZoo.QTCP.LinkController
-
-    if !isdefined(Main, :WebQuantumSavoryScriptCollisionA)
-      Core.eval(Main, :(
-        module WebQuantumSavoryScriptCollisionA
-          const Shared = Val{:a}
-          const network = :a
-          const var"for" = :keyword
-          macro shared()
-            QuoteNode(:macro_a)
-          end
-        end
-      ))
-    end
-    if !isdefined(Main, :WebQuantumSavoryScriptCollisionB)
-      Core.eval(Main, :(
-        module WebQuantumSavoryScriptCollisionB
-          const Shared = Val{:b}
-          macro shared()
-            QuoteNode(:macro_b)
-          end
-        end
-      ))
-    end
-    collision_a = getfield(Main, :WebQuantumSavoryScriptCollisionA)
-    collision_b = getfield(Main, :WebQuantumSavoryScriptCollisionB)
-    collision_sources = [
-      (collision_a, :Shared),
-      (collision_a, :network),
-      (collision_a, :for),
-      (collision_a, Symbol("@shared")),
-      (collision_b, :Shared),
-      (collision_b, Symbol("@shared")),
+    unknown = deepcopy(payload)
+    unknown["net"]["edges"][1]["data"]["protocols"][1]["parameters"] = [
+      Dict("name" => "unknown_keyword", "type" => "Float64", "value" => 1.0),
     ]
-    forward_registry =
-      WebQuantumSavory._script_import_registry(collision_sources)
-    forward_references = Dict(
-      source => WebQuantumSavory._script_reference(forward_registry, source...)
-      for source in collision_sources
-    )
-    reverse_registry =
-      WebQuantumSavory._script_import_registry(reverse(collision_sources))
-    reverse_references = Dict(
-      source => WebQuantumSavory._script_reference(reverse_registry, source...)
-      for source in reverse(collision_sources)
-    )
-    @test forward_references == reverse_references
-    @test all(reference != "Shared" for reference in values(forward_references))
-    @test forward_references[(collision_a, :network)] != "network"
-    @test forward_references[(collision_a, :for)] != "for"
-    @test forward_references[(collision_a, Symbol("@shared"))] != "@shared"
-    @test forward_references[(collision_b, Symbol("@shared"))] != "@shared"
-    forward_import_lines =
-      WebQuantumSavory._script_import_lines(forward_registry)
-    reverse_import_lines =
-      WebQuantumSavory._script_import_lines(reverse_registry)
-    @test forward_import_lines == reverse_import_lines
+    @test execution_error(unknown, "unknown-keyword-export.jl") isa MethodError
 
-    collision_module = Module(gensym(:CollisionExplicitImportExport))
-    Core.eval(collision_module, :(using Base))
-    collision_values = join(
-      (
-        forward_references[(collision_a, :Shared)],
-        forward_references[(collision_b, :Shared)],
-        forward_references[(collision_a, :network)],
-        forward_references[(collision_a, :for)],
-        forward_references[(collision_a, Symbol("@shared"))] * "()",
-        forward_references[(collision_b, Symbol("@shared"))] * "()",
-      ),
-      ", ",
-    )
-    Base.include_string(
-      collision_module,
-      join(forward_import_lines, "\n") *
-        "\ncollision_values = ($collision_values)\n",
-      "collision-explicit-import-export.jl",
-    )
-    @test getfield(collision_module, :collision_values) ==
-      (Val{:a}, Val{:b}, :a, :keyword, :macro_a, :macro_b)
+    wrong_type = deepcopy(payload)
+    wrong_type["net"]["edges"][1]["data"]["protocols"][1]["parameters"] = [
+      Dict("name" => "success_prob", "type" => "String", "value" => "wrong"),
+    ]
+    @test execution_error(wrong_type, "wrong-type-export.jl") isa MethodError
 
-    catalog_candidates = WebQuantumSavory._script_import_candidates()
-    catalog_registry =
-      WebQuantumSavory._script_import_registry(catalog_candidates)
-    for source in catalog_candidates
-      WebQuantumSavory._script_reference(catalog_registry, source...)
+    out_of_domain = deepcopy(payload)
+    out_of_domain["net"]["edges"][1]["data"]["protocols"][1]["parameters"] = [
+      Dict("name" => "success_prob", "type" => "Float64", "value" => 0.0),
+    ]
+    @test execution_error(out_of_domain, "out-of-domain-export.jl") isa DomainError
+
+    malformed_source = deepcopy(transport_payload)
+    malformed_source["variables"][2]["value"]["source"] = "self +"
+    malformed_error = try
+      WebQuantumSavory.generate_julia_script(malformed_source)
+      nothing
+    catch error
+      error
     end
-    catalog_module = Module(gensym(:CatalogExplicitImportExport))
-    Core.eval(catalog_module, :(using Base))
-    Base.include_string(
-      catalog_module,
-      join((
-        "using QuantumSavory",
-        "using QuantumSavory.ProtocolZoo",
-        "using QuantumSavory.StatesZoo",
-        "using Graphs",
-        "using ConcurrentSim",
-        "using ResumableFunctions",
-        "using CairoMakie",
-        "using LinearAlgebra",
-        WebQuantumSavory._script_import_lines(catalog_registry)...,
-      ), "\n"),
-      "catalog-explicit-import-export.jl",
-    )
-    for entry in values(catalog_registry.entries)
-      @test getfield(catalog_module, entry.local_name) ===
-        getfield(entry.source_module, entry.source_name)
+    @test malformed_error isa WebQuantumSavory.APIError
+    @test malformed_error.status_code == 400
+    @test malformed_error.details["stage"] == "admission"
+
+    forbidden_source = deepcopy(transport_payload)
+    forbidden_source["variables"][2]["value"]["source"] = "open(\"forbidden\", \"w\")"
+    forbidden_error = try
+      WebQuantumSavory.generate_julia_script(forbidden_source)
+      nothing
+    catch error
+      error
     end
+    @test forbidden_error isa WebQuantumSavory.APIError
+    @test forbidden_error.status_code == 400
+    @test occursin("source policy", lowercase(forbidden_error.message))
   end
-
   @testset "Background Types" begin
       background_types = WebQuantumSavory.get_background_types()
       @test isa(background_types, Vector)
@@ -1104,96 +732,61 @@
   end
 
   @testset "Known Function References" begin
-      expected_known_functions = [
-          "minimum", "maximum", "abs", "identity", "<(self)", ">(self)", "≤(self)", "≥(self)", "==(self)",
-      ]
-      @test WebQuantumSavory.known_functions() == expected_known_functions
+    expected_known_functions = [
+      "minimum",
+      "maximum",
+      "abs",
+      "identity",
+      "<(self)",
+      ">(self)",
+      "≤(self)",
+      "≥(self)",
+      "==(self)",
+    ]
+    @test WebQuantumSavory.known_functions() == expected_known_functions
+    @test WebQuantumSavory.resolve_function_reference("minimum") === minimum
+    @test WebQuantumSavory.resolve_function_reference("maximum") === maximum
+    @test WebQuantumSavory.resolve_function_reference("abs") === abs
+    @test WebQuantumSavory.resolve_function_reference("identity") === identity
+    @test WebQuantumSavory.resolve_function_reference("exit") === nothing
+    @test WebQuantumSavory.resolve_function_reference("Main.eval") === nothing
 
-      safe_references = [
-        "minimum" => minimum,
-        "maximum" => maximum,
-        "abs" => abs,
-        "identity" => identity,
-      ]
-      for (name, expected) in safe_references
-        @test WebQuantumSavory.resolve_function_reference(name) === expected
-      end
+    variables = WebQuantumSavory._VariableRecipe[]
+    context = Dict{Symbol,Any}(:node => 2)
+    recipe = WebQuantumSavory._normalize_transport_value(
+      "Function",
+      "==(self)",
+      "/net/nodes/0/data/protocols/0/parameters/0/value",
+    )
+    chooser = WebQuantumSavory._materialize_transport_value(recipe, context, variables)
+    @test chooser(2)
+    @test !chooser(1)
 
-      # Names outside the advertised allowlist must not reach arbitrary Julia
-      # functions, whether they are qualified or unqualified.
-      rejected_references = [
-        "min", "Base.min", "exit", "Base.exit", "eval", "Core.eval",
-        "Main.eval", "include", "Base.include", "run", "Base.run", "rm",
-        "Base.rm", "open", "Base.open",
-      ]
-      for name in rejected_references
-        @test WebQuantumSavory.resolve_function_reference(name) === nothing
-      end
+    ordinary = WebQuantumSavory._normalize_transport_value(
+      "Function",
+      "identity",
+      "/net/protocols/0/parameters/0/value",
+    )
+    @test WebQuantumSavory._materialize_transport_value(
+      ordinary,
+      Dict{Symbol,Any}(),
+      variables,
+    ) === identity
 
-      rejected_kwargs = Dict{Symbol,Any}()
-      @test !WebQuantumSavory._handle_function_lambda_parameter!(
-        rejected_kwargs,
-        :filter,
+    unknown_error = try
+      WebQuantumSavory._normalize_transport_value(
         "Function",
         "exit",
+        "/net/protocols/0/parameters/0/value",
       )
-      @test !haskey(rejected_kwargs, :filter)
-
-      comparison_cases = [
-        "<(self)" => [true, false, false],
-        ">(self)" => [false, false, true],
-        "≤(self)" => [true, true, false],
-        "≥(self)" => [false, true, true],
-        "==(self)" => [false, true, false],
-      ]
-      for (name, expected) in comparison_cases
-        comparison = WebQuantumSavory.resolve_self_comparison_reference(name, 2)
-        @test comparison !== nothing
-        if comparison !== nothing
-          @test comparison.(1:3) == expected
-        end
-        @test WebQuantumSavory.resolve_function_reference(name) === nothing
-      end
-      @test WebQuantumSavory.resolve_self_comparison_reference("!=(self)", 2) === nothing
-      @test WebQuantumSavory.resolve_self_comparison_reference("==(self)", nothing) === nothing
-
-      node_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
-        node_kwargs,
-        :chooseslot,
-        "Function",
-        "==(self)";
-        self_node_index=2,
-      )
-      @test haskey(node_kwargs, :chooseslot)
-      if haskey(node_kwargs, :chooseslot)
-        @test node_kwargs[:chooseslot].(1:3) == [false, true, false]
-      end
-
-      non_node_kwargs = Dict{Symbol,Any}()
-      @test !WebQuantumSavory._handle_function_lambda_parameter!(
-        non_node_kwargs,
-        :chooseslot,
-        "Function",
-        "==(self)",
-      )
-      @test !haskey(non_node_kwargs, :chooseslot)
-
-      # The optional positional state argument remains backwards compatible.
-      ordinary_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
-        ordinary_kwargs,
-        :filter,
-        "Function",
-        "identity",
-        nothing,
-      )
-      @test haskey(ordinary_kwargs, :filter)
-      if haskey(ordinary_kwargs, :filter)
-        @test ordinary_kwargs[:filter] === identity
-      end
+      nothing
+    catch error
+      error
+    end
+    @test unknown_error isa WebQuantumSavory.APIError
+    @test unknown_error.status_code == 400
+    @test unknown_error.details["stage"] == "admission"
   end
-
   @testset "Custom Function Source Evaluation" begin
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       accepted_sources = (
@@ -1320,223 +913,87 @@
       @test !success
       @test results === nothing
       @test parse_error isa Base.Meta.ParseError
-
-      development_response = WebQuantumSavory.evaluation_failure_response(
-        parse_error;
-        environment="dev",
-      )
-      @test startswith(development_response[:error], "ParseError:")
-      @test occursin("Expected `)` or `,`", development_response[:error])
-      @test !occursin("Base.Meta.ParseError(", development_response[:error])
-      @test development_response[:error_type] == "Base.Meta.ParseError"
-
-      production_response = WebQuantumSavory.evaluation_failure_response(
-        parse_error;
-        environment="prod",
-      )
-      @test production_response[:error] == "Evaluation failed"
-      @test !occursin("invalid(", string(production_response))
     end
   end
 
   @testset "Custom Function Runtime Context" begin
-      nodes = [
-        Dict("name" => "Amherst"),
-        Dict("name" => "Cambridge"),
-        Dict("name" => "Amherst"),
-      ]
-      node_name_to_index = WebQuantumSavory._node_name_to_index(nodes)
-      # Julia Dict construction intentionally preserves compatibility for
-      # duplicate names by retaining the last matching node.
-      @test node_name_to_index == Dict("Amherst" => 3, "Cambridge" => 2)
+    node_names = Dict("Alice" => 1, "Cambridge" => 2)
+    node_context = Dict{Symbol,Any}(
+      :node => 2,
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_names,
+    )
+    edge_context = Dict{Symbol,Any}(
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_names,
+      WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY =>
+        WebQuantumSavory._EdgeFunctionContext(100.0, 0.2, 1.5, 0.1, 0.9, 1, 2),
+    )
 
-      withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-        anonymous = WebQuantumSavory.create_lambda(
-          "candidate -> self == nodeid(\"Cambridge\") && candidate == nodeid(\"Amherst\")";
-          node_name_to_index=node_name_to_index,
-          self_node_index=2,
-        )
-        @test anonymous(3)
-        @test !anonymous(2)
-
-        named = WebQuantumSavory.create_lambda(
-          """
-          function contextual_selector(candidate)
-            return self == nodeid("Cambridge") && candidate == nodeid("Amherst")
-          end
-          """;
-          node_name_to_index=node_name_to_index,
-          self_node_index=2,
-        )
-        @test named(3)
-        @test !named(1)
-
-        short_form_source =
-          "contextual_short(candidate) = " *
-          "self == nodeid(\"Cambridge\") && candidate == nodeid(\"Amherst\"); contextual_short"
-        @test Meta.parse(short_form_source).head === :toplevel
-        short_form = WebQuantumSavory.create_lambda(
-          short_form_source;
-          node_name_to_index=node_name_to_index,
-          self_node_index=2,
-        )
-        @test short_form(3)
-        @test !short_form(2)
-        @test !isdefined(parentmodule(short_form.func), :contextual_short)
-
-        long_form_source = """
-        function contextual_long(candidate)
-          return self == nodeid("Cambridge") && candidate == nodeid("Amherst")
-        end; contextual_long
-        """
-        @test Meta.parse(long_form_source).head === :toplevel
-        long_form = WebQuantumSavory.create_lambda(
-          long_form_source;
-          node_name_to_index=node_name_to_index,
-          self_node_index=2,
-        )
-        @test long_form(3)
-        @test !long_form(1)
-        @test !isdefined(parentmodule(long_form.func), :contextual_long)
-
-        # Literal custom functions are instantiated with the node assignment's
-        # context rather than a process-global value.
-        literal_kwargs = Dict{Symbol,Any}()
-        literal_ctx = Dict{Symbol,Any}(
-          :node => 2,
-          WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
-        )
-        @test WebQuantumSavory._handle_typed_parameter!(
-          literal_kwargs,
-          :selector,
-          "Lambda",
+    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
+      node_function = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._FunctionSource(
           "candidate -> candidate == self && nodeid(\"Cambridge\") == self",
-          literal_ctx,
-        )
-        @test literal_kwargs[:selector](2)
-        @test !literal_kwargs[:selector](1)
+        ),
+        node_context,
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test node_function(2)
+      @test !node_function(1)
 
-        # Lambda variables retain raw source and receive a fresh lexical `self`
-        # for each assignment, while sharing the prepared node lookup.
-        lambda_variable = WebQuantumSavory.Variable(
-          "contextual-selector",
-          "contextual selector",
-          "Lambda",
-          "candidate -> candidate == self && nodeid(\"Cambridge\") == 2",
-        )
-        variable_functions = Dict{Int,Any}()
-        for node_index in 1:2
-          kwargs = Dict{Symbol,Any}()
-          ctx = Dict{Symbol,Any}(
-            :node => node_index,
-            WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
-          )
-          @test WebQuantumSavory._handle_typed_parameter!(
-            kwargs,
-            :selector,
-            lambda_variable.type,
-            lambda_variable.value,
-            ctx,
-          )
-          variable_functions[node_index] = kwargs[:selector]
-        end
-        @test variable_functions[1](1)
-        @test !variable_functions[1](2)
-        @test variable_functions[2](2)
-        @test !variable_functions[2](1)
+      edge_function = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._FunctionSource(
+          "() -> distance == 100 && delay == 0.2 && node_a == 1 && node_b == 2",
+        ),
+        edge_context,
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test edge_function()
 
-        physical_edge_context = WebQuantumSavory._EdgeFunctionContext(
-          1250.0,
-          0.25,
-          1.5,
-          0.2,
-          0.95,
-          1,
-          2,
-        )
-        edge_ctx = Dict{Symbol,Any}(
-          :node_a => 1,
-          :node_b => 2,
-          WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
-          WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY => physical_edge_context,
-        )
-        edge_kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_typed_parameter!(
-          edge_kwargs,
-          :selector,
-          "Lambda",
-          "candidates -> distance == 1250.0 && delay == 0.25 && " *
-          "refractive_index == 1.5 && loss == 0.2 && transmissivity == 0.95 && " *
-          "node_a == 1 && node_b == 2 && length(candidates) == 2",
-          edge_ctx,
-        )
-        @test edge_kwargs[:selector]([1, 2])
+      numeric = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource(
+          "(loss + transmissivity) * delay + nodeid(\"Alice\")",
+          "Float64",
+        ),
+        edge_context,
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test numeric ≈ 1.2
 
-        virtual_function = WebQuantumSavory.create_lambda(
-          "() -> isnothing(distance) && isnothing(delay) && isnothing(refractive_index) && " *
-          "isnothing(loss) && isnothing(transmissivity) && " *
-          "node_a == 2 && node_b == 1";
-          edge_context=WebQuantumSavory._EdgeFunctionContext(
-            nothing,
-            nothing,
-            nothing,
-            nothing,
-            nothing,
-            2,
-            1,
-          ),
-        )
-        @test virtual_function()
+      variables = [WebQuantumSavory._VariableRecipe(
+        "selector",
+        "contextual selector",
+        "/variables/0",
+        "Lambda",
+        WebQuantumSavory._FunctionSource("candidate -> candidate == self"),
+      )]
+      first_use = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._VariableUse(1),
+        Dict{Symbol,Any}(:node => 1),
+        variables,
+      )
+      second_use = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._VariableUse(1),
+        Dict{Symbol,Any}(:node => 2),
+        variables,
+      )
+      @test first_use(1)
+      @test !first_use(2)
+      @test second_use(2)
+      @test !second_use(1)
+    end
 
-        ordinary_length = WebQuantumSavory.create_lambda("values -> length(values)")
-        @test ordinary_length([1, 2, 3]) == 3
-
-        for self_node_index in (1, nothing), edge_only_name in ("node_a", "delay")
-          node_or_floating_function = WebQuantumSavory.create_lambda(
-            "() -> $edge_only_name";
-            node_name_to_index=node_name_to_index,
-            self_node_index=self_node_index,
-          )
-          @test_throws UndefVarError node_or_floating_function()
-        end
-
-        # Edge and floating functions receive `nodeid`, but no `self` binding.
-        for ctx in (
-          edge_ctx,
-          Dict{Symbol,Any}(
-            WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
-          ),
-        )
-          kwargs = Dict{Symbol,Any}()
-          @test WebQuantumSavory._handle_typed_parameter!(
-            kwargs,
-            :selector,
-            "Lambda",
-            "candidate -> candidate == nodeid(\"Cambridge\")",
-            ctx,
-          )
-          @test kwargs[:selector](2)
-
-          invalid_kwargs = Dict{Symbol,Any}()
-          @test WebQuantumSavory._handle_typed_parameter!(
-            invalid_kwargs,
-            :selector,
-            "Lambda",
-            "candidate -> candidate == self",
-            ctx,
-          )
-          @test_throws UndefVarError invalid_kwargs[:selector](2)
-        end
-
-        missing_name = WebQuantumSavory.create_lambda(
-          "candidate -> candidate == nodeid(\"Springfield\")";
-          node_name_to_index=node_name_to_index,
-          self_node_index=1,
-        )
-        @test_throws KeyError missing_name(1)
-      end
+    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._FunctionSource("value -> value"),
+        node_context,
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource("self + 1", "Int64"),
+        node_context,
+        WebQuantumSavory._VariableRecipe[],
+      )
+    end
   end
-
   @testset "Restricted source allowlist" begin
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
       # Accepted: ordinary custom functions and query predicates that stay within
@@ -1698,7 +1155,10 @@
         error
       end
       @test bare_protocol_error isa WebQuantumSavory.APIError
-      @test occursin("must be an object", bare_protocol_error.message)
+      @test bare_protocol_error.message == "Expected an object"
+      @test bare_protocol_error.details["stage"] == "admission"
+      @test bare_protocol_error.details["path"] ==
+        "/net/nodes/0/data/protocols/0"
   end
 
   @testset "SimpleSwitch Catalog Construction and Export" begin
@@ -1718,17 +1178,10 @@
 
       missing_required = deepcopy(payload)
       pop!(missing_required["net"]["nodes"][1]["data"]["protocols"][1]["parameters"])
-      required_error = try
-        WebQuantumSavory.validate_payload(missing_required; catalogs)
-        nothing
-      catch error
-        error
-      end
-      @test required_error isa WebQuantumSavory.APIError
-      @test occursin("success_probs", required_error.message)
+      @test WebQuantumSavory.validate_payload(missing_required; catalogs)["success"]
 
-      validation = WebQuantumSavory.validate_payload(payload; catalogs)
-      state = WebQuantumSavory.build_simulation_state(validation; catalogs)
+      WebQuantumSavory.validate_payload(payload; catalogs)
+      state = WebQuantumSavory.build_simulation_state(payload; catalogs)
       runtime_switch = WebQuantumSavory._instantiate_protocol(
         switch_definition,
         Dict{Symbol,Any}(
@@ -1743,12 +1196,29 @@
       @test runtime_switch.success_probs == [0.8]
       @test runtime_switch._backlog[1, 1] == 0
 
+      missing_runtime_error = try
+        WebQuantumSavory._instantiate_protocol(
+          missing_required["net"]["nodes"][1]["data"]["protocols"][1],
+          Dict{Symbol,Any}(
+            :sim => WebQuantumSavory.get_network_time_tracker(state.network),
+            :net => state.network,
+            :node => 1,
+          );
+          catalogs,
+        )
+        nothing
+      catch error
+        error
+      end
+      @test missing_runtime_error isa WebQuantumSavory.APIError
+      @test missing_runtime_error.error_code == "CONSTRUCTOR_REJECTED"
+
       script = WebQuantumSavory.generate_julia_script(payload; catalogs)
       @test occursin("switchnode = 1", script)
       paused_script = replace(
         script,
-        "\nrun(sim, simulation_duration)\n" =>
-          "\n# run(sim, simulation_duration)  # paused by the switch parity test\n";
+        "\nConcurrentSim.run(sim, simulation_duration)\n" =>
+          "\n# ConcurrentSim.run(sim, simulation_duration)  # paused by the switch parity test\n";
         count=1,
       )
       generated_module = Module(gensym(:SimpleSwitchCatalogExport))
@@ -1762,11 +1232,10 @@
       WebQuantumSavory.cleanup_state!(state)
   end
 
-  @testset "Named AbstractTag Protocol Parameters" begin
+  @testset "Named AbstractTag transport values" begin
     payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    simulation_name = "named_abstract_tag_protocol_parameters"
-    payload["name"] = simulation_name
-    state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
+    WebQuantumSavory.validate_payload(payload)
+    state = WebQuantumSavory.build_simulation_state(payload)
     context = Dict{Symbol,Any}(
       :sim => WebQuantumSavory.get_network_time_tracker(state.network),
       :net => state.network,
@@ -1774,16 +1243,15 @@
       :node_b => 2,
     )
     counterpart_id = "QuantumSavory.ProtocolZoo.EntanglementCounterpart"
-
-    protocol_definition(T, value; client_type="Any") = Dict(
+    protocol_definition(T, value, wire_type; id="tag-protocol") = Dict(
+      "id" => id,
       "type" => string(T),
       "parameters" => [Dict(
         "name" => "tag",
-        "type" => client_type,
+        "type" => wire_type,
         "value" => value,
       )],
     )
-
     captured_error(thunk) = try
       thunk()
       nothing
@@ -1796,58 +1264,52 @@
         entangler = WebQuantumSavory._instantiate_protocol(
           protocol_definition(
             QuantumSavory.ProtocolZoo.EntanglerProt,
-            counterpart_id;
-            client_type="DataType",
+            counterpart_id,
+            "DataType",
           ),
           context,
         )
         @test entangler.tag === QuantumSavory.ProtocolZoo.EntanglementCounterpart
 
-        consumer = WebQuantumSavory._instantiate_protocol(
-          protocol_definition(
-            QuantumSavory.ProtocolZoo.EntanglementConsumer,
-            counterpart_id;
-            client_type="DataType",
-          ),
-          context,
-        )
-        @test consumer.tag === QuantumSavory.ProtocolZoo.EntanglementCounterpart
-
         no_tag = WebQuantumSavory._instantiate_protocol(
           protocol_definition(
             QuantumSavory.ProtocolZoo.EntanglerProt,
-            "nothing";
-            client_type="Nothing",
+            "nothing",
+            "Nothing";
+            id="no-tag",
           ),
           context,
         )
         @test no_tag.tag === nothing
 
-        invalid_values = Any[
-          "nothing" => "does not accept nothing",
-          "EntanglementCounterpart" => "not an advertised named AbstractTag type",
-          "Main.UnknownTag" => "not an advertised named AbstractTag type",
-          "Core.Int64" => "not an advertised named AbstractTag type",
-          42 => "fully qualified named AbstractTag type ID",
-          Dict("kind" => "variable", "id" => "tag-variable") => "cannot use variables",
-        ]
-        for (value, message) in invalid_values
-          T = value == "nothing" ?
-            QuantumSavory.ProtocolZoo.EntanglementConsumer :
-            QuantumSavory.ProtocolZoo.EntanglerProt
-          error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
-            protocol_definition(T, value; client_type="Type{<:AbstractTag}"),
-            context,
-          ))
-          @test error isa WebQuantumSavory.APIError
-          if error isa WebQuantumSavory.APIError
-            @test error.status_code == 400
-            @test occursin(message, error.message)
-          end
-        end
+        unknown_type = captured_error(() -> WebQuantumSavory._instantiate_protocol(
+          protocol_definition(
+            QuantumSavory.ProtocolZoo.EntanglerProt,
+            "Main.UnknownTag",
+            "DataType";
+            id="unknown-tag",
+          ),
+          context,
+        ))
+        @test unknown_type isa WebQuantumSavory.APIError
+        @test unknown_type.status_code == 400
+        @test unknown_type.details["stage"] == "admission"
 
+        incompatible_type = captured_error(() -> WebQuantumSavory._instantiate_protocol(
+          protocol_definition(
+            QuantumSavory.ProtocolZoo.EntanglerProt,
+            "Core.Int64",
+            "DataType";
+            id="incompatible-tag",
+          ),
+          context,
+        ))
+        @test incompatible_type isa WebQuantumSavory.APIError
+        @test incompatible_type.status_code == 422
+        @test incompatible_type.error_code == "CONSTRUCTOR_REJECTED"
 
-        unknown_parameter = Dict(
+        unknown_keyword = Dict(
+          "id" => "unknown-keyword",
           "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
           "parameters" => [Dict(
             "name" => "forged_parameter",
@@ -1855,24 +1317,19 @@
             "value" => 0.5,
           )],
         )
-        error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
-          unknown_parameter,
+        constructor_error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
+          unknown_keyword,
           context,
         ))
-        @test error isa WebQuantumSavory.APIError
-        @test occursin("Unknown protocol parameter", error.message)
-        unknown_parameter["parameters"][1]["value"] = ""
-        error = captured_error(() -> WebQuantumSavory._instantiate_protocol(
-          unknown_parameter,
-          context,
-        ))
-        @test error isa WebQuantumSavory.APIError
-        @test occursin("Unknown protocol parameter", error.message)
+        @test constructor_error isa WebQuantumSavory.APIError
+        @test constructor_error.error_code == "CONSTRUCTOR_REJECTED"
+        @test constructor_error.details["supplied_keywords"] == ["forged_parameter"]
       end
 
       withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
         custom_choosers = WebQuantumSavory._instantiate_protocol(
           Dict(
+            "id" => "custom-choosers",
             "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
             "parameters" => Any[
               Dict(
@@ -1891,176 +1348,124 @@
         )
         @test custom_choosers.chooseslotA([2, 3]) == 2
         @test custom_choosers.chooseslotB([2, 3]) == 3
-
-        forged_lambda = WebQuantumSavory._instantiate_protocol(
-          Dict(
-            "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
-            "parameters" => [Dict(
-              "name" => "success_prob",
-              "type" => "Lambda",
-              "value" => 0.25,
-            )],
-          ),
-          context,
-        )
-        @test forged_lambda.success_prob == 0.25
-        @test WebQuantumSavory._protocol_parameter_handling_type(
-          Float64,
-          "Lambda",
-          0.25,
-        ) === Float64
       end
     finally
-      WebQuantumSavory.destroy_simulation(simulation_name)
+      WebQuantumSavory.cleanup_state!(state)
     end
   end
 
   @testset "States Zoo Registry and Recipes" begin
-      expected = [
-        "BarrettKokBellPair" => QuantumSavory.StatesZoo.BarrettKokBellPair,
-        "BarrettKokBellPairW" => QuantumSavory.StatesZoo.BarrettKokBellPairW,
-        "DepolarizedBellPair" => QuantumSavory.StatesZoo.DepolarizedBellPair,
-        "GenqoMultiplexedCascadedBellPairW" => QuantumSavory.StatesZoo.Genqo.GenqoMultiplexedCascadedBellPairW,
-        "GenqoUnheraldedSPDCBellPairW" => QuantumSavory.StatesZoo.Genqo.GenqoUnheraldedSPDCBellPairW,
-      ]
+    expected = [
+      "BarrettKokBellPair" => QuantumSavory.StatesZoo.BarrettKokBellPair,
+      "BarrettKokBellPairW" => QuantumSavory.StatesZoo.BarrettKokBellPairW,
+      "DepolarizedBellPair" => QuantumSavory.StatesZoo.DepolarizedBellPair,
+      "GenqoMultiplexedCascadedBellPairW" =>
+        QuantumSavory.StatesZoo.Genqo.GenqoMultiplexedCascadedBellPairW,
+      "GenqoUnheraldedSPDCBellPairW" =>
+        QuantumSavory.StatesZoo.Genqo.GenqoUnheraldedSPDCBellPairW,
+    ]
+    catalog = WebQuantumSavory.get_states_zoo_types()
+    @test [entry["id"] for entry in catalog] == first.(expected)
+    @test [entry["weighted"] for entry in catalog] == [false, true, false, true, true]
 
-      @test length(WebQuantumSavory.STATES_ZOO_TYPE_REGISTRY) == 5
-      @test Set(keys(WebQuantumSavory.STATES_ZOO_TYPE_REGISTRY)) == Set(first.(expected))
-
-      catalog = WebQuantumSavory.get_states_zoo_types()
-      @test [entry["id"] for entry in catalog] == first.(expected)
-      @test [entry["display_name"] for entry in catalog] == [
-        "Barrett-Kok Bell Pair",
-        "Barrett-Kok Bell Pair (weighted)",
-        "Depolarized Bell Pair",
-        "Genqo Multiplexed Cascaded Bell Pair (weighted)",
-        "Genqo Unheralded SPDC Bell Pair (weighted)",
-      ]
-      @test [entry["weighted"] for entry in catalog] == [false, true, false, true, true]
-
-      for (catalog_entry, (id, T)) in zip(catalog, expected)
-        parameters = QuantumSavory.StatesZoo.stateparameters(T)
-        ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
-        expected_metadata = [
-          Dict{String,Any}(
-            "name" => string(parameter),
-            "min" => ranges[parameter].min,
-            "max" => ranges[parameter].max,
-            "good" => ranges[parameter].good,
-          ) for parameter in parameters
-        ]
-        @test catalog_entry["parameters"] == expected_metadata
-
-        good_parameters = Dict(
-          string(parameter) => ranges[parameter].good for parameter in parameters
-        )
-        @test WebQuantumSavory.construct_states_zoo_state(id, good_parameters) isa T
-
-        recipe = Dict(
-          "kind" => "states_zoo",
-          "state_type" => id,
-          "parameters" => good_parameters,
-        )
-        recipe_state = WebQuantumSavory.construct_states_zoo_recipe(recipe)
-        if catalog_entry["weighted"]
-          @test recipe_state isa QuantumSavory.SymQObj
-          @test abs(LinearAlgebra.tr(QuantumSavory.express(recipe_state))) ≈ 1
-          raw_state = WebQuantumSavory.construct_states_zoo_state(id, good_parameters)
-          @test WebQuantumSavory._states_zoo_absolute_trace(id, raw_state) > 0
-        else
-          @test recipe_state isa T
-        end
-      end
-
-      barrett_weighted_parameters =
-        Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1)
-      barrett_weighted = WebQuantumSavory.construct_states_zoo_state(
-        "BarrettKokBellPairW",
-        barrett_weighted_parameters,
+    for (catalog_entry, (id, T)) in zip(catalog, expected)
+      parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
+      ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
+      @test [parameter["name"] for parameter in catalog_entry["parameters"]] ==
+        string.(collect(parameter_names))
+      parameters = Dict(
+        string(parameter) => ranges[parameter].good for parameter in parameter_names
       )
-      @test WebQuantumSavory._states_zoo_absolute_trace(
-        "BarrettKokBellPairW",
-        barrett_weighted,
-      ) ≈ 0.5
+      @test WebQuantumSavory.construct_states_zoo_state(id, parameters) isa T
+    end
 
-      zero_trace_recipe = Dict(
+    multiplexed = only(filter(
+      entry -> entry["id"] == "GenqoMultiplexedCascadedBellPairW",
+      catalog,
+    ))
+    unheralded = only(filter(
+      entry -> entry["id"] == "GenqoUnheraldedSPDCBellPairW",
+      catalog,
+    ))
+    @test [parameter["name"] for parameter in multiplexed["parameters"]] ==
+      ["ηᵇ", "ηᵈ", "ηᵗ", "N"]
+    @test [parameter["name"] for parameter in unheralded["parameters"]] ==
+      ["ηᵈ", "ηᵗ", "N"]
+    @test all(parameter["name"] != "Pᵈ" for parameter in multiplexed["parameters"])
+    @test all(parameter["name"] != "Pᵈ" for parameter in unheralded["parameters"])
+
+    # Suggested exploration ranges are not validity checks.
+    outside_suggestion = WebQuantumSavory.construct_states_zoo_state(
+      "DepolarizedBellPair",
+      Dict("p" => 2.0),
+    )
+    @test outside_suggestion isa QuantumSavory.StatesZoo.DepolarizedBellPair
+
+    weighted_parameters =
+      Dict("ηᴬ" => 1.0, "ηᴮ" => 1.0, "Pᵈ" => 0.0, "ηᵈ" => 1.0, "𝒱" => 1.0)
+    weighted = WebQuantumSavory.construct_states_zoo_state(
+      "BarrettKokBellPairW",
+      weighted_parameters,
+    )
+    @test WebQuantumSavory._states_zoo_absolute_trace(
+      "BarrettKokBellPairW",
+      weighted,
+    ) ≈ 0.5
+    normalized = WebQuantumSavory.construct_states_zoo_recipe(Dict(
+      "kind" => "states_zoo",
+      "state_type" => "BarrettKokBellPairW",
+      "parameters" => weighted_parameters,
+    ))
+    @test abs(LinearAlgebra.tr(QuantumSavory.express(normalized))) ≈ 1
+
+    zero_trace_error = try
+      WebQuantumSavory.construct_states_zoo_recipe(Dict(
         "kind" => "states_zoo",
         "state_type" => "BarrettKokBellPairW",
-        "parameters" => Dict("ηᴬ" => 0, "ηᴮ" => 0, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
-      )
-      zero_trace_error = try
-        WebQuantumSavory.construct_states_zoo_recipe(zero_trace_recipe)
-        nothing
+        "parameters" =>
+          Dict("ηᴬ" => 0.0, "ηᴮ" => 0.0, "Pᵈ" => 0.0, "ηᵈ" => 1.0, "𝒱" => 1.0),
+      ))
+      nothing
+    catch error
+      error
+    end
+    @test zero_trace_error isa WebQuantumSavory.APIError
+    @test occursin("finite, positive", zero_trace_error.message)
+
+    function zoo_error(state_type, parameters)
+      try
+        WebQuantumSavory.construct_states_zoo_state(state_type, parameters)
+        return nothing
       catch error
-        error
+        return error
       end
-      @test zero_trace_error isa WebQuantumSavory.APIError
-      @test zero_trace_error.status_code == 400
-      @test occursin("finite, positive", zero_trace_error.message)
-      @test zero_trace_error.details["trace"] == 0
+    end
+    @test zoo_error("NotAState", Dict()) isa WebQuantumSavory.APIError
+    @test zoo_error("DepolarizedBellPair", Dict()) isa WebQuantumSavory.APIError
+    @test zoo_error(
+      "DepolarizedBellPair",
+      Dict("p" => 0.5, "extra" => 1.0),
+    ) isa WebQuantumSavory.APIError
+    for value in ("0.5", true, NaN, Inf, -Inf)
+      @test zoo_error("DepolarizedBellPair", Dict("p" => value)) isa
+        WebQuantumSavory.APIError
+    end
 
-      function states_zoo_error(state_type, parameters)
-        try
-          WebQuantumSavory.construct_states_zoo_state(state_type, parameters)
-          return nothing
-        catch error
-          return error
-        end
-      end
-
-      unknown = states_zoo_error("NotAState", Dict())
-      @test unknown isa WebQuantumSavory.APIError
-      @test unknown.status_code == 400
-      @test unknown.error_code == "VALIDATION_ERROR"
-
-      missing = states_zoo_error("DepolarizedBellPair", Dict())
-      @test missing isa WebQuantumSavory.APIError
-      @test missing.details["missing"] == ["p"]
-
-      extra = states_zoo_error("DepolarizedBellPair", Dict("p" => 0.5, "other" => 1))
-      @test extra isa WebQuantumSavory.APIError
-      @test extra.details["extra"] == ["other"]
-
-      for invalid_value in ("0.5", true, NaN, Inf, -Inf)
-        invalid = states_zoo_error("DepolarizedBellPair", Dict("p" => invalid_value))
-        @test invalid isa WebQuantumSavory.APIError
-        @test occursin("finite number", invalid.message)
-      end
-
-      for invalid_value in (-0.01, 1.01)
-        invalid = states_zoo_error("DepolarizedBellPair", Dict("p" => invalid_value))
-        @test invalid isa WebQuantumSavory.APIError
-        @test occursin("outside its declared range", invalid.message)
-      end
-
-      tagged_recipe = Dict(
+    recipe = WebQuantumSavory._normalize_states_zoo_value(
+      Dict(
         "kind" => "states_zoo",
         "state_type" => "DepolarizedBellPair",
-        "parameters" => Dict("p" => 0.75),
-      )
-      withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-        kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :pairstate, tagged_recipe)
-        @test kwargs[:pairstate] isa QuantumSavory.StatesZoo.DepolarizedBellPair
-
-        weighted_recipe = Dict(
-          "kind" => "states_zoo",
-          "state_type" => "BarrettKokBellPairW",
-          "parameters" => barrett_weighted_parameters,
-        )
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :weighted, weighted_recipe)
-        @test kwargs[:weighted] isa QuantumSavory.SymQObj
-        @test abs(LinearAlgebra.tr(QuantumSavory.express(kwargs[:weighted]))) ≈ 1
-      end
-
-      # Existing symbolic strings keep their evaluation-backed behavior.
-      withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-        kwargs = Dict{Symbol,Any}()
-        @test WebQuantumSavory._handle_symbolic_parameter!(kwargs, :pairstate, "Z₁")
-        @test haskey(kwargs, :pairstate)
-      end
+        "parameters" => Dict("p" => 0.9),
+      ),
+      "/variables/0/value",
+    )
+    materialized = WebQuantumSavory._materialize_transport_value(
+      recipe,
+      Dict{Symbol,Any}(),
+      WebQuantumSavory._VariableRecipe[],
+    )
+    @test materialized isa QuantumSavory.StatesZoo.DepolarizedBellPair
   end
-
   @testset "States Zoo Preview Rendering" begin
       state = WebQuantumSavory.construct_states_zoo_state(
         "DepolarizedBellPair",
@@ -2146,8 +1551,6 @@
   end
 
   @testset "Server Startup Warmup" begin
-      @test WebQuantumSavory.start_startup_warmup!() === nothing
-      @test !WebQuantumSavory.STARTUP_WARMUP_COMPLETE[]
       @test basename(WebQuantumSavory._latest_startup_warmup_demo()) ==
         "2.Entangler.Example.with.consumer.json"
       mktempdir() do demos_dir
@@ -2230,10 +1633,10 @@
     coerced_integer["net"]["nodes"][1]["data"]["protocols"][2]["parameters"][2]["value"] = "2"
     push!(malformed, coerced_integer)
 
-    forged_wire_type = deepcopy(test_payload)
-    forged_wire_type["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["type"] = "String"
-    forged_wire_type["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["value"] = "0.15"
-    push!(malformed, forged_wire_type)
+    constructor_incompatible_wire = deepcopy(test_payload)
+    constructor_incompatible_wire["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["type"] = "String"
+    constructor_incompatible_wire["net"]["nodes"][1]["data"]["protocols"][1]["parameters"][1]["value"] = "0.15"
+    @test WebQuantumSavory.validate_payload(constructor_incompatible_wire)["success"]
 
     duplicate_id = deepcopy(test_payload)
     duplicate_id["net"]["nodes"][1]["data"]["slots"][1]["id"] = "node1"
@@ -2266,260 +1669,168 @@
   end
 
   @testset "Payload Validation" begin
-      result = WebQuantumSavory.validate_payload(test_payload)
-      @test result["success"] == true
-      @test result["message"] == "Network graph parsed successfully"
-      @test haskey(result, "graph_info")
-      @test result["graph_info"]["node_count"] == 2
-      @test result["graph_info"]["edge_count"] == 1
-      @test length(result["graph_info"]["node_ids"]) == 2
-      @test length(result["graph_info"]["edge_connections"]) == 1
+    result = WebQuantumSavory.validate_payload(test_payload)
+    @test result["success"]
+    @test result["message"] == "Project is structurally valid"
+    @test result["graph_info"]["node_count"] == 2
+    @test result["graph_info"]["edge_count"] == 1
 
-      # Test missing name field
-      invalid_payload = deepcopy(test_payload)
-      delete!(invalid_payload, "name")
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("fields do not match", e.message)
-      end
+    failure(payload) = try
+      WebQuantumSavory.validate_payload(payload)
+      nothing
+    catch error
+      error
+    end
 
-      # Test missing net field
-      invalid_payload = deepcopy(test_payload)
-      delete!(invalid_payload, "net")
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("fields do not match", e.message)
-      end
+    cases = [
+      ("name", payload -> delete!(payload, "name"), "/name"),
+      ("net", payload -> delete!(payload, "net"), "/net"),
+      (
+        "nodes",
+        payload -> delete!(payload["net"], "nodes"),
+        "/net/nodes",
+      ),
+      (
+        "duplicate node",
+        payload -> (payload["net"]["nodes"][2]["id"] = "node1"),
+        "/net/nodes/1/id",
+      ),
+      (
+        "source",
+        payload -> (payload["net"]["edges"][1]["source"] = "missing"),
+        "/net/edges/0/source",
+      ),
+      (
+        "target",
+        payload -> (payload["net"]["edges"][1]["target"] = "missing"),
+        "/net/edges/0/target",
+      ),
+      (
+        "delay",
+        payload ->
+          (payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = -1.0),
+        "/net/edges/0/data/propagationDelaySeconds",
+      ),
+      (
+        "transmissivity",
+        payload -> (payload["net"]["edges"][1]["data"]["transmissivity"] = 1.01),
+        "/net/edges/0/data/transmissivity",
+      ),
+    ]
+    for (_, mutate!, path) in cases
+      invalid = deepcopy(test_payload)
+      mutate!(invalid)
+      error = failure(invalid)
+      @test error isa WebQuantumSavory.APIError
+      @test error.status_code == 400
+      @test error.error_code == "VALIDATION_ERROR"
+      @test error.details["stage"] == "admission"
+      @test error.details["path"] == path
+    end
 
-      # Test missing nodes field
-      invalid_payload = deepcopy(test_payload)
-      delete!(invalid_payload["net"], "nodes")
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("fields do not match", e.message)
-      end
+    duplicate_physical = deepcopy(test_payload)
+    duplicate_edge = deepcopy(duplicate_physical["net"]["edges"][1])
+    duplicate_edge["id"] = "duplicate-physical"
+    duplicate_edge["source"], duplicate_edge["target"] =
+      duplicate_edge["target"], duplicate_edge["source"]
+    empty!(duplicate_edge["data"]["protocols"])
+    push!(duplicate_physical["net"]["edges"], duplicate_edge)
+    duplicate_error = failure(duplicate_physical)
+    @test duplicate_error.details["path"] == "/net/edges/1"
 
-      # Test missing edges field
-      invalid_payload = deepcopy(test_payload)
-      delete!(invalid_payload["net"], "edges")
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("fields do not match", e.message)
-      end
+    permitted_virtual = deepcopy(duplicate_physical)
+    permitted_virtual["net"]["edges"][2]["isLogic"] = true
+    permitted_virtual["net"]["edges"][2]["data"] = Dict(
+      "type" => "connection",
+      "protocols" => [Dict(
+        "id" => "virtual-consumer",
+        "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
+        "parameters" => Any[],
+      )],
+    )
+    @test WebQuantumSavory.validate_payload(permitted_virtual)["success"]
 
-      # Test duplicate node IDs
-      invalid_payload = deepcopy(test_payload)
-      invalid_payload["net"]["nodes"][2]["id"] = "node1"  # Duplicate ID
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test e.message == "Duplicate durable ID: 'node1'"
-      end
-
-      # Test edge referencing non-existent source node
-      invalid_payload = deepcopy(test_payload)
-      invalid_payload["net"]["edges"][1]["source"] = "nonexistent"
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("endpoints must reference existing nodes", e.message)
-      end
-
-      # Test edge referencing non-existent target node
-      invalid_payload = deepcopy(test_payload)
-      invalid_payload["net"]["edges"][1]["target"] = "nonexistent"
-      try
-        result = WebQuantumSavory.validate_payload(invalid_payload)
-      catch e
-        @test e isa WebQuantumSavory.APIError
-        @test occursin("endpoints must reference existing nodes", e.message)
-      end
-
-      duplicate_physical = deepcopy(test_payload)
-      duplicate_edge = deepcopy(duplicate_physical["net"]["edges"][1])
-      duplicate_edge["id"] = "duplicate-physical"
-      duplicate_edge["source"], duplicate_edge["target"] =
-        duplicate_edge["target"], duplicate_edge["source"]
-      duplicate_edge["data"]["protocols"] = Any[]
-      push!(duplicate_physical["net"]["edges"], duplicate_edge)
-      duplicate_error = try
-        WebQuantumSavory.validate_payload(duplicate_physical)
-        nothing
-      catch error
-        error
-      end
-      @test duplicate_error isa WebQuantumSavory.APIError
-      @test occursin("Duplicate physical edge endpoints", duplicate_error.message)
-
-      permitted_virtual = deepcopy(duplicate_physical)
-      permitted_virtual["net"]["edges"][2]["isLogic"] = true
-      permitted_virtual["net"]["edges"][2]["data"] = Dict(
-        "type" => "connection",
-        "protocols" => [Dict(
-          "id" => "virtual-consumer",
-          "type" => string(QuantumSavory.ProtocolZoo.EntanglementConsumer),
-          "parameters" => Any[],
-        )],
-      )
-      @test WebQuantumSavory.validate_payload(permitted_virtual)["success"] == true
-
-      forbidden_virtual = deepcopy(permitted_virtual)
-      forbidden_virtual["net"]["edges"][2]["data"]["protocols"][1]["type"] =
-        string(QuantumSavory.ProtocolZoo.EntanglerProt)
-      forbidden_error = try
-        WebQuantumSavory.validate_payload(forbidden_virtual)
-        nothing
-      catch error
-        error
-      end
-      @test forbidden_error isa WebQuantumSavory.APIError
-      @test occursin("not permitted on a virtual edge", forbidden_error.message)
-
-      for invalid_delay in (true, -1, Inf, "slow")
-        invalid_payload = deepcopy(test_payload)
-        invalid_payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = invalid_delay
-        delay_error = try
-          WebQuantumSavory.validate_payload(invalid_payload)
-          nothing
-        catch error
-          error
-        end
-        @test delay_error isa WebQuantumSavory.APIError
-        @test occursin("propagation", lowercase(delay_error.message))
-      end
-
-      for (field, invalid_value, message) in (
-        ("distanceMeters", -1, "distance"),
-        ("distanceMeters", Inf, "distance"),
-        ("refractiveIndex", 0, "refractive"),
-        ("refractiveIndex", "glass", "refractive"),
-        ("lossDbPerKm", -1, "loss"),
-        ("lossDbPerKm", Inf, "loss"),
-        ("transmissivity", -0.01, "transmissivity"),
-        ("transmissivity", 1.01, "transmissivity"),
-        ("transmissivity", Inf, "transmissivity"),
-      )
-        invalid_payload = deepcopy(test_payload)
-        invalid_payload["net"]["edges"][1]["data"][field] = invalid_value
-        physical_error = try
-          WebQuantumSavory.validate_payload(invalid_payload)
-          nothing
-        catch error
-          error
-        end
-        @test physical_error isa WebQuantumSavory.APIError
-        @test occursin(message, physical_error.message)
-      end
-
-      independent_physical_values = deepcopy(test_payload)
-      independent_physical_values["net"]["edges"][1]["data"]["distanceMeters"] = 1.0
-      independent_physical_values["net"]["edges"][1]["data"]["lossDbPerKm"] = 0.2
-      independent_physical_values["net"]["edges"][1]["data"]["transmissivity"] = 0.1
-      @test WebQuantumSavory.validate_payload(independent_physical_values)["success"] == true
+    forbidden_virtual = deepcopy(permitted_virtual)
+    forbidden_virtual["net"]["edges"][2]["data"]["protocols"][1]["type"] =
+      string(QuantumSavory.ProtocolZoo.EntanglerProt)
+    forbidden_error = failure(forbidden_virtual)
+    @test forbidden_error isa WebQuantumSavory.APIError
+    @test forbidden_error.details["path"] ==
+      "/net/edges/1/data/protocols/0/type"
   end
-
   @testset "Simulation Variables" begin
-      @test isempty(WebQuantumSavory._parse_variables(test_payload))
-      @test WebQuantumSavory.validate_payload(test_payload)["success"] == true
+    payload = deepcopy(test_payload)
+    payload["variables"] = [Dict(
+      "id" => "retention",
+      "name" => "retention time",
+      "type" => "Float64",
+      "value" => 0.75,
+    )]
+    parameter = only(
+      assignment for assignment in
+        payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"]
+      if assignment["name"] == "retention_time"
+    )
+    parameter["value"] = Dict("kind" => "variable", "id" => "retention")
+    @test WebQuantumSavory.validate_payload(payload)["success"]
 
-      variable_payload = deepcopy(test_payload)
-      variable_payload["variables"] = [
-        Dict(
-          "id" => "variable_retention",
-          "name" => "retention time",
-          "type" => "Float64",
-          "value" => 0.75,
-        ),
-      ]
-      retention_parameter(payload) = only(
-        parameter for parameter in
-          payload["net"]["nodes"][1]["data"]["protocols"][1]["parameters"]
-        if parameter["name"] == "retention_time"
-      )
-      retention_parameter(variable_payload)["value"] = Dict(
-        "kind" => "variable",
-        "id" => "variable_retention",
-      )
+    variables, indices, types = WebQuantumSavory._normalize_variable_recipes(payload)
+    @test length(variables) == 1
+    @test variables[1].id == "retention"
+    @test variables[1].name == "retention time"
+    @test variables[1].wire_type == "Float64"
+    @test indices == Dict("retention" => 1)
+    @test types == Dict("retention" => "Float64")
 
-      validated = WebQuantumSavory.validate_payload(variable_payload)
-      @test validated["success"] == true
-      variables = WebQuantumSavory._parse_variables(variable_payload)
-      @test variables["variable_retention"] isa WebQuantumSavory.Variable
-      @test variables["variable_retention"].name == "retention time"
-      @test variables["variable_retention"].type == "Float64"
-      @test variables["variable_retention"].value == 0.75
+    reference = WebQuantumSavory._parse_variable_reference(
+      Dict("kind" => "variable", "id" => "retention"),
+    )
+    @test reference isa WebQuantumSavory.VariableReference
+    @test reference.id == "retention"
+    @test WebQuantumSavory._parse_variable_reference(
+      Dict("kind" => "literal", "id" => "retention"),
+    ) === nothing
 
-      reference = WebQuantumSavory._parse_variable_reference(Dict(
-        "kind" => "variable",
-        "id" => "variable_retention",
-      ))
-      @test reference isa WebQuantumSavory.VariableReference
-      @test reference.id == "variable_retention"
-      @test WebQuantumSavory._parse_variable_reference(Dict("kind" => "literal", "id" => "x")) === nothing
-      @test WebQuantumSavory._parse_variable_reference(3.0) === nothing
-
-      function variable_validation_error(mutator)
-        payload = deepcopy(variable_payload)
-        mutator(payload)
-        try
-          WebQuantumSavory.validate_payload(payload)
-          return nothing
-        catch e
-          return e
-        end
+    function variable_error(mutate!)
+      invalid = deepcopy(payload)
+      mutate!(invalid)
+      try
+        WebQuantumSavory.validate_payload(invalid)
+        return nothing
+      catch error
+        return error
       end
+    end
 
-      invalid_array = variable_validation_error(payload -> (payload["variables"] = Dict()))
-      @test invalid_array isa WebQuantumSavory.APIError
-      @test invalid_array.status_code == 400
+    duplicate_name = variable_error(candidate -> push!(
+      candidate["variables"],
+      Dict("id" => "other", "name" => "retention time", "type" => "Int64", "value" => 2),
+    ))
+    @test duplicate_name.details["path"] == "/variables/1/name"
 
-      duplicate_id = variable_validation_error(payload -> push!(
-        payload["variables"],
-        Dict("id" => "variable_retention", "name" => "other", "type" => "Int64", "value" => 2),
-      ))
-      @test duplicate_id isa WebQuantumSavory.APIError
-      @test occursin("Duplicate durable ID", duplicate_id.message)
+    dangling = variable_error(
+      candidate -> (parameter = only(
+        assignment for assignment in
+          candidate["net"]["nodes"][1]["data"]["protocols"][1]["parameters"]
+        if assignment["name"] == "retention_time"
+      ); parameter["value"]["id"] = "missing"),
+    )
+    @test dangling.details["path"] ==
+      "/net/nodes/0/data/protocols/0/parameters/0/value/id"
 
-      duplicate_name = variable_validation_error(payload -> push!(
-        payload["variables"],
-        Dict("id" => "other", "name" => "retention time", "type" => "Int64", "value" => 2),
-      ))
-      @test duplicate_name isa WebQuantumSavory.APIError
-      @test occursin("Duplicate variable name", duplicate_name.message)
-
-      missing_value = variable_validation_error(payload -> delete!(payload["variables"][1], "value"))
-      @test missing_value isa WebQuantumSavory.APIError
-      @test occursin("fields do not match", missing_value.message)
-
-      malformed_reference = variable_validation_error(payload -> delete!(
-        retention_parameter(payload)["value"],
-        "id",
-      ))
-      @test malformed_reference isa WebQuantumSavory.APIError
-      @test occursin("fields do not match", malformed_reference.message)
-
-      dangling_reference = variable_validation_error(payload -> (
-        retention_parameter(payload)["value"]["id"] = "missing"
-      ))
-      @test dangling_reference isa WebQuantumSavory.APIError
-      @test dangling_reference.status_code == 400
-      @test occursin("Unknown variable reference", dangling_reference.message)
-
-      null_typed_value = variable_validation_error(payload -> (payload["variables"][1]["value"] = nothing))
-      @test null_typed_value isa WebQuantumSavory.APIError
-      @test occursin("must not be null", null_typed_value.message)
+    mismatched = variable_error(candidate -> begin
+      parameter = only(
+        assignment for assignment in
+          candidate["net"]["nodes"][1]["data"]["protocols"][1]["parameters"]
+        if assignment["name"] == "retention_time"
+      )
+      parameter["type"] = "Int64"
+    end)
+    @test mismatched.details["path"] ==
+      "/net/nodes/0/data/protocols/0/parameters/0/value"
+    @test mismatched.details["assignment_type"] == "Int64"
+    @test mismatched.details["variable_type"] == "Float64"
   end
-
   @testset "Variable-backed Protocol Parameters" begin
       runtime_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
       simulation_name = "variable_backed_protocol_parameters"
@@ -2555,7 +1866,7 @@
         "parameters" => Any[
           Dict(
             "name" => "chooseL",
-            "type" => "Function",
+            "type" => "Lambda",
             "value" => Dict("kind" => "variable", "id" => "contextual_lambda"),
           ),
           Dict(
@@ -2572,8 +1883,7 @@
       )
 
       try
-        state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(runtime_payload))
-        WebQuantumSavory.prepare_simulation(state, simulation_name)
+        state = WebQuantumSavory.simulation_prepare!(runtime_payload)
         protocol = state.protocol_mapping[protocol_definition["id"]]
         @test protocol.success_prob == 0.25
         @test protocol.retry_lock_time === nothing
@@ -2583,22 +1893,6 @@
         @test contextual_protocol.chooseL([5]) == 107
         @test contextual_protocol.chooseH([5]) == 1006
 
-        invalid_protocol_definition = Dict(
-          "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
-          "parameters" => [Dict(
-            "name" => "success_prob",
-            "type" => "Float64",
-            "value" => Dict("kind" => "variable", "id" => "invalid_probability"),
-          )],
-        )
-        invalid_variables = Dict(
-          "invalid_probability" => WebQuantumSavory.Variable(
-            "invalid_probability",
-            "invalid probability",
-            "Float64",
-            "not-a-number",
-          ),
-        )
         ctx = Dict{Symbol,Any}(
           :sim => state.simulation,
           :net => state.network,
@@ -2607,6 +1901,7 @@
         )
 
         states_zoo_protocol_definition = Dict(
+          "id" => "states-zoo-variable",
           "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
           "parameters" => [Dict(
             "name" => "pairstate",
@@ -2614,18 +1909,18 @@
             "value" => Dict("kind" => "variable", "id" => "zoo_pair_state"),
           )],
         )
-        states_zoo_variables = Dict(
-          "zoo_pair_state" => WebQuantumSavory.Variable(
-            "zoo_pair_state",
-            "zoo pair state",
-            "Symbolic",
-            Dict(
+        states_zoo_variables, _, _ = WebQuantumSavory._normalize_variable_recipes(Dict(
+          "variables" => [Dict(
+            "id" => "zoo_pair_state",
+            "name" => "zoo pair state",
+            "type" => "Symbolic",
+            "value" => Dict(
               "kind" => "states_zoo",
               "state_type" => "DepolarizedBellPair",
               "parameters" => Dict("p" => 0.9),
             ),
-          ),
-        )
+          )],
+        ))
         withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
           states_zoo_protocol = WebQuantumSavory._instantiate_protocol(
             states_zoo_protocol_definition,
@@ -2635,36 +1930,23 @@
           @test states_zoo_protocol.pairstate isa QuantumSavory.StatesZoo.DepolarizedBellPair
         end
 
-        conversion_error = try
-          WebQuantumSavory._instantiate_protocol(
-            invalid_protocol_definition,
-            ctx;
-            variables=invalid_variables,
-          )
-          nothing
-        catch e
-          e
-        end
-        @test conversion_error isa WebQuantumSavory.APIError
-        @test conversion_error.status_code == 400
-        @test occursin("Failed to convert variable", conversion_error.message)
-
         incompatible_protocol_definition = Dict(
+          "id" => "string-probability-protocol",
           "type" => string(QuantumSavory.ProtocolZoo.EntanglerProt),
           "parameters" => [Dict(
             "name" => "success_prob",
-            "type" => "Float64",
+            "type" => "String",
             "value" => Dict("kind" => "variable", "id" => "string_probability"),
           )],
         )
-        incompatible_variables = Dict(
-          "string_probability" => WebQuantumSavory.Variable(
-            "string_probability",
-            "string probability",
-            "String",
-            "0.25",
-          ),
-        )
+        incompatible_variables, _, _ = WebQuantumSavory._normalize_variable_recipes(Dict(
+          "variables" => [Dict(
+            "id" => "string_probability",
+            "name" => "string probability",
+            "type" => "String",
+            "value" => "0.25",
+          )],
+        ))
         constructor_error = try
           WebQuantumSavory._instantiate_protocol(
             incompatible_protocol_definition,
@@ -2676,25 +1958,31 @@
           e
         end
         @test constructor_error isa WebQuantumSavory.APIError
-        @test constructor_error.status_code == 400
-        @test occursin("incompatible", constructor_error.message)
-        @test constructor_error.details["variable_id"] == "string_probability"
-        @test constructor_error.details["parameter_name"] == "success_prob"
+        @test constructor_error.status_code == 422
+        @test constructor_error.error_code == "CONSTRUCTOR_REJECTED"
+        @test constructor_error.details["supplied_keywords"] == ["success_prob"]
 
       finally
         haskey(WebQuantumSavory.STATE, simulation_name) && WebQuantumSavory.destroy_simulation(simulation_name)
       end
 
-      # A function-valued variable still resolves in the assigned node context.
-      kwargs = Dict{Symbol,Any}()
-      ctx = Dict{Symbol,Any}(:node => 2)
-      @test WebQuantumSavory._handle_typed_parameter!(kwargs, :filter, "Function", "<(self)", ctx)
-      @test kwargs[:filter].(1:3) == [true, false, false]
+      # A function-valued recipe still resolves in the assigned node context.
+      recipe = WebQuantumSavory._normalize_transport_value(
+        "Function",
+        "<(self)",
+        "/net/nodes/0/data/protocols/0/parameters/0/value",
+      )
+      filter_function = WebQuantumSavory._materialize_transport_value(
+        recipe,
+        Dict{Symbol,Any}(:node => 2),
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test filter_function.(1:3) == [true, false, false]
   end
 
   @testset "Graph Building" begin
-      validation_result = WebQuantumSavory.validate_payload(test_payload)
-      g = WebQuantumSavory.build_graph(validation_result)
+      WebQuantumSavory.validate_payload(test_payload)
+      g = WebQuantumSavory.build_graph(test_payload)
       @test isa(g, SimpleGraph)
       @test nv(g) == 2  # 2 nodes
       @test ne(g) == 1  # 1 edge
@@ -2705,9 +1993,8 @@
       virtual_edge["isLogic"] = true
       virtual_edge["data"] = Dict("type" => "connection", "protocols" => Any[])
       push!(with_virtual["net"]["edges"], virtual_edge)
-      virtual_graph = WebQuantumSavory.build_graph(
-        WebQuantumSavory.validate_payload(with_virtual),
-      )
+      WebQuantumSavory.validate_payload(with_virtual)
+      virtual_graph = WebQuantumSavory.build_graph(with_virtual)
       @test nv(virtual_graph) == 2
       @test ne(virtual_graph) == 1
   end
@@ -2767,13 +2054,12 @@
       @test virtual_context.node_b == 2
 
       try
-        state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
+        state = WebQuantumSavory.simulation_prepare!(payload)
         @test ne(state.graph) == 1
         for endpoints in (1 => 2, 2 => 1)
           @test QuantumSavory.channel(state.network, endpoints).delay == 0.125
           @test QuantumSavory.qchannel(state.network, endpoints).queue.delay == 0.125
         end
-        WebQuantumSavory.prepare_simulation(state, simulation_name)
         entangler = state.protocol_mapping[entangler_definition["id"]]
         @test entangler.chooseslotA(7)
         @test state.protocol_mapping["virtual-consumer"] isa
@@ -2785,8 +2071,8 @@
   end
 
   @testset "Register Creation" begin
-      validation_result = WebQuantumSavory.validate_payload(test_payload)
-      registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+      WebQuantumSavory.validate_payload(test_payload)
+      registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(test_payload)
       @test isa(registers, Vector)
       @test length(registers) == 2  # Both nodes (including empty slots node)
       @test isa(registers[1], Register)
@@ -2806,8 +2092,8 @@
         "parameters" => [Dict("name" => "t1", "type" => "Float64", "value" => 5.0)],
       )
 
-      default_noise_validation = WebQuantumSavory.validate_payload(default_noise_payload)
-      default_noise_registers, _, _ = WebQuantumSavory.create_registers_from_nodes(default_noise_validation)
+      WebQuantumSavory.validate_payload(default_noise_payload)
+      default_noise_registers, _, _ = WebQuantumSavory.create_registers_from_nodes(default_noise_payload)
       @test length.(getfield.(default_noise_registers, :backgrounds)) == length.(default_noise_registers)
       @test isnothing(default_noise_registers[1].backgrounds[1])
       @test default_noise_registers[1].backgrounds[2] isa QuantumSavory.T1Decay
@@ -2825,10 +2111,9 @@
         "qumodeRepresentation" => "GabsRepr",
       )
       selected_representation_payload["net"]["nodes"][1]["data"]["slots"][2]["type"] = "Qumode"
-      selected_representation_validation =
-        WebQuantumSavory.validate_payload(selected_representation_payload)
+      WebQuantumSavory.validate_payload(selected_representation_payload)
       selected_representation_registers, _, _ =
-        WebQuantumSavory.create_registers_from_nodes(selected_representation_validation)
+        WebQuantumSavory.create_registers_from_nodes(selected_representation_payload)
       @test selected_representation_registers[1].reprs[1] isa QuantumMCRepr
       @test selected_representation_registers[1].reprs[2] isa QuantumSavory.GabsRepr
 
@@ -2844,7 +2129,8 @@
       named_payload["name"] = simulation_name
 
       try
-        state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(named_payload))
+        WebQuantumSavory.validate_payload(named_payload)
+        state = WebQuantumSavory.build_simulation_state(named_payload)
         @test state.network.names == ["Amherst", "Cambridge"]
         @test QuantumSavory.name.(state.network.registers) == ["Amherst", "Cambridge"]
         @test occursin("Amherst(#1)", sprint(show, state.network.registers[1]))
@@ -2857,9 +2143,10 @@
   end
 
   @testset "RegisterNet Creation" begin
-      validation_result = WebQuantumSavory.validate_payload(test_payload)
-      g = WebQuantumSavory.build_graph(validation_result)
-      registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+      WebQuantumSavory.validate_payload(test_payload)
+      g = WebQuantumSavory.build_graph(test_payload)
+      registers, slot_mapping, slot_reverse_mapping =
+        WebQuantumSavory.create_registers_from_nodes(test_payload)
       
       # Test that RegisterNet creation fails with empty slot registers (current behavior)
       @test_throws BoundsError RegisterNet(g, registers)
@@ -2880,7 +2167,7 @@
         :protocol,
         catalogs,
       )
-      @test protocol_type !== nothing
+      @test protocol_type === nothing
 
       @test WebQuantumSavory._resolve_type_from_string(
         "Depolarization",
@@ -2891,7 +2178,7 @@
         "DEPOLARIZATION",
         :noise,
         catalogs,
-      ) !== nothing
+      ) === nothing
       @test WebQuantumSavory._resolve_type_from_string(
         "Qubit",
         :slot,
@@ -2901,7 +2188,7 @@
         "QUBIT",
         :slot,
         catalogs,
-      ) !== nothing
+      ) === nothing
 
       @test_logs (:warn, "Protocol type not found in catalog") begin
         @test WebQuantumSavory._resolve_type_from_string(
@@ -2962,9 +2249,10 @@
       )
 
       # Test that RegisterNet creation fails with current test payload (has empty slots)
-      validation_result = WebQuantumSavory.validate_payload(test_payload)
-      g = WebQuantumSavory.build_graph(validation_result)
-      registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+      WebQuantumSavory.validate_payload(test_payload)
+      g = WebQuantumSavory.build_graph(test_payload)
+      registers, slot_mapping, slot_reverse_mapping =
+        WebQuantumSavory.create_registers_from_nodes(test_payload)
       
       # Test that the protocol definition is valid
       @test haskey(prot_def, "type")
@@ -2996,10 +2284,10 @@
   end
 
   @testset "Status Determination" begin
-      # Test created status
+      # Partial graph-only states are no longer publicly observable.
       state = WebQuantumSavory.State(name="test", graph=SimpleGraph(2))
       status = WebQuantumSavory._determine_status(state)
-      @test status == "created"
+      @test status == "unknown"
 
       # Test prepared status
       state = WebQuantumSavory.State(name="test", network=nothing)
@@ -3011,10 +2299,10 @@
       status = WebQuantumSavory._determine_status(state)
       @test status == "unknown"
 
-      # Test prepared status with graph (created status)
+      # A graph without a prepared simulation is not a lifecycle phase.
       state = WebQuantumSavory.State(name="test", graph=SimpleGraph(2))
       status = WebQuantumSavory._determine_status(state)
-      @test status == "created"
+      @test status == "unknown"
 
       # Test prepared status with simulation (we'll test this by checking the has_run field)
       # Since we can't easily create a Simulation object, we'll test the logic indirectly
@@ -3030,20 +2318,20 @@
   end
 
   @testset "Status Messages" begin
-      # Test created message
+      # Partial graph-only states have no public lifecycle message.
       state = WebQuantumSavory.State(name="test", graph=SimpleGraph(2))
       message = WebQuantumSavory._get_status_message(state)
-      @test message == "Network has been created"
+      @test message == "No network data available"
 
       # Test prepared message
       state = WebQuantumSavory.State(name="test", network=nothing)
       message = WebQuantumSavory._get_status_message(state)
       @test message == "No network data available"
 
-    # Test created message
+    # Partial graph-only states have no public lifecycle message.
     state = WebQuantumSavory.State(name="test", graph=SimpleGraph(2))
     message = WebQuantumSavory._get_status_message(state)
-    @test message == "Network has been created"
+    @test message == "No network data available"
 
     # Test unknown message
     state = WebQuantumSavory.State(name="test")
@@ -3100,8 +2388,9 @@
 
   @testset "Slot State Inspection" begin
     # Create a test state with slot mapping
-    validation_result = WebQuantumSavory.validate_payload(test_payload)
-    registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+    WebQuantumSavory.validate_payload(test_payload)
+    registers, slot_mapping, slot_reverse_mapping =
+      WebQuantumSavory.create_registers_from_nodes(test_payload)
     state = WebQuantumSavory.State(name="test", slot_mapping=slot_mapping)
 
     reverse_mapping = WebQuantumSavory.ensure_slot_reverse_mapping!(state)
@@ -3149,9 +2438,10 @@
   @testset "State Cleanup" begin
     # Exercise cleanup with a live assigned state so register back-references are removed.
     cleanup_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    validation_result = WebQuantumSavory.validate_payload(cleanup_payload)
-    g = WebQuantumSavory.build_graph(validation_result)
-    registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+    WebQuantumSavory.validate_payload(cleanup_payload)
+    g = WebQuantumSavory.build_graph(cleanup_payload)
+    registers, slot_mapping, slot_reverse_mapping =
+      WebQuantumSavory.create_registers_from_nodes(cleanup_payload)
     network = RegisterNet(g, registers)
     assigned_slots = (registers[1][1], registers[2][1])
     initialize!(assigned_slots, StabilizerState("ZZ XX"); time=0.0)
@@ -3159,7 +2449,7 @@
 
     state = WebQuantumSavory.State(
       name="test_cleanup",
-      payload=validation_result,
+      payload=cleanup_payload,
       graph=g,
       network=network,
       slot_mapping=slot_mapping,
@@ -3182,8 +2472,9 @@
 
   @testset "Slot Serialization" begin
     # Create a test state with slot mapping
-    validation_result = WebQuantumSavory.validate_payload(test_payload)
-    registers, slot_mapping, slot_reverse_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+    WebQuantumSavory.validate_payload(test_payload)
+    registers, slot_mapping, slot_reverse_mapping =
+      WebQuantumSavory.create_registers_from_nodes(test_payload)
     state = WebQuantumSavory.State(name="test", slot_mapping=slot_mapping)
 
     # Test slot serialization
@@ -3218,60 +2509,70 @@
 
   @testset "Network Time Tracker" begin
     # Test that RegisterNet creation fails with empty slot registers (current behavior)
-    validation_result = WebQuantumSavory.validate_payload(test_payload)
-    g = WebQuantumSavory.build_graph(validation_result)
-    registers, slot_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+    WebQuantumSavory.validate_payload(test_payload)
+    g = WebQuantumSavory.build_graph(test_payload)
+    registers, slot_mapping = WebQuantumSavory.create_registers_from_nodes(test_payload)
     
     # Test that RegisterNet creation fails due to empty slots (expected behavior)
     @test_throws BoundsError RegisterNet(g, registers)
   end
 
-  @testset "Parameter Conversion Utility" begin
-    # Wildcard selections carry no user-entered value, but the UI sends the
-    # selected entry name so the backend can construct the sentinel.
-    ok, wildcard = WebQuantumSavory._convert_parameter_value("Wildcard", "Wildcard")
-    @test ok
-    @test wildcard isa QuantumSavory.Wildcard
+  @testset "Canonical Wire Decoding" begin
+    context = Dict{Symbol,Any}()
+    variables = WebQuantumSavory._VariableRecipe[]
+    cases = (
+      ("Int", 42, 42),
+      ("Int64", 7, Int64(7)),
+      ("Float64", 3.14, 3.14),
+      ("String", "123", "123"),
+      ("Bool", true, true),
+      ("Nothing", "nothing", nothing),
+      ("Vector{Int64}", [1, 2], Int64[1, 2]),
+      ("Vector{Float64}", [1, 2.5], Float64[1, 2.5]),
+    )
+    for (wire_type, wire_value, expected) in cases
+      recipe = WebQuantumSavory._normalize_transport_value(
+        wire_type,
+        wire_value,
+        "/value",
+      )
+      @test WebQuantumSavory._materialize_transport_value(
+        recipe,
+        context,
+        variables,
+      ) == expected
+    end
 
-    # Int conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Int", "42")
-    @test ok && v == 42
-    ok, v = WebQuantumSavory._convert_parameter_value("Int64", 7.0)
-    @test ok && v == 7
+    first_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._normalize_transport_value("Wildcard", "Wildcard", "/value"),
+      context,
+      variables,
+    )
+    second_wildcard = WebQuantumSavory._materialize_transport_value(
+      WebQuantumSavory._normalize_transport_value("Wildcard", "Wildcard", "/value"),
+      context,
+      variables,
+    )
+    @test first_wildcard isa QuantumSavory.Wildcard
+    @test second_wildcard isa QuantumSavory.Wildcard
 
-    # Float conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Float64", "3.14")
-    @test ok && v ≈ 3.14
-    ok, v = WebQuantumSavory._convert_parameter_value("Float32", 2)
-    @test ok && v == 2.0
-
-    # Strings and explicit Nothing values do not require Julia evaluation.
-    ok, v = WebQuantumSavory._convert_parameter_value("String", 123)
-    @test ok && v == "123"
-    ok, v = WebQuantumSavory._convert_parameter_value("Nothing", nothing)
-    @test ok && v === nothing
-
-    # Bool conversions
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", "true")
-    @test ok && v === true
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", "off")
-    @test ok && v === false
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", 0)
-    @test ok && v === false
-    ok, v = WebQuantumSavory._convert_parameter_value("Bool", :nope)
-    @test !ok
-
-    # Union with Nothing
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Int64}", "nothing")
-    @test ok && v === nothing
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Float64}", "2.5")
-    @test ok && v == 2.5
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, String}", 123)
-    @test ok && v == "123"
-    ok, v = WebQuantumSavory._convert_parameter_value("Union{Nothing, Bool}", "yes")
-    @test ok && v === true
+    payload = deepcopy(test_payload)
+    assignment = payload["net"]["nodes"][1]["data"]["protocols"][2]["parameters"][2]
+    assignment["type"] = "Int64"
+    for value in ("7", true, 7.5)
+      invalid = deepcopy(payload)
+      invalid["net"]["nodes"][1]["data"]["protocols"][2]["parameters"][2]["value"] = value
+      error = try
+        WebQuantumSavory.validate_payload(invalid)
+        nothing
+      catch caught
+        caught
+      end
+      @test error isa WebQuantumSavory.APIError
+      @test error.status_code == 400
+      @test error.details["stage"] == "admission"
+    end
   end
-
   @testset "Unsafe Evaluation Policy" begin
     @test WebQuantumSavory.unsafe_code_evaluation_enabled(environment="dev", override=nothing)
     @test WebQuantumSavory.unsafe_code_evaluation_enabled(environment="test", override=nothing)
@@ -3281,52 +2582,6 @@
     @test !WebQuantumSavory.unsafe_code_evaluation_enabled(environment="test", override="False")
     @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override="1")
     @test_throws ArgumentError WebQuantumSavory.unsafe_code_evaluation_enabled(environment="prod", override="yes")
-
-    production_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("sensitive evaluation details");
-      environment="prod",
-    )
-    @test production_failure[:error] == "Evaluation failed"
-    @test production_failure[:error_code] == WebQuantumSavory.EVALUATION_FAILED_CODE
-    @test !haskey(production_failure, :error_type)
-    @test !occursin("sensitive", string(production_failure))
-
-    staging_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("staging details are also private");
-      environment="staging",
-    )
-    @test staging_failure[:error] == "Evaluation failed"
-    @test !haskey(staging_failure, :error_type)
-
-    development_failure = WebQuantumSavory.evaluation_failure_response(
-      ErrorException("useful development details");
-      environment="dev",
-    )
-    @test occursin("useful development details", development_failure[:error])
-    @test haskey(development_failure, :error_type)
-
-    evaluation_error = WebQuantumSavory.validation_error(
-      "A runtime expression failed",
-      Dict{String,Any}(
-        "parameter_name" => "timeout",
-        "evaluation_error" => "sensitive response-boundary details",
-      ),
-    )
-    production_error_response = WebQuantumSavory.create_error_response(
-      evaluation_error;
-      environment="prod",
-    )
-    @test production_error_response["details"]["parameter_name"] == "timeout"
-    @test production_error_response["details"]["evaluation_error"] == "Evaluation failed"
-    @test !occursin("sensitive", string(production_error_response))
-    development_error_response = WebQuantumSavory.create_error_response(
-      evaluation_error;
-      environment="dev",
-    )
-    @test occursin(
-      "sensitive response-boundary details",
-      development_error_response["details"]["evaluation_error"],
-    )
   end
 
   @testset "Unsafe Evaluation Surfaces" begin
@@ -3334,102 +2589,73 @@
       caught = try
         thunk()
         nothing
-      catch e
-        e
+      catch error
+        error
       end
-
       @test caught isa WebQuantumSavory.APIError
-      if caught isa WebQuantumSavory.APIError
-        @test caught.status_code == 403
-        @test caught.error_code == WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
-      end
+      @test caught.status_code == 403
+      @test caught.error_code == WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
     end
 
-    original_override = get(ENV, WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR, nothing)
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      # Direct code, symbolic, and lambda entry points enforce the policy before
-      # entering their tuple-return/error-wrapping catches.
       test_disabled(() -> WebQuantumSavory.Sandbox.test_code("x -> x + 1"))
-      test_disabled(() -> WebQuantumSavory.Sandbox.test_numeric_expression(
-        "1 / 2",
-        "Float64",
-        "variable",
-      ))
       test_disabled(() -> WebQuantumSavory.Sandbox.evaluate_symbolic_expression("Z₁"))
       test_disabled(() -> WebQuantumSavory.create_lambda("x -> x + 1"))
-      test_disabled(() -> WebQuantumSavory.create_symbolic("Z₁"))
 
-      # Known function references and primitive conversion do not evaluate code.
-      safe_function_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_function_lambda_parameter!(
-        safe_function_kwargs,
-        :filter,
-        "Function",
-        "identity",
+      # Static source admission and export do not execute source.
+      source_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+      source_payload["variables"] = [Dict(
+        "id" => "source",
+        "name" => "source",
+        "type" => "Float64",
+        "value" => Dict("kind" => "numeric_expression", "source" => "1 / 2"),
+      )]
+      @test WebQuantumSavory.validate_payload(source_payload)["success"]
+      @test occursin("1 / 2", WebQuantumSavory.generate_julia_script(source_payload))
+
+      known = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._normalize_transport_value("Function", "identity", "/value"),
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
       )
-      @test safe_function_kwargs[:filter] === identity
-
-      safe_primitive_kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :rounds, "Int64", "3")
-      @test safe_primitive_kwargs[:rounds] == 3
-      @test WebQuantumSavory._handle_regular_parameter!(safe_primitive_kwargs, :label, "String", "hello")
-      @test safe_primitive_kwargs[:label] == "hello"
+      @test known === identity
+      literal = WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._normalize_transport_value("Int64", 3, "/value"),
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
+      )
+      @test literal == 3
 
       safe_noise = WebQuantumSavory._instantiate_noise(Dict(
         "type" => "AmplitudeDamping",
-        "parameters" => [Dict("name" => "τ", "value" => "2.0")],
+        "parameters" => [Dict("name" => "τ", "type" => "Float64", "value" => 2.0)],
       ))
       @test safe_noise isa QuantumSavory.AmplitudeDamping
 
-      # Each payload fallback propagates denial instead of silently dropping a
-      # parameter or using a constructor default.
-      test_disabled(() -> WebQuantumSavory._handle_function_lambda_parameter!(
-        Dict{Symbol,Any}(),
-        :filter,
-        "Lambda",
-        "x -> true",
-      ))
-      test_disabled(() -> WebQuantumSavory._handle_symbolic_parameter!(
-        Dict{Symbol,Any}(),
-        :pairstate,
-        "Z₁",
-      ))
-      test_disabled(() -> WebQuantumSavory._handle_regular_parameter!(
-        Dict{Symbol,Any}(),
-        :values,
-        "Vector{Int64}",
-        "[1, 2]",
-      ))
+      for recipe in (
+        WebQuantumSavory._FunctionSource("x -> true"),
+        WebQuantumSavory._SymbolicSource("Z₁"),
+        WebQuantumSavory._NumericSource("2.0", "Float64"),
+      )
+        test_disabled(() -> WebQuantumSavory._materialize_transport_value(
+          recipe,
+          Dict{Symbol,Any}(),
+          WebQuantumSavory._VariableRecipe[],
+        ))
+      end
+
       test_disabled(() -> WebQuantumSavory._instantiate_noise(Dict(
         "type" => "AmplitudeDamping",
         "parameters" => [Dict(
           "name" => "τ",
+          "type" => "Float64",
           "value" => Dict(
             "kind" => "numeric_expression",
-            "source" => "begin error(\"must not execute\"); 2.0 end",
+            "source" => "Int64(1.5)",
           ),
         )],
       )))
     end
-
-    @test get(ENV, WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR, nothing) == original_override
-  end
-
-  @testset "Symbolic Expression Evaluation (Unit)" begin
-    # Simple valid expression using QuantumSavory symbols should produce latex and value
-    expr = "(Z₁⊗Z₁+Z₂⊗Z₂) / √2"
-    success, results, err = WebQuantumSavory.Sandbox.test_symbolic_expression(expr)
-    @test success == true
-    @test isa(results, Dict)
-    @test haskey(results, :latex)
-    @test haskey(results, :value)
-
-    # Invalid expression should return an error
-    bad_expr = "(Z₁⊗Z₁+"  # malformed
-    success2, results2, err2 = WebQuantumSavory.Sandbox.test_symbolic_expression(bad_expr)
-    @test success2 == false
-    @test results2 === nothing
-    @test err2 !== nothing
   end
 
   @testset "Extract Payload Error Handling" begin
@@ -3452,21 +2678,21 @@
 
   @testset "Protocol Launch" begin
     # Test that RegisterNet creation fails with empty slot registers (current behavior)
-    validation_result = WebQuantumSavory.validate_payload(test_payload)
-    g = WebQuantumSavory.build_graph(validation_result)
-    registers, slot_mapping = WebQuantumSavory.create_registers_from_nodes(validation_result)
+    WebQuantumSavory.validate_payload(test_payload)
+    g = WebQuantumSavory.build_graph(test_payload)
+    registers, slot_mapping = WebQuantumSavory.create_registers_from_nodes(test_payload)
     
     # Test that RegisterNet creation fails due to empty slots (expected behavior)
     @test_throws BoundsError RegisterNet(g, registers)
     
     # Test protocol launch structure without creating network
     protocol_mapping = Dict{String, Any}()
-    modified_payload = deepcopy(validation_result)
-    modified_payload["data"]["net"]["protocols"] = []  # Remove floating protocols
+    modified_payload = deepcopy(test_payload)
+    modified_payload["net"]["protocols"] = []  # Remove floating protocols
 
     # Test that the structure is correct even if we can't create the network
-    @test haskey(modified_payload["data"]["net"], "protocols")
-    @test isa(modified_payload["data"]["net"]["protocols"], Vector)
+    @test haskey(modified_payload["net"], "protocols")
+    @test isa(modified_payload["net"]["protocols"], Vector)
   end
 
   @testset "Log Management" begin
@@ -3716,58 +2942,6 @@
     end
   end
 
-  @testset "Symbolic Expression Handling" begin
-    # Test create_symbolic function
-    symbolic_expr = "(Z₁⊗Z₁+Z₂⊗Z₂) / √2"
-    
-    try
-      symbolic_obj = WebQuantumSavory.create_symbolic(symbolic_expr)
-      @test isa(symbolic_obj, WebQuantumSavory.SymbolicImpl)
-      @test symbolic_obj.expression == symbolic_expr
-      @test !isempty(symbolic_obj.latex)
-      @test symbolic_obj.value !== nothing
-    catch e
-      @warn "Symbolic expression test failed: $e"
-    end
-    
-    # Test protocol parameter handling with symbolic type
-    test_params = [
-      Dict(
-        "name" => "pairstate",
-        "type" => "Symbolic", 
-        "value" => "(Z₁⊗Z₁+Z₂⊗Z₂) / √2"
-      )
-    ]
-    
-    try
-      # This tests the parameter conversion logic
-      kwargs = Dict{Symbol, Any}()
-      for p in test_params
-        name = Symbol(p["name"])
-        ptype = p["type"]
-        value = p["value"]
-        
-        # Simulate the parameter conversion logic
-        symbolic_type_requested = ptype == "Symbolic"
-        
-        if symbolic_type_requested && isa(value, String)
-          try
-            symbolic_obj = WebQuantumSavory.create_symbolic(value)
-            kwargs[name] = symbolic_obj.value
-          catch e
-            @warn "Failed to create symbolic expression: $e"
-          end
-        end
-      end
-      
-      # If we got here without error, the basic logic works
-      @test true
-    catch e
-      @warn "Symbolic parameter handling test failed: $e"
-      # This might fail if QuantumSavory packages aren't available in test environment
-    end
-  end
-
   @testset "State Serialization with Pause Field" begin
     # Test that simulation_paused field is included in serialization
     state = WebQuantumSavory.State(
@@ -3795,8 +2969,7 @@
     simulation_name = "cooperative_lifecycle"
     payload["name"] = simulation_name
 
-    state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
-    state = WebQuantumSavory.prepare_simulation(state, simulation_name)
+    state = WebQuantumSavory.simulation_prepare!(payload)
 
     # A prepared-but-not-started simulation cannot be paused.
     @test_throws WebQuantumSavory.APIError WebQuantumSavory.pause_simulation(state)
@@ -3891,8 +3064,7 @@
       ]
 
       try
-        state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
-        state = WebQuantumSavory.prepare_simulation(state, simulation_name)
+        state = WebQuantumSavory.simulation_prepare!(payload)
         @test state.protocols_launched["floating"] == 1
         @test state.protocol_mapping["broken-diagnostic"] isa WebQuantumSavory.MockBrokenProtocol
 
@@ -3944,16 +3116,9 @@
     test_payload3["name"] = simulation_name
     
     # Validate payload first (this adds the graph_info structure)
-    validation_result = WebQuantumSavory.validate_payload(test_payload3)
-    
-    # Parse the network graph
-    state = WebQuantumSavory.parse_network_graph(validation_result)
+    state = WebQuantumSavory.simulation_prepare!(test_payload3)
     @test haskey(WebQuantumSavory.STATE, simulation_name)
     @test state.simulation_last_active_time !== nothing
-    
-    # Prepare the simulation
-    state = WebQuantumSavory.prepare_simulation(state, simulation_name)
-    @test haskey(WebQuantumSavory.STATE, simulation_name)
     
     # Make the simulation stale by setting last_active_time to AUTO_PURGE_MINUTES + 1 minutes ago
     state.simulation_last_active_time = Dates.now() - Dates.Minute(WebQuantumSavory.AUTO_PURGE_MINUTES + 1)
@@ -3986,14 +3151,7 @@
     test_payload3["name"] = simulation_name
     
     # Validate payload first (this adds the graph_info structure)
-    validation_result = WebQuantumSavory.validate_payload(test_payload3)
-    
-    # Parse the network graph
-    state = WebQuantumSavory.parse_network_graph(validation_result)
-    @test haskey(WebQuantumSavory.STATE, simulation_name)
-    
-    # Prepare the simulation
-    state = WebQuantumSavory.prepare_simulation(state, simulation_name)
+    state = WebQuantumSavory.simulation_prepare!(test_payload3)
     @test haskey(WebQuantumSavory.STATE, simulation_name)
     
     # Make the simulation stale by setting last_active_time to AUTO_PURGE_MINUTES + 1 minutes ago
@@ -4042,16 +3200,9 @@
     test_payload3["name"] = simulation_name
     
     # Validate payload first (this adds the graph_info structure)
-    validation_result = WebQuantumSavory.validate_payload(test_payload3)
-    
-    # Parse the network graph
-    state = WebQuantumSavory.parse_network_graph(validation_result)
+    state = WebQuantumSavory.simulation_prepare!(test_payload3)
     @test haskey(WebQuantumSavory.STATE, simulation_name)
     @test state.simulation_last_active_time !== nothing
-    
-    # Prepare the simulation
-    state = WebQuantumSavory.prepare_simulation(state, simulation_name)
-    @test haskey(WebQuantumSavory.STATE, simulation_name)
     
     # STEP 1: Make the simulation stale for auto-purge (AUTO_PURGE_MINUTES + 1 minutes ago)
     state.simulation_last_active_time = Dates.now() - Dates.Minute(WebQuantumSavory.AUTO_PURGE_MINUTES + 1)
@@ -4097,14 +3248,7 @@
     test_payload3["name"] = simulation_name
     
     # Validate payload first (this adds the graph_info structure)
-    validation_result = WebQuantumSavory.validate_payload(test_payload3)
-    
-    # Parse the network graph
-    state = WebQuantumSavory.parse_network_graph(validation_result)
-    @test haskey(WebQuantumSavory.STATE, simulation_name)
-    
-    # Prepare the simulation
-    state = WebQuantumSavory.prepare_simulation(state, simulation_name)
+    state = WebQuantumSavory.simulation_prepare!(test_payload3)
     @test haskey(WebQuantumSavory.STATE, simulation_name)
     
     # Block the simulation due to timeout
@@ -4515,7 +3659,7 @@
     message_target = Dict("target" => "message_buffer", "node_id" => "node_FVAmt8")
 
     try
-      state = WebQuantumSavory.parse_network_graph(WebQuantumSavory.validate_payload(payload))
+      state = WebQuantumSavory.simulation_prepare!(payload)
       @test WebQuantumSavory.require_live_tag_state(simulation_name) === state
 
       malformed_target_error = captured_error(() -> WebQuantumSavory.list_tags(
@@ -4726,925 +3870,256 @@
     end
   end
 
-  @testset "Typed Numeric Expressions" begin
-    expression(source) = Dict(
-      "kind" => "numeric_expression",
-      "source" => source,
-    )
-    capture_error(thunk) = try
-      thunk()
-      nothing
-    catch error
-      error
-    end
-    contextual_catalogs = constructor_catalogs_with_contextual_background()
-
-    parsed_expression = WebQuantumSavory._parse_numeric_expression(
-      expression("delay / 2"),
-    )
-    @test parsed_expression isa WebQuantumSavory.NumericExpression
-    @test parsed_expression.source == "delay / 2"
-    @test WebQuantumSavory._parse_numeric_expression(0.5) === nothing
-    @test WebQuantumSavory._parse_numeric_expression(
-      Dict("kind" => "literal", "source" => "1"),
-    ) === nothing
-    @test_throws WebQuantumSavory.APIError WebQuantumSavory._parse_numeric_expression(
-      merge(expression("1"), Dict("value" => 1)),
-    )
-    @test_throws WebQuantumSavory.APIError WebQuantumSavory._parse_numeric_expression(
-      Dict("kind" => "numeric_expression", "source" => 1),
-    )
-
-    function lowered_bindings(source; evaluation_module=Module())
-      lowered = Meta.lower(
-        evaluation_module,
-        WebQuantumSavory._parse_complete_source(source),
-      )
-      return WebQuantumSavory._lowered_numeric_context_bindings(
-        lowered,
-        evaluation_module,
-      )
-    end
-    @test lowered_bindings("delay / 2 + node_a") == Set((:delay, :node_a))
-    @test lowered_bindings("loss * transmissivity") == Set((:loss, :transmissivity))
-    @test isempty(lowered_bindings("Base.length([1, 2])"))
-    @test isempty(lowered_bindings("let delay = 4; delay / 2; end"))
-    @test isempty(lowered_bindings("delay(x) = x + 1\ndelay(2)"))
-    @test lowered_bindings("x -> x + delay") == Set((:delay,))
-    @test isempty(lowered_bindings(":(delay + self)"))
-    @test lowered_bindings("# delay\nself") == Set((:self,))
-    @test lowered_bindings("@isdefined(delay)") == Set((:delay,))
-    @test isempty(lowered_bindings("if true; delay = 1; end; delay"))
-
-    macro_module = Module()
-    Core.eval(macro_module, :(expansion_count = Ref(0)))
-    Core.eval(macro_module, quote
-      macro count_expansion(expression)
-        expansion_count[] += 1
-        return esc(expression)
-      end
-      macro discard_expression(expression)
-        return :(1)
-      end
-      macro hygienic_delay()
-        return :(delay)
-      end
-      macro escaped_delay()
-        return esc(:delay)
-      end
-    end)
-    counted_lowered = Meta.lower(
-      macro_module,
-      WebQuantumSavory._parse_complete_source("@count_expansion(1 + 1)"),
-    )
-    @test isempty(WebQuantumSavory._lowered_numeric_context_bindings(
-      counted_lowered,
-      macro_module,
-    ))
-    @test Core.eval(macro_module, counted_lowered) == 2
-    @test Core.eval(macro_module, :expansion_count)[] == 1
-    @test isempty(lowered_bindings(
-      "@discard_expression(delay)";
-      evaluation_module=macro_module,
-    ))
-    @test lowered_bindings(
-      "@hygienic_delay";
-      evaluation_module=macro_module,
-    ) == Set((:delay,))
-    @test lowered_bindings(
-      "@escaped_delay";
-      evaluation_module=macro_module,
-    ) == Set((:delay,))
-
-    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-      # Non-allowlisted operations and syntax are rejected before evaluation:
-      # rationals (`//`), ranges/generators, module qualification, and property
-      # access.
-      for (source, placement) in (
-        ("x = 1 // 2\nx + π / π", "floating"),
-        ("x = 1 // 2\nx + π / π", "variable"),
-        ("sum(range(1; length=3))", "variable"),
-        ("(; delay=1).delay", "variable"),
-        ("sum(length for length in 1:3)", "variable"),
-        ("Base.length((1, 2))", "variable"),
-      )
-        success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-          source,
-          "Int64",
-          placement,
-        )
-        @test !success
-        @test results === nothing
-        @test error isa ArgumentError
-        @test occursin("restricted expression", sprint(showerror, error))
-      end
-
-      # Plain assignment and finite arithmetic without a free context reference
-      # evaluate immediately.
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "if true; delay=1; end; delay",
-        "Int64",
-        "variable",
-      )
-      @test success
-      @test error === nothing
-      @test results == Dict(
-        :deferred => false,
-        :target_type => "Int64",
-        :value => "1",
-      )
-
-      for source in (
-        "delay / 2",
-        "self + nodeid(\"Bob\")",
-        "distance + refractive_index + loss + transmissivity + node_a + node_b",
-      )
-        success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-          source,
-          "Float64",
-          "variable",
-        )
-        @test success
-        @test error === nothing
-        @test results[:deferred] == true
-        @test !haskey(results, :value)
-      end
-
-      # Macros are rejected before any lowering or expansion.
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "@isdefined(delay)",
-        "Float64",
-        "variable",
-      )
-      @test !success
-      @test results === nothing
-      @test error isa ArgumentError
-
-      edge_context = (
-        node_names=["Alice", "Bob"],
-        edge_context=WebQuantumSavory._EdgeFunctionContext(
-          100.0,
-          5.0e-7,
-          1.5,
-          0.2,
-          0.95,
-          1,
-          2,
-        ),
-      )
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "delay / 2",
-        "Float64",
-        "edge";
-        context=edge_context,
-      )
-      @test success
-      @test error === nothing
-      @test results == Dict(
-        :deferred => false,
-        :target_type => "Float64",
-        :value => "2.5e-7",
-      )
-
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "loss + transmissivity",
-        "Float64",
-        "edge";
-        context=edge_context,
-      )
-      @test success
-      @test error === nothing
-      @test parse(Float64, results[:value]) ≈ 1.15
-
-      duplicate_context = (
-        node_names=["Alice", "Alice"],
-        self=1,
-      )
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "nodeid(\"Alice\") + self",
-        "Int64",
-        "node";
-        context=duplicate_context,
-      )
-      @test success
-      @test results[:value] == "3"
-      @test error === nothing
-
-      virtual_context = (
-        node_names=["Alice", "Bob"],
-        edge_context=WebQuantumSavory._EdgeFunctionContext(
-          nothing,
-          nothing,
-          nothing,
-          nothing,
-          nothing,
-          1,
-          2,
-        ),
-      )
-      # `all` is not an allowlisted reducer, so the expression is rejected.
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "all(isnothing, (distance, delay, refractive_index, loss, transmissivity)) ? " *
-        "node_b - node_a : 99",
-        "Int64",
-        "edge";
-        context=virtual_context,
-      )
-      @test !success
-      @test results === nothing
-      @test error isa ArgumentError
-
-      # These evaluate past the allowlist and then fail in the target cast or
-      # parser, exercising the downstream error path rather than the guard.
-      for (source, target, expected_error) in (
-        ("1 / 2", "Int64", InexactError),
-        ("Inf", "Float64", ArgumentError),
-        ("true", "Int64", ArgumentError),
-        ("\"not numeric\"", "Float64", ArgumentError),
-        ("invalid(", "Float64", Base.Meta.ParseError),
-      )
-        success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-          source,
-          target,
-          "variable",
-        )
-        @test !success
-        @test results === nothing
-        @test error isa expected_error
-      end
-
-      # `big` and `typemax` are not allowlisted, so this is rejected up front.
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "big(typemax(Int64)) + 1",
-        "Int64",
-        "variable",
-      )
-      @test !success
-      @test results === nothing
-      @test error isa ArgumentError
-
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "delay / 2",
-        "Float64",
-        "node";
-        context=(node_names=["Alice"], self=1),
-      )
-      @test !success
-      @test results === nothing
-      @test error isa UndefVarError
-
-      # Module qualification is rejected; the bare allowlisted `length` is fine.
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "Base.length([1, 2])",
-        "Int64",
-        "floating";
-        context=(node_names=["Alice"],),
-      )
-      @test !success
-      @test results === nothing
-      @test error isa ArgumentError
-
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "length([1, 2])",
-        "Int64",
-        "floating";
-        context=(node_names=["Alice"],),
-      )
-      @test success
-      @test results[:value] == "2"
-      @test error === nothing
-
-      # I/O is rejected before evaluation, so the source never runs and no file
-      # is ever created.
-      contextual_body_file = tempname()
-      contextual_source = "open($(repr(contextual_body_file)), \"a\") do io; write(io, \"x\"); end; delay"
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        contextual_source,
-        "Float64",
-        "variable",
-      )
-      @test !success
-      @test results === nothing
-      @test error isa ArgumentError
-      @test !isfile(contextual_body_file)
-
-      for placement in ("variable", "floating")
-        execution_file = tempname()
-        source = "open($(repr(execution_file)), \"a\") do io; write(io, \"x\"); end; 1"
-        success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-          source,
-          "Int64",
-          placement,
-        )
-        @test !success
-        @test results === nothing
-        @test error isa ArgumentError
-        @test !isfile(execution_file)
-      end
-
-      success, results, error = WebQuantumSavory.Sandbox.test_numeric_expression(
-        "delay; break",
-        "Float64",
-        "variable",
-      )
-      @test !success
-      @test results === nothing
-      @test error isa Exception
-    end
-
-    concrete_edge_request = WebQuantumSavory._parse_numeric_expression_test_request(Dict(
-      "expression" => "delay / 2",
-      "target_type" => "Float64",
-      "placement" => "edge",
-      "context" => Dict(
-        "node_names" => ["Alice", "Bob"],
-        "distance" => 100.0,
-        "delay" => 5.0e-7,
-        "refractive_index" => 1.5,
-        "loss" => 0.2,
-        "transmissivity" => 0.95,
-        "node_a" => 1,
-        "node_b" => 2,
-      ),
-    ))
-    @test concrete_edge_request.context.edge_context.delay_seconds == 5.0e-7
-    @test concrete_edge_request.context.edge_context.loss_db_per_km == 0.2
-    @test concrete_edge_request.context.edge_context.transmissivity == 0.95
-    @test WebQuantumSavory._parse_numeric_expression_test_request(Dict(
-      "expression" => "self",
-      "target_type" => "Int64",
-      "placement" => "node",
-    )).context === nothing
-    for malformed in (
-      Dict(
-        "expression" => "1",
-        "target_type" => "Float64",
-        "placement" => "variable",
-        "context" => Dict(),
-      ),
-      Dict(
-        "expression" => "1",
-        "target_type" => "Number",
-        "placement" => "floating",
-      ),
-      Dict(
-        "expression" => "1",
-        "target_type" => "Float64",
-        "placement" => "floating",
-        "extra" => true,
-      ),
-      Dict(
-        "expression" => "1",
-        "target_type" => "Float64",
-        "placement" => "edge",
-        "context" => Dict(
-          "node_names" => ["Alice", "Bob"],
-          "distance" => nothing,
-          "delay" => 1.0,
-          "refractive_index" => nothing,
-          "loss" => nothing,
-          "transmissivity" => nothing,
-          "node_a" => 1,
-          "node_b" => 2,
-        ),
-      ),
-      Dict(
-        "expression" => "1",
-        "target_type" => "Float64",
-        "placement" => "edge",
-        "context" => Dict(
-          "node_names" => ["Alice", "Bob"],
-          "distance" => 100.0,
-          "delay" => 5.0e-7,
-          "refractive_index" => 1.5,
-          "loss" => 0.2,
-          "transmissivity" => 1.01,
-          "node_a" => 1,
-          "node_b" => 2,
-        ),
-      ),
-    )
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory._parse_numeric_expression_test_request(
-        malformed,
-      )
-    end
-
-    invalid_variable_payload = deepcopy(test_payload)
-    invalid_variable_payload["variables"] = [Dict(
-      "id" => "invalid-expression",
-      "name" => "invalid expression",
-      "type" => "String",
-      "value" => expression("1"),
-    )]
-    @test_throws WebQuantumSavory.APIError WebQuantumSavory.validate_payload(
-      invalid_variable_payload,
-    )
-
-    noise_expression = Dict(
-      "type" => "AmplitudeDamping",
-      "parameters" => [Dict(
-        "name" => "τ",
-        "value" => expression("self + nodeid(\"Alice\")"),
-      )],
-    )
-    noise_context = Dict{Symbol,Any}(
+  @testset "Typed Numeric Transport" begin
+    node_context = Dict{Symbol,Any}(
       :node => 2,
-      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY => Dict("Alice" => 1),
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY =>
+        Dict("Alice" => 1, "Cambridge" => 2),
+    )
+    edge_context = Dict{Symbol,Any}(
+      WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY =>
+        Dict("Alice" => 1, "Cambridge" => 2),
+      WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY =>
+        WebQuantumSavory._EdgeFunctionContext(100.0, 0.2, 1.5, 0.2, 0.95, 1, 2),
     )
     withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-      default_noise = WebQuantumSavory._instantiate_noise(Dict(
-        "type" => "T1Decay",
-        "parameters" => Any[],
+      @test WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource(
+          "2 * self + nodeid(\"Alice\")",
+          "Int64",
+        ),
+        node_context,
+        WebQuantumSavory._VariableRecipe[],
+      ) === Int64(5)
+      @test WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource(
+          "(loss + transmissivity) * delay / 4",
+          "Float64",
+        ),
+        edge_context,
+        WebQuantumSavory._VariableRecipe[],
+      ) ≈ 0.0575
+      @test WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource("Inf", "Float64"),
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
+      ) === Inf
+      @test isnan(WebQuantumSavory._materialize_transport_value(
+        WebQuantumSavory._NumericSource("NaN", "Float64"),
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
       ))
-      @test default_noise.t1 == 1.0e9
-
-      noise = WebQuantumSavory._instantiate_noise(noise_expression, noise_context)
-      @test noise isa QuantumSavory.AmplitudeDamping
-      @test noise.τ == 3.0
-
-      variable_noise = WebQuantumSavory._instantiate_noise(
-        Dict(
-          "type" => "AmplitudeDamping",
-          "parameters" => [Dict(
-            "name" => "τ",
-            "value" => Dict("kind" => "variable", "id" => "noise-rate"),
-          )],
-        ),
-        noise_context;
-        variables=Dict(
-          "noise-rate" => WebQuantumSavory.Variable(
-            "noise-rate",
-            "noise rate",
-            "Float64",
-            expression("self * nodeid(\"Alice\")"),
-          ),
-        ),
-      )
-      @test variable_noise.τ == 2.0
-
-      integer_noise = WebQuantumSavory._instantiate_noise(
-        Dict(
-          "type" => "ContextualIntegerBackground",
-          "parameters" => [Dict(
-            "name" => "count",
-            "value" => expression("self + 1"),
-          )],
-        ),
-        noise_context;
-        catalogs=contextual_catalogs,
-      )
-      @test integer_noise.count == 3
-      @test integer_noise.label == "default"
-
-      integer_variable = WebQuantumSavory.Variable(
-        "integer-count",
-        "integer count",
-        "Int64",
-        expression("2 * self + nodeid(\"Alice\")"),
-      )
-      variable_integer_noise = WebQuantumSavory._instantiate_noise(
-        Dict(
-          "type" => "ContextualIntegerBackground",
-          "parameters" => [Dict(
-            "name" => "count",
-            "value" => Dict("kind" => "variable", "id" => "integer-count"),
-          )],
-        ),
-        noise_context;
-        variables=Dict("integer-count" => integer_variable),
-        catalogs=contextual_catalogs,
-      )
-      @test variable_integer_noise.count == 5
     end
 
-    script_noise = WebQuantumSavory._script_noise_expression(
-      noise_expression,
-      "Test background noise";
-      node_index=2,
-    )
-    @test occursin("self = 2", script_noise)
-    @test occursin("nodeid(\"Alice\")", script_noise)
-    @test Meta.parse(script_noise) isa Expr
-
-    integer_variable = WebQuantumSavory.Variable(
-      "integer-count",
-      "integer count",
-      "Int64",
-      expression("2 * self + nodeid(\"Alice\")"),
-    )
-    _, integer_script_expression =
-      WebQuantumSavory._script_constructor_parameter_expression(
-        Dict(
-          "name" => "count",
-          "value" => Dict("kind" => "variable", "id" => "integer-count"),
-        ),
-        Dict(
-          "integer-count" => (
-            name="variable_integer_count",
-            variable=integer_variable,
-            per_assignment=true,
-            fresh_wildcard=false,
-          ),
-        ),
-        "Test background noise";
-        node_index=2,
-        declared_type=Int64,
-        constructor_metadata=(
-          field=:count,
-          type=Int64,
-          doc="A contextual integer constructor field.",
-        ),
-      )
-    @test occursin("Base.Int64(let\n    self = 2", integer_script_expression)
-    @test !occursin("nodeid =", integer_script_expression)
-    @test !occursin("expression_value", integer_script_expression)
-    integer_script_module = Module(gensym(:IntegerBackgroundExpressionExport))
-    Core.eval(
-      integer_script_module,
-      :(nodeid(name::String)::Int = Dict{String,Int}("Alice" => 1)[name]),
-    )
-    exported_integer_value = Core.eval(
-      integer_script_module,
-      Meta.parse(integer_script_expression),
-    )
-    @test exported_integer_value === Int64(5)
-
-    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      disabled_error = capture_error(
-        () -> WebQuantumSavory._instantiate_noise(noise_expression, noise_context),
-      )
-      @test disabled_error isa WebQuantumSavory.APIError
-      @test disabled_error.status_code == 403
-      @test disabled_error.error_code ==
-        WebQuantumSavory.UNSAFE_EVALUATION_DISABLED_CODE
-    end
-
-    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-      rejected = capture_error(() -> WebQuantumSavory._instantiate_noise(
-        Dict(
-          "type" => "AmplitudeDamping",
-          "parameters" => [Dict(
-            "name" => "τ",
-            "value" => expression("open(\"forbidden\", \"w\")"),
-          )],
-        ),
-        noise_context,
-      ))
-      @test rejected isa WebQuantumSavory.APIError
-      @test occursin("restricted expression", string(rejected.details["evaluation_error"]))
-    end
-
-    nonnumeric_expression = Dict(
-      "type" => "ContextualIntegerBackground",
-      "parameters" => [Dict(
-        "name" => "label",
-        "value" => expression("1"),
-      )],
-    )
-    nonnumeric_error = capture_error(
-      () -> WebQuantumSavory._instantiate_noise(
-        nonnumeric_expression,
-        noise_context;
-        catalogs=contextual_catalogs,
-      ),
-    )
-    @test nonnumeric_error isa WebQuantumSavory.APIError
-    @test occursin("does not authoritatively accept", nonnumeric_error.message)
-    script_nonnumeric_error = capture_error(
-      () -> WebQuantumSavory._script_noise_expression(
-        nonnumeric_expression,
-        "Test background noise",
-        node_index=2,
-        catalogs=contextual_catalogs,
-      ),
-    )
-    @test script_nonnumeric_error isa WebQuantumSavory.APIError
-    @test occursin(
-      "does not authoritatively accept",
-      script_nonnumeric_error.message,
-    )
-
-    function background_validation_error(background; variables=Any[], catalogs=nothing)
-      payload = deepcopy(test_payload)
-      payload["variables"] = variables
-      payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] = background
-      catalogs === nothing || return capture_error(
-        () -> WebQuantumSavory.validate_payload(payload; catalogs),
-      )
-      return capture_error(() -> WebQuantumSavory.validate_payload(payload))
-    end
-
-    valid_background_payload = deepcopy(test_payload)
-    valid_background_payload["variables"] = [Dict(
-      "id" => "contextual-rate",
-      "name" => "contextual rate",
-      "type" => "Float64",
-      "value" => expression("self + nodeid(\"Amherst\")"),
-    )]
-    valid_background_payload["net"]["nodes"][1]["data"]["slots"][1]["backgroundNoise"] =
-      Dict(
-        "type" => "T1Decay",
-        "parameters" => [Dict(
-          "name" => "t1",
-          "type" => "Float64",
-          "value" => Dict("kind" => "variable", "id" => "contextual-rate"),
-        )],
-      )
-    @test WebQuantumSavory.validate_payload(valid_background_payload)["success"]
-
-    unknown_variable = background_validation_error(Dict(
-      "type" => "T1Decay",
-      "parameters" => [Dict(
-        "name" => "t1",
-        "type" => "Float64",
-        "value" => Dict("kind" => "variable", "id" => "missing"),
-      )],
+    catalogs = constructor_catalogs_with_contextual_background()
+    inaccurate_entry = only(filter(
+      entry -> entry.wire_type == "ContextualIntegerBackground",
+      catalogs.backgrounds,
     ))
-    @test unknown_variable isa WebQuantumSavory.APIError
-    @test occursin("Unknown variable reference", unknown_variable.message)
-
-    incompatible_variable = background_validation_error(
-      Dict(
-        "type" => "T1Decay",
-        "parameters" => [Dict(
-          "name" => "t1",
-          "type" => "Float64",
-          "value" => Dict("kind" => "variable", "id" => "label"),
-        )],
-      );
-      variables=[Dict(
-        "id" => "label",
-        "name" => "label",
-        "type" => "String",
-        "value" => "not numeric",
-      )],
-    )
-    @test incompatible_variable isa WebQuantumSavory.APIError
-    @test occursin("incompatible", incompatible_variable.message)
-
-    nonnumeric_payload_error = background_validation_error(
+    @test inaccurate_entry.parameters[1].type === Int64
+    noise = WebQuantumSavory._instantiate_noise(
       Dict(
         "type" => "ContextualIntegerBackground",
-        "parameters" => [Dict(
-          "name" => "label",
-          "type" => "String",
-          "value" => expression("1"),
-        )],
-      );
-      catalogs=contextual_catalogs,
+        "parameters" => [
+          Dict("name" => "count", "type" => "Int64", "value" => -200),
+          Dict("name" => "label", "type" => "String", "value" => "accepted"),
+        ],
+      ),
+      Dict{Symbol,Any}();
+      catalogs,
     )
-    @test nonnumeric_payload_error isa WebQuantumSavory.APIError
-    @test occursin("requires Float64 or Int64", nonnumeric_payload_error.message)
+    @test noise.count == -200
+    @test noise.label == "accepted"
 
-    unknown_background = background_validation_error(Dict(
-      "type" => "Main.ForgedBackground",
-      "parameters" => Any[],
-    ))
-    @test unknown_background isa WebQuantumSavory.APIError
-    @test occursin("Unknown background noise type", unknown_background.message)
-
-    withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true") do
-      kwargs = Dict{Symbol,Any}()
-      @test WebQuantumSavory._handle_typed_parameter!(
-        kwargs,
-        :bounded,
-        Float64,
-        expression("0.75"),
-        Dict{Symbol,Any}();
-        constructor_metadata=(min=0.0, max=1.0),
-      )
-      @test kwargs[:bounded] == 0.75
-      @test_throws WebQuantumSavory.APIError WebQuantumSavory._handle_typed_parameter!(
-        Dict{Symbol,Any}(),
-        :bounded,
-        Float64,
-        expression("2"),
-        Dict{Symbol,Any}();
-        constructor_metadata=(min=0.0, max=1.0),
-      )
-
-      sensitive_error = capture_error(() -> WebQuantumSavory._handle_typed_parameter!(
-        Dict{Symbol,Any}(),
-        :bounded,
-        Float64,
-        expression("error(\"sensitive runtime expression details\")"),
-        Dict{Symbol,Any}();
-        constructor_metadata=(min=0.0, max=1.0),
-      ))
-      @test sensitive_error isa WebQuantumSavory.APIError
-      @test sensitive_error.error_code == "VALIDATION_ERROR"
-      production_response = WebQuantumSavory.create_error_response(
-        sensitive_error;
-        environment="prod",
-      )
-      @test production_response["details"]["parameter_name"] == "bounded"
-      @test production_response["details"]["evaluation_error"] == "Evaluation failed"
-      @test !occursin("sensitive runtime expression details", string(production_response))
-    end
-
-    bounded_script_expression = WebQuantumSavory._script_value_expression(
-      Float64,
-      expression("1 / 2"),
-      "Bounded numeric";
-      constructor_metadata=(min=0.0, max=1.0),
+    materialization_recipe = WebQuantumSavory._AssignmentRecipe(
+      "count",
+      "/net/nodes/0/data/slots/0/backgroundNoise/parameters/0",
+      "Int64",
+      WebQuantumSavory._NumericSource("1.5", "Int64"),
     )
-    @test bounded_script_expression == "Base.Float64(1 / 2)"
-    @test !occursin("isa Base.Real", bounded_script_expression)
-    @test !occursin("isfinite", bounded_script_expression)
-    @test !occursin("cast_value", bounded_script_expression)
-    @test Meta.parse(bounded_script_expression) isa Expr
-
-    background_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    background_payload["name"] = "numeric_expression_background_runtime"
-    background_payload["variables"] = [Dict(
-      "id" => "background-rate",
-      "name" => "background rate",
-      "type" => "Float64",
-      "value" => expression("self + nodeid(\"Amherst\")"),
-    )]
-    empty!(background_payload["net"]["protocols"])
-    for node in background_payload["net"]["nodes"]
-      empty!(node["data"]["protocols"])
-      node["data"]["slots"][1]["backgroundNoise"] = Dict(
-        "type" => "T1Decay",
-        "parameters" => [Dict(
-          "name" => "t1",
-          "type" => "Float64",
-          "value" => Dict("kind" => "variable", "id" => "background-rate"),
-        )],
-      )
-      node["data"]["slots"][2]["backgroundNoise"] = Dict(
-        "type" => "T1Decay",
-        "parameters" => [Dict(
-          "name" => "t1",
-          "type" => "Float64",
-          "value" => expression("10 * self + nodeid(\"Cambridge\")"),
-        )],
-      )
-    end
-    background_validation = WebQuantumSavory.validate_payload(background_payload)
-    background_registers = withenv(
+    background_entity = (
+      kind="background",
+      id="slot-1",
+      path="/net/nodes/0/data/slots/0/backgroundNoise",
+    )
+    materialization_error = withenv(
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
     ) do
-      first(WebQuantumSavory.create_registers_from_nodes(background_validation))
+      try
+        WebQuantumSavory._materialize_assignments(
+          [materialization_recipe],
+          node_context,
+          WebQuantumSavory._VariableRecipe[],
+          background_entity,
+          "ContextualIntegerBackground",
+        )
+        nothing
+      catch error
+        error
+      end
     end
-    @test [register.backgrounds[1].t1 for register in background_registers] ==
-      [2.0, 3.0]
-    @test [register.backgrounds[2].t1 for register in background_registers] ==
-      [12.0, 22.0]
+    @test materialization_error isa WebQuantumSavory.APIError
+    @test materialization_error.status_code == 422
+    @test materialization_error.error_code == "PROJECT_MATERIALIZATION_FAILED"
+    @test materialization_error.details["stage"] == "decode"
+    @test materialization_error.details["entity_kind"] == "background"
+    @test materialization_error.details["entity_id"] == "slot-1"
+    @test materialization_error.details["parameter"] == "count"
+    @test materialization_error.details["wire_type"] == "Int64"
+    @test materialization_error.details["exception_type"] == "InexactError"
 
-    background_script = withenv(
-      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
+    variable = WebQuantumSavory._VariableRecipe(
+      "invalid-count",
+      "invalid count",
+      "/variables/0",
+      "Int64",
+      WebQuantumSavory._NumericSource("1.5", "Int64"),
+    )
+    variable_recipe = WebQuantumSavory._AssignmentRecipe(
+      "count",
+      "/net/nodes/0/data/slots/0/backgroundNoise/parameters/0",
+      "Int64",
+      WebQuantumSavory._VariableUse(1),
+    )
+    variable_error = withenv(
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
     ) do
-      WebQuantumSavory.generate_julia_script(background_payload)
+      try
+        WebQuantumSavory._materialize_assignments(
+          [variable_recipe],
+          node_context,
+          [variable],
+          background_entity,
+          "ContextualIntegerBackground",
+        )
+        nothing
+      catch error
+        error
+      end
     end
-    @test first(findfirst("# Resolve GUI node names", background_script)) <
-      first(findfirst("# Registers", background_script))
-    @test length(findall("self + nodeid(\"Amherst\")", background_script)) == 2
-    @test length(findall("10 * self + nodeid(\"Cambridge\")", background_script)) == 2
-    @test occursin(
-      "GUI variable \"background rate\" is instantiated at each constructor assignment",
-      background_script,
+    @test variable_error isa WebQuantumSavory.APIError
+    @test variable_error.error_code == "PROJECT_MATERIALIZATION_FAILED"
+    for key in (
+      "stage",
+      "entity_kind",
+      "entity_id",
+      "path",
+      "constructor_type",
+      "parameter",
+      "wire_type",
+      "exception_type",
+      "cause",
     )
+      @test variable_error.details[key] == materialization_error.details[key]
+    end
+    inline_response = WebQuantumSavory.create_error_response(materialization_error)
+    variable_response = WebQuantumSavory.create_error_response(variable_error)
+    @test inline_response["details"]["cause"] ==
+      variable_response["details"]["cause"] == materialization_error.details["cause"]
+    @test occursin("InexactError", inline_response["details"]["cause"])
+    @test !haskey(inline_response["details"], "evaluation_error")
+    @test !haskey(variable_response["details"], "evaluation_error")
 
-    paused_background_script = replace(
-      background_script,
-      "\nrun(sim, simulation_duration)\n" =>
-        "\n# run(sim, simulation_duration)  # paused by the background test\n";
-      count=1,
-    )
-    background_module = Module(gensym(:BackgroundExpressionExport))
-    Core.eval(background_module, :(using Base))
-    Base.include_string(
-      background_module,
-      paused_background_script,
-      "background-expression-export.jl",
-    )
-    exported_background_registers = Core.eval(background_module, :registers)
-    @test [register.backgrounds[1].t1 for register in exported_background_registers] ==
-      [2.0, 3.0]
-    @test [register.backgrounds[2].t1 for register in exported_background_registers] ==
-      [12.0, 22.0]
-
-    runtime_payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
-    runtime_payload["name"] = "numeric_expression_runtime"
-    runtime_payload["net"]["edges"][1]["data"]["distanceMeters"] = 100.0
-    runtime_payload["net"]["edges"][1]["data"]["propagationDelaySeconds"] = 0.2
-    runtime_payload["net"]["edges"][1]["data"]["refractiveIndex"] = 1.5
-    runtime_payload["net"]["edges"][1]["data"]["lossDbPerKm"] = 0.2
-    runtime_payload["net"]["edges"][1]["data"]["transmissivity"] = 0.95
-    runtime_payload["variables"] = [Dict(
-      "id" => "per-assignment-expression",
-      "name" => "per assignment expression",
-      "type" => "Float64",
-      "value" => expression("(loss + transmissivity) * delay / 4"),
-    )]
-    protocol_definition = runtime_payload["net"]["edges"][1]["data"]["protocols"][1]
-    protocol_definition["parameters"] = Any[
-      Dict(
-        "name" => "success_prob",
-        "type" => "Float64",
-        "value" => Dict(
-          "kind" => "variable",
-          "id" => "per-assignment-expression",
-        ),
+    calls = Ref(0)
+    supplied = Vector{Vector{Symbol}}()
+    fake_constructor = function (; kwargs...)
+      calls[] += 1
+      push!(supplied, sort!(collect(keys(kwargs))))
+      haskey(kwargs, :required_value) || throw(UndefKeywordError(:required_value))
+      haskey(kwargs, :unknown_value) &&
+        throw(ArgumentError("unknown keyword reached constructor"))
+      kwargs[:required_value] isa Float64 ||
+        throw(TypeError(:FakeConstructor, "", Float64, kwargs[:required_value]))
+      kwargs[:required_value] > 0 ||
+        throw(DomainError(kwargs[:required_value], "required_value must be positive"))
+      return kwargs[:required_value]
+    end
+    entity = (kind="protocol", id="fake", path="/net/protocols/0")
+    function invoke_fake(recipes)
+      kwargs = WebQuantumSavory._materialize_assignments(
+        recipes,
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
+        entity,
+        "FakeConstructor",
+      )
+      try
+        WebQuantumSavory._invoke_constructor(
+          fake_constructor,
+          kwargs,
+          entity,
+          "FakeConstructor",
+          recipes,
+        )
+        return nothing
+      catch error
+        return error
+      end
+    end
+    missing = invoke_fake(WebQuantumSavory._AssignmentRecipe[])
+    unknown = invoke_fake([
+      WebQuantumSavory._AssignmentRecipe(
+        "required_value",
+        "/net/protocols/0/parameters/0",
+        "Float64",
+        WebQuantumSavory._LiteralValue(1.0),
       ),
-      Dict(
-        "name" => "attempt_time",
-        "type" => "Float64",
-        "value" => expression("(distance + nodeid(\"Cambridge\") - 2) / 1000"),
+      WebQuantumSavory._AssignmentRecipe(
+        "unknown_value",
+        "/net/protocols/0/parameters/1",
+        "Bool",
+        WebQuantumSavory._LiteralValue(true),
       ),
+    ])
+    wrong = invoke_fake([
+      WebQuantumSavory._AssignmentRecipe(
+        "required_value",
+        "/net/protocols/0/parameters/0",
+        "String",
+        WebQuantumSavory._LiteralValue("wrong"),
+      ),
+    ])
+    domain = invoke_fake([
+      WebQuantumSavory._AssignmentRecipe(
+        "required_value",
+        "/net/protocols/0/parameters/0",
+        "Float64",
+        WebQuantumSavory._LiteralValue(-1.0),
+      ),
+    ])
+    numeric_inf, numeric_nan = withenv(
+      WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "true",
+    ) do
+      recipes(source) = [WebQuantumSavory._AssignmentRecipe(
+        "required_value",
+        "/net/protocols/0/parameters/0",
+        "Float64",
+        WebQuantumSavory._NumericSource(source, "Float64"),
+      )]
+      invoke_fake(recipes("Inf")), invoke_fake(recipes("NaN"))
+    end
+    @test calls[] == 6
+    @test numeric_inf === nothing
+    @test all(
+      error -> error isa WebQuantumSavory.APIError,
+      (missing, unknown, wrong, domain, numeric_nan),
+    )
+    @test all(
+      error -> error.error_code == "CONSTRUCTOR_REJECTED",
+      (missing, unknown, wrong, domain, numeric_nan),
+    )
+    @test missing.details["exception_type"] == "UndefKeywordError"
+    @test unknown.details["exception_type"] == "ArgumentError"
+    @test wrong.details["exception_type"] == "TypeError"
+    @test domain.details["exception_type"] == "DomainError"
+    @test numeric_nan.details["exception_type"] == "DomainError"
+    @test supplied == [
+      Symbol[],
+      [:required_value, :unknown_value],
+      [:required_value],
+      [:required_value],
+      [:required_value],
+      [:required_value],
     ]
-
-    try
-      validation = WebQuantumSavory.validate_payload(runtime_payload)
-      state = WebQuantumSavory.parse_network_graph(validation)
-      WebQuantumSavory.prepare_simulation(state, runtime_payload["name"])
-      protocol = state.protocol_mapping[protocol_definition["id"]]
-      @test protocol.success_prob ≈ 0.0575
-      @test protocol.attempt_time == 0.1
-
-      variables = WebQuantumSavory._parse_variables(runtime_payload)
-      assignment_context = Dict{Symbol,Any}(
-        :sim => state.simulation,
-        :net => state.network,
-        :node_a => 1,
-        :node_b => 2,
-        WebQuantumSavory.NODE_NAME_TO_INDEX_CONTEXT_KEY =>
-          WebQuantumSavory._node_name_to_index(validation["graph_info"]["nodes"]),
-        WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY =>
-          WebQuantumSavory._EdgeFunctionContext(100.0, 0.2, 1.5, 0.2, 0.95, 1, 2),
-      )
-      first_assignment = WebQuantumSavory._instantiate_protocol(
-        protocol_definition,
-        assignment_context;
-        variables,
-      )
-      assignment_context[WebQuantumSavory.EDGE_FUNCTION_CONTEXT_KEY] =
-        WebQuantumSavory._EdgeFunctionContext(100.0, 0.4, 1.5, 0.2, 0.95, 1, 2)
-      second_assignment = WebQuantumSavory._instantiate_protocol(
-        protocol_definition,
-        assignment_context;
-        variables,
-      )
-      @test first_assignment.success_prob ≈ 0.0575
-      @test second_assignment.success_prob ≈ 0.115
-
-      script = WebQuantumSavory.generate_julia_script(runtime_payload)
-      @test occursin("(loss + transmissivity) * delay / 4", script)
-      @test occursin("nodeid(\"Cambridge\")", script)
-      @test !occursin("nodeid = Base.getproperty", script)
-      @test !occursin("variable_per_assignment_expression =", script)
-
-      paused_script = replace(
-        script,
-        "\nrun(sim, simulation_duration)\n" =>
-          "\n# run(sim, simulation_duration)  # paused by the numeric-expression test\n";
-        count=1,
-      )
-      generated_module = Module(gensym(:NumericExpressionExport))
-      Core.eval(generated_module, :(using Base))
-      Base.include_string(
-        generated_module,
-        paused_script,
-        "numeric-expression-export.jl",
-      )
-      exported_protocol = only(
-        entry.second
-        for entry in Core.eval(generated_module, :protocols)
-        if entry.first == protocol_definition["id"]
-      )
-      @test exported_protocol.success_prob == protocol.success_prob
-      @test exported_protocol.attempt_time == protocol.attempt_time
-    finally
-      haskey(WebQuantumSavory.STATE, runtime_payload["name"]) &&
-        WebQuantumSavory.destroy_simulation(runtime_payload["name"])
-    end
-
-    nonexecuting_payload = deepcopy(runtime_payload)
-    nonexecuting_payload["name"] = "numeric_expression_nonexecuting_export"
-    empty!(nonexecuting_payload["variables"])
-    parameter_by_name = Dict(
-      parameter["name"] => parameter
-      for parameter in
-        nonexecuting_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"]
-    )
-    parameter_by_name["success_prob"]["value"] =
-      expression("error(\"export must not execute source\")")
-    filter!(
-      parameter -> parameter["name"] != "attempt_time",
-      nonexecuting_payload["net"]["edges"][1]["data"]["protocols"][1]["parameters"],
-    )
-    script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      WebQuantumSavory.generate_julia_script(nonexecuting_payload)
-    end
-    @test occursin("export must not execute source", script)
-
-    parameter_by_name["success_prob"]["value"] =
-      expression("@server_must_not_expand_this_macro(delay)")
-    macro_script = withenv(WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false") do
-      WebQuantumSavory.generate_julia_script(nonexecuting_payload)
-    end
-    @test occursin("@server_must_not_expand_this_macro(delay)", macro_script)
   end
 end

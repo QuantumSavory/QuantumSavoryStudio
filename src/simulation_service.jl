@@ -101,44 +101,91 @@ function simulation_list(service::SimulationService=SIMULATION_SERVICE)
   end
 end
 
-function simulation_create!(
+function _prepare_payload_name(payload)
+  _is_object_like(payload) || _admission_error("Simulation payload must be an object", "/")
+  haskey(payload, "name") || _admission_error(
+    "Simulation payload is missing required field 'name'",
+    "/name",
+  )
+  name = payload["name"]
+  name isa AbstractString || _admission_error("Simulation name must be a string", "/name")
+  isempty(strip(name)) && _admission_error("Simulation name must not be blank", "/name")
+  return String(name)
+end
+
+function _prepare_failure(error, retained_previous::Bool)
+  common = Dict{String,Any}(
+    "replacement_committed" => false,
+    "retained_previous" => retained_previous,
+  )
+  if error isa APIError
+    details = error.details === nothing ? Dict{String,Any}() : copy(error.details)
+    if error.error_code == "VALIDATION_ERROR"
+      get!(details, "stage", "admission")
+      get!(details, "path", "/")
+    end
+    merge!(details, common)
+    return APIError(
+      error.message,
+      error.status_code,
+      error.error_code,
+      details,
+    )
+  end
+  return server_error(
+    "Simulation candidate preparation failed",
+    merge(common, Dict{String,Any}(
+      "exception_type" => string(typeof(error)),
+      "cause" => sprint(showerror, error),
+    )),
+  )
+end
+
+function simulation_prepare!(
   service::SimulationService,
   payload::AbstractDict;
-  validation=nothing,
-  builder=build_simulation_state,
-  catalogs=_constructor_catalog_snapshot(),
+  catalogs=nothing,
+  builder=build_prepared_simulation_state,
 )
-  validation_result = validation === nothing ?
-    validate_payload(payload; catalogs) : validation
-  name = string(validation_result["data"]["name"])
-  # Construct the replacement before touching a healthy existing simulation.
-  # Parsing may fail after structural validation (for example while materializing
-  # a runtime protocol), and such a failure must leave the prior state intact.
-  state = builder === build_simulation_state ?
-    builder(validation_result; catalogs) : builder(validation_result)
-  _with_simulation_lifecycle_lock(service, name) do
-    simulation_action_is_valid!(service, name; destroy=true, lifecycle_locked=true)
-    lock(service.lock) do
-      service.states[name] = state
+  name = _prepare_payload_name(payload)
+  return _with_simulation_lifecycle_lock(service, name) do
+    previous = lock(service.lock) do
+      get(service.states, name, nothing)
     end
-    return state
+    retained_previous = previous !== nothing
+    try
+      if previous !== nothing && _simulation_execution_active(previous)
+        throw(APIError(
+          "Simulation $name is running and cannot be replaced",
+          409,
+          "SIMULATION_RUNNING",
+          Dict{String,Any}("simulation_name" => name),
+        ))
+      end
+
+      snapshot = catalogs === nothing ? _constructor_catalog_snapshot() : catalogs
+      validate_payload(payload; catalogs=snapshot)
+      candidate = builder === build_prepared_simulation_state ?
+        builder(payload; catalogs=snapshot, service) : builder(payload)
+
+      lock(service.lock) do
+        service.states[name] = candidate
+      end
+      if previous !== nothing
+        cleanup_state!(previous) || @warn(
+          "Committed simulation replacement but previous-state cleanup failed",
+          simulation_name=name,
+        )
+      end
+      return candidate
+    catch error
+      throw(_prepare_failure(error, retained_previous))
+    end
   end
 end
 
-simulation_create!(payload::AbstractDict; kwargs...) =
-  simulation_create!(SIMULATION_SERVICE, payload; kwargs...)
-
-function simulation_prepare!(service::SimulationService, name::AbstractString)
-  _with_simulation_lifecycle_lock(service, name) do
-    state = _simulation_state(service, name)
-    state.network === nothing && throw(
-      validation_error("Network not found in simulation $(String(name))"),
-    )
-    return prepare_simulation(state, String(name); service)
-  end
-end
-
-simulation_prepare!(name::AbstractString) = simulation_prepare!(SIMULATION_SERVICE, name)
+simulation_prepare!(payload::AbstractDict; kwargs...) =
+  simulation_prepare!(SIMULATION_SERVICE, payload; kwargs...)
 
 function simulation_run!(
   service::SimulationService,

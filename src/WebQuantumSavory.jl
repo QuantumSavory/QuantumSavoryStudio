@@ -43,9 +43,10 @@ include("Sandbox.jl")
 include("Logger.jl")
 include("states_zoo.jl")
 include("representations.jl")
+include("catalogs.jl")
+include("constructor_transport.jl")
 include("parser.jl")
 include("diagnostics.jl")
-include("catalogs.jl")
 include("script_export.jl")
 using .Logger: @log_event
 
@@ -383,7 +384,6 @@ end
 
 const STATUS_COMPLETE = "complete"
 const STATUS_PREPARED = "prepared"
-const STATUS_CREATED = "created"
 const STATUS_UNKNOWN = "unknown"
 const STATUS_RUNNING = "running"
 const STATUS_NOT_STARTED = "not_started"
@@ -396,9 +396,6 @@ function _determine_status(state::State)
     else
       return STATUS_PREPARED
     end
-  elseif state.graph !== nothing || state.network !== nothing
-    # Graph (and possibly network) exist, but no simulation yet
-    return STATUS_CREATED
   else
     return STATUS_UNKNOWN
   end
@@ -406,14 +403,12 @@ end
 
 const STATUS_MESSAGE_COMPLETE = "Simulation has run"
 const STATUS_MESSAGE_PREPARED = "Simulation is prepared and ready to run"
-const STATUS_MESSAGE_CREATED = "Network has been created"
 const STATUS_MESSAGE_UNKNOWN = "No network data available"
 
 # Single source of truth for status -> message mapping
 const STATUS_TO_MESSAGE = Dict(
   STATUS_COMPLETE => STATUS_MESSAGE_COMPLETE,
   STATUS_PREPARED => STATUS_MESSAGE_PREPARED,
-  STATUS_CREATED => STATUS_MESSAGE_CREATED,
   STATUS_UNKNOWN => STATUS_MESSAGE_UNKNOWN,
 )
 
@@ -492,7 +487,7 @@ function cleanup_state!(state::State)
   end
 end
 
-function launch_protocols(
+function _construct_protocol_instances(
   data,
   net,
   sim,
@@ -501,12 +496,11 @@ function launch_protocols(
   catalogs=_constructor_catalog_snapshot(),
 )
   launched = Dict("nodes" => 0, "edges" => 0, "floating" => 0)
-  # Parse once for the full launch. Variable values remain raw until each
-  # assignment is resolved in its node/edge/floating protocol context.
-  variables = _parse_variables(data["data"])
+  instances = Any[]
+  variables, _, _ = _normalize_variable_recipes(data)
 
   # Node-attached protocols: per-node under node["data"]["protocols"]
-  nodes = data["graph_info"]["nodes"]
+  nodes = data["net"]["nodes"]
   # The validated node order is the simulator's one-based register order.
   # Construct this once per launch and share the same lookup with every
   # node-, edge-, and net-attached protocol conversion.
@@ -516,16 +510,23 @@ function launch_protocols(
     node_prots = Vector{Any}(get(node_data, "protocols", Any[]))
     @info "Processing node protocols" node_idx=idx node_name=node["name"] protocol_count=length(node_prots)
 
-    for prot_def in node_prots
+    for (protocol_index, prot_def) in enumerate(node_prots)
       ctx = Dict{Symbol,Any}(
         :sim => sim,
         :net => net,
         :node => idx,
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
       )
-      prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
-      prot === nothing && continue
-      @process prot()
+      path = "/net/nodes/$(idx - 1)/data/protocols/$(protocol_index - 1)"
+      prot = _instantiate_protocol(
+        prot_def,
+        ctx,
+        state;
+        variables,
+        catalogs,
+        path,
+      )
+      push!(instances, (protocol=prot, kind="nodes", id=String(prot_def["id"])))
       launched["nodes"] += 1
 
       # Store protocol instance in mapping if it has an ID
@@ -541,9 +542,9 @@ function launch_protocols(
   # Edge-attached protocols: per-edge under edge["data"]["protocols"]
   # Build id->index mapping once
   id_to_idx = Dict(String(n["id"]) => i for (i, n) in enumerate(nodes))
-  edges = data["graph_info"]["edges"]
+  edges = data["net"]["edges"]
   @info "Processing edge protocols" edge_count=length(edges)
-  for edge in edges
+  for (edge_index, edge) in enumerate(edges)
     edge_data = get(edge, "data", Dict{String,Any}())
     edge_prots = Vector{Any}(get(edge_data, "protocols", Any[]))
     @info "Edge protocols found" edge_id=edge["id"] protocol_count=length(edge_prots)
@@ -557,7 +558,7 @@ function launch_protocols(
     (nodeA_idx > 0 && nodeB_idx > 0) || continue
     edge_function_context = _edge_function_context(edge, nodeA_idx, nodeB_idx)
 
-    for prot_def in edge_prots
+    for (protocol_index, prot_def) in enumerate(edge_prots)
       ctx = Dict{Symbol,Any}(
         :sim => sim,
         :net => net,
@@ -566,9 +567,16 @@ function launch_protocols(
         NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
         EDGE_FUNCTION_CONTEXT_KEY => edge_function_context,
       )
-      prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
-      prot === nothing && continue
-      @process prot()
+      path = "/net/edges/$(edge_index - 1)/data/protocols/$(protocol_index - 1)"
+      prot = _instantiate_protocol(
+        prot_def,
+        ctx,
+        state;
+        variables,
+        catalogs,
+        path,
+      )
+      push!(instances, (protocol=prot, kind="edges", id=String(prot_def["id"])))
       launched["edges"] += 1
 
       # Store protocol instance in mapping if it has an ID
@@ -582,24 +590,30 @@ function launch_protocols(
   end
 
   # Floating protocols: net-level under payload["net"]["protocols"] as array
-  net_payload = data["data"]["net"]
+  net_payload = data["net"]
   floating_prots = Any[]
-  if haskey(net_payload, "protocols") && isa(net_payload["protocols"], Vector)
+  if haskey(net_payload, "protocols") && isa(net_payload["protocols"], AbstractVector)
     floating_prots = Vector{Any}(net_payload["protocols"])
   end
 
   @info "Processing floating protocols" protocol_count=length(floating_prots)
 
-  for prot_def in floating_prots
+  for (protocol_index, prot_def) in enumerate(floating_prots)
     ctx = Dict{Symbol,Any}(
       :sim => sim,
       :net => net,
       NODE_NAME_TO_INDEX_CONTEXT_KEY => node_name_to_index,
     )
-    prot = _instantiate_protocol(prot_def, ctx, state; variables, catalogs)
-    prot === nothing && continue
-    @info "Launching floating protocol" protocol_type=typeof(prot)
-    @process prot()
+    path = "/net/protocols/$(protocol_index - 1)"
+    prot = _instantiate_protocol(
+      prot_def,
+      ctx,
+      state;
+      variables,
+      catalogs,
+      path,
+    )
+    push!(instances, (protocol=prot, kind="floating", id=String(prot_def["id"])))
     launched["floating"] += 1
 
     # Store protocol instance in mapping if it has an ID (consistent with nodes/edges)
@@ -611,6 +625,34 @@ function launch_protocols(
     @info "Successfully launched floating protocol" protocol_type=typeof(prot)
   end
 
+  return instances, launched
+end
+
+function _schedule_protocol_instances!(instances)
+  for instance in instances
+    protocol = instance.protocol
+    @process protocol()
+  end
+  return nothing
+end
+
+function launch_protocols(
+  data,
+  net,
+  sim,
+  protocol_mapping=Dict{String,Any}(),
+  state=nothing;
+  catalogs=_constructor_catalog_snapshot(),
+)
+  instances, launched = _construct_protocol_instances(
+    data,
+    net,
+    sim,
+    protocol_mapping,
+    state;
+    catalogs,
+  )
+  _schedule_protocol_instances!(instances)
   @info "Protocol launch summary" launched=launched
   return launched
 end
@@ -710,13 +752,8 @@ function prepare_simulation(
   state::State,
   simulation_name::String;
   service=SIMULATION_SERVICE,
+  catalogs=_constructor_catalog_snapshot(),
 )
-  action_is_valid(
-    simulation_name,
-    false;
-    service,
-  ) # just check if running, don't destroy
-
   # Get the time tracker from the network
   sim = get_network_time_tracker(state.network)
 
@@ -725,7 +762,14 @@ function prepare_simulation(
 
   # Launch protocols from payload over nodes, edges, and floating
   # Pass state so parser warnings get logged
-  launch_counts = launch_protocols(state.payload, state.network, sim, protocol_mapping, state)
+  launch_counts = launch_protocols(
+    state.payload,
+    state.network,
+    sim,
+    protocol_mapping,
+    state;
+    catalogs,
+  )
 
   state.simulation = sim
   state.protocols_launched = launch_counts

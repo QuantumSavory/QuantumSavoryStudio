@@ -4,7 +4,6 @@ import {
   buildParameterInputOptions,
   buildVariableInputOptions,
   createNumericExpressionValue,
-  inferParameterInputOption,
   isNumericExpressionValue,
   parameterInputIsComplete,
   parseNumericParameterValue,
@@ -70,6 +69,16 @@ describe('parameter input descriptors', () => {
       .toEqual(expect.arrayContaining(['expression:Float64', 'expression:Int64']))
   })
 
+  it('maps QuantumSavory Wildcard catalog metadata to the canonical wire codec', () => {
+    expect(buildParameterInputOptions('QuantumSavory.Wildcard')[1]).toMatchObject({
+      id: 'Wildcard',
+      label: 'Wildcard',
+      inputKind: 'intrinsic',
+      wireType: 'Wildcard',
+      enabled: true,
+    })
+  })
+
   it('can explicitly exclude expression modes for numeric literal-only editors', () => {
     expect(buildParameterInputOptions(
       ['Float64', 'Int64'],
@@ -94,16 +103,7 @@ describe('parameter input descriptors', () => {
     })).toBe(false)
   })
 
-  it('infers legacy numeric strings and metadata-backed named tags', () => {
-    const numericOptions = buildParameterInputOptions(['Int64', 'String'])
-    expect(inferParameterInputOption(numericOptions, { value: '42' }).id).toBe('Int64')
-
-    const tagOptions = buildParameterInputOptions('Anything', { kind: 'named_tag_type' })
-    expect(inferParameterInputOption(tagOptions, { value: 'QuantumSavory.Tag' }).id)
-      .toBe('DataType')
-  })
-
-  it('checks completeness for every descriptor family and validation errors', () => {
+  it('checks only serializable draft completeness for every widget family', () => {
     const option = (type, id, metadata = {}) => (
       buildParameterInputOptions(type, metadata).find(candidate => candidate.id === id)
     )
@@ -111,14 +111,14 @@ describe('parameter input descriptors', () => {
       [option('Float64', 'default'), { value: null }, true],
       [option('Float64', 'default'), { value: '' }, false],
       [option('Float64', 'Float64'), { value: '0.25', min: 0, max: 1 }, true],
-      [option('Float64', 'Float64'), { value: '2', max: 1 }, false],
+      [option('Float64', 'Float64'), { value: '2', max: 1 }, true],
       [option('Float64', 'expression:Float64'), {
         value: createNumericExpressionValue('delay / 2'),
       }, true],
       [option('Float64', 'expression:Float64'), { value: null }, false],
       [option('Bool', 'Bool'), { value: false }, true],
       [option('Nothing', 'Nothing'), { value: 'nothing' }, true],
-      [option('QuantumSavory.Wildcard', 'Wildcard'), {
+      [option('Wildcard', 'Wildcard'), {
         value: 'Wildcard',
       }, true],
       [option('String', 'String'), { value: 'name' }, true],
@@ -141,9 +141,9 @@ describe('parameter input descriptors', () => {
       option('Float64', 'expression:Float64'),
       {
         value: createNumericExpressionValue('1 / 2'),
-        error: 'Expression validation is in progress',
+        error: 'Non-authoritative preview failed',
       },
-    )).toBe(false)
+    )).toBe(true)
   })
 })
 
@@ -164,13 +164,24 @@ describe('numeric parameter parsing', () => {
     ['Int64', '1.5', {}],
     ['Float64', Number.NaN, {}],
     ['Float64', Number.POSITIVE_INFINITY, {}],
-    ['Float64', -0.1, { min: 0 }],
-    ['Float64', 1.1, { max: 1 }],
   ])('rejects invalid %s value %#', (type, rawValue, parameter) => {
     expect(parseNumericParameterValue(type, rawValue, parameter)).toEqual({
       valid: false,
       empty: false,
       value: null,
+    })
+  })
+
+  it('treats catalog ranges as suggestions, not wire validity', () => {
+    expect(parseNumericParameterValue('Float64', -0.1, { min: 0 })).toEqual({
+      valid: true,
+      empty: false,
+      value: -0.1,
+    })
+    expect(parseNumericParameterValue('Float64', 1.1, { max: 1 })).toEqual({
+      valid: true,
+      empty: false,
+      value: 1.1,
     })
   })
 })

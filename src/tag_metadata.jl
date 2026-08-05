@@ -758,14 +758,14 @@ function _payload_nodes(state::State)
     "TAG_STATE_UNAVAILABLE",
     Dict{String,Any}("simulation" => state.name),
   ))
-  graph_info = _tag_get(state.payload, "graph_info")
-  graph_info === _MISSING_TAG_VALUE && throw(APIError(
+  net = _tag_get(state.payload, "net")
+  net === _MISSING_TAG_VALUE && throw(APIError(
     "Tags are unavailable because simulation node metadata is missing",
     409,
     "TAG_STATE_UNAVAILABLE",
     Dict{String,Any}("simulation" => state.name),
   ))
-  nodes = _tag_get(graph_info, "nodes")
+  nodes = _tag_get(net, "nodes")
   nodes isa AbstractVector || throw(APIError(
     "Tags are unavailable because simulation node metadata is invalid",
     409,
@@ -1092,7 +1092,10 @@ function _query_term(raw_term, expected, catalog; context::AbstractString)
       error isa APIError && rethrow()
       throw(validation_error(
         "Custom predicate is invalid",
-        evaluation_failure_details(error),
+        Dict{String,Any}(
+          "exception_type" => string(typeof(error)),
+          "cause" => sprint(showerror, error),
+        ),
       ))
     end
   end

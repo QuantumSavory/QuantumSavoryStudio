@@ -2,7 +2,6 @@ import Edge from '../../models/Edge.js'
 import FloatingProtocol from '../../models/FloatingProtocol.js'
 import Node from '../../models/Node.js'
 import Variable, {
-  NUMERIC_EXPRESSION_VALUE_KIND,
   STATES_ZOO_VALUE_KIND,
   isStatesZooTraceVariable,
   isStatesZooVariable,
@@ -22,25 +21,14 @@ import {
 } from '../../utils/edgeGeometry.js'
 import { isMapPosition } from '../../utils/mapCoordinates.js'
 import {
-  buildParameterInputOptions,
-  buildVariableInputOptions,
-  inferParameterInputOption,
-  isCodeType,
   isNumericExpressionOptionId,
   isNumericExpressionValue,
-  isSymbolicType,
-  isWildcardType,
   numericExpressionTargetType,
-  parameterInputOptionForVariable,
-  parameterTypeIsNumber,
-  parseNumericParameterValue,
 } from '../../utils/parameterTypes.js'
 import {
-  createProtocolFromDefinition,
   deepClone,
   protocolSimpleName,
 } from '../../utils/protocolConstructors.js'
-import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import {
   GLOBAL_PHYSICAL_PARAMETER_DESCRIPTORS,
   validatePhysicalParameterValue,
@@ -52,6 +40,23 @@ import {
 
 const SIMULATION_LOCK_MESSAGE = 'Reset the simulation before changing the design.'
 export const DUPLICATE_PHYSICAL_EDGE_REASON = 'DUPLICATE_PHYSICAL_EDGE'
+const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
+const WIRE_TYPES = new Set([
+  'Any',
+  'Bool',
+  'DataType',
+  'Float64',
+  'Function',
+  'Int',
+  'Int64',
+  'Lambda',
+  'Nothing',
+  'String',
+  'Symbolic',
+  'Vector{Float64}',
+  'Vector{Int64}',
+  'Wildcard',
+])
 
 export class DesignCommandError extends Error {
   constructor(code, message, { retryable = false, details = {} } = {}) {
@@ -72,6 +77,47 @@ function requireString(value, label) {
     throw new DesignCommandError('VALIDATION_FAILED', `${label} is required.`)
   }
   return value.trim()
+}
+
+function exactTaggedValue(value, keys) {
+  return record(value)
+    && Object.keys(value).sort().join('\u0000') === [...keys].sort().join('\u0000')
+}
+
+function finiteNumber(value, label, { integer = false } = {}) {
+  if (
+    typeof value !== 'number'
+    || !Number.isFinite(value)
+    || (integer && !Number.isInteger(value))
+    || (Number.isInteger(value) && Math.abs(value) > MAX_SAFE_INTEGER)
+  ) {
+    throw new DesignCommandError(
+      'VALIDATION_FAILED',
+      `${label} must be a finite${integer ? ' JavaScript-safe integer' : ' number'}.`,
+    )
+  }
+  return value
+}
+
+function opaqueJsonValue(value, label) {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') return finiteNumber(value, label)
+  if (Array.isArray(value)) {
+    return value.map((item, index) => opaqueJsonValue(item, `${label}[${index}]`))
+  }
+  if (!record(value)) {
+    throw new DesignCommandError('VALIDATION_FAILED', `${label} must be a JSON value.`)
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, opaqueJsonValue(item, `${label}.${key}`)]),
+  )
+}
+
+function selectedWireType(parameter, label) {
+  const selected = parameter?.selectedType
+  if (isNumericExpressionOptionId(selected)) return numericExpressionTargetType(selected)
+  if (typeof selected === 'string' && selected && selected !== 'default') return selected
+  return requireString(parameter?.type, `${label} wire type`)
 }
 
 function requirePosition(value, label = 'position') {
@@ -131,15 +177,6 @@ function byId(collection, id, label) {
 
 function replaceArray(target, source) {
   target.splice(0, target.length, ...source)
-}
-
-function retainLivePresentation(target, source) {
-  if (Array.isArray(target)) {
-    target.forEach((value, index) => retainLivePresentation(value, source?.[index]))
-  } else if (record(target) && record(source)) {
-    if (typeof source.latex === 'string') target.latex = source.latex
-    Object.keys(target).forEach(key => retainLivePresentation(target[key], source[key]))
-  }
 }
 
 function syncPlainObject(target, source, retainedFields = new Set()) {
@@ -338,9 +375,6 @@ export class DesignCommandService {
     backgroundCatalog = () => [],
     protocolCatalog = () => ({ node: [], edge: [], floating: [] }),
     statesCatalog = () => [],
-    knownFunctions = () => [],
-    validateCodeValue = async () => ({ valid: true }),
-    validateNumericExpressionValue = async () => ({ valid: true }),
     previewState = async () => ({ trace: 1 }),
     generators = {},
     markDirty = () => {},
@@ -356,9 +390,6 @@ export class DesignCommandService {
     this.backgroundCatalog = backgroundCatalog
     this.protocolCatalog = protocolCatalog
     this.statesCatalog = statesCatalog
-    this.knownFunctions = knownFunctions
-    this.validateCodeValue = validateCodeValue
-    this.validateNumericExpressionValue = validateNumericExpressionValue
     this.previewState = previewState
     this.generators = generators
     this.markDirty = markDirty
@@ -492,7 +523,6 @@ export class DesignCommandService {
       encodeProject(candidate, documentContext),
       documentContext,
     ).project
-    retainLivePresentation(validatedCandidate, candidate)
     reconcileDesignDocument(live, validatedCandidate)
     this.clearDeletedSelection(context.deletedIds)
     this.markDirty()
@@ -932,224 +962,84 @@ export class DesignCommandService {
     return normalized
   }
 
-  effectiveParameterDescriptor(
-    declaredType,
-    parameter = {},
-    metadata = {},
-    descriptorOptions = {},
-  ) {
-    const choices = buildParameterInputOptions(declaredType, metadata, descriptorOptions)
-    const value = parameter.value
-    // Intrinsic legacy values remain authoritative even when an older snapshot
-    // carried a contradictory selectedType.
-    if (value === 'nothing') {
-      return choices.find(option => option.id === 'Nothing') || choices[0]
+  requireTypedValue(type, value, label) {
+    if (!WIRE_TYPES.has(type)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `${label} uses an unsupported wire type: ${type}.`,
+      )
     }
-    if (value === 'Wildcard') {
-      return choices.find(option => isWildcardType(option.id)) || choices[0]
-    }
-    if (Object.hasOwn(parameter, 'selectedType')) {
-      const selectedType = requireString(parameter.selectedType, 'Selected parameter type')
-      const selected = choices.find(option => option.id === selectedType)
-      if (!selected) {
+    if (isNumericExpressionValue(value)) {
+      if (!['Float64', 'Int64'].includes(type)) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
-          `Selected parameter type must be one of: ${choices.map(option => option.id).join(', ')}.`,
+          `${label} uses a numeric source with a nonnumeric wire type.`,
         )
-      }
-      if (!selected.enabled) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Selected parameter type is unsupported: ${selectedType}.`,
-        )
-      }
-      return selected
-    }
-
-    return inferParameterInputOption(choices, parameter)
-  }
-
-  async requireTypedValue(
-    typeOrDescriptor,
-    value,
-    label,
-    { placement = 'node', parameter = {}, numericExpressionContext } = {},
-  ) {
-    const option = record(typeOrDescriptor)
-      ? typeOrDescriptor
-      : {
-          id: typeOrDescriptor,
-          inputKind: typeOrDescriptor === 'default' ? 'default' : null,
-          wireType: typeOrDescriptor,
-        }
-    const type = option.wireType ?? option.id
-    if (type === 'default') {
-      if (value == null || value === '') return null
-      throw new DesignCommandError('VALIDATION_FAILED', `${label} must use its default value.`)
-    }
-    if (option.inputKind === 'default') {
-      if (value == null || value === '') return null
-      throw new DesignCommandError('VALIDATION_FAILED', `${label} must use its default value.`)
-    }
-    if (option.inputKind === 'numeric-expression') {
-      if (
-        !isNumericExpressionOptionId(option.id)
-        || numericExpressionTargetType(option.id) !== type
-        || !isNumericExpressionValue(value)
-      ) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${label} must be an exact ${type} numeric-expression value.`,
-        )
-      }
-      let validation
-      try {
-        validation = await this.validateNumericExpressionValue(type, value.source, {
-          placement,
-          parameter,
-          context: numericExpressionContext,
-        })
-      } catch (error) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          error?.message || `${label} could not be validated.`,
-        )
-      }
-      if (validation?.valid !== true) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          validation?.message || `${label} contains an invalid numeric expression.`,
-        )
-      }
-      if (validation.value != null) {
-        const evaluated = Number(validation.value)
-        const minimum = parameter.min == null ? null : Number(parameter.min)
-        const maximum = parameter.max == null ? null : Number(parameter.max)
-        if (
-          !Number.isFinite(evaluated)
-          || (Number.isFinite(minimum) && evaluated < minimum)
-          || (Number.isFinite(maximum) && evaluated > maximum)
-        ) {
-          throw new DesignCommandError(
-            'VALIDATION_FAILED',
-            `${label} evaluates outside its allowed numeric range.`,
-          )
-        }
       }
       return deepClone(value)
     }
-    if (type === 'Any') return deepClone(value)
-    if (parameter.kind === 'named_tag_type' || type === 'Type{<:AbstractTag}') {
-      if (value == null || value === '') return null
-      if (parameter.nullable === true && value === 'nothing') return value
-      if (typeof value === 'string' && value.trim()) return value
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `${label} must be a named tag type${parameter.nullable ? ' or nothing' : ''}.`,
-      )
-    }
-    if (value == null) {
-      throw new DesignCommandError('VALIDATION_FAILED', `${label} requires an explicit value.`)
-    }
-    if (type === 'String') {
-      if (typeof value !== 'string' || !value.trim()) {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} must be a nonempty string.`)
+    if (record(value) && value.kind === STATES_ZOO_VALUE_KIND) {
+      if (
+        type !== 'Symbolic'
+        || !exactTaggedValue(value, ['kind', 'state_type', 'parameters'])
+        || typeof value.state_type !== 'string'
+        || !value.state_type.trim()
+        || !record(value.parameters)
+      ) {
+        throw new DesignCommandError('VALIDATION_FAILED', `${label} is not a States Zoo value.`)
       }
-      return value
+      return {
+        kind: STATES_ZOO_VALUE_KIND,
+        state_type: value.state_type,
+        parameters: Object.fromEntries(Object.entries(value.parameters).map(([name, item]) => [
+          name,
+          finiteNumber(item, `${label} state parameter ${name}`),
+        ])),
+      }
     }
-    if (isCodeType(type)) {
-      if (typeof value !== 'string' || !value.trim()) {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} must contain valid code.`)
-      }
-      let validation
-      try {
-        validation = await this.validateCodeValue(type, value, { placement })
-      } catch (error) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          error?.message || `${label} could not be validated.`,
-        )
-      }
-      if (validation?.valid !== true) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          validation?.message || `${label} contains invalid code.`,
-        )
-      }
-      return value
+    if (record(value) && Object.hasOwn(value, 'kind')) {
+      throw new DesignCommandError('VALIDATION_FAILED', `${label} uses an unsupported tagged value.`)
     }
-    if (parameterTypeIsNumber(type)) {
-      const numeric = parseNumericParameterValue(type, value, parameter)
-      if (!numeric.valid) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${label} is not a valid ${type} value.`,
-        )
+    if (type === 'Any') {
+      if (value === null) {
+        throw new DesignCommandError('VALIDATION_FAILED', `${label} must not be null.`)
       }
-      return numeric.value
+      return opaqueJsonValue(value, label)
     }
+    if (type === 'Float64') return finiteNumber(value, label)
+    if (type === 'Int' || type === 'Int64') return finiteNumber(value, label, { integer: true })
     if (type === 'Bool') {
       if (typeof value !== 'boolean') {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} must be a boolean.`)
+        throw new DesignCommandError('VALIDATION_FAILED', `${label} must be a Boolean.`)
       }
       return value
     }
-    if (type === 'Function') {
-      if (typeof value !== 'string' || !value) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${label} must be a known function.`,
-        )
-      }
-      const functions = this.knownFunctions()
-      if (
-        !functions.includes(value)
-        || (!['node', 'variable'].includes(placement) && value.endsWith('(self)'))
-      ) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${label} is not available in the runtime function catalog.`,
-        )
-      }
-      return value
+    if (['String', 'DataType', 'Function', 'Lambda', 'Symbolic'].includes(type)) {
+      return requireString(value, label)
     }
     if (type === 'Nothing') {
       if (value !== 'nothing') {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} must be nothing.`)
+        throw new DesignCommandError('VALIDATION_FAILED', `${label} must use the nothing sentinel.`)
       }
       return value
     }
-    if (isWildcardType(type)) {
+    if (type === 'Wildcard') {
       if (value !== 'Wildcard') {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} must be Wildcard.`)
+        throw new DesignCommandError('VALIDATION_FAILED', `${label} must use the Wildcard sentinel.`)
       }
       return value
     }
-    if (type === 'Vector{Int64}' || type === 'Vector{Float64}') {
-      if (
-        !Array.isArray(value)
-        || !value.every(item => (
-          typeof item === 'number'
-          && Number.isFinite(item)
-          && (type !== 'Vector{Int64}' || Number.isInteger(item))
-        ))
-      ) {
-        throw new DesignCommandError('VALIDATION_FAILED', `${label} is not a valid ${type}.`)
-      }
-      return [...value]
+    const integer = type === 'Vector{Int64}'
+    if (!Array.isArray(value)) {
+      throw new DesignCommandError('VALIDATION_FAILED', `${label} must be an array.`)
     }
-    throw new DesignCommandError(
-      'VALIDATION_FAILED',
-      `${label} uses an unsupported parameter type: ${type}.`,
-    )
+    return value.map((item, index) => finiteNumber(item, `${label}[${index}]`, { integer }))
   }
 
   async requireBackgroundNoise(
     noise,
     {
       project = this.getProject(),
-      ownerId = null,
-      template = false,
       canonicalAssignments = false,
     } = {},
   ) {
@@ -1177,18 +1067,6 @@ export class DesignCommandService {
       }
       return { type: 'default', parameters: [] }
     }
-    if (!definition && noise.parameters.some(parameter => (
-      (
-        record(parameter?.value)
-        && parameter.value.kind === NUMERIC_EXPRESSION_VALUE_KIND
-      )
-      || isVariableReference(parameter?.value)
-    ))) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Background noise ${type} requires catalog metadata for Variables or numeric expressions.`,
-      )
-    }
     if (!definition) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1198,31 +1076,19 @@ export class DesignCommandService {
 
     const parameters = await this.constructorParameters(
       project,
-      definition,
-      noise.parameters.map(parameter => ({
-        ...parameter,
-        field: parameter?.field ?? parameter?.name,
-      })),
+      canonicalAssignments
+        ? noise.parameters
+        : noise.parameters.map(parameter => ({
+            ...parameter,
+            field: parameter?.field ?? parameter?.name,
+          })),
       {
-        identity: 'field',
+        identity: canonicalAssignments ? 'name' : 'field',
         label: 'Background noise',
-        placement: 'node',
-        ownerId,
-        template,
-        requireWireType: canonicalAssignments,
-        defaults: (definition.parameters || []).map(parameter => ({
-          ...deepClone(parameter),
-          field: String(parameter.field),
-          selectedType: 'default',
-          value: null,
-        })),
+        canonicalAssignments,
       },
     )
-    return {
-      ...deepClone(definition),
-      type,
-      parameters,
-    }
+    return { type, parameters }
   }
 
   async createProtocol(project, operation, context) {
@@ -1259,12 +1125,8 @@ export class DesignCommandService {
       type: value.type,
       parameters: await this.protocolParameters(
         project,
-        definition,
         value.parameters,
-        operation.placement,
-        null,
-        operation.owner_id,
-        context.origin === 'mcp',
+        { canonicalAssignments: context.origin === 'mcp' },
       ),
     }
     collection.push(new FloatingProtocol({ id, ...constructor }))
@@ -1302,196 +1164,107 @@ export class DesignCommandService {
         'The protocol is incompatible with virtual edges.',
       )
     }
-    const preservedParameterTypes = type === previousType
-      ? new Map(
-          (protocol.parameters || []).map(parameter => [
-            parameter.name,
-            deepClone(parameter.type),
-          ]),
-        )
-      : null
     protocol.type = type
     if (Object.hasOwn(value, 'parameters') || type !== previousType) {
       protocol.parameters = await this.protocolParameters(
         project,
-        definition,
         value.parameters,
-        operation.placement,
-        preservedParameterTypes,
-        operation.owner_id,
-        context.origin === 'mcp',
+        { canonicalAssignments: context.origin === 'mcp' },
       )
     }
     context.affectedIds.add(protocol.id)
   }
 
-  async protocolParameters(
-    project,
-    definition,
-    supplied,
-    placement,
-    preservedTypes = null,
-    ownerId = null,
-    requireWireType = false,
-  ) {
-    const defaults = createProtocolFromDefinition(definition).parameters
-    return this.constructorParameters(project, definition, supplied, {
+  async protocolParameters(project, supplied, { canonicalAssignments = false } = {}) {
+    return this.constructorParameters(project, supplied, {
       identity: 'name',
       label: 'Protocol',
-      placement,
-      ownerId,
-      preservedTypes,
-      defaults,
-      requireWireType,
+      canonicalAssignments,
     })
   }
 
   /**
-   * Validate and normalize a catalog-backed constructor parameter list.
-   * Protocols and background-noise constructors intentionally share this path
-   * so defaults, Variables, expression contexts, bounds, and editor
-   * descriptors cannot drift.
+   * Normalize constructor drafts mechanically into canonical wire assignments.
+   * Catalog declarations never participate in acceptance.
    */
   async constructorParameters(
     project,
-    definition,
     supplied,
     {
       identity = 'name',
       label = 'Constructor',
-      placement = 'floating',
-      ownerId = null,
-      template = false,
-      preservedTypes = null,
-      defaults = [],
-      requireWireType = false,
+      canonicalAssignments = false,
     } = {},
   ) {
-    const canonicalDefaults = deepClone(defaults)
-    if (supplied === undefined) return canonicalDefaults
+    if (supplied === undefined) return []
     if (!Array.isArray(supplied)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
         `${label} parameters must be an array.`,
       )
     }
-    const byName = new Map()
+    const names = new Set()
+    const normalizedParameters = []
     for (const parameter of supplied) {
+      if (
+        canonicalAssignments
+        && !exactTaggedValue(parameter, ['name', 'type', 'value'])
+      ) {
+        throw new DesignCommandError(
+          'VALIDATION_FAILED',
+          `${label} assignments must contain exactly name, type, and value.`,
+        )
+      }
       const name = requireString(
-        parameter?.[identity],
+        parameter?.[identity] ?? parameter?.name,
         `${label} parameter ${identity}`,
       )
-      if (byName.has(name)) {
+      if (names.has(name)) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
           `Duplicate ${label.toLowerCase()} parameter: ${name}`,
         )
       }
-      byName.set(name, parameter)
-    }
-    const definitions = new Map(
-      (definition.parameters || []).map(parameter => [String(parameter.field), parameter]),
-    )
-    for (const name of byName.keys()) {
-      if (!definitions.has(name)) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Unknown ${label.toLowerCase()} parameter for ${definition.type}: ${name}`,
-        )
-      }
-    }
-    const normalizedParameters = []
-    for (const parameter of canonicalDefaults) {
-      const parameterName = String(parameter?.[identity] ?? '')
-      const canonicalParameter = preservedTypes?.has(parameterName)
-        ? { ...parameter, type: deepClone(preservedTypes.get(parameterName)) }
-        : parameter
-      const suppliedParameter = byName.get(parameterName)
-      if (!suppliedParameter) {
-        normalizedParameters.push(canonicalParameter)
-        continue
-      }
-      const parameterDefinition = definitions.get(parameterName)
+      names.add(name)
+      if (
+        !canonicalAssignments
+        && (parameter.selectedType === 'default' || parameter.value === null)
+      ) continue
+      let type = canonicalAssignments
+        ? requireString(parameter.type, `${label} parameter ${name} wire type`)
+        : selectedWireType(parameter, `${label} parameter ${name}`)
       let normalizedValue
-      let normalizedSelectedType
-      if (isVariableReference(suppliedParameter.value)) {
-        const variable = byId(project.variables, suppliedParameter.value.id, 'Variable')
-        const linkedOption = parameterInputOptionForVariable(
-          parameterDefinition.type,
-          parameterDefinition,
-          variable,
-        )
-        if (!linkedOption) {
+      if (isVariableReference(parameter.value)) {
+        if (!exactTaggedValue(parameter.value, ['kind', 'id'])) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',
-            `Variable ${variable.name} has no compatible input option for parameter ${parameterName}.`,
+            `${label} parameter ${name} has an invalid Variable reference.`,
           )
         }
-        if (requireWireType && suppliedParameter.type !== linkedOption.wireType) {
-          throw new DesignCommandError(
-            'VALIDATION_FAILED',
-            `${label} parameter ${parameterName} must use wire type ${linkedOption.wireType}.`,
-          )
-        }
-        normalizedSelectedType = linkedOption.id
+        const variable = byId(project.variables, parameter.value.id, 'Variable')
         if (
-          ['number', 'numeric-expression'].includes(linkedOption.inputKind)
-          && (
-            linkedOption.inputKind !== 'numeric-expression'
-            || isNumericExpressionValue(variable.value)
-          )
+          (canonicalAssignments || !Object.hasOwn(parameter, 'selectedType'))
+          && typeof parameter.type === 'string'
+          && parameter.type !== variable.type
         ) {
-          await this.requireTypedValue(
-            linkedOption,
-            variable.value,
-            `Variable ${variable.name} for ${label.toLowerCase()} parameter ${parameterName}`,
-            {
-              placement,
-              parameter: parameterDefinition,
-              numericExpressionContext: template
-                ? undefined
-                : buildNumericExpressionContext(project, placement, ownerId),
-            },
-          )
-        }
-        normalizedValue = deepClone(suppliedParameter.value)
-      } else {
-        const effectiveType = this.effectiveParameterDescriptor(
-          parameterDefinition.type,
-          suppliedParameter,
-          parameterDefinition,
-        )
-        if (requireWireType && suppliedParameter.type !== effectiveType.wireType) {
           throw new DesignCommandError(
             'VALIDATION_FAILED',
-            `${label} parameter ${parameterName} must use wire type ${effectiveType.wireType}.`,
+            `${label} parameter ${name} and Variable ${variable.name} must use the same wire type.`,
           )
         }
-        normalizedValue = await this.requireTypedValue(
-          effectiveType,
-          suppliedParameter.value,
-          `${label} parameter ${parameterName}`,
-          {
-            placement,
-            parameter: parameterDefinition,
-            numericExpressionContext: effectiveType.inputKind === 'numeric-expression'
-              ? (
-                  template
-                    ? undefined
-                    : buildNumericExpressionContext(project, placement, ownerId)
-                )
-              : undefined,
-          },
+        type = variable.type
+        normalizedValue = deepClone(parameter.value)
+      } else {
+        normalizedValue = this.requireTypedValue(
+          type,
+          parameter.value,
+          `${label} parameter ${name}`,
         )
-        normalizedSelectedType = effectiveType.id
       }
       normalizedParameters.push({
-        ...canonicalParameter,
+        name,
+        type,
         value: normalizedValue,
-        selectedType: normalizedSelectedType,
-        ...(typeof suppliedParameter.latex === 'string'
-          ? { latex: suppliedParameter.latex }
-          : {}),
       })
     }
     return normalizedParameters
@@ -1513,64 +1286,31 @@ export class DesignCommandService {
     return normalized
   }
 
-  effectiveVariableDescriptor(value = {}) {
-    const options = buildVariableInputOptions()
-    let option
-    if (Object.hasOwn(value, 'selectedType')) {
-      const selectedType = requireString(value.selectedType, 'Selected variable type')
-      option = options.find(candidate => candidate.id === selectedType)
-      if (!option || !option.enabled) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `Selected variable type must be one of: ${
-            options.filter(candidate => candidate.enabled).map(candidate => candidate.id).join(', ')
-          }.`,
-        )
-      }
-    } else if (isNumericExpressionValue(value.value)) {
-      option = options.find(candidate => (
-        candidate.inputKind === 'numeric-expression'
-        && candidate.wireType === value.type
-      ))
-    } else if (
-      !Object.hasOwn(value, 'type')
-      && !Object.hasOwn(value, 'value')
-    ) {
-      option = options.find(candidate => candidate.id === 'Float64')
-    } else {
-      option = options.find(candidate => candidate.id === value.type)
-        || inferParameterInputOption(options, value)
-    }
-    if (!option) {
-      throw new DesignCommandError('VALIDATION_FAILED', 'Variable input type is unsupported.')
-    }
-
-    const semanticType = option.wireType
-    if (
-      Object.hasOwn(value, 'type')
-      && value.type !== semanticType
-    ) {
-      throw new DesignCommandError(
-        'VALIDATION_FAILED',
-        `Variable semantic type ${value.type} does not match ${option.id} (${semanticType}).`,
-      )
-    }
-    return option
-  }
-
   async createVariable(project, operation, context) {
     const value = operation.value || operation
     const id = this.assignId('variable', project, operation, context)
     if (project.variables.some(variable => variable.id === id)) {
       throw new DesignCommandError('VALIDATION_FAILED', `Variable ID already exists: ${id}`)
     }
-    const option = this.effectiveVariableDescriptor(value)
-    const type = option.wireType
-    const variableValue = await this.requireTypedValue(
-      option,
+    if (context.origin === 'mcp' && Object.hasOwn(value, 'selectedType')) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'MCP Variable values must not contain draft-only selectedType.',
+      )
+    }
+    const type = context.origin === 'mcp'
+      ? requireString(value.type, `Variable ${value.name || id} wire type`)
+      : selectedWireType(
+          { ...value, type: value.type ?? 'Float64' },
+          `Variable ${value.name || id}`,
+        )
+    if (type === 'Any' || type === 'DataType') {
+      throw new DesignCommandError('VALIDATION_FAILED', `Variables cannot use wire type ${type}.`)
+    }
+    const variableValue = this.requireTypedValue(
+      type,
       Object.hasOwn(value, 'value') ? value.value : 0,
       `Variable ${value.name || id}`,
-      { placement: 'variable' },
     )
     const variable = new Variable({
       id,
@@ -1578,7 +1318,6 @@ export class DesignCommandService {
       type,
       value: variableValue,
     })
-    variable.selectedType = option.id
     project.variables.push(variable)
   }
 
@@ -1594,6 +1333,12 @@ export class DesignCommandService {
       )
     }
     const value = operation.value || operation
+    if (context.origin === 'mcp' && Object.hasOwn(value, 'selectedType')) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'MCP Variable values must not contain draft-only selectedType.',
+      )
+    }
     if (Object.hasOwn(value, 'name')) {
       variable.name = this.ensureUniqueVariableName(project, value.name, variable.id)
     }
@@ -1602,34 +1347,21 @@ export class DesignCommandService {
       || Object.hasOwn(value, 'selectedType')
       || Object.hasOwn(value, 'value')
     ) {
-      const changingOption = Object.hasOwn(value, 'type') || Object.hasOwn(value, 'selectedType')
-      const taggedExpressionUpdate = (
-        Object.hasOwn(value, 'value')
-        && isNumericExpressionValue(value.value)
-        && !Object.hasOwn(value, 'selectedType')
-      )
       const proposed = {
         type: value.type ?? variable.type,
-        value: Object.hasOwn(value, 'value')
-          ? value.value
-          : (changingOption ? null : variable.value),
-        ...(!taggedExpressionUpdate
-          ? {
-              selectedType: value.selectedType
-                ?? (Object.hasOwn(value, 'type')
-                  ? value.type
-                  : variable.selectedType || variable.type),
-            }
-          : {}),
+        ...(Object.hasOwn(value, 'selectedType') ? { selectedType: value.selectedType } : {}),
       }
-      const option = this.effectiveVariableDescriptor(proposed)
-      variable.type = option.wireType
-      variable.selectedType = option.id
-      variable.value = await this.requireTypedValue(
-        option,
-        proposed.value,
+      const type = context.origin === 'mcp'
+        ? requireString(proposed.type, `Variable ${variable.name} wire type`)
+        : selectedWireType(proposed, `Variable ${variable.name}`)
+      if (type === 'Any' || type === 'DataType') {
+        throw new DesignCommandError('VALIDATION_FAILED', `Variables cannot use wire type ${type}.`)
+      }
+      variable.type = type
+      variable.value = this.requireTypedValue(
+        type,
+        Object.hasOwn(value, 'value') ? value.value : variable.value,
         `Variable ${variable.name}`,
-        { placement: 'variable' },
       )
     }
     context.affectedIds.add(variable.id)
@@ -1683,20 +1415,7 @@ export class DesignCommandService {
     }
     return Object.fromEntries(parameterDefinitions.map(parameter => {
       const name = String(parameter.name)
-      const value = Number(values[name])
-      const minimum = Number(parameter.min)
-      const maximum = Number(parameter.max)
-      if (
-        !Number.isFinite(value)
-        || (Number.isFinite(minimum) && value < minimum)
-        || (Number.isFinite(maximum) && value > maximum)
-      ) {
-        throw new DesignCommandError(
-          'VALIDATION_FAILED',
-          `${name} must be a finite number in [${minimum}, ${maximum}].`,
-        )
-      }
-      return [name, value]
+      return [name, finiteNumber(values[name], `States Zoo parameter ${name}`)]
     }))
   }
 
@@ -1899,12 +1618,7 @@ export class DesignCommandService {
           type: definition.type,
           parameters: await this.protocolParameters(
             project,
-            definition,
             setting.parameters,
-            target.placement,
-            null,
-            target.ownerId,
-            true,
           ),
         }
       }

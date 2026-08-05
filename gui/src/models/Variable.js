@@ -10,14 +10,12 @@ export default class Variable {
     name = '',
     type = 'Float64',
     value = 0,
-    selectedType = type,
     statesZooTraceSourceId = null
   } = {}) {
     this.id = id
     this.name = name
     this.type = type
     this.value = value
-    this.selectedType = selectedType
     if (typeof statesZooTraceSourceId === 'string' && statesZooTraceSourceId) {
       this.statesZooTraceSourceId = statesZooTraceSourceId
     }
@@ -28,8 +26,7 @@ export default class Variable {
       id: this.id,
       name: this.name,
       type: this.type,
-      value: this.value,
-      selectedType: this.selectedType
+      value: this.value
     }
     if (typeof this.statesZooTraceSourceId === 'string' && this.statesZooTraceSourceId) {
       serialized.statesZooTraceSourceId = this.statesZooTraceSourceId

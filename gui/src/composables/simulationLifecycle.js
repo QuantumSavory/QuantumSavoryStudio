@@ -1,6 +1,5 @@
 export const SimulationPhase = Object.freeze({
   EMPTY: 'empty',
-  PARSED: 'parsed',
   PREPARED: 'prepared',
   RUNNING: 'running',
   PAUSED: 'paused',
@@ -14,13 +13,23 @@ export function createSimulationState() {
     phase: SimulationPhase.EMPTY,
     message: '',
     backendState: null,
-    isParsed: false,
     isPrepared: false,
+    preparedRevision: null,
     cumulativeTargetTime: 0,
     pollingActive: false,
     foregroundRequest: null,
-    error: null
+    error: null,
+    lastError: null
   }
+}
+
+function lifecycleFailure(event, fallbackMessage) {
+  if (event.error instanceof Error) return event.error
+  const message = [event.error?.message, event.error, event.message]
+    .find(value => typeof value === 'string' && value.trim())
+  const error = new Error(message || fallbackMessage)
+  if (event.error && typeof event.error === 'object') Object.assign(error, event.error)
+  return error
 }
 
 export function isNotFoundResponse(response) {
@@ -54,7 +63,6 @@ export function phaseFromBackendState(backendState, fallback = SimulationPhase.P
   }
   if (backendState?.status === 'complete') return SimulationPhase.COMPLETED
   if (backendState?.status === 'prepared') return SimulationPhase.PREPARED
-  if (backendState?.status === 'created') return SimulationPhase.PARSED
   if (backendState?.status === 'unknown') return SimulationPhase.EMPTY
   return fallback
 }
@@ -78,8 +86,6 @@ export function messageForBackendState(backendState, phase) {
         : 'Simulation execution time exceeded'
     case SimulationPhase.PREPARED:
       return 'Simulation prepared'
-    case SimulationPhase.PARSED:
-      return 'Network graph parsed'
     default:
       return ''
   }
@@ -100,7 +106,8 @@ export function reduceSimulationState(previous, event) {
         ...state,
         foregroundRequest: event.request,
         message: event.message || state.message,
-        error: null
+        error: null,
+        lastError: null
       }
     case 'FOREGROUND_REQUEST_FINISHED':
       if (
@@ -118,17 +125,8 @@ export function reduceSimulationState(previous, event) {
       return {
         ...state,
         message: event.message || state.message,
-        error: null
-      }
-    case 'PARSED':
-      return {
-        ...state,
-        phase: SimulationPhase.PARSED,
-        message: event.message || 'Network graph parsed',
-        backendState: event.backendState ?? state.backendState,
-        isParsed: true,
-        isPrepared: false,
-        error: null
+        error: null,
+        lastError: null
       }
     case 'PREPARED':
       return {
@@ -136,9 +134,31 @@ export function reduceSimulationState(previous, event) {
         phase: SimulationPhase.PREPARED,
         message: event.message || 'Simulation prepared',
         backendState: event.backendState ?? state.backendState,
-        isParsed: true,
         isPrepared: true,
-        error: null
+        preparedRevision: event.preparedRevision ?? state.preparedRevision,
+        error: null,
+        lastError: null
+      }
+    case 'PREPARE_FAILED':
+      return {
+        ...state,
+        message: event.message || event.error?.message || 'Simulation preparation failed',
+        error: null,
+        lastError: lifecycleFailure(event, 'Simulation preparation failed')
+      }
+    case 'REQUEST_FAILED':
+      return {
+        ...state,
+        message: event.message || event.error?.message || 'Backend request failed',
+        pollingActive: event.stopPolling === true ? false : state.pollingActive,
+        error: null,
+        lastError: lifecycleFailure(event, 'Backend request failed')
+      }
+    case 'INVALIDATED':
+      return {
+        ...state,
+        preparedRevision: null,
+        isPrepared: false
       }
     case 'RUN_TARGET':
       return {
@@ -157,8 +177,7 @@ export function reduceSimulationState(previous, event) {
         phase,
         message: event.message || messageForBackendState(event.backendState, phase),
         backendState: event.backendState,
-        isParsed: phase !== SimulationPhase.EMPTY,
-        isPrepared: ![SimulationPhase.EMPTY, SimulationPhase.PARSED].includes(phase),
+        isPrepared: phase !== SimulationPhase.EMPTY,
         error: phase === SimulationPhase.ERROR ? (event.error || event.backendState?.simulation?.simulation_error || null) : null
       }
     }
@@ -191,7 +210,6 @@ export function simulationCapabilities(
   const paused = phase === SimulationPhase.PAUSED
   const foregroundPending = Boolean(foregroundRequest)
   const networkPhase = [
-    SimulationPhase.PARSED,
     SimulationPhase.PREPARED,
     SimulationPhase.RUNNING,
     SimulationPhase.PAUSED,
@@ -207,14 +225,14 @@ export function simulationCapabilities(
     canStop: !graphEmpty && phase !== SimulationPhase.EMPTY && !foregroundPending,
     canPrepare: !graphEmpty && !running && !paused && !foregroundPending,
     // Once a backend graph exists, edits must wait for Reset/Stop so Run can
-    // never reuse a parsed snapshot that differs from the visible project.
+    // never reuse a prepared snapshot that differs from the visible project.
     editingDisabled: phase !== SimulationPhase.EMPTY || foregroundPending,
     canExploreTags
   }
 }
 
 export function legacySimulationStatus(state) {
-  const ready = [SimulationPhase.PARSED, SimulationPhase.PREPARED, SimulationPhase.COMPLETED].includes(state.phase)
+  const ready = [SimulationPhase.PREPARED, SimulationPhase.COMPLETED].includes(state.phase)
   return {
     status: state.phase === SimulationPhase.ERROR || state.phase === SimulationPhase.BLOCKED
       ? 'error'

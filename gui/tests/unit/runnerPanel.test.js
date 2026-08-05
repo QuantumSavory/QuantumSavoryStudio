@@ -51,7 +51,7 @@ describe('RunnerPanel foreground loading feedback', () => {
 
   it('locks the duration as soon as simulation-backed editing is disabled', () => {
     const wrapper = mountRunner({
-      phase: 'parsed',
+      phase: 'prepared',
       capabilities: capabilities({ editingDisabled: true }),
     })
 
@@ -119,16 +119,16 @@ describe('RunnerPanel foreground loading feedback', () => {
     expect(actionButton.find('.lucide-play').exists()).toBe(false)
   })
 
-  it('disables advanced Parse and Prepare controls for any foreground request', () => {
+  it('exposes only a disabled Prepare control for any foreground request', () => {
     const wrapper = mountRunner({
-      phase: 'parsed',
+      phase: 'empty',
       foregroundRequest: { id: 1, action: 'prepare' },
       capabilities: capabilities({ canRun: false, canStop: false, canPrepare: false })
     })
 
-    expect(wrapper.get('.prepare-network-graph-btn').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.prepare-simulation-btn').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.reset-btn').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.prepare-network-graph-btn').exists()).toBe(false)
+    expect(wrapper.find('.reset-btn').exists()).toBe(false)
   })
 })
 
@@ -192,7 +192,7 @@ describe('RunnerPanel representation controls', () => {
           qumodeRepresentation: 'QuantumOpticsRepr',
         },
       },
-      phase: 'parsed',
+      phase: 'prepared',
       capabilities: capabilities({ editingDisabled: true })
     })
 

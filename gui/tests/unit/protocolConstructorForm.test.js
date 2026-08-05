@@ -22,7 +22,7 @@ const protocolDefinition = {
   parameters: [
     {
       field: 'nodeL',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      type: ['Wildcard', 'Int64', 'Function'],
       doc: 'Choose a lower remote node.'
     },
     { field: 'rounds', type: 'Int64', doc: 'Number of rounds.' }
@@ -124,7 +124,7 @@ describe('ProtocolConstructorForm', () => {
     )
   })
 
-  it('keeps optional fields Default-first and required fields concrete but incomplete', () => {
+  it('keeps Default available when catalog requiredness is inaccurate', () => {
     const definition = {
       type: 'QuantumSavory.ProtocolZoo.RequiredNodeProtocol',
       group: 'node',
@@ -140,9 +140,8 @@ describe('ProtocolConstructorForm', () => {
     const [optional, required] = protocol.parameters
 
     expect(optional).toMatchObject({ selectedType: 'default', value: null })
-    expect(required).toMatchObject({ selectedType: 'Vector{Int64}', value: null })
-    expect(() => validateProtocolConstructorDraft(definition, protocol))
-      .toThrow('clientnodes requires a complete Vector{Int64} value')
+    expect(required).toMatchObject({ selectedType: 'default', value: null })
+    expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
 
     const wrapper = mountForm({
       protocol,
@@ -159,15 +158,18 @@ describe('ProtocolConstructorForm', () => {
     expect(selectors[0].findAll('option').map(option => option.text()))
       .toEqual(['Default', 'Int64', 'Int64 Expression'])
     expect(selectors[1].findAll('option').map(option => option.text()))
-      .toEqual(['Vector{Int64}'])
+      .toEqual(['Default', 'Vector{Int64}'])
     expect(wrapper.get('[aria-label="Set clientnodes from a variable"]')
-      .attributes('disabled')).toBeDefined()
+      .attributes('disabled')).toBeUndefined()
 
+    required.selectedType = 'Vector{Int64}'
+    expect(() => validateProtocolConstructorDraft(definition, protocol))
+      .toThrow('Constructor field clientnodes requires a serializable value.')
     required.value = [2]
     expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
   })
 
-  it('keeps an unsupported required field visible and invalid', () => {
+  it('keeps unsupported catalog metadata visible without forcing an assignment', () => {
     const definition = {
       type: 'Example.RequiredOpenWorldProtocol',
       group: 'node',
@@ -185,29 +187,26 @@ describe('ProtocolConstructorForm', () => {
     const protocol = createProtocolFromDefinition(definition)
     expect(protocol.parameters[0]).toMatchObject({
       name: 'labels',
-      selectedType: 'Vector{String}',
+      selectedType: 'default',
       value: null,
     })
-    expect(() => validateProtocolConstructorDraft(definition, protocol))
-      .toThrow('Constructor field labels uses a disabled input option.')
+    expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
 
     const wrapper = mountForm({ protocol, category: 'node' })
     const selector = wrapper.get('[aria-label="Input option for labels"]')
     expect(selector.findAll('option').map(option => option.text()))
-      .toEqual(['Vector{String}'])
-    expect(selector.get('option').attributes('disabled')).toBeDefined()
+      .toEqual(['Default', 'Vector{String}'])
+    expect(selector.findAll('option')[1].attributes('disabled')).toBeDefined()
     expect(wrapper.get('.unknown-type-indicator').exists()).toBe(true)
     expect(wrapper.get('.param-name').attributes('data-tooltip'))
       .toContain('**Unsupported:** `Vector{String}`')
-    expect(wrapper.get('.unsupported-parameter-value').text())
-      .toBe('Unsupported input type')
-    expect(wrapper.get('.param-item-row').classes()).toContain('grayed-parameter')
+    expect(wrapper.find('.unsupported-parameter-value').exists()).toBe(false)
   })
 
   it('preserves union choices and contextual Function filtering', async () => {
     const parameter = {
       name: 'nodeL',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      type: ['Wildcard', 'Int64', 'Function'],
       selectedType: 'default',
       value: null
     }
@@ -245,16 +244,8 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('.param-value').text()).toContain('Wildcard')
   })
 
-  it('inherits the shared open, validate, compact, and reopen expression lifecycle', async () => {
+  it('commits and reopens an exact nonblank numeric-source recipe', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    vi.spyOn(api, 'validateNumericExpression').mockResolvedValue({
-      success: true,
-      results: {
-        deferred: false,
-        target_type: 'Int64',
-        value: '2',
-      },
-    })
     const parameter = {
       name: 'rounds',
       type: 'Int64',
@@ -274,18 +265,12 @@ describe('ProtocolConstructorForm', () => {
     await wrapper.get('[aria-label="Validate rounds expression"]').trigger('click')
     await flushPromises()
 
-    expect(api.validateNumericExpression).toHaveBeenCalledWith(
-      'self + 1',
-      'Int64',
-      'node',
-      expect.objectContaining({ context }),
-    )
     expect(parameter.value).toEqual({
       kind: 'numeric_expression',
       source: 'self + 1',
     })
     expect(wrapper.get('[data-testid="numeric-expression-summary"]').text())
-      .toContain('Result: 2')
+      .toContain('self + 1')
     expect(wrapper.emitted('commit')).toHaveLength(1)
 
     await wrapper.get('[data-testid="numeric-expression-summary"]').trigger('click')
@@ -294,7 +279,7 @@ describe('ProtocolConstructorForm', () => {
       .toBe('self + 1')
   })
 
-  it('links only compatible variables and restores the direct value when unlinked', async () => {
+  it('offers every variable and restores the direct value when unlinked', async () => {
     const parameter = { name: 'rounds', type: 'Int64', value: 7 }
     const compatibleVariable = { id: 'variable-rounds', name: 'rounds', type: 'Int64' }
     const wrapper = mountForm({
@@ -310,7 +295,8 @@ describe('ProtocolConstructorForm', () => {
     const variableSelector = wrapper.get('.variable-selector')
     expect(variableSelector.findAll('option').map(option => option.text())).toEqual([
       'Select a variable',
-      'rounds (Int64)'
+      'rounds (Int64)',
+      'label (String)'
     ])
 
     await variableSelector.setValue(compatibleVariable.id)
@@ -323,7 +309,7 @@ describe('ProtocolConstructorForm', () => {
   })
 
   it('links a semantic Symbolic variable through the authoritative Julia descriptor', async () => {
-    const symbolicType = 'SymbolicUtils.Symbolic{Real}'
+    const symbolicType = 'Symbolic'
     api._config.value = {
       protocolTypes: {
         node: [{
@@ -431,7 +417,7 @@ describe('ProtocolConstructorForm', () => {
     })
     await nextTick()
 
-    expect(wrapper.get('.variable-selector').text()).toContain('Incompatible variable')
+    expect(wrapper.get('.variable-selector').text()).toContain('rounds (String)')
     await wrapper.get('[aria-label="Use a direct value for rounds"]').trigger('click')
     expect(wrapper.props('protocol').parameters[0]).toMatchObject({
       selectedType: 'Int64',
@@ -472,13 +458,13 @@ describe('ProtocolConstructorForm', () => {
     await wrapper.get('.variable-selector').setValue(variable.id)
     await wrapper.get('[aria-label="Use a direct value for choice"]').trigger('click')
 
-    expect(parameter).toMatchObject({ selectedType: 'Int64', value: null })
+    expect(parameter).toMatchObject({ selectedType: 'default', value: null })
   })
 
   it('visibly identifies strategy-controlled fields and disables every editing path', async () => {
     const parameter = {
       name: 'nodeL',
-      type: ['QuantumSavory.Wildcard', 'Int64', 'Function'],
+      type: ['Wildcard', 'Int64', 'Function'],
       selectedType: 'Int64',
       value: 2
     }
@@ -524,7 +510,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('input[type="number"]').attributes('disabled')).toBeDefined()
   })
 
-  it('uses the standard union selector for old nullable tag snapshots', async () => {
+  it('uses the catalog widget for an exact nullable tag draft', async () => {
     api._config.value = {
       protocolTypes: {
         node: [],
@@ -567,9 +553,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.find('.unknown-type-indicator').exists()).toBe(false)
     expect(wrapper.get('.param-item-row').classes()).not.toContain('grayed-parameter')
     expect(wrapper.get('[aria-label="Set tag from a variable"]').attributes('disabled'))
-      .toBeDefined()
-    expect(wrapper.get('.variable-binding-control').attributes('data-tooltip'))
-      .toContain('cannot use Variables yet')
+      .toBeUndefined()
 
     await typeSelector.setValue('default')
     expect(parameter.value).toBeNull()
@@ -678,7 +662,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.findComponent({ name: 'NamedTagTypeAutocomplete' }).exists()).toBe(true)
   })
 
-  it('uses non-nullable live Consumer metadata instead of a saved Any type', () => {
+  it('does not infer a tag editor mode from stale assignment metadata', () => {
     api._config.value = {
       protocolTypes: {
         node: [],
@@ -709,8 +693,8 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.find('.complexTypeSelector').exists()).toBe(true)
     expect(wrapper.get('.complexTypeSelector').findAll('option').map(option => option.text()))
       .toEqual(['Default', 'Tag'])
-    expect(wrapper.getComponent({ name: 'NamedTagTypeAutocomplete' }).props('includeDefault'))
-      .toBe(false)
+    expect(wrapper.get('.complexTypeSelector').element.value).toBe('default')
+    expect(wrapper.findComponent({ name: 'NamedTagTypeAutocomplete' }).exists()).toBe(false)
     expect(wrapper.get('.param-item-row').classes()).not.toContain('grayed-parameter')
     expect(wrapper.find('.unknown-type-indicator').exists()).toBe(false)
   })
@@ -751,7 +735,7 @@ describe('ProtocolConstructorForm', () => {
     expect(wrapper.get('.unknown-type-indicator').exists()).toBe(true)
   })
 
-  it('allows unlinking a legacy variable reference from a newly semantic tag field', async () => {
+  it('allows unlinking a variable reference without compatibility inference', async () => {
     api._config.value = {
       protocolTypes: {
         node: [],
@@ -777,7 +761,7 @@ describe('ProtocolConstructorForm', () => {
       stubs: { NamedTagTypeAutocomplete: NamedTagTypeAutocompleteStub }
     })
 
-    expect(wrapper.get('.variable-selector').text()).toContain('Incompatible variable: legacy tag')
+    expect(wrapper.get('.variable-selector').text()).toContain('legacy tag (DataType)')
     const unlink = wrapper.get('[aria-label="Use a direct value for tag"]')
     expect(unlink.attributes('disabled')).toBeUndefined()
     await unlink.trigger('click')
@@ -851,7 +835,7 @@ describe('TypedValueInput disabled code values', () => {
     expect(parameter.value).toBe(0.73)
   })
 
-  it('uses shared numeric boundaries for draft validity', async () => {
+  it('validates numeric wire shape without treating catalog ranges as bounds', async () => {
     const parameter = { name: 'rounds', value: 1, min: 1, max: 3 }
     const wrapper = mount(TypedValueInput, {
       props: { parameter, type: 'Int64', category: 'edge' }
@@ -864,7 +848,7 @@ describe('TypedValueInput disabled code values', () => {
     await input.setValue('3')
     expect(input.attributes('aria-invalid')).toBe('false')
     await input.setValue('4')
-    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(input.attributes('aria-invalid')).toBe('false')
   })
 
   it('does not open or overwrite a collapsed Lambda while disabled', async () => {
@@ -898,12 +882,9 @@ describe('TypedValueInput disabled code values', () => {
     expect(parameter.value).toBe('x -> x < self')
   })
 
-  it('passes raw validator responses and transport errors as Markdown code blocks', async () => {
+  it('commits nonblank code without invoking the preview endpoint', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    const validate = vi.spyOn(api, 'validateFunction').mockResolvedValue({
-      success: false,
-      error: 'bad <lambda> & "quote" \'single\'\\nnext'
-    })
+    const validate = vi.spyOn(api, 'validateFunction')
     const parameter = { name: 'nodeL', value: 'x -> true' }
     const wrapper = mount(TypedValueInput, {
       props: { parameter, type: 'Lambda', category: 'node' },
@@ -920,22 +901,13 @@ describe('TypedValueInput disabled code values', () => {
 
     await wrapper.get('.validate-code-stub').trigger('click')
     await flushPromises()
-    expect(parameter.error).toBe(
-      '```\nbad <lambda> & "quote" \'single\'\\nnext\n```'
-    )
-
-    validate.mockRejectedValueOnce(new Error('<transport> & "down"'))
-    await wrapper.get('.validate-code-stub').trigger('click')
-    await flushPromises()
-    expect(parameter.error).toBe('```\n<transport> & "down"\n```')
+    expect(validate).not.toHaveBeenCalled()
+    expect(parameter).not.toHaveProperty('error')
+    expect(wrapper.emitted('commit')).toHaveLength(1)
   })
 
-  it('blocks dirty and pending custom code until successful validation commits', async () => {
+  it('keeps dirty code local until an explicit nonblank commit', async () => {
     vi.spyOn(api, 'isUnsafeCodeEvaluationEnabled').mockReturnValue(true)
-    let resolveValidation
-    vi.spyOn(api, 'validateFunction').mockImplementation(() => (
-      new Promise(resolve => { resolveValidation = resolve })
-    ))
     const parameter = { name: 'nodeL', value: 'x -> true' }
     const wrapper = mount(TypedValueInput, {
       props: { parameter, type: 'Lambda', category: 'node' },
@@ -961,8 +933,6 @@ describe('TypedValueInput disabled code values', () => {
     expect(wrapper.emitted('commit')).toBeUndefined()
 
     await wrapper.get('.validate-code-stub').trigger('click')
-    expect(parameter.error).toBe('```\nCode validation is in progress.\n```')
-    resolveValidation({ success: true, results: {} })
     await flushPromises()
     expect(parameter).not.toHaveProperty('error')
     expect(wrapper.emitted('commit')).toHaveLength(1)

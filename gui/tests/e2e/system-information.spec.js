@@ -36,12 +36,14 @@ test('version badge opens complete system information with exact locked dependen
   await expect(dialog.getByTestId('system-genie-version')).toHaveText(platformInfo.versions.genie)
   await expect(dialog.getByTestId('system-quantumsavory-version'))
     .toHaveText(platformInfo.quantumsavory.version)
-  await expect(dialog.getByTestId('system-quantumsavory-source'))
-    .toHaveText(platformInfo.quantumsavory.tracked_source)
-  await expect(dialog.getByTestId('system-quantumsavory-revision'))
-    .toHaveText(platformInfo.quantumsavory.tracked_revision)
-  await expect(dialog.getByTestId('system-quantumsavory-tree-hash'))
-    .toHaveText(platformInfo.quantumsavory.tree_hash)
+  for (const [testId, value] of [
+    ['system-quantumsavory-source', platformInfo.quantumsavory.tracked_source],
+    ['system-quantumsavory-revision', platformInfo.quantumsavory.tracked_revision],
+    ['system-quantumsavory-tree-hash', platformInfo.quantumsavory.tree_hash],
+  ]) {
+    if (value) await expect(dialog.getByTestId(testId)).toHaveText(value)
+    else await expect(dialog.getByTestId(testId)).toHaveCount(0)
+  }
 
   if (platformInfo.quantumsavory.commit) {
     await expect(dialog.getByTestId('system-quantumsavory-commit'))

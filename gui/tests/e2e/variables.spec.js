@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { parameterTypeSupportsVariableType } from '../../src/utils/parameterTypes.js'
 
 const EDGE_PROTOCOL_TYPE = {
   type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
@@ -128,22 +127,6 @@ async function setSimulationPhase(page, phase) {
   }, phase)
 }
 
-test.describe('Protocol variable type compatibility', () => {
-  test('matches declared field types directionally and recognizes supported aliases', () => {
-    expect(parameterTypeSupportsVariableType('Int64', 'Int64')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Int64', 'String')).toBe(false)
-    expect(parameterTypeSupportsVariableType(['Nothing', 'Float64'], 'Nothing')).toBe(true)
-    expect(parameterTypeSupportsVariableType(['Nothing', 'Float64'], 'Float64')).toBe(true)
-    expect(parameterTypeSupportsVariableType(['Nothing', 'Float64'], 'Bool')).toBe(false)
-    expect(parameterTypeSupportsVariableType('Function', 'Lambda')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Lambda', 'Function')).toBe(false)
-    expect(parameterTypeSupportsVariableType('SymbolicUtils.Symbolic{Real}', 'Symbolic')).toBe(true)
-    expect(parameterTypeSupportsVariableType('QuantumSavory.Wildcard', 'Wildcard')).toBe(true)
-    expect(parameterTypeSupportsVariableType('Any', 'Bool')).toBe(true)
-    expect(parameterTypeSupportsVariableType('DataType', 'default')).toBe(false)
-  })
-})
-
 test.describe('Global protocol variables', () => {
   test.beforeEach(async ({ page }) => {
     await mockConfiguration(page)
@@ -200,7 +183,7 @@ test.describe('Global protocol variables', () => {
       const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       return setupState?.projectData?.net?.edges?.[0]?.data?.protocols?.[0]?.parameters?.[0]?.value
     })
-    expect(valueBeforeSelection).toBeNull()
+    expect(valueBeforeSelection).toBeUndefined()
 
     await variableSelector.selectOption(variableId)
     await expect(variableSelector).toHaveValue(variableId)
@@ -257,7 +240,7 @@ test.describe('Global protocol variables', () => {
     expect(serialized.fullParameter).toEqual(expectedFullParameter)
     expect(serialized.minimizedParameter).toEqual(expectedMinimizedParameter)
 
-    await setSimulationPhase(page, 'parsed')
+    await setSimulationPhase(page, 'prepared')
     await expect(addVariableButton).toBeDisabled()
     await expect(nameInput).toBeDisabled()
     await expect(typeSelect).toBeDisabled()
@@ -287,7 +270,7 @@ test.describe('Global protocol variables', () => {
     ])
   })
 
-  test('filters the picker, explains availability, and preserves incompatible assignments', async ({ page }) => {
+  test('lists every variable and preserves assignments when wire types change', async ({ page }) => {
     await createProjectWithEdgeProtocol(page)
 
     await page.evaluate(() => {
@@ -314,7 +297,7 @@ test.describe('Global protocol variables', () => {
     await expect(bindingButton).toBeEnabled()
     await bindingControl.hover()
     await expect(page.locator('.p-tooltip-text')).toHaveText(
-      'Choose a compatible variable for this parameter',
+      'Choose a variable for this parameter',
     )
 
     await bindingButton.click()
@@ -322,6 +305,7 @@ test.describe('Global protocol variables', () => {
     await expect(variableSelector).toHaveValue('')
     await expect(variableSelector.locator('option')).toHaveText([
       'Select a variable',
+      'round label (String)',
       'retry rounds (Int64)',
     ])
 
@@ -343,7 +327,8 @@ test.describe('Global protocol variables', () => {
 
     await expect(variableSelector).toHaveValue('variable_rounds')
     await expect(variableSelector.locator('option')).toHaveText([
-      'Incompatible variable: retry rounds (String)',
+      'round label (String)',
+      'retry rounds (String)',
     ])
     const preservedReference = await page.evaluate(() => {
       const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
@@ -353,12 +338,12 @@ test.describe('Global protocol variables', () => {
     expect(preservedReference).toEqual({ kind: 'variable', id: 'variable_rounds' })
 
     await roundsRow.getByRole('button', { name: 'Use a direct value for rounds' }).click()
-    await expect(bindingButton).toBeDisabled()
+    await expect(bindingButton).toBeEnabled()
     await expect(roundsRow.locator('input[type="number"]')).toHaveValue('2')
     await page.mouse.move(0, 0)
     await bindingControl.hover()
     await expect(page.locator('.p-tooltip-text')).toHaveText(
-      'No variables have a type supported by this parameter',
+      'Choose a variable for this parameter',
     )
   })
 
@@ -397,6 +382,7 @@ test.describe('Global protocol variables', () => {
     const variableRow = variablesPanel.locator('.variable-row')
     const typeSelect = variableRow.locator('.variable-type-select')
     await expect(typeSelect.locator('option')).toHaveText([
+      'Default',
       'Float64',
       'Float64 Expression',
       'Int64',
