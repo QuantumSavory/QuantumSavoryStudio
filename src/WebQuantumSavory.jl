@@ -503,10 +503,11 @@ function _construct_protocol_instances(
 )
   launched = Dict("nodes" => 0, "edges" => 0, "floating" => 0)
   instances = Any[]
-  variables, _, _ = _normalize_variable_recipes(data["data"])
+  payload = _canonical_payload(data)
+  variables, _, _ = _normalize_variable_recipes(payload)
 
   # Node-attached protocols: per-node under node["data"]["protocols"]
-  nodes = data["graph_info"]["nodes"]
+  nodes = payload["net"]["nodes"]
   # The validated node order is the simulator's one-based register order.
   # Construct this once per launch and share the same lookup with every
   # node-, edge-, and net-attached protocol conversion.
@@ -548,7 +549,7 @@ function _construct_protocol_instances(
   # Edge-attached protocols: per-edge under edge["data"]["protocols"]
   # Build id->index mapping once
   id_to_idx = Dict(String(n["id"]) => i for (i, n) in enumerate(nodes))
-  edges = data["graph_info"]["edges"]
+  edges = payload["net"]["edges"]
   @info "Processing edge protocols" edge_count=length(edges)
   for (edge_index, edge) in enumerate(edges)
     edge_data = get(edge, "data", Dict{String,Any}())
@@ -596,7 +597,7 @@ function _construct_protocol_instances(
   end
 
   # Floating protocols: net-level under payload["net"]["protocols"] as array
-  net_payload = data["data"]["net"]
+  net_payload = payload["net"]
   floating_prots = Any[]
   if haskey(net_payload, "protocols") && isa(net_payload["protocols"], AbstractVector)
     floating_prots = Vector{Any}(net_payload["protocols"])
@@ -758,13 +759,8 @@ function prepare_simulation(
   state::State,
   simulation_name::String;
   service=SIMULATION_SERVICE,
+  catalogs=_constructor_catalog_snapshot(),
 )
-  action_is_valid(
-    simulation_name,
-    false;
-    service,
-  ) # just check if running, don't destroy
-
   # Get the time tracker from the network
   sim = get_network_time_tracker(state.network)
 
@@ -773,7 +769,14 @@ function prepare_simulation(
 
   # Launch protocols from payload over nodes, edges, and floating
   # Pass state so parser warnings get logged
-  launch_counts = launch_protocols(state.payload, state.network, sim, protocol_mapping, state)
+  launch_counts = launch_protocols(
+    state.payload,
+    state.network,
+    sim,
+    protocol_mapping,
+    state;
+    catalogs,
+  )
 
   state.simulation = sim
   state.protocols_launched = launch_counts

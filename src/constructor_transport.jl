@@ -65,7 +65,7 @@ struct _AssignmentRecipe
   value::_TransportValue
 end
 
-_pointer_escape(value) = replace(replace(String(value), "~" => "~0"), "/" => "~1")
+_pointer_escape(value) = replace(replace(string(value), "~" => "~0"), "/" => "~1")
 _pointer_child(path::AbstractString, key) =
   isempty(path) ? "/$(_pointer_escape(key))" : "$(String(path))/$(_pointer_escape(key))"
 

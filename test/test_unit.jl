@@ -140,6 +140,84 @@
     @test rejection.details["stage"] == "invoke"
     @test rejection.details["exception_type"] == "DomainError"
     @test rejecting_calls[] == 1
+
+    payload = deepcopy(test_payload)
+    payload["variables"] = Any[]
+    for node in payload["net"]["nodes"]
+      node["data"]["protocols"] = Any[]
+    end
+    for edge in payload["net"]["edges"]
+      edge["data"]["protocols"] = Any[]
+    end
+    payload["net"]["protocols"] = Any[
+      Dict("id" => "first", "type" => "Test.First", "parameters" => Any[]),
+      Dict("id" => "second", "type" => "Test.Second", "parameters" => Any[]),
+    ]
+    first_constructions = Ref(0)
+    second_constructions = Ref(0)
+    schedules = Ref(0)
+    first_constructor = function (; sim, net)
+      first_constructions[] += 1
+      return () -> (schedules[] += 1)
+    end
+    second_constructor = function (; sim, net)
+      second_constructions[] += 1
+      throw(DomainError(:second, "second constructor failed"))
+    end
+    misleading_metadata = [(
+      field=:invented_required_field,
+      type=Bool,
+      required=true,
+      default=nothing,
+      min=nothing,
+      max=nothing,
+      doc="Transport must ignore this metadata.",
+    )]
+    base_catalogs = WebQuantumSavory._constructor_catalog_snapshot()
+    protocol_entries = Any[
+      (
+        type=first_constructor,
+        wire_type="Test.First",
+        doc="",
+        attachment=:network,
+        group="floating",
+        attachment_fields=NamedTuple(),
+        parameters=misleading_metadata,
+        permits_virtual_edge=false,
+      ),
+      (
+        type=second_constructor,
+        wire_type="Test.Second",
+        doc="",
+        attachment=:network,
+        group="floating",
+        attachment_fields=NamedTuple(),
+        parameters=misleading_metadata,
+        permits_virtual_edge=false,
+      ),
+    ]
+    fake_catalogs = WebQuantumSavory._ConstructorCatalogSnapshot(
+      protocol_entries,
+      base_catalogs.backgrounds,
+      base_catalogs.slots,
+    )
+    WebQuantumSavory._normalize_project_transport(payload; catalogs=fake_catalogs)
+    construction_error = try
+      WebQuantumSavory._construct_protocol_instances(
+        payload,
+        nothing,
+        nothing;
+        catalogs=fake_catalogs,
+      )
+      nothing
+    catch error
+      error
+    end
+    @test construction_error isa WebQuantumSavory.APIError
+    @test construction_error.error_code == "CONSTRUCTOR_REJECTED"
+    @test first_constructions[] == 1
+    @test second_constructions[] == 1
+    @test schedules[] == 0
   end
 
   @testset "Julia Script Export" begin

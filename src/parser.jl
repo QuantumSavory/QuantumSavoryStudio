@@ -108,6 +108,15 @@ _is_object_like(x) = x isa AbstractDict || startswith(string(typeof(x)), "JSON3.
 """Return whether an edge represents a virtual (logic-only) connection."""
 _is_virtual_edge(edge) = get(edge, "isLogic", false) === true
 
+"""Accept either a canonical payload or the legacy validation response wrapper internally."""
+function _canonical_payload(data)
+  if _is_object_like(data) && haskey(data, "data") &&
+      _is_object_like(data["data"]) && haskey(data["data"], "net")
+    return data["data"]
+  end
+  return data
+end
+
 """Read one optional, finite physical-edge number from minimized payload data."""
 function _physical_edge_number(
   edge_data,
@@ -193,8 +202,9 @@ end
 
 """Build the symmetric per-link delay map used by `RegisterNet`."""
 function _physical_delay_map(data)
-  nodes = data["graph_info"]["nodes"]
-  edges = data["graph_info"]["edges"]
+  payload = _canonical_payload(data)
+  nodes = payload["net"]["nodes"]
+  edges = payload["net"]["edges"]
   id_to_idx = Dict(String(node["id"]) => index for (index, node) in enumerate(nodes))
   delays = Dict{Tuple{Int,Int},Float64}()
   for edge in edges
@@ -1305,9 +1315,9 @@ function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
 end
 
 function build_graph(data)
-  # Extract nodes and edges from payload
-  nodes = data["graph_info"]["nodes"]
-  edges = data["graph_info"]["edges"]
+  payload = _canonical_payload(data)
+  nodes = payload["net"]["nodes"]
+  edges = payload["net"]["edges"]
 
   # Map external node ids (e.g., "node1") to 1..N indices
   id_to_idx = Dict(String(n["id"]) => i for (i, n) in enumerate(nodes))
@@ -1325,10 +1335,10 @@ end
 _register_names(nodes) = [string(node["name"]) for node in nodes]
 
 function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapshot())
-  # Extract nodes from the validation result
-  nodes = data["graph_info"]["nodes"]
-  default_representations = representation_config(data["data"])
-  variables, _, _ = _normalize_variable_recipes(data["data"])
+  payload = _canonical_payload(data)
+  nodes = payload["net"]["nodes"]
+  default_representations = representation_config(payload)
+  variables, _, _ = _normalize_variable_recipes(payload)
   node_name_to_index = _node_name_to_index(nodes)
 
   # Create array of Register objects based on slots data
@@ -1930,6 +1940,7 @@ function action_is_valid(
 end
 
 function build_simulation_state(data; catalogs=_constructor_catalog_snapshot())
+  payload = _canonical_payload(data)
   g = build_graph(data)
 
   # Create registers array based on node slots data
@@ -1944,16 +1955,16 @@ function build_simulation_state(data; catalogs=_constructor_catalog_snapshot())
   net = RegisterNet(
     g,
     registers;
-    names=_register_names(data["graph_info"]["nodes"]),
+    names=_register_names(payload["net"]["nodes"]),
     classical_delay=link_delay,
     quantum_delay=link_delay,
   )
 
-  simulation_name = data["data"]["name"]
+  simulation_name = payload["name"]
 
   state = WebQuantumSavory.State(
     name = simulation_name,
-    payload = data,
+    payload = payload,
     graph = g,
     network = net,
     slot_mapping = slot_mapping,
@@ -1962,6 +1973,16 @@ function build_simulation_state(data; catalogs=_constructor_catalog_snapshot())
 
   state.simulation_last_active_time = Dates.now()
   return state
+end
+
+"""Build, construct, and schedule a complete candidate before publication."""
+function build_prepared_simulation_state(
+  data;
+  catalogs=_constructor_catalog_snapshot(),
+  service=SIMULATION_SERVICE,
+)
+  state = build_simulation_state(data; catalogs)
+  return prepare_simulation(state, state.name; service, catalogs)
 end
 
 parse_network_graph(data; catalogs=_constructor_catalog_snapshot()) =
