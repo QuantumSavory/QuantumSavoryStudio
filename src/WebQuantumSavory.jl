@@ -384,7 +384,6 @@ end
 
 const STATUS_COMPLETE = "complete"
 const STATUS_PREPARED = "prepared"
-const STATUS_CREATED = "created"
 const STATUS_UNKNOWN = "unknown"
 const STATUS_RUNNING = "running"
 const STATUS_NOT_STARTED = "not_started"
@@ -397,9 +396,6 @@ function _determine_status(state::State)
     else
       return STATUS_PREPARED
     end
-  elseif state.graph !== nothing || state.network !== nothing
-    # Graph (and possibly network) exist, but no simulation yet
-    return STATUS_CREATED
   else
     return STATUS_UNKNOWN
   end
@@ -407,14 +403,12 @@ end
 
 const STATUS_MESSAGE_COMPLETE = "Simulation has run"
 const STATUS_MESSAGE_PREPARED = "Simulation is prepared and ready to run"
-const STATUS_MESSAGE_CREATED = "Network has been created"
 const STATUS_MESSAGE_UNKNOWN = "No network data available"
 
 # Single source of truth for status -> message mapping
 const STATUS_TO_MESSAGE = Dict(
   STATUS_COMPLETE => STATUS_MESSAGE_COMPLETE,
   STATUS_PREPARED => STATUS_MESSAGE_PREPARED,
-  STATUS_CREATED => STATUS_MESSAGE_CREATED,
   STATUS_UNKNOWN => STATUS_MESSAGE_UNKNOWN,
 )
 
@@ -503,11 +497,10 @@ function _construct_protocol_instances(
 )
   launched = Dict("nodes" => 0, "edges" => 0, "floating" => 0)
   instances = Any[]
-  payload = _canonical_payload(data)
-  variables, _, _ = _normalize_variable_recipes(payload)
+  variables, _, _ = _normalize_variable_recipes(data)
 
   # Node-attached protocols: per-node under node["data"]["protocols"]
-  nodes = payload["net"]["nodes"]
+  nodes = data["net"]["nodes"]
   # The validated node order is the simulator's one-based register order.
   # Construct this once per launch and share the same lookup with every
   # node-, edge-, and net-attached protocol conversion.
@@ -549,7 +542,7 @@ function _construct_protocol_instances(
   # Edge-attached protocols: per-edge under edge["data"]["protocols"]
   # Build id->index mapping once
   id_to_idx = Dict(String(n["id"]) => i for (i, n) in enumerate(nodes))
-  edges = payload["net"]["edges"]
+  edges = data["net"]["edges"]
   @info "Processing edge protocols" edge_count=length(edges)
   for (edge_index, edge) in enumerate(edges)
     edge_data = get(edge, "data", Dict{String,Any}())
@@ -597,7 +590,7 @@ function _construct_protocol_instances(
   end
 
   # Floating protocols: net-level under payload["net"]["protocols"] as array
-  net_payload = payload["net"]
+  net_payload = data["net"]
   floating_prots = Any[]
   if haskey(net_payload, "protocols") && isa(net_payload["protocols"], AbstractVector)
     floating_prots = Vector{Any}(net_payload["protocols"])

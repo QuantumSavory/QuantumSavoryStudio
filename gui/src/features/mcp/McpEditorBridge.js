@@ -12,10 +12,15 @@ const TERMINAL_BINDING_ERRORS = new Set([
 
 function bridgeError(error, fallbackCode = 'INTERNAL_ERROR') {
   return {
-    code: error?.code || fallbackCode,
+    code: error?.error_code || error?.code || fallbackCode,
     message: error?.message || 'The editor could not process the command.',
     retryable: error?.retryable === true,
-    details: error?.details || {},
+    ...(error?.status == null ? {} : { status: error.status }),
+    details: {
+      ...(error?.details || {}),
+      ...(error?.status == null ? {} : { http_status: error.status }),
+      ...(error?.rawResponse == null ? {} : { raw_response: error.rawResponse }),
+    },
   }
 }
 
@@ -47,6 +52,7 @@ export class McpEditorBridge {
     this.binding = null
     this.revision = 0
     this.hash = null
+    this.preparedRevision = null
     this.running = false
     this.heartbeatTimer = null
     this.commandAbortController = null
@@ -60,6 +66,7 @@ export class McpEditorBridge {
       binding: this.binding,
       revision: this.revision,
       hash: this.hash,
+      prepared_revision: this.preparedRevision,
       editorId: this.editorId,
       ...extra,
     }
@@ -127,6 +134,7 @@ export class McpEditorBridge {
       this.binding = null
       this.revision = 0
       this.hash = null
+      this.preparedRevision = null
       this.state({ synchronized: false })
     }
   }
@@ -201,6 +209,7 @@ export class McpEditorBridge {
       await this.designCommands.runExclusive(async () => {
         let result
         let documentChanged = false
+        let preparedActionSucceeded = false
         if (command.base_revision !== this.revision) {
           const error = new Error('The browser revision changed before command execution.')
           error.code = 'REVISION_CONFLICT'
@@ -229,6 +238,8 @@ export class McpEditorBridge {
             operationId: payload.arguments.operation_id,
           })
           documentChanged = true
+          this.preparedRevision = null
+          this.simulationController.invalidate?.()
           durableActionApplied = true
         } else if (payload.type === 'simulation_action') {
           const action = this.simulationController[payload.action]
@@ -240,6 +251,10 @@ export class McpEditorBridge {
             throw new Error(`Simulation action was not accepted: ${payload.action}`)
           }
           result = { summary: `Simulation ${payload.action} accepted.` }
+          if (payload.action === 'prepare') {
+            result.prepared_revision = command.base_revision
+            preparedActionSucceeded = true
+          }
           durableActionApplied = true
         } else {
           throw new Error(`Unknown browser command type: ${payload.type}`)
@@ -263,6 +278,7 @@ export class McpEditorBridge {
         })
         this.revision = response.revision
         this.hash = encoded.hash
+        if (preparedActionSucceeded) this.preparedRevision = response.revision
         this.state({ synchronized: true, lastCommand: command.command_id })
       })
     } catch (error) {
@@ -313,6 +329,8 @@ export class McpEditorBridge {
     })
     this.revision = response.revision
     this.hash = encoded.hash
+    this.preparedRevision = null
+    this.simulationController.invalidate?.()
     this.state({ synchronized: true })
   }
 

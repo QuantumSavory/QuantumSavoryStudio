@@ -94,14 +94,12 @@ test('reports a diagnostic protocol panic without uploading the project', async 
   await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
 
   const importedProject = await importBrokenProject(page)
-  const parseResponse = page.waitForResponse(response => response.url().endsWith('/parse_network_graph'))
   const prepareResponse = page.waitForResponse(response => response.url().endsWith('/prepare_simulation'))
   const runResponse = page.waitForResponse(response => response.url().endsWith('/run_simulation'))
 
   const runButton = page.locator('#runnerPanel .main-buttons .run-btn')
   await expect(runButton).toBeEnabled()
   await runButton.click()
-  expect((await parseResponse).status()).toBe(200)
   expect((await prepareResponse).status()).toBe(200)
   expect((await runResponse).status()).toBe(202)
 
@@ -162,15 +160,14 @@ test('reports a diagnostic protocol panic without uploading the project', async 
   expect(copiedReport).toContain(`- QuantumSavory: ${platformInfo.versions.quantumsavory}`)
   expect(copiedReport).toContain(`- Julia: ${platformInfo.versions.julia}`)
   expect(copiedReport).toContain(`- Genie: ${platformInfo.versions.genie}`)
-  expect(copiedReport).toContain(
-    `- QuantumSavory tracked source: ${platformInfo.quantumsavory.tracked_source}`,
-  )
-  expect(copiedReport).toContain(
-    `- QuantumSavory tracked revision: ${platformInfo.quantumsavory.tracked_revision}`,
-  )
-  expect(copiedReport).toContain(
-    `- QuantumSavory Pkg tree hash: ${platformInfo.quantumsavory.tree_hash}`,
-  )
+  for (const [label, value] of [
+    ['tracked source', platformInfo.quantumsavory.tracked_source],
+    ['tracked revision', platformInfo.quantumsavory.tracked_revision],
+    ['Pkg tree hash', platformInfo.quantumsavory.tree_hash],
+  ]) {
+    if (value) expect(copiedReport).toContain(`- QuantumSavory ${label}: ${value}`)
+    else expect(copiedReport).not.toContain(`- QuantumSavory ${label}:`)
+  }
   if (platformInfo.quantumsavory.commit) {
     expect(copiedReport).toContain(`- QuantumSavory commit: ${platformInfo.quantumsavory.commit}`)
   } else {

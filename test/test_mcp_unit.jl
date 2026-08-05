@@ -1,6 +1,7 @@
 @safetestset "MCP configuration, collaboration, and simulation services" begin
   using Dates
   using Genie
+  using JSON
   using Main.WebQuantumSavory
   using Test
 
@@ -133,6 +134,57 @@
       ),
     )
     @test fetch(waiting)["revision"] == 1
+  end
+
+  @testset "browser simulation errors retain HTTP context through the hub" begin
+    hub = WebQuantumSavory.CollaborationHub()
+    binding = WebQuantumSavory.bind_editor!(hub, binding_request())
+    owner = Dict(
+      "binding_id" => binding["binding_id"],
+      "generation" => 1,
+    )
+    waiting = @async try
+      WebQuantumSavory.dispatch_mcp_tool!(
+        "simulation_prepare",
+        Dict{String,Any}();
+        hub,
+      )
+    catch error
+      error
+    end
+    command = WebQuantumSavory.next_browser_command!(hub, owner; timeout_seconds=1)
+    details = Dict{String,Any}(
+      "stage" => "invoke",
+      "path" => "/net/protocols/0",
+      "http_status" => 422,
+      "raw_response" => Dict(
+        "status_code" => 422,
+        "error_code" => "CONSTRUCTOR_REJECTED",
+      ),
+    )
+    WebQuantumSavory.commit_browser_command!(
+      hub,
+      Dict(
+        owner...,
+        "command_id" => command["command_id"],
+        "base_revision" => 0,
+        "success" => false,
+        "error" => Dict(
+          "code" => "CONSTRUCTOR_REJECTED",
+          "message" => "Constructor rejected",
+          "retryable" => false,
+          "status" => 422,
+          "details" => details,
+        ),
+      ),
+    )
+
+    rejected = fetch(waiting)
+    @test rejected isa WebQuantumSavory.APIError
+    @test rejected.status_code == 422
+    @test rejected.error_code == "CONSTRUCTOR_REJECTED"
+    @test rejected.details["details"] == details
+    @test hub.prepared_revision === nothing
   end
 
   @testset "strict feature configuration" begin
@@ -779,14 +831,12 @@
     service = WebQuantumSavory.SimulationService(
       Dict("atomic-replacement" => existing),
     )
-    validation = Dict(
-      "data" => Dict("name" => "atomic-replacement"),
-    )
+    payload = JSON.parsefile(joinpath(@__DIR__, "mock", "payload3.json"))
+    payload["name"] = "atomic-replacement"
 
-    @test_throws ErrorException WebQuantumSavory.simulation_create!(
+    @test_throws WebQuantumSavory.APIError WebQuantumSavory.simulation_prepare!(
       service,
-      Dict{String,Any}();
-      validation,
+      payload;
       builder=_ -> error("candidate construction failed"),
     )
     @test service.states["atomic-replacement"] === existing

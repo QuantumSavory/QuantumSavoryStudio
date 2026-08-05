@@ -65,10 +65,24 @@ function abortError() {
 
 async function readJsonResponse(response, fallbackMessage) {
   const body = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(apiErrorMessage(body, `${fallbackMessage}: ${response.status}`))
+  if (!response.ok || body?.success === false) {
+    throw new BrowserApiError(response, body, fallbackMessage)
   }
   return body
+}
+
+export class BrowserApiError extends Error {
+  constructor(response, body, fallbackMessage = 'Backend request failed') {
+    super(apiErrorMessage(body, `${fallbackMessage}: ${response?.status ?? 'unknown'}`))
+    this.name = 'BrowserApiError'
+    this.status = response?.status ?? body?.status_code ?? null
+    this.error_code = body?.error_code || null
+    this.code = this.error_code || 'HTTP_ERROR'
+    this.details = body?.details || {}
+    this.rawResponse = body
+    this.response = body
+    this.httpResponse = response || null
+  }
 }
 
 export class ApiConnector {
@@ -430,32 +444,10 @@ export class ApiConnector {
         method: 'POST',
         body: JSON.stringify({ name: this.getScopedSimulationName(projectName) })
       })
-      return res.json()
+      return await readJsonResponse(res, 'Simulation destruction failed')
     } catch (e) {
       this._error.value = e;
-      console.error( 'destroySimulation error', e );
-    } finally {
-      this._loading.value = false
-    }
-    return { success: false, message: 'Failed to destroy simulation' }
-  }
-
-  async parseNetworkGraph(data){
-    try{
-      this._loading.value = true
-      const modifiedData = {
-        ...data,
-        name: this.getScopedSimulationName(data.name)
-      }
-      const res = await fetch(`${this.baseUrl}/parse_network_graph`, {
-        headers: this.requestHeaders,
-        method: 'POST',
-        body: JSON.stringify(modifiedData)
-      })
-      return res.json()
-    } catch (e) {
-      this._error.value = e;
-      console.error( 'parseNetworkGraph error', e );
+      throw e
     } finally {
       this._loading.value = false
     }
@@ -467,12 +459,15 @@ export class ApiConnector {
       const res = await fetch(`${this.baseUrl}/prepare_simulation`, {
         headers: this.requestHeaders,
         method: 'POST',
-        body: JSON.stringify({ name: this.getScopedSimulationName(data.name) })
+        body: JSON.stringify({
+          ...data,
+          name: this.getScopedSimulationName(data.name),
+        })
       })
-      return res.json()
+      return await readJsonResponse(res, 'Simulation preparation failed')
     } catch (e) {
       this._error.value = e;
-      console.error( 'prepareSimulation error', e );
+      throw e
     } finally {
       this._loading.value = false
     }
@@ -490,14 +485,11 @@ export class ApiConnector {
         method: 'GET',
         signal,
       })
-      const response = await res.json()
-
-      return response
+      return await readJsonResponse(res, 'Simulation status fetch failed')
     } catch (e) {
       if (e?.name === 'AbortError') throw e
       this._error.value = e;
-      console.error( 'getSimulationStatus error', e );
-      return { success: false, message: e.message }
+      throw e
     } finally {
       this._loading.value = false
     }
@@ -511,10 +503,10 @@ export class ApiConnector {
         method: 'POST',
         body: JSON.stringify({ name: this.getScopedSimulationName(projectName), time_units })
       })
-      return res.json()
+      return await readJsonResponse(res, 'Simulation run failed')
     } catch (e) {
       this._error.value = e;
-      console.error( 'runSimulation error', e );
+      throw e
     } finally {
       this._loading.value = false
     }
@@ -528,10 +520,10 @@ export class ApiConnector {
         method: 'POST',
         body: JSON.stringify({ name: this.getScopedSimulationName(projectName) })
       })
-      return res.json()
+      return await readJsonResponse(res, 'Simulation pause failed')
     } catch (e) {
       this._error.value = e;
-      console.error( 'pauseSimulation error', e );
+      throw e
     } finally {
       this._loading.value = false
     }
@@ -605,39 +597,6 @@ export class ApiConnector {
       body: JSON.stringify(body)
     })
     return res.json()
-  }
-
-  async validateSymbolicFunction( expr ){
-    if( expr == undefined || expr == null || expr == '' ){
-      return { success: false, error: 'Expression is empty' }
-    }
-    const res = await fetch(`${this.baseUrl}/test_symbolic_expression`, {
-      headers: this.requestHeaders,
-      method: 'POST',
-      body: JSON.stringify( { expr: expr || '' } )
-    })
-    return res.json()
-  }
-
-  async validateNumericExpression(
-    expression,
-    targetType,
-    placement,
-    { context, signal } = {},
-  ){
-    const body = {
-      expression: String(expression ?? ''),
-      target_type: targetType,
-      placement,
-    }
-    if (context !== undefined) body.context = context
-    const res = await fetch(`${this.baseUrl}/test_numeric_expression`, {
-      headers: this.requestHeaders,
-      method: 'POST',
-      body: JSON.stringify(body),
-      signal,
-    })
-    return readJsonResponse(res, 'Numeric expression validation failed')
   }
 
   async getBackendLogs( projectName, purge = true, { signal } = {} ){

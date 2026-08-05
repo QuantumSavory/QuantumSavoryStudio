@@ -161,14 +161,10 @@
     payload = repeater_chain_payload(simulation_name)
 
     try
-      parse_response_data = make_request("POST", "/parse_network_graph"; body=payload)
-      @test parse_response_data.status == 200
-      @test parse_response(parse_response_data)["status"] == WebQuantumSavory.STATUS_CREATED
-
       prepare_response = make_request(
         "POST",
         "/prepare_simulation";
-        body=Dict("name" => simulation_name),
+        body=payload,
       )
       @test prepare_response.status == 200
       prepared = parse_response(prepare_response)
@@ -232,13 +228,10 @@
       ))
       @test diagnostic["group"] == "floating"
 
-      parse_response_data = make_request("POST", "/parse_network_graph"; body=payload)
-      @test parse_response_data.status == 200
-
       prepare_response = make_request(
         "POST",
         "/prepare_simulation";
-        body=Dict("name" => simulation_name),
+        body=payload,
       )
       @test prepare_response.status == 200
       @test parse_response(prepare_response)["protocols_launched"]["floating"] == 1

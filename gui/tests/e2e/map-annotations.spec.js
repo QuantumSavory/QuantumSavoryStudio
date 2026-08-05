@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from '@playwright/test'
 
-async function mockBackend(page, { parseRequests = [], scriptRequests = [] } = {}) {
+async function mockBackend(page, { prepareRequests = [], scriptRequests = [] } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
     json: { known_functions: [] },
   }))
@@ -33,9 +33,9 @@ async function mockBackend(page, { parseRequests = [], scriptRequests = [] } = {
   await page.route('**/logs/**', route => route.fulfill({
     json: { success: true, logs: [] },
   }))
-  await page.route('**/parse_network_graph', route => {
-    parseRequests.push(route.request().postDataJSON())
-    return route.fulfill({ json: { success: true, message: 'Parsed' } })
+  await page.route('**/prepare_simulation', route => {
+    prepareRequests.push(route.request().postDataJSON())
+    return route.fulfill({ json: { success: true, message: 'Prepared' } })
   })
   await page.route('**/export_script', route => {
     scriptRequests.push(route.request().postDataJSON())
@@ -243,9 +243,9 @@ test.describe('Map annotations and Tools presentation', () => {
     await page.addInitScript(() => {
       localStorage.setItem('bottomPanel_size', JSON.stringify({ width: 800, height: 360 }))
     })
-    const parseRequests = []
+    const prepareRequests = []
     const scriptRequests = []
-    await loadApp(page, { parseRequests, scriptRequests })
+    await loadApp(page, { prepareRequests, scriptRequests })
     await page.getByRole('button', { name: 'Menu' }).click()
     await page.getByRole('menuitem', { name: 'New' }).click()
     const newProjectDialog = page.getByRole('dialog', { name: 'New Project' })
@@ -380,9 +380,9 @@ test.describe('Map annotations and Tools presentation', () => {
 
     await createSimulationTopology(page)
     await page.getByRole('button', { name: 'Toggle advanced controls' }).click()
-    await page.getByRole('button', { name: 'Parse', exact: true }).click()
-    await expect.poll(() => parseRequests.length).toBe(1)
-    expect(parseRequests[0]).not.toHaveProperty('annotations')
+    await page.getByRole('button', { name: 'Prepare', exact: true }).click()
+    await expect.poll(() => prepareRequests.length).toBe(1)
+    expect(prepareRequests[0]).not.toHaveProperty('annotations')
 
     await page.getByRole('tab', { name: 'Layout Tools' }).click()
     await expect(page.getByLabel('Curve mode')).toBeDisabled()

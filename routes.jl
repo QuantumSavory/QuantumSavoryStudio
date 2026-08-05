@@ -55,7 +55,7 @@ end
                         type: string
                       status:
                         type: string
-                        enum: ["created", "prepared", "complete", "unknown"]
+                        enum: ["prepared", "complete", "unknown"]
 """
 route("/simulations", method="GET") do
   json(Dict(
@@ -601,9 +601,7 @@ end
         application/json:
           schema:
             type: object
-            required:
-              - name
-              - net
+            required: [name, simulationConfig, variables, net]
             properties:
               name:
                 type: string
@@ -614,7 +612,7 @@ end
                   properties:
                     statesZooTraceSourceId:
                       type: string
-                      description: Optional owner ID for a generated weighted States Zoo trace companion; used to compute tuple bindings rather than embedding its cached value
+                      description: Optional owner ID for a weighted States Zoo trace companion; its persisted Float64 value is rendered without reconstructing the trace
               simulationConfig:
                 type: object
                 properties:
@@ -662,7 +660,7 @@ end
                   type: string
                   example: repeater-chain.jl
       '400':
-        description: The project is invalid or contains a value that cannot be translated reliably.
+        description: Canonical admission, reference resolution, static source policy, or final Julia syntax failed.
         content:
           application/json:
             schema:
@@ -687,449 +685,27 @@ end
 
 ########################################################
 
-@swagger """
-/parse_network_graph:
-  post:
-    description: Parse a network graph JSON payload and return the parsed object
-    requestBody:
-      content:
-        application/json:
-          schema:
-            type: object
-            required:
-              - name
-              - net
-            properties:
-              name:
-                type: string
-                description: Name of the network
-              variables:
-                type: array
-                description: Optional simulation-global typed variables
-                items:
-                  type: object
-                  required:
-                    - id
-                    - name
-                    - type
-                    - value
-                  properties:
-                    id:
-                      type: string
-                      description: Stable variable identifier used by protocol references
-                    name:
-                      type: string
-                      description: User-visible unique variable name
-                    type:
-                      type: string
-                      description: Concrete parameter type used to convert the value
-                    statesZooTraceSourceId:
-                      type: string
-                      description: Optional owner ID for a generated weighted States Zoo trace companion
-                    value:
-                      nullable: true
-                      description: JSON-compatible variable value; Symbolic variables may use the structured States Zoo recipe object shown below
-                      oneOf:
-                        - type: string
-                        - type: number
-                        - type: boolean
-                        - type: object
-                          additionalProperties: false
-                          required:
-                            - kind
-                            - state_type
-                            - parameters
-                          properties:
-                            kind:
-                              type: string
-                              enum: [states_zoo]
-                            state_type:
-                              type: string
-                              description: Stable ID returned by GET /states_zoo_types
-                            parameters:
-                              type: object
-                              additionalProperties:
-                                type: number
-              simulationConfig:
-                type: object
-                description: >-
-                  Optional global numerical-representation defaults; omitted fields use
-                  QuantumOpticsRepr
-                properties:
-                  qubitRepresentation:
-                    type: string
-                    enum: [QuantumOpticsRepr, QuantumMCRepr, CliffordRepr]
-                    default: QuantumOpticsRepr
-                  qumodeRepresentation:
-                    type: string
-                    enum: [QuantumOpticsRepr, QuantumMCRepr, GabsRepr]
-                    default: QuantumOpticsRepr
-              net:
-                type: object
-                required:
-                  - nodes
-                  - edges
-                properties:
-                  nodes:
-                    type: array
-                    items:
-                      type: object
-                      required:
-                        - id
-                        - name
-                        - position
-                        - data
-                      properties:
-                        id:
-                          type: string
-                          description: Unique identifier for the node
-                        name:
-                          type: string
-                          description: Display name for the node
-                        position:
-                          type: array
-                          items:
-                            type: number
-                          minItems: 2
-                          maxItems: 2
-                          description: "[longitude, latitude] coordinates"
-                        data:
-                          type: object
-                          properties:
-                            type:
-                              type: string
-                              description: "Type of node (e.g., city, City)"
-                            slots:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  id:
-                                    type: string
-                                  type:
-                                    type: string
-                                  backgroundNoise:
-                                    type: string
-                                  lastOperationTime:
-                                    type: number
-                                  assignment:
-                                    type: boolean
-                                  isLocked:
-                                    type: boolean
-                                  representationType:
-                                    type: string
-                            protocols:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  id:
-                                    type: string
-                                  type:
-                                    type: string
-                                  parameters:
-                                    type: array
-                                    items:
-                                      type: object
-                                      properties:
-                                        name:
-                                          type: string
-                                        type:
-                                          type: string
-                                        value:
-                                          oneOf:
-                                            - type: string
-                                            - type: number
-                                            - type: boolean
-                                            - type: object
-                                              required:
-                                                - kind
-                                                - id
-                                              properties:
-                                                kind:
-                                                  type: string
-                                                  enum: ["variable"]
-                                                id:
-                                                  type: string
-                                              description: Reference to a top-level simulation variable
-                  edges:
-                    type: array
-                    items:
-                      type: object
-                      required:
-                        - id
-                        - source
-                        - target
-                      properties:
-                        id:
-                          type: string
-                          description: Unique identifier for the edge
-                        source:
-                          type: string
-                          description: Source node ID
-                        target:
-                          type: string
-                          description: Target node ID
-                        data:
-                          type: object
-                          properties:
-                            type:
-                              type: string
-                              description: Type of connection
-                            distanceMeters:
-                              type: number
-                              format: double
-                              minimum: 0
-                              nullable: true
-                              description: Optional resolved physical-edge distance in meters; a number must be finite and nonnegative, while omission or null leaves custom-function context unknown
-                            propagationDelaySeconds:
-                              type: number
-                              format: double
-                              minimum: 0
-                              description: Optional resolved physical-edge propagation delay in seconds; when present it must be finite and nonnegative, while omission by a legacy client defaults to zero
-                            refractiveIndex:
-                              type: number
-                              format: double
-                              minimum: 0
-                              exclusiveMinimum: true
-                              nullable: true
-                              description: Optional resolved dimensionless physical-edge refractive index; a number must be finite and greater than zero, while omission or null leaves custom-function context unknown
-                            lossDbPerKm:
-                              type: number
-                              format: double
-                              minimum: 0
-                              nullable: true
-                              description: Optional resolved physical-edge fiber loss in dB/km; a number must be finite and nonnegative, while omission or null leaves custom-function context unknown
-                            transmissivity:
-                              type: number
-                              format: double
-                              minimum: 0
-                              maximum: 1
-                              nullable: true
-                              description: Optional resolved dimensionless physical-edge transmissivity; a number must be finite from zero through one, while omission or null leaves custom-function context unknown
-                            protocols:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  id:
-                                    type: string
-                                    description: Protocol identifier
-                                  type:
-                                    type: string
-                                    description: Protocol type name
-                                  parameters:
-                                    type: array
-                                    items:
-                                      type: object
-                                      properties:
-                                        name:
-                                          type: string
-                                          description: Parameter name
-                                        type:
-                                          type: string
-                                          description: Parameter type
-                                        value:
-                                          oneOf:
-                                            - type: string
-                                            - type: number
-                                            - type: boolean
-                                            - type: object
-                                              required:
-                                                - kind
-                                                - id
-                                              properties:
-                                                kind:
-                                                  type: string
-                                                  enum: ["variable"]
-                                                id:
-                                                  type: string
-                                              description: Reference to a top-level simulation variable
-                                          description: Parameter value
-                  protocols:
-                    type: array
-                    description: Array of floating protocols that operate at the network level
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          description: Protocol identifier
-                        type:
-                          type: string
-                          description: Protocol type name
-                        parameters:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              name:
-                                type: string
-                                description: Parameter name
-                              type:
-                                type: string
-                                description: Parameter type
-                              value:
-                                oneOf:
-                                  - type: string
-                                  - type: number
-                                  - type: boolean
-                                  - type: object
-                                    required:
-                                      - kind
-                                      - id
-                                    properties:
-                                      kind:
-                                        type: string
-                                        enum: ["variable"]
-                                      id:
-                                        type: string
-                                    description: Reference to a top-level simulation variable
-                                description: Parameter value
-    responses:
-      '200':
-        description: Network created and stored; returns serializable state information
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  description: Name of the simulation
-                status:
-                  type: string
-                  description: Current status of the simulation
-                  enum: ["created", "prepared", "complete", "unknown"]
-                node_count:
-                  type: integer
-                  description: Number of nodes in the network
-                edge_count:
-                  type: integer
-                  description: Number of edges in the network
-                protocols_launched:
-                  type: object
-                  description: Count of launched protocols by category
-                  additionalProperties:
-                    type: integer
-                  nullable: true
-                slots:
-                  type: object
-                  description: Information about quantum slots and their entanglements
-                  properties:
-                    slots:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          slot_id:
-                            type: string
-                            description: Unique identifier for the slot
-                          state_type:
-                            type: string
-                            nullable: true
-                            description: Type of quantum state in the slot
-                          is_locked:
-                            type: boolean
-                            description: Whether the slot is locked
-                          is_assigned:
-                            type: boolean
-                            description: Whether the slot has an assigned state
-                          entangled_slots:
-                            type: array
-                            items:
-                              type: string
-                            description: List of slot IDs that are entangled with this slot
-                    entanglements:
-                      type: array
-                      items:
-                        type: array
-                        items:
-                          type: string
-                        description: Pairs of entangled slot IDs
-                protocols:
-                  type: object
-                  description: Information about launched protocols
-                  properties:
-                    protocols:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          protocol_id:
-                            type: string
-                            description: Unique identifier for the protocol
-                          protocol_type:
-                            type: string
-                            description: Type of the protocol
-                simulation:
-                  type: object
-                  description: Simulation execution information
-                  properties:
-                    simulation_time:
-                      type: number
-                      nullable: true
-                      description: Total time units for the simulation
-                    simulation_progress:
-                      type: number
-                      nullable: true
-                      description: Current simulation time progress
-                    simulation_running:
-                      type: string
-                      enum: ["running", "complete", "not_started"]
-                      description: Current simulation execution status
-                    simulation_paused:
-                      type: boolean
-                      description: Whether the simulation is currently paused
-                message:
-                  type: string
-                  description: Human-readable status message
-      '400':
-        description: Invalid JSON payload or missing required fields
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                  example: false
-                error:
-                  type: string
-                  description: Error message describing the validation failure
-                details:
-                  type: object
-                  description: Additional error details
-      '403':
-        description: Payload requires unsafe Julia evaluation, which is disabled (UNSAFE_EVALUATION_DISABLED)
-"""
-route("/parse_network_graph", method="POST") do
-  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-  state = try
-    WebQuantumSavory.simulation_create!(payload)
-  catch ex
-    isa(ex, APIError) && rethrow(ex)
-    throw(validation_error("Invalid graph - data can not be correctly parsed. Details: $ex"))
-  end
-
-  json(WebQuantumSavory.serialize_state(state))
-end
-
-########################################################
 
 @swagger """
 /prepare_simulation:
   post:
-    description: Prepare the simulation for running
+    description: Atomically admit and prepare a complete canonical simulation payload. Constructor semantics are owned by QuantumSavory.
     requestBody:
       content:
         application/json:
           schema:
             type: object
+            required: [name, simulationConfig, variables, net]
             properties:
               name:
                 type: string
                 description: Name of the simulation
+              simulationConfig:
+                type: object
+              variables:
+                type: array
+              net:
+                type: object
     responses:
       '200':
         description: Simulation prepared and stored; returns serializable state information
@@ -1144,7 +720,7 @@ end
                 status:
                   type: string
                   description: Current status of the simulation
-                  enum: ["created", "prepared", "complete", "unknown"]
+                  enum: ["prepared", "complete", "unknown"]
                 node_count:
                   type: integer
                   description: Number of nodes in the network
@@ -1219,17 +795,18 @@ end
                       nullable: true
                       description: Current simulation time progress
                     simulation_running:
-                      type: string
-                      enum: ["running", "complete", "not_started"]
-                      description: Current simulation execution status
+                      type: boolean
+                      description: Whether simulation execution is active
                     simulation_paused:
                       type: boolean
                       description: Whether the simulation is currently paused
                 message:
                   type: string
                   description: Human-readable status message
-      '404':
-        description: Simulation not found
+      '400':
+        description: Exact canonical admission failed (VALIDATION_ERROR with stage=admission and a JSON Pointer path)
+      '422':
+        description: A value could not be materialized (PROJECT_MATERIALIZATION_FAILED) or a QuantumSavory constructor rejected it (CONSTRUCTOR_REJECTED)
         content:
           application/json:
             schema:
@@ -1243,33 +820,15 @@ end
                   description: Error message describing the validation failure
                 details:
                   type: object
-                  description: Additional error details
+                  description: Stage, entity, path, constructor, wire, and native exception context. Constructor prose is not parsed to infer a parameter.
       '403':
         description: Protocol parameters require unsafe Julia evaluation, which is disabled (UNSAFE_EVALUATION_DISABLED)
+      '409':
+        description: A running simulation cannot be replaced (SIMULATION_RUNNING)
 """
 route("/prepare_simulation", method="POST") do
-  simulation_name = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())["name"]
-
-  # Prepare the simulation, logging unexpected errors to the simulation's log stream
-  simulation_state = try
-    WebQuantumSavory.simulation_prepare!(simulation_name)
-  catch e
-    isa(e, APIError) && rethrow(e)
-
-    # Log a human-readable message into the simulation logs for frontend display
-    try
-      recovered_state = WebQuantumSavory._simulation_state(
-        WebQuantumSavory.SIMULATION_SERVICE,
-        simulation_name,
-      )
-      @log_event recovered_state Logging.Error "Error preparing simulation $simulation_name: $(e)" error_type=string(typeof(e))
-    catch
-    end
-
-    # Rethrow so that safe_route_handler can still produce a proper HTTP error response
-    throw(validation_error("Error preparing simulation $simulation_name: $(e)", Dict("error" => string(e))))
-  end
-
+  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+  simulation_state = WebQuantumSavory.simulation_prepare!(payload)
   json(WebQuantumSavory.serialize_state(simulation_state))
 end
 
@@ -1408,7 +967,7 @@ end
                     status:
                       type: string
                       description: Current status of the simulation
-                      enum: ["created", "prepared", "complete", "unknown"]
+                      enum: ["prepared", "complete", "unknown"]
                     node_count:
                       type: integer
                       description: Number of nodes in the network
@@ -1981,245 +1540,6 @@ route("/test_code", method="POST") do
       :message => "Code executed successfully",
       :results => results
     ))
-  else
-    json(evaluation_failure_response(error))
-  end
-end
-
-########################################################
-
-@swagger """
-/test_numeric_expression:
-  post:
-    summary: Validate or evaluate a typed Julia numeric expression
-    description: |
-      Parses complete Julia source and casts its final value to Float64 or
-      Int64. Concrete node, edge, and floating requests evaluate with the
-      supplied lexical assignment context. Omit context only for explicit
-      templates and Variables. Templates evaluate once with stable
-      representative values and return that value with deferred=true. Variable
-      requests lower once and are deferred without executing the expression
-      body when resolved assignment globals are referenced. This endpoint
-      executes trusted Julia code in the server process and is available only
-      when unsafe evaluation is enabled.
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            additionalProperties: false
-            required: [expression, target_type, placement]
-            properties:
-              expression:
-                type: string
-                example: "delay / 2"
-              target_type:
-                type: string
-                enum: [Float64, Int64]
-              placement:
-                type: string
-                enum: [node, edge, floating, variable]
-              context:
-                description: Strict placement-specific concrete context; omit for templates and variables.
-                oneOf:
-                  - type: object
-                    title: Floating protocol context
-                    additionalProperties: false
-                    required: [node_names]
-                    properties:
-                      node_names:
-                        type: array
-                        items:
-                          type: string
-                  - type: object
-                    title: Node protocol context
-                    additionalProperties: false
-                    required: [node_names, self]
-                    properties:
-                      node_names:
-                        type: array
-                        items:
-                          type: string
-                      self:
-                        type: integer
-                        minimum: 1
-                  - type: object
-                    title: Edge protocol context
-                    additionalProperties: false
-                    required: [node_names, distance, delay, refractive_index, loss, transmissivity, node_a, node_b]
-                    properties:
-                      node_names:
-                        type: array
-                        items:
-                          type: string
-                      distance:
-                        type: number
-                        nullable: true
-                        minimum: 0
-                      delay:
-                        type: number
-                        nullable: true
-                        minimum: 0
-                      refractive_index:
-                        type: number
-                        nullable: true
-                        minimum: 0
-                        exclusiveMinimum: true
-                      loss:
-                        type: number
-                        nullable: true
-                        minimum: 0
-                      transmissivity:
-                        type: number
-                        nullable: true
-                        minimum: 0
-                        maximum: 1
-                      node_a:
-                        type: integer
-                        minimum: 1
-                      node_b:
-                        type: integer
-                        minimum: 1
-    responses:
-      '200':
-        description: Evaluated/deferred result or an EVALUATION_FAILED envelope
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                results:
-                  type: object
-                  required: [deferred, target_type]
-                  properties:
-                    deferred:
-                      type: boolean
-                    target_type:
-                      type: string
-                      enum: [Float64, Int64]
-                    value:
-                      type: string
-                      description: Precision-safe cast result; present for concrete, context-free Variable, and representative template results.
-                error_code:
-                  type: string
-                  enum: [EVALUATION_FAILED]
-      '400':
-        description: Malformed request DTO
-      '403':
-        description: Unsafe Julia code evaluation is disabled
-"""
-route("/test_numeric_expression", method="POST") do
-  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-  request = _parse_numeric_expression_test_request(payload)
-
-  success, results, error = Sandbox.test_numeric_expression(
-    request.expression,
-    request.target_type,
-    request.placement;
-    context=request.context,
-  )
-  if success
-    json(Dict(:success => true, :results => results))
-  else
-    json(evaluation_failure_response(error))
-  end
-end
-
-########################################################
-
-@swagger """
-/test_symbolic_expression:
-  post:
-    summary: Evaluate a symbolic expression and return its LaTeX form
-    description: |
-      Parses and evaluates a symbolic expression in the server process, in a
-      fresh module with QuantumSavory preloaded. The module is not a security
-      sandbox. This endpoint is available only when unsafe code evaluation is
-      enabled.
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              expr:
-                type: string
-                description: Symbolic expression to evaluate
-                example: "(Z₁⊗Z₁+Z₂⊗Z₂) / √2"
-            required:
-              - expr
-    responses:
-      '200':
-        description: Expression evaluated successfully
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                  example: true
-                results:
-                  type: object
-                  description: Evaluation results
-                  properties:
-                    value:
-                      type: string
-                      description: Stringified result of the evaluated expression
-                    latex:
-                      type: string
-                      description: LaTeX representation of the evaluated expression
-      '400':
-        description: Evaluation failed
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                  example: false
-                error:
-                  type: string
-                  description: Detailed error message
-                error_type:
-                  type: string
-                  description: Type of error that occurred
-      '403':
-        description: Unsafe Julia code evaluation is disabled
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                success:
-                  type: boolean
-                  example: false
-                error:
-                  type: string
-                  example: Unsafe Julia code evaluation is disabled
-                error_code:
-                  type: string
-                  example: UNSAFE_EVALUATION_DISABLED
-"""
-route("/test_symbolic_expression", method="POST") do
-  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-
-  if !haskey(payload, "expr")
-    throw(validation_error("Missing required field 'expr'", Dict("required_field" => "expr")))
-  end
-
-  expr = payload["expr"]
-  require_unsafe_code_evaluation()
-
-  success, results, error = Sandbox.test_symbolic_expression(expr)
-
-  if success
-    json(Dict(:success => true, :results => results, :message => "Expression evaluated successfully"))
   else
     json(evaluation_failure_response(error))
   end
