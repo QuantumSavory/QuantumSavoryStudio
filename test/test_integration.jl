@@ -429,7 +429,10 @@
         body=nothing_export_payload,
       )
       @test nothing_export_response.status == 200
-      @test occursin("tag = nothing", parse_response(nothing_export_response)["script"])
+      @test occursin(
+        "tag = nothing",
+        parse_response(nothing_export_response)["script"],
+      )
 
       invalid_export_payloads = [
         tagged_protocol_payload(

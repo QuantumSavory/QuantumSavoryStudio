@@ -2,12 +2,9 @@ const _SCRIPT_RESERVED_IDENTIFIERS = Set([
   "Base",
   "CairoMakie",
   "ConcurrentSim",
-  "Core",
   "Graphs",
-  "InteractiveUtils",
-  "Main",
+  "LinearAlgebra",
   "QuantumSavory",
-  "REPL",
   "ResumableFunctions",
   "animation_filename",
   "animation_step",
@@ -15,12 +12,12 @@ const _SCRIPT_RESERVED_IDENTIFIERS = Set([
   "figure",
   "frame_times",
   "graph",
+  "link_delay",
   "network",
   "network_axis",
   "network_observable",
   "node_indices",
   "nodeid",
-  "link_delay",
   "propagation_delays",
   "protocol_output_directory",
   "protocols",
@@ -33,923 +30,25 @@ const _SCRIPT_RESERVED_IDENTIFIERS = Set([
 
 const _JULIA_KEYWORDS = Set([
   "abstract", "baremodule", "begin", "break", "catch", "const", "continue", "do",
-  "else", "elseif", "end", "export", "false", "finally", "for",
-  "function", "global", "if", "import", "in", "isa", "let", "local",
-  "macro", "missing", "module", "mutable", "nothing", "primitive",
-  "outer", "public", "quote", "return", "struct", "true", "try", "type", "using",
-  "where", "while",
+  "else", "elseif", "end", "export", "false", "finally", "for", "function",
+  "global", "if", "import", "in", "isa", "let", "local", "macro", "missing",
+  "module", "mutable", "nothing", "outer", "primitive", "public", "quote",
+  "return", "struct", "true", "try", "type", "using", "where", "while",
 ])
 
-struct _ScriptReservedBinding end
-const _SCRIPT_RESERVED_BINDING = _ScriptReservedBinding()
-
-struct _ScriptImportEntry
-  source_module::Module
-  source_name::Symbol
-  local_name::Symbol
-end
-
-struct _ScriptImportRegistry
-  entries::Dict{Tuple{Module,Symbol},_ScriptImportEntry}
-  local_names::Dict{Tuple{Module,Symbol},Symbol}
-end
-
-function _script_import_registry(candidates=_script_import_candidates())
-  # Resolve every local name up front so aliases cannot depend on which
-  # constructor happens to be rendered first for a particular payload.
-  sources = sort!(unique!(collect(candidates)); by=source -> (
-    _script_module_path(first(source)),
-    string(last(source)),
-  ))
-  occupied = Dict{Symbol,Any}()
-  for base_module in (Core, Base)
-    for name in names(base_module)
-      isdefined(base_module, name) || continue
-      binding = getfield(base_module, name)
-      if haskey(occupied, name) && occupied[name] !== binding
-        occupied[name] = _SCRIPT_RESERVED_BINDING
-      else
-        occupied[name] = binding
-      end
-    end
-  end
-  for identifier in union(_SCRIPT_RESERVED_IDENTIFIERS, _JULIA_KEYWORDS)
-    occupied[Symbol(identifier)] = _SCRIPT_RESERVED_BINDING
-  end
-
-  candidate_bindings = Dict{Symbol,IdDict{Any,Nothing}}()
-  for (source_module, source_name) in sources
-    isdefined(source_module, source_name) || throw(server_error(
-      "Generated script import candidate references an unknown binding",
-      Dict{String,Any}(
-        "module" => _script_module_path(source_module),
-        "binding" => string(source_name),
-      ),
-    ))
-    bindings = get!(candidate_bindings, source_name, IdDict{Any,Nothing}())
-    bindings[getfield(source_module, source_name)] = nothing
-  end
-
-  direct_sources = Tuple{Module,Symbol}[]
-  aliased_sources = Tuple{Module,Symbol}[]
-  for source in sources
-    source_module, source_name = source
-    binding = getfield(source_module, source_name)
-    has_conflicting_candidate = length(candidate_bindings[source_name]) > 1
-    has_occupied_name = haskey(occupied, source_name) &&
-      occupied[source_name] !== binding
-    push!(
-      has_conflicting_candidate || has_occupied_name ? aliased_sources : direct_sources,
-      source,
-    )
-  end
-
-  local_names = Dict{Tuple{Module,Symbol},Symbol}()
-  for source in direct_sources
-    source_module, source_name = source
-    local_names[source] = source_name
-    occupied[source_name] = getfield(source_module, source_name)
-  end
-  for source in aliased_sources
-    source_module, source_name = source
-    binding = getfield(source_module, source_name)
-    local_name = _script_import_alias(occupied, source_module, source_name)
-    local_names[source] = local_name
-    occupied[local_name] = binding
-  end
-
-  return _ScriptImportRegistry(
-    Dict{Tuple{Module,Symbol},_ScriptImportEntry}(),
-    local_names,
-  )
-end
-
-function _script_module_path(source_module::Module)
-  # Gabs is a transitive package, but QuantumSavory intentionally exposes its
-  # basis module. Keep generated scripts on the public direct dependency path.
-  source_module === QuantumSavory.Gabs && return "QuantumSavory.Gabs"
-  return join(string.(Base.fullname(source_module)), ".")
-end
-
-function _script_qualified_reference(source_module::Module, name::Symbol)
-  return "$(_script_module_path(source_module)).$(name)"
-end
-
-function _script_import_alias(
-  occupied::Dict{Symbol,Any},
-  source_module::Module,
-  source_name::Symbol,
-)
-  source_text = string(source_name)
-  is_macro = startswith(source_text, "@")
-  bare_name = is_macro ? source_text[2:end] : source_text
-  Base.isidentifier(bare_name) || throw(server_error(
-    "Generated script import has an unsupported binding name",
-    Dict{String,Any}("binding" => source_text),
-  ))
-
-  module_parts = [
-    replace(part, r"[^A-Za-z0-9_]" => "_")
-    for part in split(_script_module_path(source_module), '.')
-  ]
-  prefix = join(module_parts, "_") * "_" * bare_name
-  candidate = Symbol((is_macro ? "@" : "") * prefix)
-  haskey(occupied, candidate) || return candidate
-
-  suffix = 2
-  while true
-    candidate = Symbol((is_macro ? "@" : "") * prefix * "_$(suffix)")
-    haskey(occupied, candidate) || return candidate
-    suffix += 1
-  end
-end
-
-function _script_import_reference!(
-  registry::_ScriptImportRegistry,
-  source_module::Module,
-  source_name::Symbol,
-)
-  key = (source_module, source_name)
-  entry = get(registry.entries, key, nothing)
-  entry === nothing || return string(entry.local_name)
-  local_name = get(registry.local_names, key, nothing)
-  local_name === nothing && throw(server_error(
-    "Generated script import was not declared in the candidate registry",
-    Dict{String,Any}(
-      "module" => _script_module_path(source_module),
-      "binding" => string(source_name),
-    ),
-  ))
-
-  entry = _ScriptImportEntry(source_module, source_name, local_name)
-  registry.entries[key] = entry
-  return string(local_name)
-end
-
-function _script_reference(
-  registry::Union{Nothing,_ScriptImportRegistry},
-  source_module::Module,
-  source_name::Symbol,
-)
-  registry === nothing && return _script_qualified_reference(source_module, source_name)
-  return _script_import_reference!(registry, source_module, source_name)
-end
-
-function _script_reference(
-  registry::Union{Nothing,_ScriptImportRegistry},
-  source_module::Module,
-  binding,
-)
-  _, source_name = _script_binding_source(source_module, binding)
-  return _script_reference(registry, source_module, source_name)
-end
-
-function _script_reference(registry::Union{Nothing,_ScriptImportRegistry}, binding)
-  source_module, source_name = _script_binding_source(binding)
-  return _script_reference(registry, source_module, source_name)
-end
-
-function _script_import_lines(registry::_ScriptImportRegistry)
-  entries = sort!(collect(values(registry.entries)); by=entry -> (
-    _script_module_path(entry.source_module),
-    string(entry.source_name),
-    string(entry.local_name),
-  ))
-  grouped = Dict{String,Vector{String}}()
-  for entry in entries
-    module_path = _script_module_path(entry.source_module)
-    reference = string(entry.source_name) * (
-      entry.local_name == entry.source_name ? "" : " as $(entry.local_name)"
-    )
-    push!(get!(grouped, module_path, String[]), reference)
-  end
-  return [
-    "using $module_path: $(join(grouped[module_path], ", "))"
-    for module_path in sort!(collect(keys(grouped)))
-  ]
-end
-
-const _SCRIPT_STATIC_IMPORT_SOURCES = (
-  (QuantumSavory, :Register),
-  (QuantumSavory, :RegisterNet),
-  (QuantumSavory, :get_time_tracker),
-  (QuantumSavory, :registernetplot_axis),
-  (QuantumSavory, :express),
-  (Graphs, :SimpleGraph),
-  (Graphs, :add_edge!),
-  (ConcurrentSim, :run),
-  (ConcurrentSim, Symbol("@process")),
-  (CairoMakie, :activate!),
-  (CairoMakie, :Figure),
-  (CairoMakie, :record),
-  (LinearAlgebra, :tr),
-)
-
-function _script_binding_source(source_module::Module, binding)
-  source_name = nameof(binding)
-  getfield(source_module, source_name) === binding || throw(server_error(
-    "Generated script import module does not expose the resolved binding",
-    Dict{String,Any}(
-      "module" => _script_module_path(source_module),
-      "binding" => string(binding),
-    ),
-  ))
-  return source_module, source_name
-end
-
-_script_binding_source(binding) = _script_binding_source(parentmodule(binding), binding)
-
-function _script_import_candidates(catalogs=_constructor_catalog_snapshot())
-  candidates = Set{Tuple{Module,Symbol}}(_SCRIPT_STATIC_IMPORT_SOURCES)
-  push!(candidates, _script_binding_source(QuantumSavory.Wildcard))
-
-  for spec in values(_REPRESENTATION_SPECS)
-    push!(candidates, _script_binding_source(
-      spec.script.constructor.source_module,
-      spec.script.constructor.binding,
-    ))
-    for argument in spec.script.arguments
-      push!(candidates, _script_binding_source(
-        argument.source_module,
-        argument.binding,
-      ))
-    end
-  end
-  for entry in catalogs.protocols
-    push!(candidates, _script_binding_source(entry.type))
-  end
-  for entry in catalogs.backgrounds
-    push!(candidates, _script_binding_source(entry.type))
-  end
-  for entry in catalogs.slots
-    push!(candidates, _script_binding_source(entry.type))
-  end
-  for entry in values(STATES_ZOO_TYPE_REGISTRY)
-    push!(candidates, _script_binding_source(entry.type))
-  end
-  for definition in _tag_catalog_snapshot().named
-    push!(candidates, _script_binding_source(definition.type))
-  end
-
-  return sort!(collect(candidates); by=source -> (
-    _script_module_path(first(source)),
-    string(last(source)),
-  ))
-end
-
-function _script_static_references!(registry::_ScriptImportRegistry)
-  return (
-    register=_script_reference(registry, QuantumSavory, :Register),
-    register_net=_script_reference(registry, QuantumSavory, :RegisterNet),
-    get_time_tracker=_script_reference(registry, QuantumSavory, :get_time_tracker),
-    registernetplot_axis=_script_reference(
-      registry,
-      QuantumSavory,
-      :registernetplot_axis,
-    ),
-    simple_graph=_script_reference(registry, Graphs, :SimpleGraph),
-    add_edge=_script_reference(registry, Graphs, :add_edge!),
-    run=_script_reference(registry, ConcurrentSim, :run),
-    activate=_script_reference(registry, CairoMakie, :activate!),
-    figure=_script_reference(registry, CairoMakie, :Figure),
-    record=_script_reference(registry, CairoMakie, :record),
-  )
-end
-
-"""Return a single-line representation suitable for generated comments."""
-function _script_comment(value)
-  replace(strip(string(value)), r"[\x00-\x1f\x7f]+" => " ")
-end
-
-function _script_literal(value, context::String)
-  if value === nothing
-    return "nothing"
-  elseif value isa Bool
-    return value ? "true" : "false"
-  elseif value isa Integer
-    return string(value)
-  elseif value isa AbstractFloat
-    isfinite(value) || throw(validation_error(
-      "$context must be finite",
-      Dict{String,Any}("value" => string(value)),
-    ))
-    return repr(value)
-  elseif value isa AbstractString
-    return repr(String(value))
-  elseif value isa AbstractVector
-    return "[" * join((_script_literal(item, context) for item in value), ", ") * "]"
-  end
-
-  throw(validation_error(
-    "$context cannot be represented as Julia source",
-    Dict{String,Any}("received_type" => string(typeof(value))),
-  ))
-end
-
-function _script_raw_expression(value, context::String)
-  if !(value isa AbstractString)
-    return _script_literal(value, context)
-  end
-
-  source = strip(String(value))
-  isempty(source) && throw(validation_error("$context must not be blank"))
-  _script_validate_source(source, context; complete=false)
-  return "(" * source * ")"
-end
-
-"""Parse user source for export without lowering, macro expansion, or execution."""
-function _script_validate_source(
-  source::AbstractString,
-  context::String;
-  complete::Bool=true,
-)
-  return try
-    complete ? _parse_complete_source(source) : Meta.parse(source; raise=true)
-  catch error
-    throw(validation_error(
-      "$context is not valid Julia syntax",
-      Dict{String,Any}("parse_error" => sprint(showerror, error)),
-    ))
-  end
-end
-
-function _script_declared_types(raw_type)
-  raw_type isa AbstractVector ? string.(collect(raw_type)) : [string(raw_type === nothing ? "Any" : raw_type)]
-end
-
-function _script_declared_type(raw_type)
-  types = _script_declared_types(raw_type)
-  length(types) == 1 ? only(types) : "Union{" * join(types, ", ") * "}"
-end
-
-function _script_special_type(raw_type)
-  _is_symbolic_parameter_type(raw_type) && return "Symbolic"
-  for type_name in _script_declared_types(raw_type)
-    if type_name in ("Function", "Lambda")
-      return type_name
-    end
-  end
-  return nothing
-end
-
-function _script_self_function(value, node_index, context::String)
-  source = strip(String(value))
-  for (reference, _) in SELF_COMPARISON_OPERATORS
-    if source == reference
-      node_index === nothing && throw(validation_error(
-        "$context uses '$reference', which is only valid for a node protocol",
-      ))
-      return replace(reference, "self" => string(node_index))
-    end
-  end
-  return nothing
-end
-
-const _SCRIPT_ASSIGNMENT_CONTEXT_BINDINGS = Set{Symbol}([
+const _SCRIPT_FACTORY_CONTEXT = (
   :self,
+  :node,
   (descriptor.binding for descriptor in EDGE_CONTEXT_DESCRIPTORS)...,
   (descriptor.binding for descriptor in EDGE_ENDPOINT_CONTEXT_DESCRIPTORS)...,
-])
-
-function _script_binding_names!(bindings::Set{Symbol}, expression)
-  if expression isa Symbol
-    push!(bindings, expression)
-  elseif expression isa Expr
-    if expression.head in (:tuple, :parameters)
-      foreach(argument -> _script_binding_names!(bindings, argument), expression.args)
-    elseif expression.head in (:(::), :kw, :(...), :(=)) &&
-           !isempty(expression.args)
-      _script_binding_names!(bindings, first(expression.args))
-    end
-  end
-  return bindings
-end
-
-function _script_function_signature(signature)
-  while signature isa Expr && signature.head in (:(::), :where)
-    signature = first(signature.args)
-  end
-  signature isa Expr && signature.head === :call ||
-    return (name=signature isa Symbol ? signature : nothing, arguments=Any[])
-  name = first(signature.args)
-  return (
-    name=name isa Symbol ? name : nothing,
-    arguments=collect(Iterators.drop(signature.args, 1)),
-  )
-end
-
-"""
-Collect names assigned in the current Julia scope.
-
-Nested local scopes are deliberately skipped. Assignments inside conditional
-branches still declare a name in the surrounding scope, matching Julia's
-lexical treatment closely enough for parse-only export.
-"""
-function _script_scope_bindings!(bindings::Set{Symbol}, expression)
-  expression isa Expr || return bindings
-  expression.head in (
-    :quote,
-    :let,
-    :for,
-    :while,
-    :try,
-    :generator,
-    :comprehension,
-    :->,
-  ) &&
-    return bindings
-
-  if expression.head === :function
-    signature = _script_function_signature(first(expression.args))
-    signature.name === nothing || push!(bindings, signature.name)
-    return bindings
-  elseif expression.head === :(=)
-    target = first(expression.args)
-    if target isa Expr && target.head === :call
-      signature = _script_function_signature(target)
-      signature.name === nothing || push!(bindings, signature.name)
-    else
-      _script_binding_names!(bindings, target)
-    end
-    return bindings
-  elseif expression.head in (:local, :global, :const)
-    foreach(argument -> _script_binding_names!(bindings, argument), expression.args)
-    return bindings
-  end
-
-  foreach(argument -> _script_scope_bindings!(bindings, argument), expression.args)
-  return bindings
-end
-
-"""Find free assignment-local names referenced syntactically by user source."""
-function _script_assignment_context_references(parsed)
-  references = Set{Symbol}()
-
-  function visit_arguments!(arguments, bound)
-    positional = Any[]
-    keywords = Any[]
-    for argument in arguments
-      argument isa LineNumberNode && continue
-      if argument isa Expr && argument.head === :parameters
-        append!(keywords, argument.args)
-      else
-        push!(positional, argument)
-      end
-    end
-    foreach(argument -> visit_argument!(argument, bound), positional)
-    foreach(argument -> visit_argument!(argument, bound), keywords)
-    return nothing
-  end
-
-  function visit_argument!(argument, bound)
-    if argument isa Expr && argument.head in (:tuple, :block, :parameters)
-      visit_arguments!(argument.args, bound)
-    elseif argument isa Expr && argument.head in (:kw, :(=)) &&
-           length(argument.args) >= 2
-      visit(argument.args[2], bound)
-      _script_binding_names!(bound, argument.args[1])
-    else
-      _script_binding_names!(bound, argument)
-    end
-    return nothing
-  end
-
-  function visit_function(signature_expression, body, bound)
-    signature = _script_function_signature(signature_expression)
-    function_bound = copy(bound)
-    signature.name === nothing || push!(function_bound, signature.name)
-    visit_arguments!(signature.arguments, function_bound)
-    visit(body, function_bound)
-    return nothing
-  end
-
-  function visit_iterator!(iterator, bound)
-    if iterator isa Expr && iterator.head in (:(=), :in)
-      visit(iterator.args[2], bound)
-      _script_binding_names!(bound, iterator.args[1])
-    elseif iterator isa Expr && iterator.head === :filter
-      foreach(item -> visit_iterator!(item, bound), iterator.args[2:end])
-      visit(first(iterator.args), bound)
-    else
-      visit(iterator, bound)
-    end
-    return nothing
-  end
-
-  function visit(expression, bound::Set{Symbol})
-    expression isa QuoteNode && return nothing
-    if expression isa Symbol
-      expression in _SCRIPT_ASSIGNMENT_CONTEXT_BINDINGS &&
-        !(expression in bound) &&
-        push!(references, expression)
-      return nothing
-    end
-    expression isa Expr || return nothing
-    expression.head === :quote && return nothing
-
-    if expression.head in (:block, :toplevel)
-      scope_bound = copy(bound)
-      _script_scope_bindings!(scope_bound, expression)
-      foreach(argument -> visit(argument, scope_bound), expression.args)
-    elseif expression.head === :let
-      let_bound = copy(bound)
-      for binding in expression.args[1:end-1]
-        if binding isa Expr && binding.head === :(=)
-          visit(binding.args[2], let_bound)
-          _script_binding_names!(let_bound, binding.args[1])
-        else
-          _script_binding_names!(let_bound, binding)
-        end
-      end
-      visit(last(expression.args), let_bound)
-    elseif expression.head === :->
-      lambda_bound = copy(bound)
-      visit_argument!(first(expression.args), lambda_bound)
-      visit(last(expression.args), lambda_bound)
-    elseif expression.head === :function
-      visit_function(expression.args[1], expression.args[2], bound)
-    elseif expression.head === :(=) &&
-           first(expression.args) isa Expr &&
-           first(expression.args).head === :call
-      visit_function(first(expression.args), expression.args[2], bound)
-    elseif expression.head === :(=)
-      visit(expression.args[2], bound)
-    elseif expression.head === :for
-      loop_bound = copy(bound)
-      visit_iterator!(first(expression.args), loop_bound)
-      visit(last(expression.args), loop_bound)
-    elseif expression.head === :while
-      visit(first(expression.args), bound)
-      visit(last(expression.args), copy(bound))
-    elseif expression.head === :try
-      visit(first(expression.args), copy(bound))
-      if length(expression.args) >= 3 && expression.args[3] !== false
-        catch_bound = copy(bound)
-        expression.args[2] === false ||
-          _script_binding_names!(catch_bound, expression.args[2])
-        visit(expression.args[3], catch_bound)
-      end
-      length(expression.args) >= 4 && expression.args[4] !== false &&
-        visit(expression.args[4], copy(bound))
-      length(expression.args) >= 5 && expression.args[5] !== false &&
-        visit(expression.args[5], copy(bound))
-    elseif expression.head === :generator
-      generator_bound = copy(bound)
-      foreach(
-        iterator -> visit_iterator!(iterator, generator_bound),
-        expression.args[2:end],
-      )
-      visit(first(expression.args), generator_bound)
-    elseif expression.head === :kw
-      length(expression.args) >= 2 && visit(expression.args[2], bound)
-    elseif expression.head in (:local, :global, :const)
-      for declaration in expression.args
-        declaration isa Expr && declaration.head === :(=) &&
-          visit(declaration.args[2], bound)
-      end
-    else
-      foreach(argument -> visit(argument, bound), expression.args)
-    end
-    return nothing
-  end
-
-  visit(parsed, Set{Symbol}())
-  return references
-end
-
-function _script_assignment_bindings(node_index, edge_context, references)
-  bindings = ""
-  :self in references && node_index !== nothing &&
-    (bindings *= "    self = $node_index\n")
-  edge_context === nothing && return bindings
-  for descriptor in EDGE_CONTEXT_DESCRIPTORS
-    descriptor.binding in references || continue
-    value = getfield(edge_context, descriptor.field)
-    bindings *=
-      "    $(descriptor.binding) = $(_script_literal(value, descriptor.script_label))\n"
-  end
-  for descriptor in EDGE_ENDPOINT_CONTEXT_DESCRIPTORS
-    descriptor.binding in references || continue
-    value = getfield(edge_context, descriptor.field)
-    bindings *= "    $(descriptor.binding) = $value\n"
-  end
-  return bindings
-end
-
-function _script_user_source_expression(
-  source::AbstractString,
-  parsed,
-  context_bindings::AbstractString,
 )
-  indented = replace(source, "\n" => "\n    ")
-  if !isempty(context_bindings)
-    return "(let\n" * context_bindings * "    $indented\nend)"
-  end
 
-  statements = parsed isa Expr && parsed.head === :block ?
-    filter(statement -> !(statement isa LineNumberNode), parsed.args) :
-    Any[parsed]
-  if length(statements) == 1 && !occursin('\n', source) && !occursin('#', source)
-    return "($source)"
-  end
-  return "(begin\n    $indented\nend)"
-end
-
-function _script_custom_function_expression(
-  source::AbstractString,
-  node_index,
-  context::String;
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-)
-  source = strip(String(source))
-  isempty(source) && throw(validation_error("$context must not be blank"))
-  parsed = _script_validate_source(source, context)
-  references = _script_assignment_context_references(parsed)
-  context_bindings = _script_assignment_bindings(
-    node_index,
-    edge_context,
-    references,
-  )
-  return _script_user_source_expression(source, parsed, context_bindings)
-end
-
-function _script_function_expression(
-  value,
-  special_type::String,
-  node_index,
-  context::String;
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-)
-  value isa AbstractString || throw(validation_error(
-    "$context must be a function name or Julia function expression",
-    Dict{String,Any}("received_type" => string(typeof(value))),
-  ))
-  source = strip(String(value))
-
-  source == "default" && return nothing
-  resolve_function_reference(source) !== nothing && return source
-
-  self_function = _script_self_function(source, node_index, context)
-  self_function !== nothing && return self_function
-
-  special_type == "Lambda" || throw(validation_error(
-    "$context is not an allowlisted function reference",
-    Dict{String,Any}("value" => source),
-  ))
-  return _script_custom_function_expression(
-    source,
-    node_index,
-    context;
-    edge_context=edge_context,
-  )
-end
-
-function _script_numeric_expression(
-  value,
-  target_type::String,
-  node_index,
-  context::String;
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-)
-  expression = _parse_numeric_expression(value; context)
-  expression === nothing && throw(validation_error(
-    "$context must use the numeric-expression tagged representation",
-  ))
-  parsed = _script_validate_source(expression.source, context)
-  references = _script_assignment_context_references(parsed)
-  context_bindings = _script_assignment_bindings(
-    node_index,
-    edge_context,
-    references,
-  )
-
-  target_constructor = target_type == "Float64" ? "Base.Float64" : "Base.Int64"
-  source_expression = _script_user_source_expression(
-    expression.source,
-    parsed,
-    context_bindings,
-  )
-  return "$target_constructor$source_expression"
-end
-
-function _script_validate_deferred_lambda(value, context::String)
-  # `node_index = nothing` would reject node-only `self` before a deferred
-  # Lambda has an assignment; validate in a representative node context, then
-  # discard this expression and rebuild it with the actual assignment context.
-  _script_function_expression(value, "Lambda", 1, context)
-  return nothing
-end
-
-function _script_validate_deferred_numeric_expression(value, context::String)
-  expression = _parse_numeric_expression(value; context)
-  expression === nothing && throw(validation_error(
-    "$context must use the numeric-expression tagged representation",
-  ))
-  _script_validate_source(expression.source, context)
-  return nothing
-end
-
-function _script_states_zoo_expression(
-  recipe,
-  context::String;
-  return_trace::Bool=false,
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-)
-  # Constructing the allowlisted symbolic value validates exact keys, ranges,
-  # and the constructor without evaluating user-provided Julia source.
-  construct_states_zoo_recipe(recipe)
-  state_type = String(recipe["state_type"])
-  _, entry = _states_zoo_entry(state_type)
-  parameter_names = QuantumSavory.StatesZoo.stateparameters(entry.type)
-  arguments = [
-    _script_literal(recipe["parameters"][string(name)], "$context parameter '$(name)'")
-    for name in parameter_names
-  ]
-  constructor = _script_reference(imports, entry.type)
-  expression = "$constructor(" * join(arguments, ", ") * ")"
-  entry.weighted || return expression
-  express = _script_reference(imports, QuantumSavory, :express)
-  trace = _script_reference(imports, LinearAlgebra, :tr)
-  result = return_trace ? "(state / trace, trace)" : "state / trace"
-  return "(let\n" *
-    "    state = $expression\n" *
-    "    trace = abs($express($trace(state)))\n" *
-    "    $result\n" *
-    "end)"
-end
-
-function _script_symbolic_expression(
-  value,
-  context::String;
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-)
-  if _states_zoo_object_like(value) && get(value, "kind", nothing) == "states_zoo"
-    return _script_states_zoo_expression(value, context; imports)
-  elseif value isa AbstractString
-    return _script_raw_expression(value, context)
-  end
-  throw(validation_error(
-    "$context must be Julia symbolic source or a States Zoo recipe",
-    Dict{String,Any}("received_type" => string(typeof(value))),
-  ))
-end
-
-function _script_regular_expression(
-  raw_type,
-  value,
-  context::String;
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-)
-  if any(type_name in ("Wildcard", "QuantumSavory.Wildcard") for type_name in _script_declared_types(raw_type))
-    wildcard = _script_reference(imports, QuantumSavory.Wildcard)
-    return "$wildcard()"
-  end
-  declared_type = _script_declared_type(raw_type)
-  converted, converted_value = _convert_parameter_value(declared_type, value)
-  converted && return _script_literal(converted_value, context)
-
-  # Scalar numeric Julia source is represented only by the explicit tagged
-  # contract. Untagged strings remain literals and must parse as such.
-  declared_types = _script_declared_types(raw_type)
-  if any(type_name -> type_name in NUMERIC_EXPRESSION_TARGETS, declared_types)
-    throw(validation_error(
-      "$context is not a valid numeric literal for declared type '$declared_type'",
-    ))
-  end
-
-  # The normal parser's final fallback interprets complex values as Julia. The
-  # exporter preserves that local-script capability but only parses the source;
-  # it never evaluates it in the web-server process.
-  if value isa AbstractString || value isa Number || value isa AbstractVector
-    return _script_raw_expression(value, context)
-  end
-  throw(validation_error(
-    "$context with declared type '$declared_type' cannot be translated",
-    Dict{String,Any}("received_type" => string(typeof(value))),
-  ))
-end
-
-function _script_assert_constructor_numeric_bounds(
-  raw_type,
-  value,
-  constructor_metadata,
-  context::String,
-)
-  constructor_metadata === nothing && return nothing
-  converted, converted_value = _convert_parameter_value(
-    _script_declared_type(raw_type),
-    value,
-  )
-  if converted && converted_value isa Real && !(converted_value isa Bool)
-    minimum = _constructor_numeric_bound(constructor_metadata, :min)
-    maximum = _constructor_numeric_bound(constructor_metadata, :max)
-    minimum !== nothing && converted_value < minimum &&
-      throw(validation_error("$context is below its minimum"))
-    maximum !== nothing && converted_value > maximum &&
-      throw(validation_error("$context is above its maximum"))
-  end
-  return nothing
-end
-
-function _script_value_expression(
-  raw_type,
-  value,
-  context::String;
-  node_index=nothing,
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-  constructor_metadata=nothing,
-)
-  numeric_expression = _parse_numeric_expression(value; context)
-  if numeric_expression !== nothing
-    target_type = _numeric_expression_target(raw_type)
-    target_type === nothing && throw(validation_error(
-      "$context does not authoritatively accept a Float64 or Int64 expression",
-    ))
-    return _script_numeric_expression(
-      value,
-      target_type,
-      node_index,
-      context;
-      edge_context,
-    )
-  end
-
-  special_type = _script_special_type(raw_type)
-  if special_type in ("Function", "Lambda")
-    return _script_function_expression(
-      value,
-      special_type,
-      node_index,
-      context;
-      edge_context=edge_context,
-    )
-  elseif special_type == "Symbolic"
-    return _script_symbolic_expression(value, context; imports)
-  end
-  _script_assert_constructor_numeric_bounds(
-    raw_type,
-    value,
-    constructor_metadata,
-    context,
-  )
-  return _script_regular_expression(raw_type, value, context; imports)
-end
-
-function _script_weighted_states_zoo_recipe(variable::Variable)
-  _script_special_type(variable.type) == "Symbolic" || return nothing
-  recipe = variable.value
-  _states_zoo_object_like(recipe) || return nothing
-  get(recipe, "kind", nothing) == "states_zoo" || return nothing
-  state_type = get(recipe, "state_type", nothing)
-  state_type isa AbstractString || return nothing
-  _, entry = _states_zoo_entry(state_type)
-  return entry.weighted ? recipe : nothing
-end
-
-function _script_states_zoo_trace_owner(
-  companion::Variable,
-  raw_companion,
-  variables::Dict{String,Variable},
-)
-  haskey(raw_companion, "statesZooTraceSourceId") || return nothing
-  context = "Generated trace variable '$(_script_comment(companion.name))'"
-  raw_owner = raw_companion["statesZooTraceSourceId"]
-  raw_owner isa AbstractString || throw(validation_error(
-    "$context field 'statesZooTraceSourceId' must be a string",
-  ))
-  owner_id = strip(String(raw_owner))
-  isempty(owner_id) && throw(validation_error(
-    "$context field 'statesZooTraceSourceId' must not be blank",
-  ))
-  source = get(variables, owner_id, nothing)
-  source === nothing && throw(validation_error(
-    "$context references an unknown States Zoo variable '$owner_id'",
-  ))
-  _script_weighted_states_zoo_recipe(source) !== nothing || throw(validation_error(
-    "$context owner '$owner_id' must be a weighted States Zoo variable",
-  ))
-
-  expected_id = "$(source.id)_tr"
-  expected_name = "$(source.name)_tr"
-  if companion.id != expected_id || companion.name != expected_name || companion.type != "Float64"
-    throw(validation_error(
-      "$context does not match its weighted States Zoo owner",
-      Dict{String,Any}(
-        "expected_id" => expected_id,
-        "expected_name" => expected_name,
-        "expected_type" => "Float64",
-      ),
-    ))
-  end
-  return source
-end
+"""Return a single-line representation suitable for generated comments."""
+_script_comment(value) = replace(strip(string(value)), r"[\x00-\x1f\x7f]+" => " ")
 
 function _script_identifier(raw_value, used::Set{String}, fallback::String)
-  raw = string(raw_value)
-  identifier = replace(raw, r"[^A-Za-z0-9_]" => "_")
-  identifier = replace(identifier, r"_+" => "_")
-  identifier = strip(identifier, '_')
+  identifier = replace(string(raw_value), r"[^A-Za-z0-9_]" => "_")
+  identifier = strip(replace(identifier, r"_+" => "_"), '_')
   if isempty(identifier)
     identifier = fallback
   elseif !isletter(first(identifier)) && first(identifier) != '_'
@@ -968,475 +67,361 @@ function _script_identifier(raw_value, used::Set{String}, fallback::String)
 end
 
 function _script_filename(project_name)
-  basename = string(project_name)
-  basename = lowercase(replace(basename, r"[^A-Za-z0-9._-]+" => "-"))
+  basename = lowercase(replace(string(project_name), r"[^A-Za-z0-9._-]+" => "-"))
   basename = strip(basename, ['.', '-', '_'])
   isempty(basename) && (basename = "quantumsavory-simulation")
   return first(basename, min(length(basename), 100)) * ".jl"
 end
 
-function _script_simulation_config(payload)
-  config = get(payload, "simulationConfig", Dict{String,Any}())
-  _is_object_like(config) || throw(validation_error(
-    "Field 'simulationConfig' must be an object",
-    Dict{String,Any}("received_type" => string(typeof(config))),
-  ))
-
-  duration = get(config, "time", 1.0)
-  time_step = get(config, "timeStep", 0.1)
-  for (name, value) in (("time", duration), ("timeStep", time_step))
-    (value isa Real && !(value isa Bool) && isfinite(value) && value > 0) ||
-      throw(validation_error(
-        "simulationConfig.$name must be a positive finite number",
-        Dict{String,Any}("value" => value),
-      ))
+function _script_literal(value, context::String="value")
+  if value === nothing
+    return "nothing"
+  elseif value isa Bool
+    return value ? "true" : "false"
+  elseif value isa Integer
+    return string(value)
+  elseif value isa AbstractFloat
+    isfinite(value) || _admission_error("$context must be finite", "")
+    return repr(value)
+  elseif value isa AbstractString
+    return repr(String(value))
+  elseif value isa AbstractVector
+    return "[" * join((_script_literal(item, context) for item in value), ", ") * "]"
+  elseif _is_object_like(value)
+    entries = [
+      "$(_script_literal(string(key), context)) => $(_script_literal(value[key], context))"
+      for key in sort!(collect(keys(value)); by=string)
+    ]
+    return "Dict{String,Any}(" * join(entries, ", ") * ")"
   end
-  return Float64(duration), Float64(time_step)
+  throw(validation_error(
+    "$context cannot be represented as Julia source",
+    Dict{String,Any}("received_type" => string(typeof(value))),
+  ))
+end
+
+function _script_wire_literal(value, wire_type::String, context::String)
+  literal = _script_literal(value, context)
+  if wire_type == "Int"
+    return "Base.Int($literal)"
+  elseif wire_type == "Int64"
+    return "Base.Int64($literal)"
+  elseif wire_type == "Float64"
+    return "Base.Float64($literal)"
+  elseif wire_type == "Vector{Int64}"
+    return "Base.Int64[" * join((_script_literal(item, context) for item in value), ", ") * "]"
+  elseif wire_type == "Vector{Float64}"
+    return "Base.Float64[" * join((_script_literal(item, context) for item in value), ", ") * "]"
+  end
+  return literal
+end
+
+function _script_module_path(source_module::Module)
+  source_module === QuantumSavory.Gabs && return "QuantumSavory.Gabs"
+  return join(string.(Base.fullname(source_module)), ".")
+end
+
+function _script_binding_reference(binding)
+  source_module = parentmodule(binding)
+  name = nameof(binding)
+  return "$(_script_module_path(source_module)).$(name)"
+end
+
+_script_binding_reference(source_module::Module, binding) =
+  "$(_script_module_path(source_module)).$(nameof(binding))"
+
+function _script_simulation_config(payload)
+  config = payload["simulationConfig"]
+  return Float64(get(config, "time", 1.0)), Float64(get(config, "timeStep", 0.1))
+end
+
+function _script_context_values(
+  node_index::Union{Nothing,Int}=nothing,
+  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
+)
+  values = Dict{Symbol,Any}(:self => node_index, :node => node_index)
+  for descriptor in EDGE_CONTEXT_DESCRIPTORS
+    values[descriptor.binding] = edge_context === nothing ? nothing :
+      getfield(edge_context, descriptor.field)
+  end
+  for descriptor in EDGE_ENDPOINT_CONTEXT_DESCRIPTORS
+    values[descriptor.binding] = edge_context === nothing ? nothing :
+      getfield(edge_context, descriptor.field)
+  end
+  return values
+end
+
+function _script_context_keywords(context_values)
+  return join([
+    string(name, " = ", _script_literal(get(context_values, name, nothing), "placement context"))
+    for name in _SCRIPT_FACTORY_CONTEXT
+  ], ", ")
+end
+
+_script_forwarded_context_keywords() = join(("$(name) = $(name)" for name in
+  _SCRIPT_FACTORY_CONTEXT), ", ")
+
+function _script_scoped_source(source::String, context_values)
+  assignments = join([
+    string(name, " = ", _script_literal(get(context_values, name, nothing), "placement context"))
+    for name in _SCRIPT_FACTORY_CONTEXT
+  ], ", ")
+  return "(let $assignments; begin\n$source\nend; end)"
+end
+
+function _script_factory_source(source::String)
+  return "(begin\n$source\nend)"
+end
+
+function _script_states_zoo_call(recipe::_StatesZooValue)
+  constructor = _script_binding_reference(recipe.constructor)
+  arguments = join((
+    _script_literal(value, "States Zoo parameter") for value in recipe.values
+  ), ", ")
+  return "$constructor($arguments)"
+end
+
+function _script_normalized_states_zoo(call::String, trace_expression::String)
+  return "(let state = $call; state / ($trace_expression); end)"
+end
+
+function _script_transport_expression(
+  recipe::_TransportValue,
+  wire_type::String,
+  context_values,
+  variables::Vector{_VariableRecipe},
+  factory_names::AbstractVector{<:AbstractString};
+  path::String="/",
+  in_factory::Bool=false,
+  variable_index::Union{Nothing,Int}=nothing,
+  trace_companions=Dict{Int,Int}(),
+)
+  if recipe isa _LiteralValue
+    return _script_wire_literal(recipe.value, wire_type, "transport literal")
+  elseif recipe isa _FreshWildcard
+    return "QuantumSavory.Wildcard()"
+  elseif recipe isa _NamedType
+    return _script_binding_reference(recipe.binding)
+  elseif recipe isa _FunctionReference
+    if recipe.self_relative
+      return in_factory ? "($(recipe.source))" :
+        _script_scoped_source(recipe.source, context_values)
+    end
+    return "Base.$(strip(recipe.source))"
+  elseif recipe isa _FunctionSource
+    return in_factory ? _script_factory_source(recipe.source) :
+      _script_scoped_source(recipe.source, context_values)
+  elseif recipe isa _NumericSource
+    source = in_factory ? _script_factory_source(recipe.source) :
+      _script_scoped_source(recipe.source, context_values)
+    return "Base.$(recipe.target)($source)"
+  elseif recipe isa _SymbolicSource
+    return in_factory ? _script_factory_source(recipe.source) :
+      _script_scoped_source(recipe.source, context_values)
+  elseif recipe isa _StatesZooValue
+    call = _script_states_zoo_call(recipe)
+    recipe.weighted || return call
+    if variable_index !== nothing && haskey(trace_companions, variable_index)
+      trace_factory = factory_names[trace_companions[variable_index]]
+      trace_context = in_factory ? _script_forwarded_context_keywords() :
+        _script_context_keywords(context_values)
+      trace_call = "$trace_factory(; $trace_context)"
+      return _script_normalized_states_zoo(call, trace_call)
+    end
+    _admission_error(
+      "Weighted States Zoo export requires its persisted trace companion",
+      path,
+    )
+  elseif recipe isa _VariableUse
+    factory = factory_names[recipe.variable_index]
+    return "$factory(; $(_script_context_keywords(context_values)))"
+  end
+  throw(ArgumentError("Unsupported transport recipe $(typeof(recipe))"))
+end
+
+function _script_variable_factories!(
+  lines::Vector{String},
+  variables::Vector{_VariableRecipe},
+  payload,
+  used::Set{String},
+)
+  factory_names = [
+    _script_identifier("variable_$(variable.name)", used, "variable_$index")
+    for (index, variable) in enumerate(variables)
+  ]
+  indices = Dict(variable.id => index for (index, variable) in enumerate(variables))
+  trace_companions = Dict{Int,Int}()
+  for (index, raw_variable) in enumerate(payload["variables"])
+    haskey(raw_variable, "statesZooTraceSourceId") || continue
+    owner_index = get(indices, String(raw_variable["statesZooTraceSourceId"]), 0)
+    owner_index == 0 || (trace_companions[owner_index] = index)
+  end
+
+  signature = join(("$(name) = nothing" for name in _SCRIPT_FACTORY_CONTEXT), ", ")
+  factory_context = Dict{Symbol,Any}(name => nothing for name in _SCRIPT_FACTORY_CONTEXT)
+  for (index, variable) in enumerate(variables)
+    expression = _script_transport_expression(
+      variable.value,
+      variable.wire_type,
+      factory_context,
+      variables,
+      factory_names;
+      path=_pointer_child(variable.path, "value"),
+      in_factory=true,
+      variable_index=index,
+      trace_companions,
+    )
+    push!(lines, "# GUI Variable $(_script_literal(variable.name)) (ID: $(_script_comment(variable.id)))")
+    push!(lines, "$(factory_names[index])(; $signature) = $expression")
+  end
+  isempty(variables) && push!(lines, "# This project does not define Variables.")
+  return factory_names
+end
+
+function _script_assignment_expressions(
+  definitions,
+  path::String,
+  context_values,
+  variables,
+  variable_indices,
+  variable_types,
+  factory_names;
+  injected=Set{String}(),
+)
+  recipes = _normalize_assignment_recipes(
+    definitions,
+    path,
+    variable_indices,
+    variable_types;
+    injected,
+  )
+  return [
+    "$(recipe.name) = " * _script_transport_expression(
+      recipe.value,
+      recipe.wire_type,
+      context_values,
+      variables,
+      factory_names;
+      path=_pointer_child(recipe.path, "value"),
+    )
+    for recipe in recipes
+  ]
 end
 
 function _script_noise_expression(
   noise_definition,
-  context::String;
-  variable_bindings=Dict{String,NamedTuple}(),
-  node_index=nothing,
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-  catalogs=_constructor_catalog_snapshot(),
+  path::String,
+  context_values,
+  variables,
+  variable_indices,
+  variable_types,
+  factory_names,
+  catalogs,
 )
-  type_name = String(noise_definition["type"])
-  type_name == "default" && return "nothing"
-  parameters = noise_definition["parameters"]
-
-  catalog_entry = _resolve_background_catalog_entry(type_name, catalogs)
-  catalog_entry === nothing && throw(validation_error("$context has unknown type '$type_name'"))
-  noise_type = catalog_entry.type
-  declared_parameter_types = _catalog_parameter_types(catalog_entry)
-  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
-  keywords = String[]
-  produced_names = Set{String}()
-  validated_parameters = _validated_catalog_parameters(
-    parameters,
-    declared_parameter_types;
-    context,
-    constructor_type=noise_type,
-    parameter_label="background noise parameter",
+  type_id = String(noise_definition["type"])
+  type_id == "default" && return "nothing"
+  entry = _catalog_entry_by_wire_type(catalogs.backgrounds, type_id)
+  entry === nothing && _admission_error("Unknown background constructor '$type_id'", "$path/type")
+  keywords = _script_assignment_expressions(
+    noise_definition["parameters"],
+    "$path/parameters",
+    context_values,
+    variables,
+    variable_indices,
+    variable_types,
+    factory_names,
   )
-  for parameter in validated_parameters
-    name = parameter.name
-    _, expression = _script_constructor_parameter_expression(
-      parameter.definition,
-      variable_bindings,
-      context;
-      node_index,
-      declared_type=parameter.declared_type,
-      constructor_metadata=get(
-        constructor_parameter_metadata,
-        name,
-        nothing,
-      ),
-      imports,
-    )
-    expression === nothing && continue
-    Base.isidentifier(name) ||
-      throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
-    push!(keywords, "$name = $expression")
-    push!(produced_names, name)
-  end
-  _require_catalog_parameters(
-    _required_catalog_parameters(catalog_entry),
-    produced_names,
-    context;
-    details=Dict{String,Any}("constructor_type" => type_name),
-  )
-  constructor = _script_reference(imports, noise_type)
-  return isempty(keywords) ? "$constructor()" : "$constructor(; " * join(keywords, ", ") * ")"
+  constructor = _script_binding_reference(entry.type)
+  return isempty(keywords) ? "$constructor()" : "$constructor(; $(join(keywords, ", ")))"
 end
-
-function _script_variable_bindings(
-  payload,
-  lines::Vector{String},
-  used::Set{String};
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-)
-  variables = _parse_variables(payload)
-  bindings = Dict{String,NamedTuple}()
-  raw_variables = payload["variables"]
-
-  if isempty(raw_variables)
-    push!(lines, "# This project does not define simulation-wide variables.")
-    return bindings
-  end
-
-  ordered_variables = [
-    (
-      index=index,
-      raw=raw_variable,
-      variable=variables[String(raw_variable["id"])],
-    ) for (index, raw_variable) in enumerate(raw_variables)
-  ]
-  # Allocate every binding before emitting assignments. A generated trace
-  # companion can precede its weighted state in imported payloads, but both
-  # names must still participate in deterministic collision resolution.
-  for item in ordered_variables
-    variable = item.variable
-    special_type = _script_special_type(variable.type)
-    numeric_expression = _parse_numeric_expression(
-      variable.value;
-      context="Variable '$(_script_comment(variable.name))'",
-    )
-    binding = _script_identifier(
-      "variable_$(variable.name)",
-      used,
-      "variable_$(item.index)",
-    )
-    self_dependent = special_type in ("Function", "Lambda") && any(
-      first(pair) == strip(string(variable.value)) for pair in SELF_COMPARISON_OPERATORS
-    )
-    source_references = if numeric_expression !== nothing
-      parsed = _script_validate_source(
-        numeric_expression.source,
-        "Variable '$(_script_comment(variable.name))'",
-      )
-      _script_assignment_context_references(parsed)
-    elseif special_type == "Lambda" && !self_dependent
-      variable.value isa AbstractString || throw(validation_error(
-        "Variable '$(_script_comment(variable.name))' must be a function name or Julia function expression",
-        Dict{String,Any}("received_type" => string(typeof(variable.value))),
-      ))
-      source = strip(String(variable.value))
-      isempty(source) && throw(validation_error(
-        "Variable '$(_script_comment(variable.name))' must not be blank",
-      ))
-      if resolve_function_reference(source) !== nothing
-        Set{Symbol}()
-      else
-        parsed = _script_validate_source(
-          source,
-          "Variable '$(_script_comment(variable.name))'",
-        )
-        _script_assignment_context_references(parsed)
-      end
-    else
-      Set{Symbol}()
-    end
-    per_assignment = self_dependent || !isempty(source_references)
-    fresh_wildcard = variable.type == "Wildcard"
-    bindings[variable.id] = (
-      name=binding,
-      variable=variable,
-      per_assignment=per_assignment,
-      fresh_wildcard=fresh_wildcard,
-    )
-  end
-
-  trace_companions = Dict{String,String}()
-  for item in ordered_variables
-    source = _script_states_zoo_trace_owner(
-      item.variable,
-      item.raw,
-      variables,
-    )
-    source === nothing || (trace_companions[source.id] = item.variable.id)
-  end
-  paired_trace_ids = Set(values(trace_companions))
-
-  for item in ordered_variables
-    variable = item.variable
-    variable.id in paired_trace_ids && continue
-    binding = bindings[variable.id]
-
-    if haskey(trace_companions, variable.id)
-      companion_id = trace_companions[variable.id]
-      companion_binding = bindings[companion_id]
-      expression = _script_states_zoo_expression(
-        variable.value,
-        "Variable '$(_script_comment(variable.name))'";
-        return_trace=true,
-        imports,
-      )
-      push!(
-        lines,
-        "$(binding.name), $(companion_binding.name) = $expression" *
-        "  # GUI variable IDs: $(_script_comment(variable.id)), $(_script_comment(companion_id))",
-      )
-      continue
-    end
-
-    if binding.per_assignment
-      numeric_expression = _parse_numeric_expression(
-        variable.value;
-        context="Variable '$(_script_comment(variable.name))'",
-      )
-      if numeric_expression !== nothing
-        _script_validate_deferred_numeric_expression(
-          variable.value,
-          "Variable '$(_script_comment(variable.name))'",
-        )
-      elseif _script_special_type(variable.type) == "Lambda"
-        _script_validate_deferred_lambda(
-          variable.value,
-          "Variable '$(_script_comment(variable.name))'",
-        )
-      end
-      push!(
-        lines,
-        "# GUI variable \"$(_script_comment(variable.name))\" is instantiated at each constructor assignment" *
-        "  # GUI variable ID: $(_script_comment(variable.id))",
-      )
-      continue
-    end
-
-    expression = if binding.fresh_wildcard
-      wildcard = _script_reference(imports, QuantumSavory.Wildcard)
-      "(() -> $wildcard())"
-    else
-      _script_value_expression(
-        variable.type,
-        variable.value,
-        "Variable '$(_script_comment(variable.name))'";
-        imports,
-      )
-    end
-    expression === nothing && throw(validation_error(
-      "Variable '$(_script_comment(variable.name))' has no script representation",
-    ))
-    push!(
-      lines,
-      "$(binding.name) = $expression  # GUI variable ID: $(_script_comment(variable.id))",
-    )
-  end
-  return bindings
-end
-
-function _script_constructor_parameter_expression(
-  parameter,
-  variable_bindings,
-  context::String;
-  node_index=nothing,
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-  declared_type=nothing,
-  constructor_metadata=nothing,
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-)
-  name = if haskey(parameter, "name")
-    _required_nonempty_string(parameter, "name", "$context parameter")
-  else
-    _required_nonempty_string(parameter, "field", "$context parameter")
-  end
-  value = get(parameter, "value", nothing)
-  value === nothing && return name, nothing
-  value isa AbstractString && isempty(strip(String(value))) && return name, nothing
-
-  named_tag_semantics = _named_tag_parameter_semantics(declared_type)
-  if named_tag_semantics !== nothing
-    _parse_variable_reference(value; context="$context parameter '$name'") === nothing ||
-      throw(validation_error(
-        "$context parameter '$name' cannot use a variable for a named tag type",
-        Dict{String,Any}("parameter_name" => name),
-      ))
-    tag_type = _resolve_named_abstract_tag_type(
-      value;
-      nullable=named_tag_semantics.nullable,
-      context="$context parameter '$name'",
-    )
-    return name, tag_type === nothing ? "nothing" : _script_reference(imports, tag_type)
-  end
-
-  reference = _parse_variable_reference(value; context="$context parameter '$name'")
-  if reference !== nothing
-    binding = get(variable_bindings, reference.id, nothing)
-    binding === nothing && throw(validation_error("$context parameter '$name' references an unknown variable"))
-    _parameter_type_supports_variable_type(
-      declared_type,
-      binding.variable.type,
-    ) || throw(validation_error(
-      "Variable '$(_script_comment(binding.variable.name))' is incompatible with $context parameter '$name'",
-    ))
-    binding.fresh_wildcard && return name, "$(binding.name)()"
-    if binding.per_assignment
-      numeric_expression = _parse_numeric_expression(
-        binding.variable.value;
-        context="Variable '$(_script_comment(binding.variable.name))'",
-      )
-      if numeric_expression !== nothing
-        target_type = _numeric_expression_target_for_parameter(
-          declared_type,
-          binding.variable.type,
-        )
-        target_type == binding.variable.type || throw(validation_error(
-          "Variable '$(_script_comment(binding.variable.name))' numeric expression is incompatible with $context parameter '$name'",
-        ))
-      end
-      expression = _script_value_expression(
-        binding.variable.type,
-        binding.variable.value,
-        "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'";
-        node_index=node_index,
-        edge_context=edge_context,
-        constructor_metadata,
-        imports,
-      )
-      expression === nothing && throw(validation_error(
-        "Variable '$(_script_comment(binding.variable.name))' cannot use a constructor default here",
-      ))
-      return name, expression
-    end
-    _script_assert_constructor_numeric_bounds(
-      binding.variable.type,
-      binding.variable.value,
-      constructor_metadata,
-      "Variable '$(_script_comment(binding.variable.name))' assigned to $context parameter '$name'",
-    )
-    return name, binding.name
-  end
-
-  handling_type = _constructor_parameter_handling_type(
-    declared_type,
-    get(parameter, "type", nothing),
-    value,
-  )
-  expression = _script_value_expression(
-    handling_type,
-    value,
-    "$context parameter '$name'";
-    node_index=node_index,
-    edge_context=edge_context,
-    constructor_metadata,
-    imports,
-  )
-  return name, expression
-end
-
-_script_protocol_parameter_expression(args...; kwargs...) =
-  _script_constructor_parameter_expression(args...; kwargs...)
 
 function _script_protocol!(
   lines::Vector{String},
-  protocol_definition,
-  variable_bindings,
-  used::Set{String},
-  protocol_entries::Vector{Pair{String,String}},
-  context::String;
-  node_index=nothing,
-  node_a=nothing,
-  node_b=nothing,
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-  imports::Union{Nothing,_ScriptImportRegistry}=nothing,
-  catalogs=_constructor_catalog_snapshot(),
+  definition,
+  path::String,
+  context_values,
+  semantic_attachments,
+  variables,
+  variable_indices,
+  variable_types,
+  factory_names,
+  used,
+  protocol_entries,
+  catalogs,
 )
-  _is_object_like(protocol_definition) || throw(validation_error("$context must be an object"))
-  raw_type = _required_nonempty_string(protocol_definition, "type", context)
-  catalog_entry = _resolve_protocol_catalog_entry(raw_type, catalogs)
-  catalog_entry === nothing && throw(validation_error("$context has unknown type '$raw_type'"))
-  protocol_type = catalog_entry.type
-  declared_parameter_types = _catalog_parameter_types(catalog_entry)
-  constructor_parameter_metadata = _catalog_parameter_metadata(catalog_entry)
-  parameters = get(protocol_definition, "parameters", Any[])
-  validated_parameters = _validated_catalog_parameters(
-    parameters,
-    declared_parameter_types;
-    context,
-    constructor_type=protocol_type,
-    parameter_label="protocol parameter",
-  )
+  type_id = String(definition["type"])
+  entry = _catalog_entry_by_wire_type(catalogs.protocols, type_id)
+  entry === nothing && _admission_error("Unknown protocol constructor '$type_id'", "$path/type")
+  injected = Set{String}(("sim", "net"))
+  attachments = _protocol_attachment_pairs(entry, semantic_attachments; context=path)
+  foreach(pair -> push!(injected, string(first(pair))), attachments)
+  keywords = String["sim = sim", "net = network"]
+  append!(keywords, ["$(first(pair)) = $(last(pair))" for pair in attachments])
+  append!(keywords, _script_assignment_expressions(
+    definition["parameters"],
+    "$path/parameters",
+    context_values,
+    variables,
+    variable_indices,
+    variable_types,
+    factory_names;
+    injected,
+  ))
 
-  keywords = ["sim = sim", "net = network"]
-  semantic_attachments = Dict{Symbol,Any}()
-  if node_index !== nothing
-    semantic_attachments[:node] = node_index
-  elseif node_a !== nothing && node_b !== nothing
-    semantic_attachments[:node_a] = node_a
-    semantic_attachments[:node_b] = node_b
-  end
-  for (keyword, value) in _protocol_attachment_pairs(
-    catalog_entry,
-    semantic_attachments;
-    context,
-  )
-    push!(keywords, "$(keyword) = $value")
-  end
-
-  produced_names = Set{String}()
-  for parameter in validated_parameters
-    submitted_name = parameter.name
-    name, expression = _script_constructor_parameter_expression(
-      parameter.definition,
-      variable_bindings,
-      context;
-      node_index=node_index,
-      edge_context=edge_context,
-      declared_type=parameter.declared_type,
-      constructor_metadata=get(
-        constructor_parameter_metadata,
-        submitted_name,
-        nothing,
-      ),
-      imports,
-    )
-    expression === nothing && continue
-    Base.isidentifier(name) || throw(validation_error("$context parameter '$name' is not a valid Julia keyword"))
-    push!(keywords, "$name = $expression")
-    push!(produced_names, name)
-  end
-
-  _require_catalog_parameters(
-    _required_catalog_parameters(catalog_entry),
-    produced_names,
-    context;
-    details=Dict{String,Any}("constructor_type" => raw_type),
-  )
-
-  protocol_id = string(get(protocol_definition, "id", context))
+  protocol_id = String(definition["id"])
   binding = _script_identifier(
     "protocol_instance_$protocol_id",
     used,
     "protocol_instance_$(length(protocol_entries) + 1)",
   )
-  constructor = _script_reference(imports, protocol_type)
-  push!(lines, "# $(_script_comment(context)); GUI protocol ID: $(_script_comment(protocol_id))")
-  push!(lines, "$binding = $constructor(; " * join(keywords, ", ") * ")")
-  process = _script_reference(imports, ConcurrentSim, Symbol("@process"))
-  push!(lines, "$process $binding()")
+  constructor = _script_binding_reference(entry.type)
+  push!(lines, "# $(_script_comment(path)); GUI protocol ID: $(_script_comment(protocol_id))")
+  push!(lines, "$binding = $constructor(; $(join(keywords, ", ")))")
+  push!(lines, "ConcurrentSim.@process $binding()")
   push!(lines, "")
   push!(protocol_entries, protocol_id => binding)
   return nothing
 end
 
-"""
-Generate a deterministic, standalone Julia script for one validated GUI project.
+function _script_render_representation(config, trait)
+  return script_representation(config, trait, (source_module, binding) ->
+    _script_binding_reference(source_module, binding)
+  )
+end
 
-The function parses user-provided Julia expressions for syntax but never
-evaluates them and never creates or mutates a server-side simulation.
+"""
+Generate a deterministic standalone Julia program from transport recipes.
+
+Export performs structural admission and static source-policy checks, but does
+not evaluate source, construct a StatesZoo value, invoke a project constructor,
+or create a server simulation. Constructor failures are deliberately deferred
+until the generated program executes.
 """
 function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot())
-  _is_object_like(payload) || throw(validation_error("Export payload must be an object"))
+  _is_object_like(payload) || _admission_error("Export payload must be an object", "")
   reject_mock_broken_protocol_export(payload)
-  validation = validate_payload(payload; catalogs)
-  data = validation["data"]
-  nodes = validation["graph_info"]["nodes"]
-  edges = validation["graph_info"]["edges"]
-  isempty(nodes) && throw(validation_error(
+  validate_payload(payload; catalogs)
+  data = payload
+  nodes = data["net"]["nodes"]
+  edges = data["net"]["edges"]
+  isempty(nodes) && _admission_error(
     "A runnable QuantumSavory script requires at least one node",
-  ))
+    "/net/nodes",
+  )
   duration, time_step = _script_simulation_config(data)
-  default_representations = representation_config(data)
+  representations_config = representation_config(data)
   filename = _script_filename(data["name"])
   output_stem = first(filename, length(filename) - 3)
-  imports = _script_import_registry(_script_import_candidates(catalogs))
-  references = _script_static_references!(imports)
-  render_reference = (source_module, binding) ->
-    _script_reference(imports, source_module, binding)
-  import_marker = "# __WEBQUANTUMSAVORY_GENERATED_IMPORTS__"
+  variables, variable_indices, variable_types = _normalize_variable_recipes(data)
 
   lines = String[
     "# This file was generated by WebQuantumSavory as pedagogical onboarding.",
-    "# The GUI simulator does not execute this file, and some GUI-only features may not translate.",
-    "# For the full power of QuantumSavory.jl, use its programmatic interface and write custom simulations.",
-    "# Review any exported symbolic or lambda expressions before running this file.",
+    "# The GUI simulator does not execute this file.",
+    "# Review exported symbolic, numeric, and function source before running it.",
     "#",
-    "# In a Julia environment, install the dependencies once with:",
+    "# Install dependencies once with:",
     "# import Pkg; Pkg.add([\"QuantumSavory\", \"Graphs\", \"ConcurrentSim\", \"ResumableFunctions\", \"CairoMakie\"])",
     "",
-    "# Broad imports preserve the evaluation context for user-authored expressions.",
     "using QuantumSavory",
     "using QuantumSavory.ProtocolZoo",
     "using QuantumSavory.StatesZoo",
@@ -1445,97 +430,84 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "using ResumableFunctions",
     "using CairoMakie",
     "using LinearAlgebra",
-    "import InteractiveUtils, REPL",
-    "# Explicit imports keep exporter-generated source concise and auditable.",
-    import_marker,
     "",
-    "$(references.activate)()",
+    "CairoMakie.activate!()",
     "",
     "# -----------------------------------------------------------------------------",
     "# Simulation settings",
     "# -----------------------------------------------------------------------------",
-    "simulation_duration = $(_script_literal(duration, "simulation duration"))",
-    "animation_step = $(_script_literal(time_step, "animation step"))",
-    "animation_filename = $(_script_literal(output_stem * ".mp4", "animation filename"))",
-    "protocol_output_directory = $(_script_literal(output_stem * "-protocols", "protocol output directory"))",
+    "simulation_duration = $(_script_literal(duration))",
+    "animation_step = $(_script_literal(time_step))",
+    "animation_filename = " * _script_literal(output_stem * ".mp4"),
+    "protocol_output_directory = " * _script_literal(output_stem * "-protocols"),
     "",
-    "# Resolve GUI node names to their one-based register indices.",
+    "# Resolve GUI node names to one-based register indices.",
     "node_indices = Dict{String,Int}(",
   ]
-
-  used = copy(_SCRIPT_RESERVED_IDENTIFIERS)
   for (node_index, node) in enumerate(nodes)
-    node_name = _script_literal(node["name"], "node name")
-    push!(
-      lines,
-      "    $node_name => $node_index,",
-    )
+    node_name_literal = _script_literal(node["name"])
+    push!(lines, "    $node_name_literal => $node_index,")
   end
   append!(lines, [
     ")",
     "nodeid(name::String)::Int = node_indices[name]",
     "",
     "# -----------------------------------------------------------------------------",
-    "# Variables",
+    "# Variables (uniform placement-context factories)",
     "# -----------------------------------------------------------------------------",
   ])
-  variable_bindings = _script_variable_bindings(data, lines, used; imports)
+  used = copy(_SCRIPT_RESERVED_IDENTIFIERS)
+  factory_names = _script_variable_factories!(lines, variables, data, used)
 
   append!(lines, [
     "",
     "# -----------------------------------------------------------------------------",
     "# Registers",
     "# -----------------------------------------------------------------------------",
-    "registers = $(references.register)[]",
+    "registers = QuantumSavory.Register[]",
   ])
   for (node_index, node) in enumerate(nodes)
-    node_data = node["data"]
-    _is_object_like(node_data) || throw(validation_error("Node $node_index data must be an object"))
+    slots = node["data"]["slots"]
+    isempty(slots) && _admission_error(
+      "A runnable QuantumSavory register requires at least one slot",
+      "/net/nodes/$(node_index - 1)/data/slots",
+    )
+    context_values = _script_context_values(node_index)
+    traits = String[]
+    representations = String[]
+    backgrounds = String[]
+    for (slot_index, slot) in enumerate(slots)
+      slot_path = "/net/nodes/$(node_index - 1)/data/slots/$(slot_index - 1)"
+      slot_entry = _catalog_entry_by_wire_type(catalogs.slots, String(slot["type"]))
+      slot_type = slot["type"]
+      slot_entry === nothing && _admission_error(
+        "Unknown slot constructor '$slot_type'",
+        "$slot_path/type",
+      )
+      push!(traits, "$(_script_binding_reference(slot_entry.type))()")
+      push!(representations, _script_render_representation(
+        representations_config,
+        slot_entry.type,
+      ))
+      push!(backgrounds, _script_noise_expression(
+        slot["backgroundNoise"],
+        "$slot_path/backgroundNoise",
+        context_values,
+        variables,
+        variable_indices,
+        variable_types,
+        factory_names,
+        catalogs,
+      ))
+    end
     node_name = _script_comment(node["name"])
     node_id = _script_comment(node["id"])
     push!(lines, "")
     push!(lines, "# Node $node_index: $node_name (GUI ID: $node_id)")
-    slots = get(node_data, "slots", Any[])
-    slots isa AbstractVector || throw(validation_error("Node $node_index slots must be an array"))
-    isempty(slots) && throw(validation_error(
-      "Node $node_index requires at least one slot for a runnable QuantumSavory register",
-    ))
-    trait_expressions = String[]
-    representation_expressions = String[]
-    background_expressions = String[]
-    for (slot_index, slot) in enumerate(slots)
-      _is_object_like(slot) || throw(validation_error("Node $node_index slot $slot_index must be an object"))
-      slot_type_name = _required_nonempty_string(slot, "type", "Node $node_index slot $slot_index")
-      slot_type = _resolve_type_from_string(slot_type_name, :slot, catalogs)
-      slot_type === nothing && throw(validation_error("Node $node_index slot $slot_index has unknown type '$slot_type_name'"))
-      push!(trait_expressions, "$(_script_reference(imports, slot_type))()")
-      push!(
-        representation_expressions,
-        script_representation(default_representations, slot_type, render_reference),
-      )
-      push!(background_expressions, _script_noise_expression(
-        slot["backgroundNoise"],
-        "Node $node_index slot $slot_index background noise";
-        variable_bindings,
-        node_index,
-        imports,
-        catalogs,
-      ))
-    end
-    traits = isempty(trait_expressions) ? "Any[]" : "[" * join(trait_expressions, ", ") * "]"
-    representations = if isempty(representation_expressions)
-      "Any[]"
-    else
-      "[" * join(representation_expressions, ", ") * "]"
-    end
-    backgrounds = isempty(background_expressions) ? "Any[]" : "[" * join(background_expressions, ", ") * "]"
-    push!(lines, "traits = $traits")
-    push!(lines, "representations = $representations")
-    push!(lines, "backgrounds = $backgrounds")
-    push!(
-      lines,
-      "push!(registers, $(references.register)(traits, representations, backgrounds))",
-    )
+    push!(lines, "traits = [$(join(traits, ", "))]")
+    push!(lines, "representations = [$(join(representations, ", "))]")
+    push!(lines, "backgrounds = [$(join(backgrounds, ", "))]")
+    push!(lines, "push!(registers, QuantumSavory.Register(traits, representations, backgrounds))")
   end
 
   append!(lines, [
@@ -1543,33 +515,31 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "# -----------------------------------------------------------------------------",
     "# Register network and simulation clock",
     "# -----------------------------------------------------------------------------",
-    "graph = $(references.simple_graph)(length(registers))",
+    "graph = Graphs.SimpleGraph(length(registers))",
   ])
   id_to_index = Dict(String(node["id"]) => index for (index, node) in enumerate(nodes))
   for edge in edges
     _is_virtual_edge(edge) && continue
-    source = get(id_to_index, String(edge["source"]), nothing)
-    target = get(id_to_index, String(edge["target"]), nothing)
-    (source !== nothing && target !== nothing) || throw(validation_error("Edge references an unknown node"))
-    push!(lines, "$(references.add_edge)(graph, $source, $target)")
+    source = id_to_index[String(edge["source"])]
+    target = id_to_index[String(edge["target"])]
+    push!(lines, "Graphs.add_edge!(graph, $source, $target)")
   end
   push!(lines, "propagation_delays = Dict{Tuple{Int,Int},Float64}(")
   for edge in edges
     _is_virtual_edge(edge) && continue
     source = id_to_index[String(edge["source"])]
     target = id_to_index[String(edge["target"])]
-    delay = _physical_edge_delay(edge, "Physical edge $(edge["id"])")
-    push!(lines, "    $(minmax(source, target)) => $(_script_literal(delay, "propagation delay")),")
+    edge_id = edge["id"]
+    delay = _physical_edge_delay(edge, "Physical edge $edge_id")
+    push!(lines, "    $(minmax(source, target)) => $(_script_literal(delay)),")
   end
   append!(lines, [
     ")",
     "link_delay(src, dst) = propagation_delays[minmax(src, dst)]",
-  ])
-  append!(lines, [
-    "network = $(references.register_net)(graph, registers; " *
-      "names = $(_script_literal(_register_names(nodes), "register names")), " *
+    "network = QuantumSavory.RegisterNet(graph, registers; " *
+      "names = $(_script_literal(_register_names(nodes))), " *
       "classical_delay = link_delay, quantum_delay = link_delay)",
-    "sim = $(references.get_time_tracker)(network)",
+    "sim = QuantumSavory.get_time_tracker(network)",
     "",
     "# -----------------------------------------------------------------------------",
     "# Protocol construction and initialization",
@@ -1578,47 +548,60 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
 
   protocol_entries = Pair{String,String}[]
   for (node_index, node) in enumerate(nodes)
-    node_data = node["data"]
-    _is_object_like(node_data) || throw(validation_error("Node $node_index data must be an object"))
-    protocols = get(node_data, "protocols", Any[])
-    protocols isa AbstractVector || throw(validation_error("Node $node_index protocols must be an array"))
-    for (protocol_index, protocol) in enumerate(protocols)
+    context_values = _script_context_values(node_index)
+    for (protocol_index, protocol) in enumerate(node["data"]["protocols"])
       _script_protocol!(
-        lines, protocol, variable_bindings, used, protocol_entries,
-        "Node $node_index protocol $protocol_index";
-        node_index=node_index,
-        imports,
+        lines,
+        protocol,
+        "/net/nodes/$(node_index - 1)/data/protocols/$(protocol_index - 1)",
+        context_values,
+        Dict{Symbol,Any}(:node => node_index),
+        variables,
+        variable_indices,
+        variable_types,
+        factory_names,
+        used,
+        protocol_entries,
         catalogs,
       )
     end
   end
   for (edge_index, edge) in enumerate(edges)
-    edge_data = get(edge, "data", Dict{String,Any}())
-    _is_object_like(edge_data) || throw(validation_error("Edge $edge_index data must be an object"))
-    protocols = get(edge_data, "protocols", Any[])
-    protocols isa AbstractVector || throw(validation_error("Edge $edge_index protocols must be an array"))
     source = id_to_index[String(edge["source"])]
     target = id_to_index[String(edge["target"])]
-    edge_function_context = _edge_function_context(edge, source, target)
-    for (protocol_index, protocol) in enumerate(protocols)
+    edge_context = _edge_function_context(edge, source, target)
+    context_values = _script_context_values(nothing, edge_context)
+    for (protocol_index, protocol) in enumerate(edge["data"]["protocols"])
       _script_protocol!(
-        lines, protocol, variable_bindings, used, protocol_entries,
-        "Edge $edge_index protocol $protocol_index";
-        node_a=source,
-        node_b=target,
-        edge_context=edge_function_context,
-        imports,
+        lines,
+        protocol,
+        "/net/edges/$(edge_index - 1)/data/protocols/$(protocol_index - 1)",
+        context_values,
+        Dict{Symbol,Any}(:node_a => source, :node_b => target),
+        variables,
+        variable_indices,
+        variable_types,
+        factory_names,
+        used,
+        protocol_entries,
         catalogs,
       )
     end
   end
-  floating_protocols = get(data["net"], "protocols", Any[])
-  floating_protocols isa AbstractVector || throw(validation_error("Floating protocols must be an array"))
-  for (protocol_index, protocol) in enumerate(floating_protocols)
+  floating_context = _script_context_values()
+  for (protocol_index, protocol) in enumerate(data["net"]["protocols"])
     _script_protocol!(
-      lines, protocol, variable_bindings, used, protocol_entries,
-      "Floating protocol $protocol_index";
-      imports,
+      lines,
+      protocol,
+      "/net/protocols/$(protocol_index - 1)",
+      floating_context,
+      Dict{Symbol,Any}(),
+      variables,
+      variable_indices,
+      variable_types,
+      factory_names,
+      used,
+      protocol_entries,
       catalogs,
     )
   end
@@ -1629,7 +612,7 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
   else
     push!(lines, "protocols = Pair{String,Any}[")
     for (protocol_id, binding) in protocol_entries
-      push!(lines, "    $(_script_literal(protocol_id, "protocol ID")) => $binding,")
+      push!(lines, "    $(_script_literal(protocol_id)) => $binding,")
     end
     push!(lines, "]")
   end
@@ -1641,19 +624,19 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "# -----------------------------------------------------------------------------",
     "# Choose only one execution recipe. Comment this line before enabling either",
     "# optional recipe below; a ConcurrentSim simulation cannot be rewound.",
-    "$(references.run)(sim, simulation_duration)",
+    "ConcurrentSim.run(sim, simulation_duration)",
     "",
     "# -----------------------------------------------------------------------------",
     "# Optional: animate the network while the simulation executes",
     "# Remove the #= and =# delimiters, and comment out the fixed run above.",
     "# -----------------------------------------------------------------------------",
     "#=",
-    "figure = $(references.figure)(size = (700, 500))",
-    "_, network_axis, _, network_observable = $(references.registernetplot_axis)(figure[1, 1], network)",
+    "figure = CairoMakie.Figure(size = (700, 500))",
+    "_, network_axis, _, network_observable = QuantumSavory.registernetplot_axis(figure[1, 1], network)",
     "frame_times = collect(0:animation_step:simulation_duration)",
     "last(frame_times) < simulation_duration && push!(frame_times, simulation_duration)",
-    "$(references.record)(figure, animation_filename, frame_times; framerate = 10) do time",
-    "    $(references.run)(sim, time)",
+    "CairoMakie.record(figure, animation_filename, frame_times; framerate = 10) do time",
+    "    ConcurrentSim.run(sim, time)",
     "    notify(network_observable)",
     "    network_axis.title = \"t=\$(round(time; digits = 3))\"",
     "end",
@@ -1664,7 +647,7 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "# Remove the #= and =# delimiters, and comment out the fixed run above.",
     "# -----------------------------------------------------------------------------",
     "#=",
-    "$(references.run)(sim, simulation_duration)",
+    "ConcurrentSim.run(sim, simulation_duration)",
     "mkpath(protocol_output_directory)",
     "for (index, (protocol_id, protocol)) in enumerate(protocols)",
     "    safe_id = replace(protocol_id, r\"[^A-Za-z0-9._-]+\" => \"-\")",
@@ -1682,15 +665,9 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "",
   ])
 
-  import_index = findfirst(==(import_marker), lines)
-  import_index === nothing && throw(server_error(
-    "Generated script import marker is missing",
-  ))
-  splice!(lines, import_index:import_index, _script_import_lines(imports))
-
   script = join(lines, "\n")
   try
-    Meta.parseall(script)
+    _parse_complete_source(script)
   catch error
     throw(server_error(
       "Generated Julia script failed internal syntax validation",
@@ -1702,7 +679,7 @@ end
 
 function generate_julia_script_export(payload)
   script = generate_julia_script(payload)
-  Dict{String,Any}(
+  return Dict{String,Any}(
     "success" => true,
     "script" => script,
     "filename" => _script_filename(payload["name"]),

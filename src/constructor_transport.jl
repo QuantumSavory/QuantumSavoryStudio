@@ -80,7 +80,6 @@ function _admission_error(message::AbstractString, path::AbstractString; details
 end
 
 function _source_recipe(source, path::String; symbolic::Bool=false)
-  require_unsafe_code_evaluation()
   parsed = try
     _parse_complete_source(source)
   catch error
@@ -360,7 +359,7 @@ function _materialize_transport_value(
     )
   elseif recipe isa _SymbolicSource
     success, value, error = Sandbox.evaluate_symbolic_expression(recipe.source)
-    success || throw(error)
+    success || throw(error === nothing ? ArgumentError("Symbolic source evaluation failed") : error)
     return value
   elseif recipe isa _StatesZooValue
     state = recipe.constructor(recipe.values...)
@@ -386,11 +385,15 @@ function _materialize_assignments(
       _materialize_transport_value(recipe.value, context, variables)
     catch error
       error isa APIError && error.error_code == "UNSAFE_EVALUATION_DISABLED" && rethrow(error)
+      details = _materialization_details(error, recipe, entity, constructor_type)
+      if recipe.value isa Union{_FunctionSource,_NumericSource,_SymbolicSource}
+        details["evaluation_error"] = details["cause"]
+      end
       throw(APIError(
         "Project value could not be materialized",
         422,
         "PROJECT_MATERIALIZATION_FAILED",
-        _materialization_details(error, recipe, entity, constructor_type),
+        details,
       ))
     end
     push!(kwargs, Symbol(recipe.name) => value)
