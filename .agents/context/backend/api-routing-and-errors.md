@@ -45,22 +45,22 @@ Failure responses have this common core:
 The helper adds `error_code` only when it is nonempty and adds `details` only when it is
 not `nothing`; neither field is part of the required common core.
 
-The intended failure handoff is stronger than this current implementation. It does not
-impose one universal HTTP status/success-envelope convention, but it does require
-preservation of backend-produced diagnostic fields across deployment profiles.
-Credential, session, and capability redaction in MCP operational transcripts remains a
-separate secret-handling boundary.
+Failure responses preserve backend-produced diagnostic fields across deployment
+profiles, including native constructor and explicitly enabled evaluation causes. This
+does not impose one universal HTTP status or success-envelope convention. Credential,
+session, and capability redaction in MCP operational transcripts remains a separate
+secret-handling boundary.
 
 Do not infer one universal success envelope. Representative current shapes are:
 
 | Operation | Success shape |
 | --- | --- |
-| Parse / prepare | Serialized state directly |
+| Prepare | Serialized state directly |
 | Run / pause | Object containing `state` |
 | Get state | `{ "success": true, "state": ... }` |
 | Destroy | `{ "success": true, "message": ... }` |
 
-The top-level serialized `status` is a coarse created/prepared/complete value, not the
+The top-level serialized `status` is a coarse prepared/complete value, not the
 complete execution phase. Running, pause acknowledgement, progress, and errors are in
 the nested simulation fields. Frontend and MCP adapters derive richer phases from those
 fields.
@@ -70,7 +70,7 @@ fields.
 The maintained frontend-support surface includes:
 
 - metadata and capability catalogs;
-- parse, prepare, run, state, pause, and destroy lifecycle operations;
+- atomic prepare, run, state, pause, and destroy lifecycle operations;
 - slots, protocols, logs, tags/queries, and rendered previews;
 - script export and restricted-source validation;
 - health, platform/capability information, and Swagger UI.
@@ -81,29 +81,26 @@ copying a route inventory into agent instructions.
 
 ## Validation boundary and current gaps
 
-Backend project validation enforces selected canonical topology, representation,
-physical-link, variable, and protocol conditions. It is not a complete JSON-schema
-validator. Nested malformed shapes may fail later. Lifecycle handlers currently index
-some required body fields directly; missing fields can become generic 500 responses.
-Some frontend callers also swallow transport failures or replace them with fallback
-values. Those are known gaps in structured Log-tab reporting, not conventions to copy.
+Backend admission enforces the exact canonical v2 wire, topology, representations,
+references, placement, and source policy. It deliberately does not enforce constructor
+keywords, Julia types, catalog ranges, or cross-field semantics. Those reach the native
+QuantumSavory constructor during atomic prepare.
 
 ## Known contract gaps
 
-- Swagger describes some `simulation_running` fields as string enums although the
-  serialized value is Boolean.
 - The developer manipulation endpoint is available in `dev` or `test`, while its
   description says development only.
 - `/platform_info` retains older “raw Julia code” wording for the restricted language.
 - Request/response Swagger coverage is sampled, not mechanically synchronized with every
   handler.
-- The three restricted-source test handlers generally return parse, allowlist, and
-  evaluation failures with HTTP 200 and `success:false`; validated malformed DTO cases
-  use 400 and policy denial uses 403. Non-string source fields and some missing
-  lifecycle inputs can still become generic 500s. `/test_symbolic_expression` Swagger
-  advertises 400 for an evaluation failure although its handler returns the ordinary
-  200 JSON response. Status-code uniformity is not required as long as the result
-  remains structured.
+- `/test_code` remains a preview surface for custom tag-query code and has its historical
+  success/failure envelope. Constructor preparation instead uses 400 admission, 403
+  source-policy, 409 running-replacement, 422 materialization/constructor, and 500
+  infrastructure classifications.
+
+Atomic prepare constructs and schedules a private candidate before publishing it. Any
+failure reports `replacement_committed=false` and whether a previous state was retained;
+successful publication is not reversed if best-effort cleanup of the old state fails.
 
 Treat these as visible gaps, not as documentation to normalize around current source.
 

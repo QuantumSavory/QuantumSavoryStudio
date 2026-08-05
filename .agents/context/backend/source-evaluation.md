@@ -41,7 +41,7 @@ complete source text
   -> server-owned placement wrapper and bindings
   -> fresh module
   -> native Base.eval path
-  -> expected runtime contract and target-type/range checks
+  -> expected runtime contract and persisted numeric target cast
 ```
 
 The forbidden-head guard rejects macros, module/property qualification, imports,
@@ -50,17 +50,12 @@ hard-denied capability names, and identifiers outside the permitted operations, 
 symbolic names, local bindings, and server context. It does not impose a tree-depth,
 node-count, or source-size bound.
 
-The guarded machinery is distributed rather than a single evaluator. Custom Functions
-parse and guard complete source in `types.jl`; numeric test/runtime paths in
-`Sandbox.jl` and `types.jl` parse and guard separately. Numeric-expression Variables in
-the test path may lower an admitted tree once to detect assignment-context globals.
-Symbolic evaluation creates a fresh module, imports a fixed package set into it, then
-parses, guards, and evaluates the expression.
-
-`parser.jl` retains a separate complex-parameter fallback that interpolates a value and
-declared type into source and calls module-global `eval` after the environment gate,
-without the allowlist or a fresh module. This is a critical gap: do not
-extend or copy that path.
+The guarded machinery is distributed rather than a single evaluator. Function and
+numeric runtime paths in `types.jl` parse and guard complete source. Symbolic evaluation
+creates a fresh module, imports a fixed package set into it, then parses, guards, and
+evaluates the expression. Constructor transport normalization performs the same static
+parse and allowlist checks without evaluating; runtime materialization is the only
+constructor path that evaluates the recipe.
 
 ## Allowlist and contexts
 
@@ -77,20 +72,20 @@ inspect both surfaces when changing available bindings.
 - Floating protocol source receives only the node-name lookup.
 - Tag-query predicates intentionally receive neither `nodeid` nor `self`.
 
-Numeric expressions retain `Float64` or `Int64` as their semantic type and persist only
-their source tag. Concrete assignments evaluate with actual context. Templates may
-return a representative deferred result. Context-dependent Variables can be classified
-as deferred without executing until an assignment supplies concrete context.
+Numeric expressions retain `Float64` or `Int64` as their wire type and persist only
+their source tag. Every direct or Variable-backed use evaluates independently with its
+actual context and casts to that persisted target. No catalog bound is applied.
 
 ## Errors and disclosure
 
-Disabled evaluation produces the stable 403 policy error. Validated malformed DTO cases
-use 400, but non-string `code`/`expr` and some other malformed inputs can still become a
-generic 500. The `/test_code`, `/test_numeric_expression`, and
-`/test_symbolic_expression` handlers currently return parse, guard, and execution
-failures as `success:false`, generally with HTTP 200. Other runtime paths may translate
-them into validation errors. Backend-produced diagnostic fields should survive
-deployment-profile handoff; current production redaction is therefore a known gap.
+Disabled evaluation produces the stable 403 policy error. Static source-policy or syntax
+failure during admission is a 400 `VALIDATION_ERROR`; evaluation/cast failure during
+prepare is a 422 `PROJECT_MATERIALIZATION_FAILED`. `/test_code` remains for custom
+tag-query preview. Numeric and symbolic constructor-editor preflight routes do not
+exist. Once an operator enables native evaluation, responses preserve its native cause
+and exception type in every environment alongside structured stage/entity/path context.
+The opt-in gate, restricted language, and external deployment sandbox own this security
+boundary; response formatting does not apply a second environment-dependent policy.
 
 ## Verification gap
 
@@ -105,7 +100,7 @@ capability responses. A real disabled-backend system test remains missing.
 - **Admission guard:** [`src/source_allowlist.jl`](../../../src/source_allowlist.jl).
 - **Guarded evaluation paths:** [`src/types.jl`](../../../src/types.jl) and
   [`src/Sandbox.jl`](../../../src/Sandbox.jl).
-- **Unguarded fallback:** [`src/parser.jl`](../../../src/parser.jl).
+- **Transport normalization:** [`src/constructor_transport.jl`](../../../src/constructor_transport.jl).
 - **Unit evidence:** [`test/test_unit.jl`](../../../test/test_unit.jl).
 - **HTTP evidence:** [`test/test_integration.jl`](../../../test/test_integration.jl).
 

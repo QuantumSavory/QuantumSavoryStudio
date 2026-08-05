@@ -57,9 +57,9 @@ path as their equivalent GUI actions.
 
 ## Lifecycle and reads
 
-Lifecycle mutations currently relay through the existing browser simulation controller,
-although direct Run bypasses part of the shared GUI capability/readiness, validation,
-prepare, start, and actionable-error path.
+Lifecycle mutations relay through the browser simulation controller. GUI Run and MCP
+Run therefore share structural readiness, atomic prepare, start, and structured-error
+handling.
 Catalog reads and simulation-result reads do not mutate the design; simulation reads use
 backend services and verify collaboration context around the read.
 

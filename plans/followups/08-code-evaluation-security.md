@@ -6,9 +6,8 @@ Make production deployment safe by default: raw Julia evaluation must be explici
 
 ## Evidence
 
-- `/test_code`, `/test_symbolic_expression`, `/test_numeric_expression`, lambda
-  creation, symbolic handling, numeric expressions, and fallback parameter
-  conversion reach `Base.eval` or `eval` in the server process.
+- `/test_code`, runtime lambda creation, symbolic handling, and numeric expressions
+  reach `Base.eval` or `eval` in the server process.
 - A fresh module isolates names but does not restrict filesystem, process, network, memory, or CPU access.
 - The current documentation calls these paths sandboxed.
 
@@ -21,8 +20,11 @@ Make production deployment safe by default: raw Julia evaluation must be explici
 ## Implementation
 
 1. Introduce one clearly named policy helper/configuration flag. Default unsafe evaluation off in production and on only in development/test unless an operator explicitly opts in.
-2. Apply the guard to HTTP evaluation endpoints and to payload-driven lambda, symbolic, and fallback eval paths; do not leave an endpoint bypass.
-3. Return a stable, documented API error when disabled and avoid leaking evaluated exception internals in production responses.
+2. Apply the guard to the HTTP code-preview endpoint and to payload-driven lambda,
+   symbolic, and numeric-source paths; do not leave a bypass.
+3. Return a stable, documented API error when disabled. Once an operator explicitly
+   enables native evaluation, preserve its exception diagnostics consistently across
+   environments.
 4. Expose enough capability information for the GUI to disable or explain unavailable evaluation controls rather than failing mysteriously.
 5. Replace all claims of a secure sandbox with precise warnings and deployment guidance.
 6. Add tests for default production denial, explicit opt-in, dev/test behavior, and safe non-eval parameter conversion.
@@ -32,18 +34,20 @@ Make production deployment safe by default: raw Julia evaluation must be explici
 The single `WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION` policy covers:
 
 - direct code validation through `POST /test_code`;
-- symbolic validation through `POST /test_symbolic_expression`;
-- numeric validation through `POST /test_numeric_expression`;
-- Custom Function/Lambda validation and protocol or Variable construction;
+- Custom Function/Lambda protocol or Variable construction;
 - symbolic source conversion outside safe tagged States Zoo recipes;
-- tagged `Float64` and `Int64` numeric expressions during validation and each
-  concrete protocol assignment; and
-- legacy/fallback conversion paths that evaluate Julia source.
+- tagged `Float64` and `Int64` numeric-source materialization at each concrete
+  protocol, background, or Variable use.
+
+Constructor-editor numeric and symbolic preflight endpoints have been removed. Their
+drafts commit exact nonblank source without executing it; constructor preparation is
+the authoritative runtime boundary.
 
 Numeric literals, intrinsic values, known-function allowlist choices, named-tag
 catalog choices, and structured States Zoo recipes do not require unsafe
-evaluation. Saved expression source remains readable while the capability is
-disabled, but it cannot be validated or executed.
+evaluation. Saved expression source remains readable and can still pass structural
+admission and static source-policy checks while the capability is disabled, but it
+cannot be evaluated during preview or preparation.
 
 Numeric previews are transient. Projects must not persist computed results,
 errors, node-name maps, placement, or edge physical context. Script export may
@@ -58,7 +62,8 @@ falling back to a constructor default.
 - Run backend unit and integration suites in test mode.
 - Run focused production-mode checks proving every raw eval surface is denied by default.
 - Run GUI build and relevant code/symbolic editor tests for both capability states.
-- Run `git diff --check` and inspect logs/responses for secret or stack-trace leakage.
+- Run `git diff --check` and inspect logs/responses for consistent native diagnostics
+  after explicit opt-in.
 
 ## Non-goals
 

@@ -29,13 +29,15 @@ A state recipe is structured data:
 }
 ```
 
-The whitelist validator requires the exact advertised parameter set, finite numeric
-values, and declared ranges. Recipes do not pass through native source evaluation.
+Transport normalization requires the exact positional constructor keys and finite
+canonical values. Declared ranges are recommended exploration/UI metadata, not a
+validity contract. Recipes do not pass through native source evaluation.
 
 Weighted recipes resolve to normalized symbolic state values while retaining the
 original density matrix's absolute trace as primitive metadata. The frontend owns a
-generated `Float64` trace companion linked to the recipe variable; both values remain
-available to compatible protocol parameters and script export.
+generated `Float64` trace companion linked to the recipe variable; runtime constructs
+the state when it is used and script export renders the persisted companion without
+reconstructing the trace.
 
 ## Rendering boundary
 

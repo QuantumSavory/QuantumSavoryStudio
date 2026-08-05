@@ -1,7 +1,7 @@
 # Simulation Runtime Reference
 
 - **Context need:** Reference
-- **Open when:** Changing parse/prepare/run/pause state, task ownership, progress,
+- **Open when:** Changing prepare/run/pause state, task ownership, progress,
   cleanup, logs, tags, panic reporting, or resource limits.
 - **Do not open when:** Changing source evaluation, generated scripts, or frontend-only
   project editing.
@@ -19,17 +19,21 @@ provide persistence or a globally frozen snapshot for concurrent readers.
 
 | Stage | Current behavior |
 | --- | --- |
-| Parse | Validate canonical payload, construct graph/register network, then install a named state |
-| Prepare | Launch protocols and establish the simulation time tracker |
+| Prepare | Admit the complete payload, build a private candidate, construct every background/state/protocol, schedule all protocols, then atomically publish the named state |
 | Run | Mark running and start one cooperative sticky `@async` task toward an absolute cumulative target |
 | Pause | Request pause and return only after the run task acknowledges and exits |
 | Resume | Reuse the paused target; a later nonpaused run may extend beyond current simulated time |
 | Complete | Retain serializable state/results until explicit or automatic cleanup |
 | Destroy | Attempt resource cleanup, remove the registry record, and make live-only operations unavailable |
 
-A failed replacement candidate is constructed before registry replacement, preserving an
-existing healthy simulation. The frontend's “Run for” duration is converted to the
-backend's absolute target before the request.
+A prepare holds the per-name lifecycle lock, rejects an actively running prior state
+before candidate construction, and publishes only after all construction and scheduling
+succeeds. Admission, policy, materialization, constructor, and scheduling failures clean
+up only the candidate and preserve the previous state identity. Cleanup of an old state
+after successful publication is best effort and cannot turn the committed prepare into
+a failure. Trusted source or third-party constructor side effects outside the candidate
+are not transactional. The frontend's “Run for” duration is converted to the backend's
+absolute target before the request.
 
 ## Serialized phase
 
@@ -80,8 +84,8 @@ HTTP log reads purge by default, while MCP reads are bounded and nonpurging. Liv
 queries, slots, and protocol rendering require a retained register/network and become
 unavailable after blocking or destruction. Panic state and structured logs may contain
 full exception messages and stack traces. Failures delivered to or polled by the GUI
-should preserve their classification, message, and available details in the Tools Log;
-current production evaluation redaction is a separate gap.
+preserve their classification, message, and available details in the Tools Log,
+including native diagnostics after an operator explicitly enables Julia evaluation.
 
 ## Anchors
 
