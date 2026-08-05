@@ -1,6 +1,9 @@
-# WebQuantumSavory (Quantum Network API)
+# WebQuantumSavory
 
-A Julia-based web API for quantum network operations, built with the Genie web framework and QuantumSavory quantum computing library. This API provides endpoints for creating, preparing, and running quantum network simulations.
+WebQuantumSavory is a browser application for designing and simulating quantum networks
+with QuantumSavory. A Julia/Genie backend serves the bundled GUI and its private
+frontend-support HTTP boundary; that boundary is not a separately supported integration
+API.
 
 ## Installation
 
@@ -142,93 +145,10 @@ are neither scanned nor removed, so they remain untouched and invisible. HTTP si
 and script-export payloads reuse the same sparse assignments, concrete Variables, and
 background sentinel while excluding project-only fields.
 
-## API Overview
+## Design and simulation behavior
 
-### Core Simulation Workflow
-
-1. **Prepare Simulation** (`POST /prepare_simulation`) - Atomically admit the complete project, construct the network and protocols, and replace the prior prepared state
-2. **Run Simulation** (`POST /run_simulation`) - Start a cooperative run to an absolute simulation-time target
-3. **Monitor State** (`GET /get_state`) - Check simulation status and progress
-4. **Cleanup** (`POST /destroy_simulation`) - Remove simulation and free resources
-
-A failed prepare never publishes its candidate. If the name already has a healthy
-state, that exact state remains installed; replacing a running state returns
-`SIMULATION_RUNNING`. Admission errors are `VALIDATION_ERROR`, value-resolution errors
-are `PROJECT_MATERIALIZATION_FAILED`, and native constructor failures are
-`CONSTRUCTOR_REJECTED`.
-
-### Simulation Control
-
-- **Pause Simulation** (`POST /pause_simulation`) - Pause a running simulation
-  - Requires simulation to be currently running
-  - Returns only after the run task stops at a simulation-step boundary
-  - Returns error if simulation is not running
-
-`POST /run_simulation` returns HTTP 202 after marking the simulation as running; use
-`GET /get_state` to monitor completion or errors. `time_units` is the absolute cumulative target,
-not a duration added by the API. To resume a paused simulation, call `/run_simulation` again with
-the target already reported in `simulation_time`.
-
-The simulation state includes a `simulation_paused` boolean field that indicates an acknowledged
-pause. When it is `true`, `simulation_running` is `false` and the execution task has stopped, so the
-simulation can be resumed or safely destroyed.
-
-#### Example: Pausing a Simulation
-
-```bash
-# Start a simulation
-curl -X POST http://localhost:8000/run_simulation \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-simulation", "time_units": 100}'
-
-# Pause the simulation
-curl -X POST http://localhost:8000/pause_simulation \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-simulation"}'
-
-# Check simulation state
-curl http://localhost:8000/get_state?name=my-simulation
-```
-
-The state response will show `simulation_paused: true` and `simulation_running: false` when the simulation has been paused.
-
-### Information Endpoints
-
-- **`GET /background_types`** - Available background noise models
-- **`GET /slot_types`** - Available quantum slot types
-- **`GET /protocol_types`** - Live upstream protocol metadata, including placement,
-  parameters, required fields, and virtual-edge eligibility
-- **`GET /protocols/:name/:protocol_id`** - Details for a protocol instance in a simulation
-- **`GET /slots/:name/:slot_id`** - Details for a slot in a simulation
-- **`GET /simulations`** - List existing simulations with `name` and `status`
-- **`GET /known_functions`** - List of supported Julia functions usable as argument values
-- **`POST /test_code`** - Test Julia code when unsafe evaluation is enabled
-- **`GET /platform_info`** - Versions and server capabilities, including `unsafe_code_evaluation`
-- **`GET /logs/:name`** - Fetch log events for a simulation; supports `purge` query (default `true`). Example: `/logs/my-sim?purge=false`
-- **`GET /status`** - Server health check
-- **`GET /docs`** - Interactive Swagger UI
-
-### Simulation States
-
-- **`prepared`** - Protocols launched, ready to run
-- **`complete`** - Simulation executed and finished
-
-### Simulation Status Fields
-
-When monitoring simulation state via `GET /get_state`, the response includes a `simulation` object with:
-- `simulation_running` - Boolean indicating if simulation is actively running
-- `simulation_paused` - Boolean indicating if simulation was paused by user request
-- `simulation_time` - Total time units for the simulation
-- `simulation_progress` - Current simulation time progress
-- `simulation_error` - Error message if simulation failed
-
-## Getting Started
-
-The best way to explore the API is through the interactive Swagger documentation at `/docs`. It provides:
-- Complete endpoint documentation
-- Request/response schemas
-- Interactive testing interface
-- Example payloads and responses
+The GUI's **Run for** value is an additional duration, but backend `time_units` is an
+absolute cumulative target; resuming a paused run reuses that target.
 
 ### Physical Links
 
@@ -317,9 +237,9 @@ generated script reports the native constructor error at its direct call site.
 
 ### Trusted Julia Evaluation
 
-`POST /test_code`, custom functions, symbolic values, and numeric expressions can
-execute Julia code in the API server process. A fresh module isolates names, but does not
-restrict filesystem, process, network, memory, or CPU access. Treat saved
+Custom functions, symbolic values, numeric expressions, and the server-side evaluation
+preview can execute Julia code in the backend process. A fresh module isolates names,
+but does not restrict filesystem, process, network, memory, or CPU access. Treat saved
 expression source as trusted code and do not enable these features for
 untrusted users.
 
@@ -333,16 +253,15 @@ WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true ./bin/server
 
 The value is parsed strictly: only `true` or `false` are accepted, ignoring case
 and surrounding whitespace. Keep the variable unset or set it to `false` in
-production unless the deployment intentionally trusts every API caller and
-simulation payload. When disabled, evaluation requests return HTTP 403 with
-`error_code: "UNSAFE_EVALUATION_DISABLED"`. Evaluation exceptions are included
-only in `dev` and `test` responses, even when evaluation is explicitly enabled
-in another environment.
+production unless the deployment intentionally trusts every API caller and simulation
+payload. When disabled, HTTP actions that would evaluate source return HTTP 403 with
+`error_code: "UNSAFE_EVALUATION_DISABLED"`. When enabled, response formatting does not
+redact available evaluation diagnostics based on the deployment environment.
 
 Numeric literals remain usable when unsafe evaluation is disabled, and saved source
-remains viewable. Preparing a payload that requires source evaluation returns the
-structured 403 policy error. Export remains available because it performs only static
-source-policy and syntax checks.
+remains viewable. Preparing a payload that requires source evaluation is rejected.
+Export remains available because it performs only static source-policy and syntax
+checks.
 
 ## Running Tests
 

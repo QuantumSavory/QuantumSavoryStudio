@@ -19,7 +19,7 @@ bin/server
   -> bootstrap.jl
   -> WebQuantumSavory.main()
   -> Genie configuration, initializers, routes.jl
-  -> generated GUI + HTTP API
+  -> generated GUI + frontend-support HTTP routes
 ```
 
 `routes.jl` is the HTTP composition root. `src/WebQuantumSavory.jl` loads package
@@ -32,17 +32,14 @@ to browser `localStorage`.
 
 | Area | Current owner | Consequence |
 | --- | --- | --- |
-| HTTP routing and Swagger | `routes.jl` | Root router rules apply even though most logic is in `src/` |
+| HTTP composition | `routes.jl` | Root router rules apply even though most logic is in `src/` |
 | Payload construction and simulation state | Root package modules | Frontend data must cross an explicit minimized payload boundary |
 | Browser authoring document | Frontend | Julia must not become a second project editor |
 | Simulation lifecycle reads/mutations | `SimulationService` plus state functions | HTTP and MCP reads can share a transport-neutral service |
 | MCP coordination | Backend collaboration/config/supervisor adapters | The optional sidecar stays out of the main dependency graph |
 | External MCP transport | Isolated `mcp/` process | Process-global MCP logging and session lifecycle cannot alter Genie |
 
-The HTTP API is a private frontend-support boundary rather than an independently
-supported client product. The primary deployment is a loopback server used from a
-desktop browser. A public educational GUI may use the same backend in a Podman
-container, but MCP remains local-only. See
+For the canonical audience, deployment, and compatibility boundary, see
 [product boundary and deployment](../product-boundary-and-deployment.md).
 
 The backend dynamically derives most constructor catalogs from QuantumSavory. Explicit

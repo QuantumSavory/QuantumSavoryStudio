@@ -38,10 +38,13 @@ root backend entry points `bootstrap.jl` and `routes.jl`.
 
 ## Root backend rules
 
-- Register HTTP handlers through the local `route(...)` wrapper in `routes.jl`.
-- Keep each changed supported route, its adjacent Swagger block, failure behavior, and
-  affected integration/frontend callers synchronized. Open the
-  [API reference](.agents/context/backend/api-routing-and-errors.md) first.
+- Register HTTP handlers through the local `route(...)` wrapper in `routes.jl`. Open
+  [frontend-support HTTP intent](.agents/context/backend/api-routing-and-errors.md)
+  before changing cross-route response behavior or validation ownership.
+- Treat a shared interface document as authoritative only when its consumers load or
+  derive from it. Otherwise the handler, invoked backend code, first-party callers, and
+  tests own exact HTTP behavior; keep them synchronized without a parallel endpoint or
+  payload-schema inventory.
 - Do not edit generated Vite output under `public/index.html`, `public/vite.svg`, or
   `public/assets/`.
 - Keep ModelContextProtocol out of the root Julia project; the dependency belongs only

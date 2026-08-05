@@ -82,10 +82,12 @@ Disabled evaluation produces the stable 403 policy error. Static source-policy o
 failure during admission is a 400 `VALIDATION_ERROR`; evaluation/cast failure during
 prepare is a 422 `PROJECT_MATERIALIZATION_FAILED`. `/test_code` remains for custom
 tag-query preview. Numeric and symbolic constructor-editor preflight routes do not
-exist. Once an operator enables native evaluation, responses preserve its native cause
-and exception type in every environment alongside structured stage/entity/path context.
-The opt-in gate, restricted language, and external deployment sandbox own this security
-boundary; response formatting does not apply a second environment-dependent policy.
+exist. Once an operator enables native evaluation, response formatting does not redact
+available native diagnostics based on the environment. Structured stage/entity/path
+context remains, but some evaluator paths wrap native exceptions, so do not promise the
+original exception type at every boundary. The opt-in gate, restricted language, and
+external deployment sandbox own this security boundary; response formatting does not
+apply a second environment-dependent policy.
 
 ## Verification gap
 

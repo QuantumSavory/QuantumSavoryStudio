@@ -14,9 +14,8 @@ then mounts the application. `App.vue` is the composition and startup root: it o
 live reactive project graph and coordinates domain services, composables, dialogs,
 panels, maps, results, and capability loading.
 
-The desktop GUI user is the product's primary actor. The HTTP API exists to support this
-frontend rather than an independent integration audience. MCP augments a live local GUI
-session and never replaces browser authority.
+For the canonical audience and component-authority boundary, see
+[product boundary and deployment](../product-boundary-and-deployment.md).
 
 ```text
 stored/imported project
