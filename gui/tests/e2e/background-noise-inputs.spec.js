@@ -31,15 +31,8 @@ async function configureDirectExpression(page, slot, source, { template = false 
   await parameter.getByRole('combobox', { name: 'Input option for t1' })
     .selectOption('expression:Float64')
   await parameter.getByTestId('numeric-expression-source').fill(source)
-  const validationResponse = page.waitForResponse(
-    response => response.url().endsWith('/test_numeric_expression'),
-  )
   await parameter.getByRole('button', { name: 'Validate t1 expression' }).click()
-  expect((await validationResponse).ok()).toBe(true)
-  await expect(parameter.getByTestId('numeric-expression-result')).toContainText(
-    'Result:',
-    { timeout: 15_000 },
-  )
+  await expect(parameter.getByTestId('numeric-expression-summary')).toBeVisible()
   return parameter
 }
 
@@ -50,12 +43,6 @@ test.describe('Background-noise constructor inputs', () => {
   }) => {
     test.setTimeout(120_000)
     test.skip(browserName !== 'chromium', 'The end-to-end backend workflow runs once in Chromium.')
-
-    const numericRequests = []
-    page.on('request', request => {
-      if (!request.url().endsWith('/test_numeric_expression')) return
-      numericRequests.push(request.postDataJSON())
-    })
 
     const backgroundsLoaded = page.waitForResponse(
       response => response.url().endsWith('/background_types') && response.ok(),
@@ -74,7 +61,6 @@ test.describe('Background-noise constructor inputs', () => {
       installedSlot,
       'self + nodeid("Node 1")',
     )
-    await expect(directParameter.getByTestId('numeric-expression-result')).toContainText('2')
     await expect(directParameter.getByTestId('numeric-expression-summary')).toBeVisible()
     await expect(directParameter.getByTestId('numeric-expression-source'))
       .toHaveText('self + nodeid("Node 1")')
@@ -82,16 +68,8 @@ test.describe('Background-noise constructor inputs', () => {
     await directParameter.getByTestId('numeric-expression-source')
       .fill('self + nodeid("Node 1") + 1')
     await directParameter.getByRole('button', { name: 'Validate t1 expression' }).click()
-    await expect(directParameter.getByTestId('numeric-expression-result')).toContainText('3')
-    expect(numericRequests.at(-1)).toMatchObject({
-      expression: 'self + nodeid("Node 1") + 1',
-      target_type: 'Float64',
-      placement: 'node',
-      context: {
-        node_names: ['Node 1'],
-        self: 1,
-      },
-    })
+    await expect(directParameter.getByTestId('numeric-expression-source'))
+      .toHaveText('self + nodeid("Node 1") + 1')
 
     await page.getByRole('tab', { name: 'Variables' }).click()
     const variables = page.getByTestId('variables-panel')
@@ -102,8 +80,7 @@ test.describe('Background-noise constructor inputs', () => {
     await variable.getByTestId('numeric-expression-source')
       .fill('self + nodeid("Node 1")')
     await variable.getByRole('button', { name: 'Validate node_decay expression' }).click()
-    await expect(variable.getByTestId('numeric-expression-deferred'))
-      .toHaveText('Evaluated when assigned.')
+    await expect(variable.getByTestId('numeric-expression-summary')).toBeVisible()
     const variableId = await variable.getAttribute('data-variable-id')
 
     await page.locator('.node-marker').first().click()
@@ -116,21 +93,16 @@ test.describe('Background-noise constructor inputs', () => {
       .selectOption(variableId)
     await expect(linkedParameter.getByTestId('linked-numeric-expression'))
       .toContainText('self + nodeid("Node 1")')
-    await expect(linkedParameter.getByTestId('numeric-expression-result')).toContainText('2')
 
     await page.getByRole('tab', { name: 'Layout Tools' }).click()
     const template = page.locator('.template-node')
     await template.getByRole('button', { name: 'Add Slot' }).click()
     const templateSlot = template.locator('.slot-row-container').first()
-    const templateRequestsStart = numericRequests.length
     const templateParameter = await configureDirectExpression(
       page,
       templateSlot,
       'self + 10',
       { template: true },
-    )
-    await expect(templateParameter.getByTestId('numeric-expression-deferred')).toHaveText(
-      'Representative result; evaluated again when assigned.',
     )
     await expect(templateParameter.getByTestId('numeric-expression-source')).toHaveText(
       'self + 10',
@@ -138,18 +110,14 @@ test.describe('Background-noise constructor inputs', () => {
     await templateParameter.getByTestId('numeric-expression-summary').click()
     await templateParameter.getByTestId('numeric-expression-source').fill('invalid(')
     await templateParameter.getByRole('button', { name: 'Validate t1 expression' }).click()
-    await expect(templateParameter.getByTestId('numeric-expression-error')).toBeVisible()
-    await expect(templateParameter.getByTestId('numeric-expression-summary')).toHaveCount(0)
+    await expect(templateParameter.getByTestId('numeric-expression-summary')).toBeVisible()
+    await expect(templateParameter.getByTestId('numeric-expression-error')).toHaveCount(0)
+    await templateParameter.getByTestId('numeric-expression-summary').click()
     await templateParameter.getByTestId('numeric-expression-source').fill('self + 11')
     await templateParameter.getByRole('button', { name: 'Validate t1 expression' }).click()
     await expect(templateParameter.getByTestId('numeric-expression-source')).toHaveText(
       'self + 11',
     )
-    expect(numericRequests.at(-1)).toEqual({
-      expression: 'self + 11',
-      target_type: 'Float64',
-      placement: 'node',
-    })
 
     await addNode(page, { x: 590, y: 245 })
     await addNode(page, { x: 760, y: 330 })
@@ -176,22 +144,15 @@ test.describe('Background-noise constructor inputs', () => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       return setup?.projectData?.net?.edges?.[0]?.data?.protocols?.length
     })).toBe(1)
-    const concreteTemplateRequests = numericRequests.slice(templateRequestsStart)
-      .filter(request => request.expression === 'self + 11' && request.context)
-    expect(concreteTemplateRequests.map(request => request.context.self)).toEqual([2, 3])
-
     const clonedBackgrounds = await page.evaluate(() => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       return setup.projectData.net.nodes.slice(1).map(node => node.data.slots[0].backgroundNoise)
     })
     expect(clonedBackgrounds).toEqual(Array(2).fill({
       type: 'T1Decay',
-      doc: expect.any(String),
       parameters: [{
-        field: 't1',
+        name: 't1',
         type: 'Float64',
-        doc: expect.any(String),
-        selectedType: 'expression:Float64',
         value: {
           kind: 'numeric_expression',
           source: 'self + 11',
@@ -221,8 +182,6 @@ test.describe('Background-noise constructor inputs', () => {
       .toBeVisible()
     await expect(reloadedTemplateParameter.getByTestId('numeric-expression-source'))
       .toHaveText('self + 11')
-    await expect(reloadedTemplateParameter.getByTestId('numeric-expression-result'))
-      .toContainText('13')
 
     const exportResponse = page.waitForResponse(
       response => response.url().endsWith('/export_script') && response.ok(),
@@ -239,11 +198,11 @@ test.describe('Background-noise constructor inputs', () => {
     const duration = page.locator('#runnerPanel .run-duration-group .duration-input')
     await duration.fill('0.01')
     await duration.press('Tab')
-    const parseRequest = page.waitForRequest(
-      request => request.url().endsWith('/parse_network_graph'),
+    const prepareRequest = page.waitForRequest(
+      request => request.url().endsWith('/prepare_simulation'),
     )
-    const parseResponse = page.waitForResponse(
-      response => response.url().endsWith('/parse_network_graph'),
+    const prepareResponse = page.waitForResponse(
+      response => response.url().endsWith('/prepare_simulation'),
     )
     const runAccepted = page.waitForResponse(
       response => response.url().endsWith('/run_simulation') && response.status() === 202,
@@ -252,7 +211,7 @@ test.describe('Background-noise constructor inputs', () => {
     await expect(runButton).toBeEnabled()
     await runButton.click()
 
-    const simulationPayload = (await parseRequest).postDataJSON()
+    const simulationPayload = (await prepareRequest).postDataJSON()
     expect(simulationPayload.net.nodes[0].data.slots[0].backgroundNoise).toEqual({
       type: 'T1Decay',
       parameters: [{
@@ -261,7 +220,7 @@ test.describe('Background-noise constructor inputs', () => {
         value: { kind: 'variable', id: variableId },
       }],
     })
-    expect((await parseResponse).status()).toBe(200)
+    expect((await prepareResponse).status()).toBe(200)
     await runAccepted
     await expect(runButton).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('#runnerPanel .main-buttons .stop-btn')).toBeEnabled()

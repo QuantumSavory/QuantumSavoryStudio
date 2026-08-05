@@ -227,20 +227,14 @@ describe('DesignCommandService', () => {
     )
   })
 
-  it('revalidates linked template backgrounds for every concrete destination node', async () => {
+  it('clones linked template recipes without evaluating them in destination contexts', async () => {
     const project = createEmptyProject('Contextual background templates')
     const expression = { kind: 'numeric_expression', source: 'self + nodeid("A")' }
-    const validateNumericExpressionValue = vi.fn(async (_type, _source, options) => ({
-      valid: true,
-      deferred: options.context == null,
-      value: options.context?.self ?? 1,
-    }))
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
         type: 'ContextNoise',
         parameters: [{ field: 'rate', type: 'Float64', min: 0, max: 10 }],
       }],
-      validateNumericExpressionValue,
     })
 
     await service.execute({
@@ -294,12 +288,6 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    const assignmentContexts = validateNumericExpressionValue.mock.calls
-      .filter(([_type, _source, options]) => options.placement === 'node')
-      .map(([_type, _source, options]) => options.context)
-    expect(assignmentContexts).toContainEqual(undefined)
-    expect(assignmentContexts).toContainEqual({ node_names: ['A'], self: 1 })
-    expect(assignmentContexts).toContainEqual({ node_names: ['A', 'B'], self: 2 })
     for (const node of project.net.nodes) {
       expect(node.data.slots[0].backgroundNoise.parameters[0].value)
         .toEqual(new VariableReference('variable_rate'))
@@ -368,7 +356,7 @@ describe('DesignCommandService', () => {
       }],
     })
     expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0])
-      .toMatchObject({ field: 'rate', selectedType: 'Float64', value: 0.25 })
+      .toEqual({ name: 'rate', type: 'Float64', value: 0.25 })
 
     await service.execute({
       origin: 'mcp',
@@ -395,11 +383,11 @@ describe('DesignCommandService', () => {
     expect(options.automation.entangler).toMatchObject({
       enabled: true,
       definition: { type: 'Example.EntanglerProt' },
-      protocol: {
-        type: 'Example.EntanglerProt',
+        protocol: {
+          type: 'Example.EntanglerProt',
         parameters: [expect.objectContaining({
           name: 'enabled',
-          selectedType: 'Bool',
+          type: 'Bool',
           value: true,
         })],
       },
@@ -410,7 +398,7 @@ describe('DesignCommandService', () => {
     })
   })
 
-  it('rolls back generated nodes when a cloned background fails concrete validation', async () => {
+  it('keeps generated constructor recipes without client-side semantic evaluation', async () => {
     const project = createEmptyProject('Generated background validation')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -418,17 +406,11 @@ describe('DesignCommandService', () => {
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    const validateNumericExpressionValue = vi.fn(async (_type, _source, options) => ({
-      valid: options.context?.self !== 2,
-      value: options.context?.self,
-      message: 'Generated assignment is invalid.',
-    }))
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
         type: 'ContextNoise',
         parameters: [{ field: 'count', type: 'Int64' }],
       }],
-      validateNumericExpressionValue,
       generators: {
         contextual_clone: net => {
           const generatedNode = new Node({
@@ -458,16 +440,18 @@ describe('DesignCommandService', () => {
       },
     })
 
-    await expect(service.execute({
+    await service.execute({
       operations: [{
         kind: 'network.generate',
         value: { generator: 'contextual_clone' },
       }],
-    })).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Generated assignment is invalid.',
     })
-    expect(project.net.nodes.map(node => node.id)).toEqual(['node_a'])
+    expect(project.net.nodes.map(node => node.id)).toEqual(['node_a', 'node_generated'])
+    expect(project.net.nodes[1].data.slots[0].backgroundNoise.parameters).toEqual([{
+      name: 'count',
+      type: 'Int64',
+      value: { kind: 'numeric_expression', source: 'self' },
+    }])
   })
 
   it('rolls back every candidate change when one operation fails', async () => {
@@ -754,6 +738,64 @@ describe('DesignCommandService', () => {
     })
   })
 
+  it('rejects draft-only constructor and Variable fields from MCP operations', async () => {
+    const project = createEmptyProject('Canonical MCP inputs')
+    project.net.nodes.push(new Node({
+      id: 'node_a',
+      name: 'Alice',
+      position: [0, 0],
+      data: { slots: [], protocols: [] },
+    }))
+    const service = serviceFor(project, {
+      protocolCatalog: () => ({
+        node: [{ type: 'Example.Protocol', parameters: [] }],
+        edge: [],
+        floating: [],
+      }),
+    })
+
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'variables.create',
+        id: 'variable_draft',
+        value: {
+          name: 'draft',
+          type: 'Float64',
+          selectedType: 'Float64',
+          value: 1,
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('selectedType'),
+    })
+
+    await expect(service.execute({
+      origin: 'mcp',
+      operations: [{
+        kind: 'protocols.create',
+        id: 'protocol_draft',
+        placement: 'node',
+        owner_id: 'node_a',
+        value: {
+          type: 'Example.Protocol',
+          parameters: [{
+            name: 'unknown_keyword',
+            type: 'Float64',
+            selectedType: 'Float64',
+            value: 1,
+          }],
+        },
+      }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('exactly name, type, and value'),
+    })
+    expect(project.variables).toEqual([])
+    expect(project.net.nodes[0].data.protocols).toEqual([])
+  })
+
   it('keeps caller-owned revision work in the same queue as GUI commands', async () => {
     const project = createEmptyProject('Queue')
     const service = serviceFor(project)
@@ -839,17 +881,13 @@ describe('DesignCommandService', () => {
     expect(project.description).toBe('$E = mc^2$ and $unknown stay Markdown.')
   })
 
-  it('validates catalog-backed noise, protocol, and ordinary variable values', async () => {
+  it('uses catalogs for constructor identity while validating only canonical wire values', async () => {
     const project = createEmptyProject('Typed values')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'A',
       position: [0, 0],
       data: { slots: [], protocols: [] },
-    }))
-    const validateNumericExpressionValue = vi.fn(async () => ({
-      valid: true,
-      value: 0.5,
     }))
     const service = serviceFor(project, {
       backgroundCatalog: () => [{
@@ -873,7 +911,6 @@ describe('DesignCommandService', () => {
         edge: [],
         floating: [],
       }),
-      validateNumericExpressionValue,
     })
 
     await expect(service.requireBackgroundNoise({
@@ -896,10 +933,9 @@ describe('DesignCommandService', () => {
         },
       }],
     })
-    expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0].value)
-      .toBeNull()
+    expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters).toEqual([])
 
-    await expect(service.execute({
+    await service.execute({
       operations: [{
         kind: 'slots.update',
         node_id: 'node_a',
@@ -911,7 +947,9 @@ describe('DesignCommandService', () => {
           },
         },
       }],
-    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    })
+    expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters)
+      .toEqual([{ name: 'rate', type: 'Float64', value: 2 }])
 
     await service.execute({
       operations: [{
@@ -933,18 +971,10 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.slots[0].backgroundNoise.parameters[0])
       .toMatchObject({
-        field: 'rate',
-        selectedType: 'expression:Float64',
+        name: 'rate',
+        type: 'Float64',
         value: { kind: 'numeric_expression', source: '1 / 2' },
       })
-    expect(validateNumericExpressionValue).toHaveBeenCalledWith(
-      'Float64',
-      '1 / 2',
-      expect.objectContaining({
-        placement: 'node',
-        context: { node_names: ['A'], self: 1 },
-      }),
-    )
     await expect(serviceFor(project).requireBackgroundNoise({
       type: 'TemporarilyUnavailableNoise',
       parameters: [{
@@ -953,7 +983,7 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('requires catalog metadata'),
+      message: 'Unknown background noise type: TemporarilyUnavailableNoise',
     })
 
     await service.execute({
@@ -971,7 +1001,7 @@ describe('DesignCommandService', () => {
       }],
     })
     expect(project.net.nodes[0].data.protocols[0].parameters)
-      .toContainEqual(expect.objectContaining({ name: 'rounds', value: null }))
+      .toEqual([{ name: 'enabled', type: 'Bool', value: false }])
     await service.execute({
       operations: [{
         kind: 'protocols.update',
@@ -980,7 +1010,7 @@ describe('DesignCommandService', () => {
         protocol_id: project.net.nodes[0].data.protocols[0].id,
         value: {
           parameters: [
-            { name: 'enabled', type: 'String', value: true },
+            { name: 'enabled', type: 'String', value: 'yes' },
             { name: 'rounds', type: 'Int64', value: 3 },
             {
               name: 'tag',
@@ -994,9 +1024,9 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.protocols[0].parameters).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'enabled', type: 'Bool', value: true }),
+        expect.objectContaining({ name: 'enabled', type: 'String', value: 'yes' }),
         expect.objectContaining({ name: 'rounds', type: 'Int64', value: 3 }),
-        expect.objectContaining({ name: 'tag', selectedType: 'Nothing', value: 'nothing' }),
+        expect.objectContaining({ name: 'tag', type: 'Nothing', value: 'nothing' }),
       ]),
     )
 
@@ -1007,12 +1037,12 @@ describe('DesignCommandService', () => {
         owner_id: 'node_a',
         protocol_id: project.net.nodes[0].data.protocols[0].id,
         value: {
-          parameters: [{ name: 'enabled', type: 'String', value: 'yes' }],
+          parameters: [{ name: 'enabled', type: 'Bool', value: 'yes' }],
         },
       }],
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
     expect(project.net.nodes[0].data.protocols[0].parameters)
-      .toContainEqual(expect.objectContaining({ name: 'enabled', type: 'Bool', value: true }))
+      .toContainEqual(expect.objectContaining({ name: 'enabled', type: 'String', value: 'yes' }))
 
     await expect(service.execute({
       operations: [{
@@ -1056,7 +1086,7 @@ describe('DesignCommandService', () => {
     expect(project.variables).toHaveLength(1)
   })
 
-  it('rejects Default and null Variables before constructor linking', async () => {
+  it('rejects empty Variables but does not apply constructor compatibility metadata', async () => {
     const project = createEmptyProject('Concrete Variables')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -1093,6 +1123,7 @@ describe('DesignCommandService', () => {
           type,
           parameters: [{
             name: 'rounds',
+            type: 'String',
             value: new VariableReference(variableId),
           }],
         },
@@ -1111,15 +1142,15 @@ describe('DesignCommandService', () => {
         value: { name: 'null value', type: 'Float64', value: null },
       }],
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
-    await expect(
-      createWithVariable('Example.RequiredProtocol', 'variable_label'),
-    ).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      message: 'Variable label has no compatible input option for parameter rounds.',
-    })
+    await createWithVariable('Example.RequiredProtocol', 'variable_label')
+    expect(project.net.nodes[0].data.protocols[0].parameters).toEqual([{
+      name: 'rounds',
+      type: 'String',
+      value: { kind: 'variable', id: 'variable_label' },
+    }])
   })
 
-  it('accepts numeric-expression tags only through matching authoritative descriptors', async () => {
+  it('accepts exact numeric-source tags without catalog preflight', async () => {
     const project = createEmptyProject('Numeric expressions')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -1127,7 +1158,6 @@ describe('DesignCommandService', () => {
       position: [0, 0],
       data: { slots: [], protocols: [] },
     }))
-    const validateNumericExpressionValue = vi.fn(async () => ({ valid: true }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
@@ -1137,7 +1167,6 @@ describe('DesignCommandService', () => {
         edge: [],
         floating: [],
       }),
-      validateNumericExpressionValue,
     })
     const expression = { kind: 'numeric_expression', source: 'self / 2' }
 
@@ -1168,21 +1197,13 @@ describe('DesignCommandService', () => {
 
     expect(project.variables[0]).toMatchObject({
       type: 'Float64',
-      selectedType: 'expression:Float64',
       value: expression,
     })
     expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
       type: 'Float64',
-      selectedType: 'expression:Float64',
       value: expression,
     })
-    expect(validateNumericExpressionValue).toHaveBeenCalledWith(
-      'Float64',
-      'self / 2',
-      expect.objectContaining({ placement: 'variable' }),
-    )
-
-    await expect(service.execute({
+    await service.execute({
       operations: [{
         kind: 'variables.create',
         value: {
@@ -1192,7 +1213,12 @@ describe('DesignCommandService', () => {
           value: expression,
         },
       }],
-    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    })
+    expect(project.variables[1]).toMatchObject({
+      name: 'forged',
+      type: 'Float64',
+      value: expression,
+    })
 
     await expect(service.execute({
       operations: [{
@@ -1211,17 +1237,13 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('infers MCP expression updates and reconciles stale linked parameter modes', async () => {
+  it('updates Variable recipes without rewriting linked canonical assignments', async () => {
     const project = createEmptyProject('Expression variable updates')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'Alice',
       position: [0, 0],
       data: { slots: [], protocols: [] },
-    }))
-    const validateNumericExpressionValue = vi.fn(async () => ({
-      valid: true,
-      deferred: true,
     }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
@@ -1232,7 +1254,6 @@ describe('DesignCommandService', () => {
         edge: [],
         floating: [],
       }),
-      validateNumericExpressionValue,
     })
 
     await service.execute({
@@ -1271,11 +1292,14 @@ describe('DesignCommandService', () => {
 
     expect(project.variables[0]).toMatchObject({
       type: 'Float64',
-      selectedType: 'expression:Float64',
       value: expression,
     })
     const protocol = project.net.nodes[0].data.protocols[0]
-    expect(protocol.parameters[0].selectedType).toBe('expression:Float64')
+    expect(protocol.parameters[0]).toEqual({
+      name: 'timeout',
+      type: 'Float64',
+      value: { kind: 'variable', id: 'variable_timeout' },
+    })
 
     await service.execute({
       operations: [{
@@ -1288,17 +1312,9 @@ describe('DesignCommandService', () => {
     })
 
     expect(protocol.parameters[0]).toMatchObject({
-      selectedType: 'expression:Float64',
+      type: 'Float64',
       value: { kind: 'variable', id: 'variable_timeout' },
     })
-    expect(validateNumericExpressionValue).toHaveBeenLastCalledWith(
-      'Float64',
-      'self / 2',
-      expect.objectContaining({
-        placement: 'node',
-        context: { node_names: ['Alice'], self: 1 },
-      }),
-    )
   })
 
   it('commits intrinsic selections into the minimized simulator payload', async () => {
@@ -1348,22 +1364,13 @@ describe('DesignCommandService', () => {
       }])
   })
 
-  it('enforces authoritative bounds for direct and linked evaluated expressions', async () => {
+  it('treats catalog bounds and expression previews as non-authoritative metadata', async () => {
     const project = createEmptyProject('Expression bounds')
     project.net.nodes.push(new Node({
       id: 'node_a',
       name: 'Alice',
       position: [0, 0],
       data: { slots: [], protocols: [] },
-    }))
-    const validateNumericExpressionValue = vi.fn(async (
-      _type,
-      _source,
-      { placement },
-    ) => ({
-      valid: true,
-      deferred: false,
-      value: placement === 'variable' ? '2.0' : '2.0',
     }))
     const service = serviceFor(project, {
       protocolCatalog: () => ({
@@ -1379,11 +1386,10 @@ describe('DesignCommandService', () => {
         edge: [],
         floating: [],
       }),
-      validateNumericExpressionValue,
     })
     const expression = { kind: 'numeric_expression', source: '1 + 1' }
 
-    await expect(service.execute({
+    await service.execute({
       operations: [{
         kind: 'protocols.create',
         placement: 'node',
@@ -1397,7 +1403,7 @@ describe('DesignCommandService', () => {
           }],
         },
       }],
-    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    })
 
     await service.execute({
       operations: [{
@@ -1412,7 +1418,7 @@ describe('DesignCommandService', () => {
       }],
     })
 
-    await expect(service.execute({
+    await service.execute({
       operations: [{
         kind: 'protocols.create',
         placement: 'node',
@@ -1426,16 +1432,9 @@ describe('DesignCommandService', () => {
           }],
         },
       }],
-    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    })
 
-    expect(validateNumericExpressionValue).toHaveBeenCalledWith(
-      'Float64',
-      '1 + 1',
-      expect.objectContaining({
-        placement: 'node',
-        context: { node_names: ['Alice'], self: 1 },
-      }),
-    )
+    expect(project.net.nodes[0].data.protocols).toHaveLength(2)
   })
 
   it('validates and updates the global quantum representations', async () => {
@@ -1466,7 +1465,7 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('links semantic Symbolic Variables through authoritative Julia field types', async () => {
+  it('links exact Symbolic Variables without persisting editor mode metadata', async () => {
     const project = createEmptyProject('Symbolic aliases')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -1484,7 +1483,7 @@ describe('DesignCommandService', () => {
         parameters: { p: 1 },
       },
     }))
-    const symbolicType = 'SymbolicUtils.Symbolic{Real}'
+    const symbolicType = 'Symbolic'
     const service = serviceFor(project, {
       protocolCatalog: () => ({
         node: [{
@@ -1514,15 +1513,16 @@ describe('DesignCommandService', () => {
 
     expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
       name: 'observable',
-      selectedType: symbolicType,
+      type: symbolicType,
       value: { kind: 'variable', id: 'variable_state' },
     })
+    expect(project.net.nodes[0].data.protocols[0].parameters[0])
+      .not.toHaveProperty('selectedType')
   })
 
-  it('validates Lambda variables with deferred node-and-edge context', async () => {
+  it('stores nonblank Lambda source verbatim', async () => {
     const project = createEmptyProject('Contextual variables')
-    const validateCodeValue = vi.fn(async () => ({ valid: true }))
-    const service = serviceFor(project, { validateCodeValue })
+    const service = serviceFor(project)
 
     await service.execute({
       operations: [{
@@ -1535,12 +1535,6 @@ describe('DesignCommandService', () => {
         },
       }],
     })
-    expect(validateCodeValue).toHaveBeenLastCalledWith(
-      'Lambda',
-      'values -> self + node_a + node_b + length + Base.length(values)',
-      { placement: 'variable' },
-    )
-
     await service.execute({
       operations: [{
         kind: 'variables.update',
@@ -1548,11 +1542,8 @@ describe('DesignCommandService', () => {
         value: { value: 'values -> delay + refractive_index + Base.length(values)' },
       }],
     })
-    expect(validateCodeValue).toHaveBeenLastCalledWith(
-      'Lambda',
-      'values -> delay + refractive_index + Base.length(values)',
-      { placement: 'variable' },
-    )
+    expect(project.variables[0].value)
+      .toBe('values -> delay + refractive_index + Base.length(values)')
   })
 
   it('synchronizes weighted States Zoo trace companions atomically', async () => {

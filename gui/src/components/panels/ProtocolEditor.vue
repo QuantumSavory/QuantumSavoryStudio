@@ -46,8 +46,12 @@ import { ref, watch } from 'vue'
 import { ChartNoAxesCombined, Trash2 } from '@lucide/vue'
 import ProtocolConstructorForm from './ProtocolConstructorForm.vue'
 import { useUiServices } from '../../composables/uiServices'
-import { protocolSimpleName } from '../../utils/protocolConstructors.js'
-import { deepClone } from '../../utils/protocolConstructors.js'
+import { api } from '../../utils/ApiConnector.js'
+import {
+  deepClone,
+  protocolSimpleName,
+  seedProtocolConstructor,
+} from '../../utils/protocolConstructors.js'
 
 const props = defineProps({
   protocol: {
@@ -82,12 +86,19 @@ const props = defineProps({
 })
 const emit = defineEmits(['select', 'delete', 'update'])
 const { showResultsView } = useUiServices()
-const draftProtocol = ref(deepClone(props.protocol))
+function editorDraft(protocol) {
+  const definition = api.getProtocolDefinition(props.category, protocol.type)
+  return definition
+    ? seedProtocolConstructor(definition, protocol)
+    : deepClone(protocol)
+}
+
+const draftProtocol = ref(editorDraft(props.protocol))
 
 watch(
   () => props.protocol,
   protocol => {
-    draftProtocol.value = deepClone(protocol)
+    draftProtocol.value = editorDraft(protocol)
   },
   { deep: true },
 )

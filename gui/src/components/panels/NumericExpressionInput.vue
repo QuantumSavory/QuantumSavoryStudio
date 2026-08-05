@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api } from '../../utils/ApiConnector.js'
 import {
   createNumericExpressionValue,
@@ -63,8 +63,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['commit'])
 
-let requestController = null
-let requestGeneration = 0
 let ownedError = null
 let ownedErrorTarget = null
 let locallyCommittedSource = null
@@ -105,9 +103,6 @@ function openEditor() {
 }
 
 function abortRequest() {
-  requestController?.abort()
-  requestController = null
-  requestGeneration += 1
   previewPending.value = false
 }
 
@@ -148,106 +143,33 @@ function onSourceInput(value) {
   setValidationError('Validate this expression before continuing')
 }
 
-async function validate({ commit = false, automatic = false } = {}) {
+async function validate({ commit = false } = {}) {
   const currentSource = source.value
   if (props.disabled) return false
-  if (!automatic && !props.linked) editorOpen.value = true
+  if (!props.linked) editorOpen.value = true
   const localError = !currentSource.trim()
     ? 'Validate this expression before continuing'
     : !evaluationEnabled.value
       ? 'Server-side Julia evaluation is disabled'
-      : !props.template && props.placement !== 'variable' && props.context == null
-        ? 'A concrete assignment context is required for validation'
-        : null
+      : null
   if (localError) {
     clearPreview()
     return setValidationError(localError)
   }
 
-  abortRequest()
-  const generation = ++requestGeneration
-  requestController = new AbortController()
-  previewPending.value = true
   previewError.value = ''
   previewResult.value = null
   previewDeferred.value = false
-  setOwnedError('Expression validation is in progress')
-
-  let response
-  try {
-    response = await api.validateNumericExpression(
-      currentSource,
-      props.targetType,
-      props.placement,
-      {
-        context: props.template || props.placement === 'variable'
-          ? undefined
-          : props.context,
-        signal: requestController.signal,
-      },
-    )
-  } catch (error) {
-    if (error?.name === 'AbortError' || generation !== requestGeneration) return false
-    previewPending.value = false
-    return setValidationError(error?.message || 'Numeric expression validation failed.')
-  }
-  if (generation !== requestGeneration || currentSource !== source.value) return false
-
-  requestController = null
-  previewPending.value = false
-  if (response?.success !== true) {
-    const error = typeof response?.error === 'string'
-      ? response.error
-      : response?.error?.message
-    return setValidationError(error || 'Numeric expression validation failed.')
-  }
-
-  const evaluatedValue = response.results?.value
-  const numericValue = evaluatedValue == null ? null : Number(evaluatedValue)
-  if (
-    numericValue != null
-    && (
-      (Number.isFinite(props.minimum) && numericValue < props.minimum)
-      || (Number.isFinite(props.maximum) && numericValue > props.maximum)
-    )
-  ) {
-    return setValidationError(`${displayName.value || 'Value'} must be`
-      + `${Number.isFinite(props.minimum) ? ` at least ${props.minimum}` : ''}`
-      + `${Number.isFinite(props.minimum) && Number.isFinite(props.maximum) ? ' and' : ''}`
-      + `${Number.isFinite(props.maximum) ? ` at most ${props.maximum}` : ''}.`)
-  }
 
   if (!props.linked && commit) {
     locallyCommittedSource = currentSource
     props.parameter.value = createNumericExpressionValue(currentSource)
-  }
-  previewDeferred.value = response.results?.deferred === true
-  if (evaluatedValue != null) {
-    previewResult.value = String(evaluatedValue)
   }
   clearOwnedError()
   if (!props.linked && commit) editorOpen.value = false
   if (commit) emit('commit')
   return true
 }
-
-watch(
-  () => [
-    props.targetType,
-    props.placement,
-    props.template,
-    JSON.stringify(props.context),
-  ],
-  () => {
-    const shouldRevalidate = props.linked || persistedSource.value === source.value
-    clearPreview()
-    if (shouldRevalidate && source.value.trim()) {
-      void validate({ automatic: true })
-    } else if (!shouldRevalidate) {
-      setValidationError('Validate this expression before continuing')
-    }
-  },
-)
 
 watch(
   [persistedSource, () => props.linked],
@@ -263,16 +185,12 @@ watch(
     if (!source.value.trim()) {
       setValidationError('Validate this expression before continuing')
     } else {
-      void validate({ automatic: true })
+      clearOwnedError()
     }
   },
   { immediate: true },
 )
 
-onBeforeUnmount(() => {
-  abortRequest()
-  clearOwnedError()
-})
 </script>
 
 <style scoped>

@@ -110,7 +110,6 @@ import {
 } from '../../models/Variable'
 import {
   buildVariableInputOptions,
-  inferParameterInputOption,
   isNumericExpressionValue,
   parameterInputIsComplete,
   resetValueForType
@@ -208,10 +207,8 @@ function initialSelectedType(variable) {
     ))
     if (expression) return expression.id
   }
-  const selected = variableInputOptions.find(option => option.id === variable.selectedType)
-  if (selected) return selected.id
   const semantic = variableInputOptions.find(option => option.id === variable.type)
-  return semantic?.id || inferParameterInputOption(variableInputOptions, variable).id
+  return semantic?.id || variableInputOptions[0].id
 }
 
 function cloneValue(value) {

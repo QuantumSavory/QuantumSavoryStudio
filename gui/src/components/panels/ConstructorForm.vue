@@ -80,14 +80,6 @@
                       Missing variable ({{ param.value.id }})
                     </option>
                     <option
-                      v-else-if="!variableIsCompatible(param, assignedVariable(param))"
-                      :value="param.value.id"
-                      disabled
-                    >
-                      Incompatible variable: {{ assignedVariable(param).name }}
-                      ({{ variableDisplayType(assignedVariable(param)) }})
-                    </option>
-                    <option
                       v-for="variable in compatibleVariables(param)"
                       :key="variable.id"
                       :value="variable.id"
@@ -190,10 +182,7 @@ import { VariableReference, isVariableReference } from '../../models/Variable'
 import {
   buildParameterInputOptions,
   getTypeOptionLabel,
-  inferParameterInputOption,
-  isNumericExpressionOptionId,
   isNumericExpressionValue,
-  parameterInputOptionForVariable,
   resetValueForType,
   unknownParameterTypes,
 } from '../../utils/parameterTypes'
@@ -272,7 +261,15 @@ function initialOption(param) {
   const explicit = options.find(option => option.id === param.selectedType)
   if (explicit) return explicit
   if (param.value == null || param.value === '' || param.value === 'default') return options[0]
-  return inferParameterInputOption(options, param)
+  if (isNumericExpressionValue(param.value)) {
+    return options.find(option => (
+      option.inputKind === 'numeric-expression' && option.wireType === param.type
+    )) || options[0]
+  }
+  return options.find(option => (
+    option.inputKind !== 'numeric-expression'
+    && (option.id === param.type || option.wireType === param.type)
+  )) || options[0]
 }
 
 function initializeParameter(param) {
@@ -370,9 +367,7 @@ function assignedVariable(param) {
 }
 
 function variableIsCompatible(param, variable) {
-  return runtimeParameterDefinition(param)?.kind !== 'named_tag_type'
-    && !!variable
-    && !!inputOptionForVariable(param, variable)
+  return !!param && !!variable
 }
 
 function compatibleVariables(param) {
@@ -380,23 +375,31 @@ function compatibleVariables(param) {
 }
 
 function variableDisplayType(variable) {
-  return getTypeOptionLabel(variable?.selectedType || variable?.type)
+  return getTypeOptionLabel(
+    isNumericExpressionValue(variable?.value)
+      ? `expression:${variable.type}`
+      : variable?.type,
+  )
 }
 
 function inputOptionForVariable(param, variable) {
-  return parameterInputOptionForVariable(
-    declaredParameterType(param),
-    runtimeParameterDefinition(param),
-    variable,
-  )
+  if (!variable) return null
+  const options = parameterInputOptions(param)
+  if (isNumericExpressionValue(variable.value)) {
+    const expression = options.find(option => (
+      option.inputKind === 'numeric-expression' && option.wireType === variable.type
+    ))
+    if (expression) return expression
+  }
+  return options.find(option => (
+    option.inputKind !== 'numeric-expression'
+    && (option.id === variable.type || option.wireType === variable.type)
+  )) || null
 }
 
 function assignedVariableIsNumericExpression(param) {
   const variable = assignedVariable(param)
-  return !!variable && (
-    isNumericExpressionOptionId(variable.selectedType)
-    || isNumericExpressionValue(variable.value)
-  )
+  return !!variable && isNumericExpressionValue(variable.value)
 }
 
 function isVariablePickerOpen(param) {
@@ -448,7 +451,6 @@ function toggleVariableAssignment(param) {
 function variableButtonDisabled(param) {
   if (parameterDisabled(param)) return true
   if (isVariableAssigned(param)) return false
-  if (runtimeParameterDefinition(param)?.kind === 'named_tag_type') return true
   return compatibleVariables(param).length === 0
 }
 
@@ -456,16 +458,13 @@ function variableButtonTitle(param) {
   if (isControlledParameter(param)) return controlledReason(param)
   if (isEditingDisabled.value) return `Reset the simulation to edit ${props.subject} parameters`
   if (isVariableAssigned(param)) return 'Use a direct value'
-  if (runtimeParameterDefinition(param)?.kind === 'named_tag_type') {
-    return 'Named tag type parameters cannot use Variables yet'
-  }
   if (isVariablePickerOpen(param)) return 'Cancel choosing a variable'
   if (!compatibleVariables(param).length) {
     return props.variables.length === 0
-      ? 'Create a compatible variable in the Variables tab first'
-      : 'No variables have a type supported by this parameter'
+      ? 'Create a variable in the Variables tab first'
+      : 'No variables are available'
   }
-  return 'Choose a compatible variable for this parameter'
+  return 'Choose a variable for this parameter'
 }
 
 function variableButtonLabel(param) {

@@ -325,7 +325,7 @@ test.describe('States Zoo variables', () => {
       'Unlink this variable from protocol or background parameters before deleting it',
     )
 
-    await setSimulationPhase(page, 'parsed')
+    await setSimulationPhase(page, 'prepared')
     await expect(panel.getByRole('button', { name: 'Add State' })).toBeDisabled()
     await expect(row.locator('.states-zoo-name-input')).toBeDisabled()
     await expect(row.locator('.states-zoo-type-select')).toBeDisabled()

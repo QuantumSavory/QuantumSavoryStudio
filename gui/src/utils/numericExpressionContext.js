@@ -12,7 +12,7 @@ function oneBasedNodeIndex(projectData, nodeOrId) {
 }
 
 /**
- * Build the exact concrete DTO accepted by /test_numeric_expression. Returning
+ * Build the concrete placement context used when a numeric recipe is materialized. Returning
  * undefined intentionally denotes a template constructor with no assignment
  * context.
  */

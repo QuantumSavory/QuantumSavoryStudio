@@ -105,7 +105,10 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ChevronDown, ChevronUp, Plus } from '@lucide/vue'
 import SlotIcon from '../map/SlotIcon.vue'
 import { api } from '../../utils/ApiConnector'
-import { deepClone } from '../../utils/protocolConstructors'
+import {
+  deepClone,
+  seedBackgroundNoiseConstructor,
+} from '../../utils/protocolConstructors'
 import { buildNumericExpressionContext } from '../../utils/numericExpressionContext.js'
 import BackgroundNoiseConstructorForm from './BackgroundNoiseConstructorForm.vue'
 import SlotEditor from './SlotEditor.vue'
@@ -215,12 +218,9 @@ function updateSlotBackground(slot, event) {
     option => option.type === event.target.value,
   )
   if (!definition) return
-  const backgroundNoise = deepClone(definition)
-  backgroundNoise.parameters = (definition.parameters || []).map(parameter => ({
-    ...deepClone(parameter),
-    selectedType: 'default',
-    value: null,
-  }))
+  const backgroundNoise = definition.type === 'default'
+    ? { type: 'default', parameters: [] }
+    : seedBackgroundNoiseConstructor(definition)
   backgroundDrafts.set(slot.id, deepClone(backgroundNoise))
   emit('update-slot', {
     slot,
@@ -230,7 +230,13 @@ function updateSlotBackground(slot, event) {
 
 function backgroundDraft(slot) {
   if (!backgroundDrafts.has(slot.id)) {
-    backgroundDrafts.set(slot.id, deepClone(slot.backgroundNoise))
+    const definition = api.getBackgroundNoiseDefinition(slot.backgroundNoise.type)
+    backgroundDrafts.set(
+      slot.id,
+      definition && definition.type !== 'default'
+        ? seedBackgroundNoiseConstructor(definition, slot.backgroundNoise)
+        : deepClone(slot.backgroundNoise),
+    )
   }
   return backgroundDrafts.get(slot.id)
 }
@@ -241,7 +247,13 @@ watch(
     backgrounds.forEach((backgroundNoise, index) => {
       const slot = props.slots[index]
       if (slot && expandedSlotIds.value.has(slot.id)) {
-        backgroundDrafts.set(slot.id, deepClone(backgroundNoise))
+        const definition = api.getBackgroundNoiseDefinition(backgroundNoise.type)
+        backgroundDrafts.set(
+          slot.id,
+          definition && definition.type !== 'default'
+            ? seedBackgroundNoiseConstructor(definition, backgroundNoise)
+            : deepClone(backgroundNoise),
+        )
       }
     })
   },
@@ -261,7 +273,13 @@ function toggleSlotExpanded(slot) {
   const expanded = new Set(expandedSlotIds.value)
   if (expanded.has(slot.id)) expanded.delete(slot.id)
   else {
-    backgroundDrafts.set(slot.id, deepClone(slot.backgroundNoise))
+    const definition = api.getBackgroundNoiseDefinition(slot.backgroundNoise.type)
+    backgroundDrafts.set(
+      slot.id,
+      definition && definition.type !== 'default'
+        ? seedBackgroundNoiseConstructor(definition, slot.backgroundNoise)
+        : deepClone(slot.backgroundNoise),
+    )
     expanded.add(slot.id)
   }
   expandedSlotIds.value = expanded

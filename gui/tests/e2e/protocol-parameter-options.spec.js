@@ -457,7 +457,7 @@ test.describe('Protocol parameter options', () => {
     await page.evaluate(() => {
       const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState
       const state = setupState?.simulationState?.value ?? setupState?.simulationState
-      state.phase = 'parsed'
+      state.phase = 'prepared'
     })
     await expect(consumerInput).toBeDisabled()
     await expect(consumerRow.getByRole('button', { name: 'Set tag from a variable' })).toBeDisabled()

@@ -76,6 +76,14 @@
       >
         {{ modelValue || 'default' }}
       </span>
+      <span
+        v-if="!evaluationEnabled"
+        class="evaluation-disabled-notice expression-editor-disabled-notice"
+        role="status"
+        :data-testid="disabledNoticeTestId"
+      >
+        {{ evaluationDisabledMessage }}
+      </span>
     </component>
 
     <template v-else>

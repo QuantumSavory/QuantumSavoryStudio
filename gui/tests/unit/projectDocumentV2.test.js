@@ -220,7 +220,7 @@ describe('project document v2 exact shape', () => {
 })
 
 describe('project document v2 constructor assignments', () => {
-  it('persists only explicit name/type/value assignments and hydrates current catalogs', () => {
+  it('persists and decodes only explicit name/type/value assignments', () => {
     const project = createEmptyProject('Sparse constructors')
     project.net.protocols.push(new FloatingProtocol({
       id: 'protocol-a',
@@ -260,15 +260,14 @@ describe('project document v2 constructor assignments', () => {
       },
     ])
     const decoded = decodeProject(document, catalogs())
-    expect(decoded.project.net.protocols[0].parameters).toEqual([
-      expect.objectContaining({ name: 'optional_rate', selectedType: 'default', value: null }),
-      expect.objectContaining({ name: 'required_count', selectedType: 'Int64', value: 3 }),
-      expect.objectContaining({ name: 'payload', selectedType: 'Any' }),
-    ])
+    expect(decoded.project.net.protocols[0].parameters).toEqual(document.net.protocols[0].parameters)
+    decoded.project.net.protocols[0].parameters.forEach(parameter => {
+      expect(Object.keys(parameter).sort()).toEqual(['name', 'type', 'value'])
+    })
     expect(encodeProject(decoded.project, catalogs())).toEqual(document)
   })
 
-  it('rejects duplicate, unknown, and missing required assignments', () => {
+  it('rejects duplicate names but passes unknown and omitted keywords to the backend', () => {
     const project = createEmptyProject('Assignments')
     project.net.protocols.push(new FloatingProtocol({
       id: 'protocol-a',
@@ -293,19 +292,12 @@ describe('project document v2 constructor assignments', () => {
 
     const unknown = structuredClone(canonical)
     unknown.net.protocols[0].parameters[0].name = 'alias'
-    expectContractError(
-      () => decodeProject(unknown, catalogs()),
-      'INVALID_PROJECT',
-      '/net/protocols/0/parameters/0/name',
-    )
+    expect(decodeProject(unknown, catalogs()).project.net.protocols[0].parameters)
+      .toEqual([{ name: 'alias', type: 'Int64', value: 3 }])
 
     const missing = structuredClone(canonical)
     missing.net.protocols[0].parameters = []
-    expectContractError(
-      () => decodeProject(missing, catalogs()),
-      'INVALID_PROJECT',
-      '/net/protocols/0/parameters',
-    )
+    expect(decodeProject(missing, catalogs()).project.net.protocols[0].parameters).toEqual([])
   })
 
   it('uses exactly one no-background-noise sentinel', () => {
