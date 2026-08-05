@@ -1085,9 +1085,7 @@ function _contract_typed_value(value, raw_type_name::AbstractString, context; va
   end
 end
 
-_is_symbolic_wire_type(type_name) = type_name == "Symbolic" ||
-  startswith(type_name, "SymbolicUtils.Symbolic{") ||
-  startswith(type_name, "QuantumSymbolics.SymQObj{")
+_is_symbolic_wire_type(type_name) = type_name == "Symbolic"
 
 function _admit_assignment_array(parameters, context)
   parameters isa AbstractVector || throw(validation_error("$context must be an array"))

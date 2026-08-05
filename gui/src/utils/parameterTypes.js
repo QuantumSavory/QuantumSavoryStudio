@@ -17,7 +17,6 @@ export const KNOWN_PARAMETER_TYPES = [
   'Vector{Int64}',
   'Vector{Float64}',
   'Lambda',
-  'SymbolicUtils.Symbolic',
   'default'
 ]
 
@@ -203,11 +202,7 @@ export function isWildcardType(type) {
 }
 
 export function isSymbolicType(type) {
-  return typeof type === 'string' && (type === 'Symbolic'
-    || type === 'SymbolicUtils.Symbolic'
-    || type.startsWith('SymbolicUtils.Symbolic{')
-    || type === 'QuantumSymbolics.SymQObj'
-    || type.startsWith('QuantumSymbolics.SymQObj{'))
+  return type === 'Symbolic'
 }
 
 export function isCodeType(type) {

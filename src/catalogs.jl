@@ -79,8 +79,8 @@ _constructor_catalog_snapshot() = _ConstructorCatalogSnapshot(
 )
 
 function _catalog_entry_by_wire_type(entries, type_str::AbstractString)
-  wire_type = lowercase(String(type_str))
-  index = findfirst(entry -> lowercase(entry.wire_type) == wire_type, entries)
+  wire_type = String(type_str)
+  index = findfirst(entry -> entry.wire_type == wire_type, entries)
   return index === nothing ? nothing : entries[index]
 end
 
@@ -108,8 +108,7 @@ function _resolve_protocol_catalog_entry(
   type_str::AbstractString,
   catalogs=_constructor_catalog_snapshot(),
 )
-  diagnostic_disabled = lowercase(String(type_str)) ==
-    lowercase(MOCK_BROKEN_PROTOCOL_TYPE)
+  diagnostic_disabled = String(type_str) == MOCK_BROKEN_PROTOCOL_TYPE
   return _resolve_catalog_entry(
     catalogs.protocols,
     type_str,
@@ -123,7 +122,7 @@ function _resolve_background_catalog_entry(
   type_str::AbstractString,
   catalogs=_constructor_catalog_snapshot(),
 )
-  lowercase(String(type_str)) == "default" && return nothing
+  String(type_str) == "default" && return nothing
   return _resolve_catalog_entry(catalogs.backgrounds, type_str, "Noise")
 end
 

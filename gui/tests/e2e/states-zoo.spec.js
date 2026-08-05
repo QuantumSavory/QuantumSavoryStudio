@@ -44,7 +44,6 @@ const STATES_ZOO_TYPES = [
       { name: 'ηᵈ', min: 0, max: 1, good: 1 },
       { name: 'ηᵗ', min: 0, max: 1, good: 1 },
       { name: 'N', min: 0, max: 10, good: 0.1 },
-      { name: 'Pᵈ', min: 0, max: 0.1, good: 1e-8 },
     ],
   },
   {
@@ -55,7 +54,6 @@ const STATES_ZOO_TYPES = [
       { name: 'ηᵈ', min: 0, max: 1, good: 1 },
       { name: 'ηᵗ', min: 0, max: 1, good: 1 },
       { name: 'N', min: 0, max: 10, good: 0.1 },
-      { name: 'Pᵈ', min: 0, max: 0.1, good: 1e-6 },
     ],
   },
 ]
@@ -67,7 +65,7 @@ const SYMBOLIC_PROTOCOL_TYPE = {
   virtual: false,
   parameters: [{
     field: 'observable',
-    type: 'SymbolicUtils.Symbolic{Real}',
+    type: 'Symbolic',
     doc: 'A symbolic state.',
   }],
 }
@@ -197,7 +195,7 @@ async function addNodeWithSymbolicProtocol(page) {
       type: 'TestProtocols.SymbolicProt',
       parameters: [{
         name: 'observable',
-        type: 'SymbolicUtils.Symbolic{Real}',
+        type: 'Symbolic',
         value: null,
       }],
     })

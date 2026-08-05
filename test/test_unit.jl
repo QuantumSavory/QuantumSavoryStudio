@@ -88,7 +88,7 @@
         "value" => Dict(
           "kind" => "states_zoo",
           "state_type" => "GenqoUnheraldedSPDCBellPairW",
-          "parameters" => Dict("ηᵈ" => 1, "ηᵗ" => 1, "N" => 0.1, "Pᵈ" => 1.0e-6),
+          "parameters" => Dict("ηᵈ" => 1, "ηᵗ" => 1, "N" => 0.1),
         ),
       ),
     ]
@@ -162,7 +162,7 @@
     @test occursin("trace = abs(express(tr(state)))", script)
     @test occursin("(state / trace, trace)", script)
     @test occursin(
-      "state = GenqoUnheraldedSPDCBellPairW(1, 1, 0.1, 1.0e-6)",
+      "state = GenqoUnheraldedSPDCBellPairW(1, 1, 0.1)",
       script,
     )
     @test !occursin("variable_weighted_pair_tr = 0.123", script)
