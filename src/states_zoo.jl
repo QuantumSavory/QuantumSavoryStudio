@@ -146,8 +146,9 @@ end
 """
 Validate one StatesZoo parameter object and construct only its allowlisted type.
 
-Parameter names must exactly match `stateparameters(T)`. Values must be finite
-JSON numbers inside the inclusive bounds from `stateparametersrange(T)`.
+Parameter names must exactly match `stateparameters(T)` and values must be
+finite JSON numbers. `stateparametersrange(T)` is authoring metadata, not an
+admission or constructor-validity contract.
 """
 function construct_states_zoo_state(state_type, parameters)
   state_type isa AbstractString || throw(validation_error(
@@ -163,7 +164,6 @@ function construct_states_zoo_state(state_type, parameters)
 
   T = entry.type
   parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
-  parameter_ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
   expected_names = string.(collect(parameter_names))
   _validate_states_zoo_object_keys(parameters, expected_names, "States Zoo parameters for '$id'")
 
@@ -171,8 +171,6 @@ function construct_states_zoo_state(state_type, parameters)
   for parameter_name in parameter_names
     name = string(parameter_name)
     value = parameters[name]
-    bounds = parameter_ranges[parameter_name]
-
     if !(value isa Real) || value isa Bool || !isfinite(value)
       throw(validation_error(
         "States Zoo parameter '$name' must be a finite number",
@@ -180,19 +178,6 @@ function construct_states_zoo_state(state_type, parameters)
           "state_type" => id,
           "parameter" => name,
           "received_type" => string(typeof(value)),
-        ),
-      ))
-    end
-
-    if value < bounds.min || value > bounds.max
-      throw(validation_error(
-        "States Zoo parameter '$name' is outside its declared range",
-        Dict{String,Any}(
-          "state_type" => id,
-          "parameter" => name,
-          "value" => value,
-          "min" => bounds.min,
-          "max" => bounds.max,
         ),
       ))
     end

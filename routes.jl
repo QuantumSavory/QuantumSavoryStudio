@@ -1541,7 +1541,12 @@ route("/test_code", method="POST") do
       :results => results
     ))
   else
-    json(evaluation_failure_response(error))
+    json(Dict(
+      :success => false,
+      :error => sprint(showerror, error),
+      :error_type => string(typeof(error)),
+      :error_code => EVALUATION_FAILED_CODE,
+    ))
   end
 end
 

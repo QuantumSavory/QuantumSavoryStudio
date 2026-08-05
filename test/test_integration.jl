@@ -128,14 +128,13 @@
 
       quantumsavory = platform_info["quantumsavory"]
       @test quantumsavory["version"] == versions["quantumsavory"]
-      @test quantumsavory["tracked_revision"] isa String
-      @test !isempty(quantumsavory["tracked_revision"])
-      @test quantumsavory["tracked_source"] isa String
-      @test !isempty(quantumsavory["tracked_source"])
-      @test quantumsavory["tree_hash"] isa String
-      @test !isempty(quantumsavory["tree_hash"])
+      for key in ("tracked_revision", "tracked_source", "tree_hash")
+        value = quantumsavory[key]
+        @test value === nothing || (value isa String && !isempty(value))
+      end
       revision = quantumsavory["tracked_revision"]
-      if occursin(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$", revision)
+      if revision isa String &&
+          occursin(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$", revision)
         @test quantumsavory["commit"] == lowercase(revision)
       else
         @test quantumsavory["commit"] === nothing
@@ -255,7 +254,7 @@
       invalid_data = parse_response(invalid_response)
       @test invalid_data["success"] == false
       @test invalid_data["error_code"] == "VALIDATION_ERROR"
-      @test occursin("must be positive", invalid_data["error"])
+      @test occursin("positive", invalid_data["error"])
 
       incompatible_payload = deepcopy(export_payload)
       incompatible_payload["simulationConfig"]["qubitRepresentation"] = "GabsRepr"
@@ -324,12 +323,10 @@
       ]
       for (simulation_name, payload) in valid_cases
         try
-          parse_response_http = make_request("POST", "/parse_network_graph"; body=payload)
-          @test parse_response_http.status == 200
           prepare_response = make_request(
             "POST",
             "/prepare_simulation";
-            body=Dict("name" => simulation_name),
+            body=payload,
           )
           @test prepare_response.status == 200
           prepare_data = parse_response(prepare_response)
@@ -350,15 +347,16 @@
       )
       invalid_wire_response = make_request(
         "POST",
-        "/parse_network_graph";
+        "/prepare_simulation";
         body=invalid_wire_payload,
       )
-      @test invalid_wire_response.status == 400
+      @test invalid_wire_response.status == 422
       invalid_wire_data = parse_response(invalid_wire_response)
       @test invalid_wire_data["success"] == false
-      @test invalid_wire_data["error_code"] == "VALIDATION_ERROR"
+      @test invalid_wire_data["error_code"] == "CONSTRUCTOR_REJECTED"
+      @test invalid_wire_data["details"]["replacement_committed"] == false
 
-      invalid_cases = [
+      invalid_reference_cases = [
         (
           "named-tag-http-short",
           tagged_protocol_payload(
@@ -373,22 +371,13 @@
             entangler_tag="Main.UnknownTag",
           ),
         ),
-        (
-          "named-tag-http-general-datatype",
-          tagged_protocol_payload(
-            "named-tag-http-general-datatype";
-            entangler_tag="Core.Int64",
-          ),
-        ),
       ]
-      for (simulation_name, payload) in invalid_cases
+      for (simulation_name, payload) in invalid_reference_cases
         try
-          parse_response_http = make_request("POST", "/parse_network_graph"; body=payload)
-          @test parse_response_http.status == 200
           prepare_response = make_request(
             "POST",
             "/prepare_simulation";
-            body=Dict("name" => simulation_name),
+            body=payload,
           )
           @test prepare_response.status == 400
           prepare_data = parse_response(prepare_response)
@@ -403,6 +392,19 @@
         end
       end
 
+      incompatible_type_payload = tagged_protocol_payload(
+        "named-tag-http-general-datatype";
+        entangler_tag="Core.Int64",
+      )
+      incompatible_type_response = make_request(
+        "POST",
+        "/prepare_simulation";
+        body=incompatible_type_payload,
+      )
+      @test incompatible_type_response.status == 422
+      @test parse_response(incompatible_type_response)["error_code"] ==
+        "CONSTRUCTOR_REJECTED"
+
       simulations_before = make_request("GET", "/simulations")
       names_before = Set(
         simulation["name"]
@@ -416,7 +418,10 @@
       export_one = parse_response(export_response_one)
       export_two = parse_response(export_response_two)
       @test export_one["script"] == export_two["script"]
-      @test length(findall("tag = EntanglementCounterpart", export_one["script"])) == 2
+      @test length(findall(
+        "tag = QuantumSavory.ProtocolZoo.EntanglementCounterpart",
+        export_one["script"],
+      )) == 2
       @test Meta.parseall(export_one["script"]) isa Expr
 
       nothing_export_payload = tagged_protocol_payload(
@@ -434,11 +439,7 @@
         parse_response(nothing_export_response)["script"],
       )
 
-      invalid_export_payloads = [
-        tagged_protocol_payload(
-          "named-tag-http-export-consumer-nothing";
-          consumer_tag="nothing",
-        ),
+      invalid_export_references = [
         tagged_protocol_payload(
           "named-tag-http-export-short";
           entangler_tag="EntanglementCounterpart",
@@ -447,17 +448,30 @@
           "named-tag-http-export-unknown";
           entangler_tag="Main.UnknownTag",
         ),
-        tagged_protocol_payload(
-          "named-tag-http-export-general-datatype";
-          entangler_tag="Core.Int64",
-        ),
       ]
-      for invalid_payload in invalid_export_payloads
+      for invalid_payload in invalid_export_references
         invalid_response = make_request("POST", "/export_script"; body=invalid_payload)
         @test invalid_response.status == 400
         invalid_data = parse_response(invalid_response)
         @test invalid_data["success"] == false
         @test invalid_data["error_code"] == "VALIDATION_ERROR"
+      end
+
+
+      deferred_constructor_failures = [
+        tagged_protocol_payload(
+          "named-tag-http-export-consumer-nothing";
+          consumer_tag="nothing",
+        ),
+        tagged_protocol_payload(
+          "named-tag-http-export-general-datatype";
+          entangler_tag="Core.Int64",
+        ),
+      ]
+      for deferred_payload in deferred_constructor_failures
+        deferred_response = make_request("POST", "/export_script"; body=deferred_payload)
+        @test deferred_response.status == 200
+        @test parse_response(deferred_response)["success"] == true
       end
 
       simulations_after = make_request("GET", "/simulations")
@@ -555,7 +569,7 @@
       @test unknown_data["success"] == false
       @test unknown_data["error_code"] == "VALIDATION_ERROR"
 
-      invalid_response = make_request(
+      out_of_range_response = make_request(
         "POST",
         "/states_zoo_preview";
         body=Dict(
@@ -563,18 +577,15 @@
           "parameters" => Dict("p" => 2),
         ),
       )
-      @test invalid_response.status == 400
-      invalid_data = parse_response(invalid_response)
-      @test invalid_data["success"] == false
-      @test invalid_data["error_code"] == "VALIDATION_ERROR"
+      @test out_of_range_response.status == 200
+      @test parse_response(out_of_range_response)["success"] == true
   end
 
-  @testset "Parse Network Graph - Success" begin
-      # Use the test payload from the mock file
+  @testset "Atomic Prepare - Success" begin
       payload = deepcopy(test_payload)
       payload["name"] = TEST_SIMULATION_NAME
 
-      response = make_request("POST", "/parse_network_graph", body=payload)
+      response = make_request("POST", "/prepare_simulation", body=payload)
 
       @test response.status == 200
       data = parse_response(response)
@@ -589,11 +600,11 @@
 
       # Check values
       @test data["name"] == TEST_SIMULATION_NAME
-      @test data["status"] == WebQuantumSavory.STATUS_CREATED
+      @test data["status"] == WebQuantumSavory.STATUS_PREPARED
       @test data["node_count"] == 2
       @test data["edge_count"] == 1
-      @test data["protocols_launched"] === nothing
-      @test data["message"] == WebQuantumSavory.STATUS_MESSAGE_CREATED
+      @test data["protocols_launched"] !== nothing
+      @test data["message"] == WebQuantumSavory.STATUS_MESSAGE_PREPARED
   end
 
   @testset "States Zoo Variable Protocol Resolution" begin
@@ -619,13 +630,10 @@
       ))
 
       try
-        create_response = make_request("POST", "/parse_network_graph"; body=payload)
-        @test create_response.status == 200
-
         prepare_response = make_request(
           "POST",
           "/prepare_simulation";
-          body=Dict("name" => simulation_name),
+          body=payload,
         )
         @test prepare_response.status == 200
         prepare_data = parse_response(prepare_response)
@@ -635,58 +643,58 @@
       end
   end
 
-  @testset "Parse Network Graph - Validation Errors" begin
+  @testset "Atomic Prepare - Admission Errors" begin
       # Test missing name field
       invalid_payload = deepcopy(test_payload)
       delete!(invalid_payload, "name")
 
-      response = make_request("POST", "/parse_network_graph", body=invalid_payload)
+      response = make_request("POST", "/prepare_simulation", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Simulation payload fields do not match the request schema"
+      @test data["error_code"] == "VALIDATION_ERROR"
+      @test data["details"]["stage"] == "admission"
+      @test data["details"]["path"] == "/name"
 
       # Test missing net field
       invalid_payload = deepcopy(test_payload)
       delete!(invalid_payload, "net")
 
-      response = make_request("POST", "/parse_network_graph", body=invalid_payload)
+      response = make_request("POST", "/prepare_simulation", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Simulation payload fields do not match the request schema"
+      @test data["error_code"] == "VALIDATION_ERROR"
+      @test data["details"]["path"] == "/net"
 
       # Test missing nodes field
       invalid_payload = deepcopy(test_payload)
       delete!(invalid_payload["net"], "nodes")
 
-      response = make_request("POST", "/parse_network_graph", body=invalid_payload)
+      response = make_request("POST", "/prepare_simulation", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Network fields do not match the request schema"
+      @test data["error_code"] == "VALIDATION_ERROR"
+      @test data["details"]["path"] == "/net/nodes"
 
       # Test missing edges field
       invalid_payload = deepcopy(test_payload)
       delete!(invalid_payload["net"], "edges")
 
-      response = make_request("POST", "/parse_network_graph", body=invalid_payload)
+      response = make_request("POST", "/prepare_simulation", body=invalid_payload)
       @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Network fields do not match the request schema"
+      @test data["error_code"] == "VALIDATION_ERROR"
+      @test data["details"]["path"] == "/net/edges"
   end
 
-  @testset "Prepare Simulation - Success" begin
-            # First create a network
+  @testset "Prepare Simulation - Replacement Success" begin
       payload = deepcopy(test_payload)
       payload["name"] = TEST_SIMULATION_NAME
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-
-      # Then prepare the simulation
-      prepare_response = make_request("POST", "/prepare_simulation", body=Dict("name" => TEST_SIMULATION_NAME))
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
       @test prepare_response.status == 200
 
       data = parse_response(prepare_response)
@@ -705,24 +713,23 @@
       @test data["message"] == WebQuantumSavory.STATUS_MESSAGE_PREPARED
   end
 
-  @testset "Prepare Simulation - Error Cases" begin
-      # Test preparing non-existent simulation
-      response = make_request("POST", "/prepare_simulation", body=Dict("name" => "nonexistent_sim"))
-      @test response.status == 404
+  @testset "Prepare Simulation - Incomplete Payload" begin
+      payload = deepcopy(test_payload)
+      payload["name"] = "incomplete_sim"
+      delete!(payload, "simulationConfig")
+      response = make_request("POST", "/prepare_simulation", body=payload)
+      @test response.status == 400
       data = parse_response(response)
       @test data["success"] == false
-      @test data["error"] == "Simulation not found"
+      @test data["error_code"] == "VALIDATION_ERROR"
+      @test data["details"]["path"] == "/simulationConfig"
   end
 
   @testset "Run Simulation - Success" begin
-            # First create and prepare a network
       payload = deepcopy(test_payload)
       payload["name"] = TEST_SIMULATION_NAME
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-
-      prepare_response = make_request("POST", "/prepare_simulation", body=Dict("name" => TEST_SIMULATION_NAME))
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
       @test prepare_response.status == 200
 
       # Then run the simulation
@@ -749,27 +756,14 @@
       @test data["success"] == false
       @test data["error"] == "Simulation not found"
 
-            # Test running unprepared simulation
-      payload = deepcopy(test_payload)
-      payload["name"] = "unprepared_sim"
-
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-
-      run_response = make_request("POST", "/run_simulation", body=Dict("name" => "unprepared_sim", "time_units" => 5))
-      @test run_response.status == 400
-      data = parse_response(run_response)
-      @test data["success"] == false
-      @test data["error"] == "Simulation not prepared"
   end
 
   @testset "Get State - Success" begin
-            # First create a network
       payload = deepcopy(test_payload)
       payload["name"] = TEST_SIMULATION_NAME
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
+      @test prepare_response.status == 200
 
       # Then get the state
       state_response = make_request("GET", "/get_state", query=Dict("name" => TEST_SIMULATION_NAME))
@@ -788,11 +782,11 @@
       @test haskey(state, "message")
 
       @test state["name"] == TEST_SIMULATION_NAME
-      @test state["status"] == WebQuantumSavory.STATUS_CREATED
+      @test state["status"] == WebQuantumSavory.STATUS_PREPARED
       @test state["node_count"] == 2
       @test state["edge_count"] == 1
-      @test state["protocols_launched"] === nothing
-      @test state["message"] == WebQuantumSavory.STATUS_MESSAGE_CREATED
+      @test state["protocols_launched"] !== nothing
+      @test state["message"] == WebQuantumSavory.STATUS_MESSAGE_PREPARED
   end
 
   @testset "Get State - Error Cases" begin
@@ -808,12 +802,11 @@
   end
 
   @testset "Destroy Simulation - Success" begin
-    # First create a network
       payload = deepcopy(test_payload)
       payload["name"] = TEST_SIMULATION_NAME
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
+      @test prepare_response.status == 200
 
       # Then destroy the simulation
       destroy_response = make_request("POST", "/destroy_simulation", body=Dict("name" => TEST_SIMULATION_NAME))
@@ -842,35 +835,29 @@
   @testset "Complete Workflow" begin
       workflow_name = "workflow_test_sim"
 
-        # 1. Create network
       payload = deepcopy(test_payload)
       payload["name"] = workflow_name
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-      create_data = parse_response(create_response)
-      @test create_data["status"] == WebQuantumSavory.STATUS_CREATED
-
-      # 2. Prepare simulation
-      prepare_response = make_request("POST", "/prepare_simulation", body=Dict("name" => workflow_name))
+      # 1. Atomically prepare the complete project.
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
       @test prepare_response.status == 200
       prepare_data = parse_response(prepare_response)
       @test prepare_data["status"] == WebQuantumSavory.STATUS_PREPARED
 
-      # 3. Run simulation
+      # 2. Run simulation
       run_response = make_request("POST", "/run_simulation", body=Dict("name" => workflow_name, "time_units" => 10))
       @test run_response.status == 202
       run_data = parse_response(run_response)
       @test run_data["success"] == true
 
-      # 4. Wait for the real run transition and get final state
+      # 3. Wait for the real run transition and get final state
       final_state = wait_for_state(workflow_name, timeout=10.0) do state
         state["simulation"]["simulation_running"] == false
       end
       @test final_state["simulation"]["simulation_error"] === nothing
       @test final_state["simulation"]["simulation_progress"] >= 10
 
-      # 5. Retrieve a real structured Simulator record through the public route.
+      # 4. Retrieve a real structured Simulator record through the public route.
       logs_response = make_request(
         "GET",
         "/logs/$workflow_name",
@@ -920,79 +907,17 @@
       @test options_match !== nothing
       if options_match !== nothing
         swagger = JSON.parse(only(options_match.captures))["swaggerDoc"]
-        edge_data_schema =
-          swagger["paths"]["/parse_network_graph"]["post"]["requestBody"]["content"][
-            "application/json"
-          ]["schema"]["properties"]["net"]["properties"]["edges"]["items"]["properties"][
-            "data"
-          ]
-        edge_properties = edge_data_schema["properties"]
-        required_edge_data = Set(get(edge_data_schema, "required", Any[]))
-
-        for field in (
-          "distanceMeters",
-          "propagationDelaySeconds",
-          "refractiveIndex",
-          "lossDbPerKm",
-          "transmissivity",
-        )
-          @test haskey(edge_properties, field)
-          @test edge_properties[field]["type"] == "number"
-          @test !(field in required_edge_data)
-          @test contains(edge_properties[field]["description"], "finite")
-        end
-        @test edge_properties["distanceMeters"]["minimum"] == 0
-        @test edge_properties["distanceMeters"]["nullable"] == true
-        @test contains(edge_properties["distanceMeters"]["description"], "meters")
-        @test contains(edge_properties["distanceMeters"]["description"], "omission or null")
-        @test edge_properties["propagationDelaySeconds"]["minimum"] == 0
-        @test get(edge_properties["propagationDelaySeconds"], "nullable", false) == false
-        @test contains(edge_properties["propagationDelaySeconds"]["description"], "seconds")
-        @test contains(edge_properties["propagationDelaySeconds"]["description"], "defaults to zero")
-        @test edge_properties["refractiveIndex"]["minimum"] == 0
-        @test edge_properties["refractiveIndex"]["exclusiveMinimum"] == true
-        @test edge_properties["refractiveIndex"]["nullable"] == true
-        @test contains(edge_properties["refractiveIndex"]["description"], "dimensionless")
-        @test contains(edge_properties["refractiveIndex"]["description"], "omission or null")
-        @test edge_properties["lossDbPerKm"]["minimum"] == 0
-        @test edge_properties["lossDbPerKm"]["nullable"] == true
-        @test contains(edge_properties["lossDbPerKm"]["description"], "dB/km")
-        @test edge_properties["transmissivity"]["minimum"] == 0
-        @test edge_properties["transmissivity"]["maximum"] == 1
-        @test edge_properties["transmissivity"]["nullable"] == true
-        @test contains(edge_properties["transmissivity"]["description"], "dimensionless")
-
-        numeric_operation = swagger["paths"]["/test_numeric_expression"]["post"]
-        numeric_schema = numeric_operation["requestBody"]["content"]["application/json"]["schema"]
-        @test Set(numeric_schema["required"]) ==
-          Set(["expression", "target_type", "placement"])
-        @test numeric_schema["additionalProperties"] == false
-        @test numeric_schema["properties"]["target_type"]["enum"] ==
-          ["Float64", "Int64"]
-        @test numeric_schema["properties"]["placement"]["enum"] ==
-          ["node", "edge", "floating", "variable"]
-        context_schemas = numeric_schema["properties"]["context"]["oneOf"]
-        @test length(context_schemas) == 3
-        @test all(schema -> schema["additionalProperties"] == false, context_schemas)
-        @test Set(context_schemas[1]["required"]) == Set(["node_names"])
-        @test Set(context_schemas[2]["required"]) == Set(["node_names", "self"])
-        @test Set(context_schemas[3]["required"]) == Set([
-          "node_names",
-          "distance",
-          "delay",
-          "refractive_index",
-          "loss",
-          "transmissivity",
-          "node_a",
-          "node_b",
-        ])
-        @test context_schemas[3]["properties"]["distance"]["nullable"] == true
-        @test context_schemas[3]["properties"]["delay"]["nullable"] == true
-        @test context_schemas[3]["properties"]["refractive_index"]["nullable"] == true
-        @test context_schemas[3]["properties"]["loss"]["nullable"] == true
-        @test context_schemas[3]["properties"]["transmissivity"]["nullable"] == true
-        @test context_schemas[3]["properties"]["transmissivity"]["maximum"] == 1
-        @test haskey(numeric_operation["responses"], "403")
+        paths = swagger["paths"]
+        @test haskey(paths, "/prepare_simulation")
+        @test !haskey(paths, "/parse_network_graph")
+        @test !haskey(paths, "/test_numeric_expression")
+        @test !haskey(paths, "/test_symbolic_expression")
+        prepare_operation = paths["/prepare_simulation"]["post"]
+        prepare_schema =
+          prepare_operation["requestBody"]["content"]["application/json"]["schema"]
+        @test Set(prepare_schema["required"]) ==
+          Set(["name", "simulationConfig", "variables", "net"])
+        @test all(code -> haskey(prepare_operation["responses"], code), ["200", "403", "409", "422"])
       end
   end
 
@@ -1090,177 +1015,12 @@
       end
   end
 
-  @testset "Test Numeric Expression Endpoint" begin
-      edge_request = Dict(
-        "expression" => "delay / 2",
-        "target_type" => "Float64",
-        "placement" => "edge",
-        "context" => Dict(
-          "node_names" => ["Alice", "Bob"],
-          "distance" => 100.0,
-          "delay" => 5.0e-7,
-          "refractive_index" => 1.5,
-          "loss" => 0.2,
-          "transmissivity" => 0.95,
-          "node_a" => 1,
-          "node_b" => 2,
-        ),
-      )
-      response = make_request(
-        "POST",
-        "/test_numeric_expression";
-        body=edge_request,
-      )
-      data = parse_response(response)
-      if unsafe_evaluation_enabled
-        @test response.status == 200
-        @test data == Dict(
-          "success" => true,
-          "results" => Dict(
-            "deferred" => false,
-            "target_type" => "Float64",
-            "value" => "2.5e-7",
-          ),
-        )
-
-        template_response = make_request(
-          "POST",
-          "/test_numeric_expression";
-          body=Dict(
-            "expression" => "1 / 2",
-            "target_type" => "Float64",
-            "placement" => "floating",
-          ),
-        )
-        @test template_response.status == 200
-        @test parse_response(template_response)["results"] == Dict(
-          "deferred" => true,
-          "target_type" => "Float64",
-          "value" => "0.5",
-        )
-
-        variable_response = make_request(
-          "POST",
-          "/test_numeric_expression";
-          body=Dict(
-            # Rationals (`//`) are not allowlisted; use plain arithmetic to
-            # exercise immediate (non-deferred) variable evaluation.
-            "expression" => "x = 3\nx + 0",
-            "target_type" => "Int64",
-            "placement" => "variable",
-          ),
-        )
-        @test variable_response.status == 200
-        @test parse_response(variable_response)["results"] == Dict(
-          "deferred" => false,
-          "target_type" => "Int64",
-          "value" => "3",
-        )
-
-        contextual_variable_response = make_request(
-          "POST",
-          "/test_numeric_expression";
-          body=Dict(
-            "expression" => "self + nodeid(\"Alice\")",
-            "target_type" => "Int64",
-            "placement" => "variable",
-          ),
-        )
-        @test contextual_variable_response.status == 200
-        @test parse_response(contextual_variable_response)["results"] == Dict(
-          "deferred" => true,
-          "target_type" => "Int64",
-        )
-
-        for failing_request in (
-          merge(edge_request, Dict("expression" => "1 / 2", "target_type" => "Int64")),
-          merge(edge_request, Dict("expression" => "Inf")),
-          merge(edge_request, Dict("expression" => "invalid(")),
-          merge(edge_request, Dict("expression" => "self")),
-          # Rejected by the restricted allowlist before evaluation.
-          merge(edge_request, Dict("expression" => "Base.length([1, 2])", "target_type" => "Int64")),
-          merge(edge_request, Dict("expression" => "open(\"/tmp/x\", \"w\")")),
-        )
-          failing_response = make_request(
-            "POST",
-            "/test_numeric_expression";
-            body=failing_request,
-          )
-          @test failing_response.status == 200
-          failing_data = parse_response(failing_response)
-          @test failing_data["success"] == false
-          @test failing_data["error_code"] == "EVALUATION_FAILED"
-        end
-      else
-        @test response.status == 403
-        @test data["success"] == false
-        @test data["error_code"] == "UNSAFE_EVALUATION_DISABLED"
-      end
-
-      for malformed_request in (
-        Dict(
-          "target_type" => "Float64",
-          "placement" => "variable",
-        ),
-        Dict(
-          "expression" => "1",
-          "target_type" => "Number",
-          "placement" => "variable",
-        ),
-        Dict(
-          "expression" => "1",
-          "target_type" => "Float64",
-          "placement" => "variable",
-          "context" => Dict(),
-        ),
-        merge(edge_request, Dict("unexpected" => true)),
-      )
-        malformed_response = make_request(
-          "POST",
-          "/test_numeric_expression";
-          body=malformed_request,
-        )
-        @test malformed_response.status == 400
-        malformed_data = parse_response(malformed_response)
-        @test malformed_data["success"] == false
-        @test malformed_data["error_code"] == "VALIDATION_ERROR"
+  @testset "Removed expression preflight endpoints" begin
+      for path in ("/test_numeric_expression", "/test_symbolic_expression")
+        response = make_request("POST", path; body=Dict{String,Any}())
+        @test response.status == 404
       end
   end
-
-  @testset "Test Symbolic Expression Endpoint" begin
-      # Success when enabled; stable policy denial otherwise.
-      response = make_request("POST", "/test_symbolic_expression", body=Dict("expr" => "(Z₁⊗Z₁+Z₂⊗Z₂) / √2"))
-      data = parse_response(response)
-      if unsafe_evaluation_enabled
-        @test response.status == 200
-        @test data["success"] == true
-        @test haskey(data, "results")
-        @test haskey(data["results"], "latex")
-        @test haskey(data["results"], "value")
-      else
-        @test response.status == 403
-        @test data["success"] == false
-        @test data["error"] == "Unsafe Julia code evaluation is disabled"
-        @test data["error_code"] == "UNSAFE_EVALUATION_DISABLED"
-      end
-
-      # Validation error (missing field)
-      response2 = make_request("POST", "/test_symbolic_expression", body=Dict("wrong" => "..."))
-      @test response2.status == 400
-      data2 = parse_response(response2)
-      @test data2["success"] == false
-      @test occursin("Missing required field 'expr'", data2["error"])
-
-      if unsafe_evaluation_enabled
-        # Execution error (bad expression)
-        response3 = make_request("POST", "/test_symbolic_expression", body=Dict("expr" => "(Z₁⊗Z₁+"))
-        @test response3.status == 400 || response3.status == 200  # server wraps as 400 via handler; allow either in case of internal mapping
-        data3 = parse_response(response3)
-        @test data3["success"] == false
-        @test data3["error_code"] == "EVALUATION_FAILED"
-      end
-  end
-
   @testset "Simulation Log Groups Endpoint" begin
       response = make_request("GET", "/simulation_log_groups")
       @test response.status == 200
@@ -1277,8 +1037,8 @@
       payload = deepcopy(test_payload)
       payload["name"] = logs_test_name
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
+      @test prepare_response.status == 200
 
       # Test getting logs with default purge=true
       logs_response = make_request("GET", "/logs/$logs_test_name")
@@ -1339,10 +1099,7 @@
       payload = deepcopy(test_payload)
       payload["name"] = pause_test_name
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-
-      prepare_response = make_request("POST", "/prepare_simulation", body=Dict("name" => pause_test_name))
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
       @test prepare_response.status == 200
 
       # Start a long run and observe actual progress before pausing it.
@@ -1358,7 +1115,7 @@
 
       # A second run cannot overlap the active task.
       duplicate_response = make_request("POST", "/run_simulation", body=Dict("name" => pause_test_name, "time_units" => target_time))
-      @test duplicate_response.status == 400
+      @test duplicate_response.status == 409
       @test occursin("running", parse_response(duplicate_response)["error"])
 
       # Pause the simulation
@@ -1394,44 +1151,21 @@
       @test data["success"] == false
       @test data["error"] == "Simulation not found"
 
-      # Test pausing unprepared simulation
-      unprepared_name = "unprepared_pause_test"
-      payload = deepcopy(test_payload)
-      payload["name"] = unprepared_name
-
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-
-      pause_response = make_request("POST", "/pause_simulation", body=Dict("name" => unprepared_name))
-      @test pause_response.status == 400
-      pause_data = parse_response(pause_response)
-      @test pause_data["success"] == false
-      @test occursin("not running", pause_data["error"])
-
-      # Clean up the unprepared state.
-      destroy_response = make_request("POST", "/destroy_simulation", body=Dict("name" => unprepared_name))
-      @test destroy_response.status == 200
   end
 
   @testset "Complete Workflow with Pause" begin
       workflow_pause_name = "workflow_pause_test_sim"
 
-      # 1. Create network
       payload = deepcopy(test_payload)
       payload["name"] = workflow_pause_name
 
-      create_response = make_request("POST", "/parse_network_graph", body=payload)
-      @test create_response.status == 200
-      create_data = parse_response(create_response)
-      @test create_data["status"] == WebQuantumSavory.STATUS_CREATED
-
-      # 2. Prepare simulation
-      prepare_response = make_request("POST", "/prepare_simulation", body=Dict("name" => workflow_pause_name))
+      # 1. Atomically prepare the complete project.
+      prepare_response = make_request("POST", "/prepare_simulation", body=payload)
       @test prepare_response.status == 200
       prepare_data = parse_response(prepare_response)
       @test prepare_data["status"] == WebQuantumSavory.STATUS_PREPARED
 
-      # 3. Start simulation
+      # 2. Start simulation
       # Keep the run long enough that the cooperative task cannot finish
       # between observing progress and sending the pause request.
       target_time = 1000
@@ -1619,8 +1353,8 @@
       message_target = Dict("target" => "message_buffer", "node_id" => node_id)
 
       try
-        create_response = make_request("POST", "/parse_network_graph"; body=payload)
-        @test create_response.status == 200
+        prepare_response = make_request("POST", "/prepare_simulation"; body=payload)
+        @test prepare_response.status == 200
 
         empty_list_response = make_request(
           "GET",

@@ -168,20 +168,6 @@ function _protocol_attachment_pairs(entry, semantic_values; context::String="Pro
   ]
 end
 
-_catalog_parameter_types(entry) = Dict(
-  string(parameter.field) => parameter.type for parameter in entry.parameters
-)
-
-_catalog_parameter_metadata(entry) = Dict(
-  string(parameter.field) => parameter for parameter in entry.parameters
-)
-
-_required_catalog_parameters(entry) = Set{String}(
-  string(parameter.field)
-  for parameter in entry.parameters
-  if hasproperty(parameter, :required) && parameter.required
-)
-
 function get_background_types()
   return [
     Dict(

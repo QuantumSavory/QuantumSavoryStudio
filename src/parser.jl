@@ -2,102 +2,6 @@
 # Contains all parsing, validation, and type resolution functionality
 
 using Dates
-using .Logger: @log_event
-
-"""Convert a raw parameter value to a target primitive, Wildcard, or simple Union type.
-
-Supported target strings: "Int", "Int64", "Float64", "Float32", "String", "Nothing", "Bool",
-"Wildcard", "QuantumSavory.Wildcard", and Union types that include Nothing and
-one of the above primitives or String. Wildcard targets produce a fresh
-`QuantumSavory.Wildcard()` and do not use the supplied value.
-
-Returns a Pair{Bool,Any} where first indicates success. On failure, returns
-(false, nothing) and callers should skip setting the parameter.
-"""
-function _convert_parameter_value(ptype::AbstractString, value)
-  # Normalize ptype string
-  ts = String(ptype)
-
-  if ts in ("Wildcard", "QuantumSavory.Wildcard")
-    return true => QuantumSavory.Wildcard()
-  end
-
-  # Direct primitives
-  try
-    if ts in ("Int", "Int64")
-      if isa(value, Integer)
-        return true => Int(value)
-      elseif isa(value, AbstractFloat)
-        if isinteger(value)
-          return true => Int(trunc(value))
-        else
-          return false => nothing
-        end
-      else
-        return true => parse(Int, string(value))
-      end
-    elseif ts in ("Float64", "Float32")
-      if isa(value, Number)
-        return true => Float64(value)
-      else
-        return true => parse(Float64, string(value))
-      end
-    elseif ts == "String"
-      return true => (value isa AbstractString ? String(value) : string(value))
-    elseif ts == "Nothing"
-      if value === nothing || (value isa AbstractString && lowercase(strip(value)) == "nothing")
-        return true => nothing
-      end
-      return false => nothing
-    elseif ts == "Bool"
-      if isa(value, Bool)
-        return true => value
-      elseif isa(value, String)
-        lv = lowercase(value)
-        if lv in ("true", "1", "yes", "on")
-          return true => true
-        elseif lv in ("false", "0", "no", "off")
-          return true => false
-        else
-          return false => nothing
-        end
-      elseif isa(value, Number)
-        return true => (value != 0)
-      else
-        return false => nothing
-      end
-    end
-  catch
-    return false => nothing
-  end
-
-  # Union types with Nothing and a simple member
-  try
-    if occursin(r"Union\{.*Nothing.*\}", ts)
-      if isa(value, String) && lowercase(value) == "nothing"
-        return true => nothing
-      end
-      if occursin(r"Float\d+", ts)
-        return true => parse(Float64, string(value))
-      elseif occursin(r"Int\d*", ts)
-        return true => parse(Int, string(value))
-      elseif occursin(r"String", ts)
-        return true => string(value)
-      elseif occursin(r"Bool", ts)
-        # Delegate to Bool path by recursion
-        ok, v = _convert_parameter_value("Bool", value)
-        return ok => v
-      end
-      # Unsupported union member: let caller handle
-      return false => nothing
-    end
-  catch
-    return false => nothing
-  end
-
-  # No conversion performed
-  return false => nothing
-end
 
 """Coerce any AbstractVector implementation (e.g., JSON3.Array) to a plain Vector."""
 _to_vector(x) = isa(x, AbstractVector) ? collect(x) : x
@@ -107,15 +11,6 @@ _is_object_like(x) = x isa AbstractDict || startswith(string(typeof(x)), "JSON3.
 
 """Return whether an edge represents a virtual (logic-only) connection."""
 _is_virtual_edge(edge) = get(edge, "isLogic", false) === true
-
-"""Accept either a canonical payload or the legacy validation response wrapper internally."""
-function _canonical_payload(data)
-  if _is_object_like(data) && haskey(data, "data") &&
-      _is_object_like(data["data"]) && haskey(data["data"], "net")
-    return data["data"]
-  end
-  return data
-end
 
 """Read one optional, finite physical-edge number from minimized payload data."""
 function _physical_edge_number(
@@ -202,9 +97,8 @@ end
 
 """Build the symmetric per-link delay map used by `RegisterNet`."""
 function _physical_delay_map(data)
-  payload = _canonical_payload(data)
-  nodes = payload["net"]["nodes"]
-  edges = payload["net"]["edges"]
+  nodes = data["net"]["nodes"]
+  edges = data["net"]["edges"]
   id_to_idx = Dict(String(node["id"]) => index for (index, node) in enumerate(nodes))
   delays = Dict{Tuple{Int,Int},Float64}()
   for edge in edges
@@ -218,161 +112,6 @@ function _physical_delay_map(data)
   return delays
 end
 
-function _required_nonempty_string(object, field::String, context::String)
-  haskey(object, field) || throw(validation_error("$context missing required field: '$field'"))
-  raw_value = object[field]
-  raw_value isa AbstractString || throw(validation_error(
-    "$context field '$field' must be a string",
-    Dict{String,Any}("field" => field, "received_type" => string(typeof(raw_value))),
-  ))
-  value = strip(String(raw_value))
-  isempty(value) && throw(validation_error("$context field '$field' must not be blank"))
-  return value
-end
-
-function _require_exact_object_fields(
-  object,
-  required_fields,
-  optional_fields=();
-  context::String,
-)
-  _is_object_like(object) || throw(validation_error("$context must be an object"))
-  received = Set(string(key) for key in keys(object))
-  required = Set(String.(required_fields))
-  allowed = union(required, Set(String.(optional_fields)))
-  issubset(required, received) && issubset(received, allowed) ||
-    throw(validation_error("$context fields do not match the request schema"))
-  return object
-end
-
-function _numeric_context_node_names(context_object, context::String)
-  raw_names = context_object["node_names"]
-  raw_names isa AbstractVector && all(name -> name isa AbstractString, raw_names) ||
-    throw(validation_error(
-      "$context field 'node_names' must be an array of strings",
-    ))
-  return String.(raw_names)
-end
-
-function _numeric_context_node_index(
-  context_object,
-  field::String,
-  node_names,
-  context::String,
-)
-  raw_value = context_object[field]
-  raw_value isa Integer && !(raw_value isa Bool) || throw(validation_error(
-    "$context field '$field' must be a one-based integer node index",
-  ))
-  value = try
-    Int(raw_value)
-  catch
-    throw(validation_error(
-      "$context field '$field' must be representable as an integer node index",
-    ))
-  end
-  1 <= value <= length(node_names) || throw(validation_error(
-    "$context field '$field' must refer to an entry in 'node_names'",
-  ))
-  return value
-end
-
-"""
-Validate the optional concrete context accepted by `/test_numeric_expression`.
-
-Omitted context identifies a template validation request. Variables never
-accept concrete context because their assignment placement is not yet known.
-"""
-function _parse_numeric_expression_test_request(payload)
-  _require_exact_object_fields(
-    payload,
-    ("expression", "target_type", "placement"),
-    ("context",);
-    context="Numeric expression request",
-  )
-  expression = _required_nonempty_string(payload, "expression", "Numeric expression request")
-  target_type = _required_nonempty_string(payload, "target_type", "Numeric expression request")
-  target_type in NUMERIC_EXPRESSION_TARGETS || throw(validation_error(
-    "Field 'target_type' must be 'Float64' or 'Int64'",
-  ))
-  placement = _required_nonempty_string(payload, "placement", "Numeric expression request")
-  placement in NUMERIC_EXPRESSION_PLACEMENTS || throw(validation_error(
-    "Field 'placement' must be 'node', 'edge', 'floating', or 'variable'",
-  ))
-
-  haskey(payload, "context") || return (; expression, target_type, placement, context=nothing)
-  placement == "variable" && throw(validation_error(
-    "Field 'context' must be omitted for variable numeric expressions",
-  ))
-  raw_context = payload["context"]
-  context_name = "$(uppercasefirst(placement)) numeric expression context"
-  fields = placement == "floating" ? ("node_names",) :
-    placement == "node" ? ("node_names", "self") :
-    (
-      "node_names",
-      (string(descriptor.binding) for descriptor in EDGE_CONTEXT_DESCRIPTORS)...,
-      (string(descriptor.binding) for descriptor in
-        EDGE_ENDPOINT_CONTEXT_DESCRIPTORS)...,
-    )
-  _require_exact_object_fields(
-    raw_context,
-    fields;
-    context=context_name,
-  )
-  node_names = _numeric_context_node_names(raw_context, context_name)
-  placement == "floating" &&
-    return (; expression, target_type, placement, context=(; node_names))
-  if placement == "node"
-    self = _numeric_context_node_index(raw_context, "self", node_names, context_name)
-    return (; expression, target_type, placement, context=(; node_names, self))
-  end
-
-  endpoints = map(EDGE_ENDPOINT_CONTEXT_DESCRIPTORS) do descriptor
-    _numeric_context_node_index(
-      raw_context,
-      string(descriptor.binding),
-      node_names,
-      context_name,
-    )
-  end
-  physical_values = map(EDGE_CONTEXT_DESCRIPTORS) do descriptor
-    binding = string(descriptor.binding)
-    _physical_edge_number(
-      raw_context,
-      binding,
-      "field '$binding'",
-      context_name;
-      positive=descriptor.positive,
-      maximum=descriptor.maximum,
-    )
-  end
-  all(value -> value === nothing, physical_values) ||
-    all(value -> value !== nothing, physical_values) ||
-    throw(validation_error(
-      "$context_name physical fields must either all be numbers or all be null",
-    ))
-  edge_context = _EdgeFunctionContext(
-    physical_values...,
-    endpoints...,
-  )
-  return (; expression, target_type, placement, context=(; node_names, edge_context))
-end
-
-"""Hydrate the already-admitted concrete simulation Variables."""
-function _parse_variables(payload)
-  variables = Dict{String,Variable}()
-  for raw_variable in payload["variables"]
-    id = String(raw_variable["id"])
-    variables[id] = Variable(
-      id,
-      String(raw_variable["name"]),
-      String(raw_variable["type"]),
-      raw_variable["value"],
-    )
-  end
-  return variables
-end
-
 """
 Parse the tagged protocol-parameter representation of a variable reference.
 
@@ -382,8 +121,17 @@ Non-object and untagged object values are ordinary literal values and return
 function _parse_variable_reference(value; context::String="Protocol parameter")
   _is_object_like(value) || return nothing
   get(value, "kind", nothing) == "variable" || return nothing
-  id = _required_nonempty_string(value, "id", "$context variable reference")
-  return VariableReference(id)
+  fields = Set(String(key) for key in keys(value))
+  fields == Set(("kind", "id")) || _admission_error(
+    "Variable references must contain exactly kind and id",
+    context,
+  )
+  id = get(value, "id", nothing)
+  id isa AbstractString && !isempty(strip(id)) || _admission_error(
+    "Variable reference id must be a nonblank string",
+    _pointer_child(context, "id"),
+  )
+  return VariableReference(String(id))
 end
 
 function _collect_protocol_definitions(payload)
@@ -447,284 +195,9 @@ function _collect_protocol_definitions(payload)
   return definitions
 end
 
-function _collect_background_definitions(payload)
-  definitions = Tuple{Any,String}[]
-  net = get(payload, "net", nothing)
-  _is_object_like(net) || return definitions
-  nodes = get(net, "nodes", Any[])
-  nodes isa AbstractVector || return definitions
-
-  for (node_index, node) in enumerate(nodes)
-    _is_object_like(node) || continue
-    node_data = get(node, "data", nothing)
-    _is_object_like(node_data) || continue
-    slots = get(node_data, "slots", Any[])
-    slots isa AbstractVector || continue
-    for (slot_index, slot) in enumerate(slots)
-      _is_object_like(slot) || continue
-      background = slot["backgroundNoise"]
-      push!(
-        definitions,
-        (background, "node $node_index slot $slot_index background"),
-      )
-    end
-  end
-  return definitions
-end
-
-"""Validate constructor parameter names once before caller-specific value handling."""
-function _validated_catalog_parameters(
-  parameters,
-  declared_parameter_types;
-  context::String,
-  constructor_type,
-  parameter_label::String="constructor parameter",
-)
-  parameters isa AbstractVector || throw(validation_error(
-    "$context parameters must be an array",
-  ))
-
-  supplied_names = Set{String}()
-  validated = NamedTuple[]
-  for (parameter_index, parameter) in enumerate(parameters)
-    _is_object_like(parameter) || throw(validation_error(
-      "$context parameter $parameter_index must be an object",
-    ))
-    name = _required_nonempty_string(
-      parameter,
-      "name",
-      "$context parameter $parameter_index",
-    )
-    name in supplied_names && throw(validation_error(
-      "$context contains duplicate parameter '$name'",
-    ))
-    push!(supplied_names, name)
-
-    haskey(declared_parameter_types, name) || throw(validation_error(
-      "Unknown $parameter_label '$name'",
-      Dict{String,Any}(
-        "parameter_name" => name,
-        "constructor_type" => string(constructor_type),
-      ),
-    ))
-    push!(validated, (
-      definition=parameter,
-      name=name,
-      declared_type=declared_parameter_types[name],
-      value=parameter["value"],
-    ))
-  end
-  return validated
-end
-
-"""Require every catalog-marked field to produce a concrete constructor value."""
-function _require_catalog_parameters(
-  required_parameters,
-  produced_parameters,
-  context::String;
-  details=Dict{String,Any}(),
-)
-  missing_required = sort!(collect(setdiff(required_parameters, produced_parameters)))
-  isempty(missing_required) && return nothing
-  error_details = merge(
-    Dict{String,Any}("missing_parameters" => missing_required),
-    Dict{String,Any}(details),
-  )
-  throw(validation_error(
-    "$context is missing required parameter(s): $(join(missing_required, ", "))",
-    error_details,
-  ))
-end
-
-function _catalog_parameter_wire_types(metadata)
-  semantics = _named_tag_parameter_semantics(metadata.type)
-  semantics === nothing || return Set(
-    semantics.nullable ? ("DataType", "Nothing") : ("DataType",),
-  )
-  parsed_type = only(parse_pt_type([metadata])).type
-  types = parsed_type isa AbstractVector ? string.(parsed_type) : [string(parsed_type)]
-  types = replace.(types, "QuantumSavory.Wildcard" => "Wildcard")
-  "Function" in types && push!(types, "Lambda")
-  return Set(types)
-end
-
-"""
-Validate catalog placement and constructor values before construction.
-
-This covers protocols and slot backgrounds, including direct numeric
-expressions and every semantic Variable type.
-"""
-function _validate_catalog_constructors(
-  payload,
-  variables;
-  catalogs=_constructor_catalog_snapshot(),
-)
-  constructors = Any[
-    (
-      definition=protocol.definition,
-      location=protocol.location,
-      kind=:protocol,
-      attachment=protocol.attachment,
-      virtual=protocol.virtual,
-    )
-    for protocol in _collect_protocol_definitions(payload)
-  ]
-  append!(
-    constructors,
-    (
-      definition=definition,
-      location=location,
-      kind=:background,
-      attachment=nothing,
-      virtual=false,
-    )
-    for (definition, location) in _collect_background_definitions(payload)
-  )
-
-  for constructor in constructors
-    definition = constructor.definition
-    location = constructor.location
-    kind = constructor.kind
-    _is_object_like(definition) || throw(validation_error(
-      "$location must be a catalog-backed object",
-    ))
-
-    raw_type = _required_nonempty_string(definition, "type", location)
-    if kind === :background && raw_type == "default"
-      continue
-    end
-    catalog_entry = kind === :protocol ?
-      _resolve_protocol_catalog_entry(raw_type, catalogs) :
-      _resolve_background_catalog_entry(raw_type, catalogs)
-    catalog_entry === nothing && throw(validation_error(
-      "Unknown $(kind === :protocol ? "protocol" : "background noise") type: '$raw_type'",
-      Dict{String,Any}("location" => location, "constructor_type" => raw_type),
-    ))
-    constructor_type = catalog_entry.type
-
-    if kind === :protocol
-      catalog_entry.attachment === constructor.attachment || throw(validation_error(
-        "Protocol '$raw_type' cannot be attached at $location",
-        Dict{String,Any}(
-          "protocol_type" => raw_type,
-          "actual_placement" => string(constructor.attachment),
-          "expected_placement" => string(catalog_entry.attachment),
-        ),
-      ))
-      constructor.virtual && !catalog_entry.permits_virtual_edge && throw(validation_error(
-        "Protocol '$raw_type' is not permitted on a virtual edge",
-      ))
-    end
-
-    declared_parameter_types = _catalog_parameter_types(catalog_entry)
-    required_parameters = _required_catalog_parameters(catalog_entry)
-    kind_label = kind === :protocol ? "protocol" : "background noise"
-    subject = "$(uppercasefirst(kind_label)) '$raw_type'"
-    parameters = _validated_catalog_parameters(
-      get(definition, "parameters", Any[]),
-      declared_parameter_types;
-      context="$subject at $location",
-      constructor_type,
-      parameter_label="$kind_label parameter",
-    )
-    produced_names = Set{String}()
-
-    for parameter in parameters
-      parameter_name = parameter.name
-      selected_type = _required_nonempty_string(
-        parameter.definition,
-        "type",
-        "$location parameter '$parameter_name'",
-      )
-      metadata = get(_catalog_parameter_metadata(catalog_entry), parameter_name, nothing)
-      selected_type in _catalog_parameter_wire_types(metadata) || throw(validation_error(
-        "$location parameter '$parameter_name' type '$selected_type' is not a catalog wire type",
-      ))
-      value = parameter.value
-      context = "$location parameter '$parameter_name'"
-      declared_type = parameter.declared_type
-
-      numeric_expression = _parse_numeric_expression(value; context=context)
-      if numeric_expression !== nothing
-        target = _numeric_expression_target_for_parameter(
-          declared_type,
-          get(parameter.definition, "type", nothing),
-        )
-        target === nothing && throw(validation_error(
-          "$context does not accept a numeric expression",
-          Dict{String,Any}(
-            "parameter_name" => parameter_name,
-            "constructor_type" => raw_type,
-          ),
-        ))
-        push!(produced_names, parameter_name)
-        continue
-      end
-
-      reference = _parse_variable_reference(value; context=context)
-      if reference === nothing
-        push!(produced_names, parameter_name)
-        continue
-      end
-      haskey(variables, reference.id) || throw(validation_error(
-        "Unknown variable reference: '$(reference.id)'",
-        Dict{String,Any}(
-          "variable_id" => reference.id,
-          "parameter_name" => parameter_name,
-          "location" => location,
-        ),
-      ))
-      variable = variables[reference.id]
-      _named_tag_parameter_semantics(declared_type) === nothing ||
-        throw(validation_error(
-          "Named tag type parameters cannot use variables",
-          Dict{String,Any}("parameter_name" => parameter_name),
-        ))
-      _parameter_type_supports_variable_type(declared_type, variable.type) ||
-        throw(validation_error(
-          "Variable '$(variable.name)' is incompatible with $context",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => parameter_name,
-          ),
-        ))
-
-      variable_expression = _parse_numeric_expression(
-        variable.value;
-        context="Variable '$(variable.name)'",
-      )
-      if variable_expression !== nothing
-        target = _numeric_expression_target_for_parameter(declared_type, variable.type)
-        target == variable.type || throw(validation_error(
-          "Variable '$(variable.name)' numeric expression is incompatible with $context",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => parameter_name,
-          ),
-        ))
-      end
-      push!(produced_names, parameter_name)
-    end
-
-    _require_catalog_parameters(
-      required_parameters,
-      produced_names,
-      subject;
-      details=Dict{String,Any}(
-        "constructor_type" => raw_type,
-        "location" => location,
-      ),
-    )
-  end
-
-  return true
-end
-
 const NAMED_TAG_PARAMETER_KIND = "named_tag_type"
 
-"""Recognize current and legacy symbolic protocol type identities."""
+"""Map Julia implementation identities from catalog metadata to the Symbolic wire codec."""
 function _is_symbolic_parameter_type(type)
   members = try
     Base.uniontypes(type)
@@ -764,135 +237,6 @@ function _named_tag_parameter_semantics(type)
   return (; nullable=any(member -> member === Nothing, members))
 end
 
-"""Return authoritative constructor field types from catalog metadata."""
-function _constructor_parameter_types(constructor_type)
-  return Dict(
-    string(parameter.field) => parameter.type
-    for parameter in QuantumSavory.constructor_metadata(constructor_type)
-  )
-end
-
-"""Return authoritative constructor metadata keyed by its wire field."""
-function _constructor_parameter_metadata(constructor_type)
-  return Dict(
-    string(parameter.field) => parameter
-    for parameter in QuantumSavory.constructor_metadata(constructor_type)
-  )
-end
-
-function _constructor_numeric_bound(metadata, field::Symbol)
-  metadata === nothing && return nothing
-  field in propertynames(metadata) || return nothing
-  value = getproperty(metadata, field)
-  value === nothing && return nothing
-  value isa Real && !(value isa Bool) || throw(server_error(
-    "Constructor numeric bound is not a real number",
-    Dict{String,Any}("field" => string(field), "value_type" => string(typeof(value))),
-  ))
-  number = Float64(value)
-  isfinite(number) || throw(server_error(
-    "Constructor numeric bound must be finite",
-    Dict{String,Any}("field" => string(field)),
-  ))
-  return number
-end
-
-function _numeric_expression_target_for_parameter(declared_type, client_type=nothing)
-  members = try
-    Base.uniontypes(declared_type)
-  catch
-    Any[declared_type]
-  end
-  member_targets = Set(
-    string(member) for member in members
-    if string(member) in NUMERIC_EXPRESSION_TARGETS
-  )
-  if client_type isa AbstractString && String(client_type) in member_targets
-    return String(client_type)
-  end
-  return length(member_targets) == 1 ? only(member_targets) : nothing
-end
-
-"""Mirror the frontend's semantic Variable-to-constructor compatibility rules."""
-function _parameter_type_supports_variable_type(declared_type, variable_type)
-  variable_type isa AbstractString || return false
-  variable_name = String(variable_type)
-  isempty(variable_name) && return false
-
-  members = try
-    Base.uniontypes(declared_type)
-  catch
-    Any[declared_type]
-  end
-  return any(members) do member
-    member === Any && return true
-    member_name = string(member)
-    if member === Function
-      return variable_name in ("Function", "Lambda")
-    elseif _is_symbolic_parameter_type(member)
-      return variable_name in (
-        "Symbolic",
-        "SymQObj",
-        "QuantumSymbolics.SymQObj",
-      ) || startswith(variable_name, "SymbolicUtils.Symbolic{") ||
-        startswith(variable_name, "QuantumSymbolics.SymQObj{")
-    elseif member === QuantumSavory.Wildcard
-      return variable_name == "Wildcard"
-    elseif member in (Int, Int64)
-      return variable_name in ("Int", "Int64")
-    end
-    return member_name == variable_name
-  end
-end
-
-"""Choose a value-compatible member while staying inside an authoritative union type."""
-function _declared_parameter_value_type(declared_type, value)
-  members = try
-    Base.uniontypes(declared_type)
-  catch
-    Any[declared_type]
-  end
-  length(members) == 1 && return only(members)
-
-  if value isa AbstractString
-    stripped = strip(value)
-    stripped == "nothing" && Nothing in members && return Nothing
-    stripped == "Wildcard" && QuantumSavory.Wildcard in members && return QuantumSavory.Wildcard
-    Function in members && return Function
-    String in members && return String
-  elseif value isa Function && Function in members
-    return Function
-  end
-
-  for member in members
-    member isa Type && value isa member && return member
-  end
-  for member in members
-    ok, _ = _convert_parameter_value(string(member), value)
-    ok && return member
-  end
-  return declared_type
-end
-
-"""Refine a union member only within the authoritative constructor declaration."""
-function _constructor_parameter_handling_type(declared_type, client_type, value)
-  members = Base.uniontypes(declared_type)
-  if client_type isa AbstractString
-    client_type_name = String(client_type)
-    client_type_name == "Lambda" && Function in members && return "Lambda"
-    if client_type_name == "Symbolic"
-      symbolic_member = findfirst(_is_symbolic_parameter_type, members)
-      symbolic_member === nothing || return members[symbolic_member]
-    end
-    selected_member = findfirst(member -> string(member) == client_type_name, members)
-    selected_member === nothing || return members[selected_member]
-  end
-  return _declared_parameter_value_type(declared_type, value)
-end
-
-_protocol_parameter_handling_type(declared_type, client_type, value) =
-  _constructor_parameter_handling_type(declared_type, client_type, value)
-
 function parse_pt_type(parameters::AbstractVector)
   result = []
 
@@ -915,9 +259,7 @@ function parse_pt_type(parameters::AbstractVector)
       continue
     end
 
-    # Normalize symbolic protocol values to the UI's stable symbolic type.
-    # QuantumSavory metadata has used both SymbolicUtils.Symbolic and
-    # QuantumSymbolics.SymQObj across releases.
+    # Catalog implementation identities are not accepted as public wire aliases.
     if _is_symbolic_parameter_type(t)
       push!(result, merge(p, (type="Symbolic",)))
       continue
@@ -993,277 +335,469 @@ function extract_payload(payload = nothing, raw_payload = nothing)
 end
 
 const _MAX_SAFE_JSON_INTEGER = 9_007_199_254_740_991
+const _SUPPORTED_WIRE_CODECS = Set((
+  "Any",
+  "Bool",
+  "DataType",
+  "Float64",
+  "Function",
+  "Int",
+  "Int64",
+  "Lambda",
+  "Nothing",
+  "String",
+  "Symbolic",
+  "Vector{Float64}",
+  "Vector{Int64}",
+  "Wildcard",
+))
 
-function _contract_number(value, context; integer=false)
-  value isa Real && !(value isa Bool) && isfinite(value) ||
-    throw(validation_error("$context must be a finite number"))
-  integer && !isinteger(value) &&
-    throw(validation_error("$context must be an integer"))
-  isinteger(value) && abs(value) > _MAX_SAFE_JSON_INTEGER &&
-    throw(validation_error("$context must be a JavaScript-safe integer"))
-  return value
-end
+_admission_path(path::AbstractString) = isempty(path) ? "/" : String(path)
 
-function _opaque_json_value(value, context)
-  if value === nothing || value isa AbstractString || value isa Bool
-    return value
-  elseif value isa Real
-    _contract_number(value, context)
-  elseif value isa AbstractVector
-    foreach(enumerate(value)) do (index, item)
-      _opaque_json_value(item, "$context[$index]")
-    end
-  elseif _is_object_like(value)
-    foreach(pairs(value)) do (key, item)
-      _opaque_json_value(item, "$context.$key")
-    end
-  else
-    throw(validation_error("$context must be a finite JSON value"))
+function _admit_exact_object(value, required, optional, path::String)
+  _is_object_like(value) || _admission_error("Expected an object", _admission_path(path))
+  required_names = Set(String.(required))
+  allowed_names = union(required_names, Set(String.(optional)))
+  received_names = Set(String(key) for key in keys(value))
+  for name in required_names
+    name in received_names || _admission_error(
+      "Required field is missing",
+      _pointer_child(path, name),
+    )
+  end
+  for name in received_names
+    name in allowed_names || _admission_error(
+      "Field is not part of this record",
+      _pointer_child(path, name),
+    )
   end
   return value
 end
 
-function _contract_typed_value(value, raw_type_name::AbstractString, context; variable=false)
+_admit_exact_object(value, required, path::String) =
+  _admit_exact_object(value, required, (), path)
+
+function _admit_nonblank_string(value, path::String)
+  value isa AbstractString || _admission_error("Expected a string", path)
+  isempty(strip(value)) && _admission_error("Expected a nonblank string", path)
+  return String(value)
+end
+
+function _contract_number(value, context; integer=false, path::String=String(context))
+  value isa Real && !(value isa Bool) && isfinite(value) ||
+    _admission_error("$context must be a finite number", path)
+  integer && !isinteger(value) &&
+    _admission_error("$context must be an integer", path)
+  isinteger(value) && abs(value) > _MAX_SAFE_JSON_INTEGER &&
+    _admission_error("$context must be a JavaScript-safe integer", path)
+  return value
+end
+
+function _opaque_json_value(value, context; path::String=String(context))
+  if value === nothing || value isa AbstractString || value isa Bool
+    return value
+  elseif value isa Real
+    _contract_number(value, context; path)
+  elseif value isa AbstractVector
+    foreach(enumerate(value)) do (index, item)
+      _opaque_json_value(
+        item,
+        "$context[$index]";
+        path=_pointer_child(path, index - 1),
+      )
+    end
+  elseif _is_object_like(value)
+    foreach(pairs(value)) do (key, item)
+      _opaque_json_value(item, "$context.$key"; path=_pointer_child(path, key))
+    end
+  else
+    _admission_error("$context must be a finite JSON value", path)
+  end
+  return value
+end
+
+function _contract_typed_value(
+  value,
+  raw_type_name::AbstractString,
+  context;
+  variable=false,
+  path::String=String(context),
+)
   type_name = String(raw_type_name)
   if _is_object_like(value)
     kind = get(value, "kind", nothing)
     if !variable && kind == "variable"
-      _require_exact_object_fields(value, ("kind", "id"); context)
-      _required_nonempty_string(value, "id", context)
+      _admit_exact_object(value, ("kind", "id"), path)
+      _admit_nonblank_string(value["id"], _pointer_child(path, "id"))
       return
     elseif kind == NUMERIC_EXPRESSION_KIND
-      type_name in NUMERIC_EXPRESSION_TARGETS || throw(validation_error(
+      type_name in NUMERIC_EXPRESSION_TARGETS || _admission_error(
         "$context numeric expression requires Float64 or Int64",
-      ))
-      _parse_numeric_expression(value; context)
+        path,
+      )
+      _admit_exact_object(value, ("kind", "source"), path)
+      _admit_nonblank_string(value["source"], _pointer_child(path, "source"))
       return
     elseif kind == "states_zoo"
-      _is_symbolic_wire_type(type_name) || throw(validation_error(
+      _is_symbolic_wire_type(type_name) || _admission_error(
         "$context States Zoo value requires a Symbolic type",
-      ))
-      _require_exact_object_fields(
-        value,
-        ("kind", "state_type", "parameters");
-        context,
+        path,
       )
-      _required_nonempty_string(value, "state_type", context)
+      _admit_exact_object(
+        value,
+        ("kind", "state_type", "parameters"),
+        path,
+      )
+      _admit_nonblank_string(value["state_type"], _pointer_child(path, "state_type"))
       parameters = value["parameters"]
-      _is_object_like(parameters) || throw(validation_error(
+      _is_object_like(parameters) || _admission_error(
         "$context States Zoo parameters must be an object",
-      ))
+        _pointer_child(path, "parameters"),
+      )
       foreach(pairs(parameters)) do (name, parameter)
-        _contract_number(parameter, "$context.parameters.$name")
+        _contract_number(
+          parameter,
+          "$context.parameters.$name";
+          path=_pointer_child(_pointer_child(path, "parameters"), name),
+        )
       end
       return
     elseif type_name == "Any"
-      _opaque_json_value(value, context)
+      _opaque_json_value(value, context; path)
       return
     end
-    throw(validation_error("$context contains an unsupported tagged value"))
+    _admission_error("$context contains an unsupported tagged value", path)
   end
 
-  value === nothing && throw(validation_error("$context must not be null"))
+  value === nothing && _admission_error("$context must not be null", path)
   if type_name in ("Int", "Int64")
-    _contract_number(value, context; integer=true)
+    _contract_number(value, context; integer=true, path)
   elseif type_name == "Float64"
-    _contract_number(value, context)
+    _contract_number(value, context; path)
   elseif type_name == "Bool"
-    value isa Bool || throw(validation_error("$context must be a boolean"))
+    value isa Bool || _admission_error("$context must be a boolean", path)
   elseif type_name in ("String", "DataType", "Function", "Lambda") ||
       _is_symbolic_wire_type(type_name)
     value isa AbstractString && !isempty(strip(value)) ||
-      throw(validation_error("$context must be a nonblank string"))
+      _admission_error("$context must be a nonblank string", path)
     lowercase(strip(value)) == "default" && type_name != "String" &&
-      throw(validation_error("$context must not use the default sentinel"))
+      _admission_error("$context must not use the default sentinel", path)
   elseif type_name == "Nothing"
-    value == "nothing" || throw(validation_error(
+    value == "nothing" || _admission_error(
       "$context must use the 'nothing' sentinel",
-    ))
+      path,
+    )
   elseif type_name == "Wildcard"
-    value == "Wildcard" || throw(validation_error(
+    value == "Wildcard" || _admission_error(
       "$context must use the 'Wildcard' sentinel",
-    ))
+      path,
+    )
   elseif type_name in ("Vector{Int64}", "Vector{Float64}")
-    value isa AbstractVector || throw(validation_error("$context must be an array"))
+    value isa AbstractVector || _admission_error("$context must be an array", path)
     foreach(enumerate(value)) do (index, item)
-      _contract_number(item, "$context[$index]"; integer=type_name == "Vector{Int64}")
+      _contract_number(
+        item,
+        "$context[$index]";
+        integer=type_name == "Vector{Int64}",
+        path=_pointer_child(path, index - 1),
+      )
     end
   elseif type_name == "Any"
-    _opaque_json_value(value, context)
+    _opaque_json_value(value, context; path)
   else
-    throw(validation_error("$context uses unsupported wire type '$type_name'"))
+    _admission_error("$context uses unsupported wire type '$type_name'", path)
   end
 end
 
 _is_symbolic_wire_type(type_name) = type_name == "Symbolic"
 
-function _admit_assignment_array(parameters, context)
-  parameters isa AbstractVector || throw(validation_error("$context must be an array"))
+function _admit_assignment_array(parameters, path::String)
+  parameters isa AbstractVector || _admission_error("Expected an array", path)
   names = Set{String}()
   for (index, parameter) in enumerate(parameters)
-    item_context = "$context[$index]"
-    _require_exact_object_fields(parameter, ("name", "type", "value"); context=item_context)
-    name = _required_nonempty_string(parameter, "name", item_context)
-    name in names && throw(validation_error("$context contains duplicate assignment '$name'"))
+    item_path = _pointer_child(path, index - 1)
+    _admit_exact_object(parameter, ("name", "type", "value"), item_path)
+    name = _admit_nonblank_string(parameter["name"], _pointer_child(item_path, "name"))
+    name in names && _admission_error(
+      "Duplicate constructor assignment '$name'",
+      _pointer_child(item_path, "name"),
+    )
     push!(names, name)
-    type_name = _required_nonempty_string(parameter, "type", item_context)
-    _contract_typed_value(parameter["value"], type_name, "$item_context.value")
+    type_path = _pointer_child(item_path, "type")
+    type_name = _admit_nonblank_string(parameter["type"], type_path)
+    type_name in _SUPPORTED_WIRE_CODECS || _admission_error(
+      "Unsupported wire codec '$type_name'",
+      type_path,
+    )
+    _contract_typed_value(
+      parameter["value"],
+      type_name,
+      "Constructor assignment '$name'";
+      path=_pointer_child(item_path, "value"),
+    )
   end
 end
 
-function _admit_protocol(protocol, context, ids)
-  _require_exact_object_fields(protocol, ("id", "type", "parameters"); context)
-  id = _required_nonempty_string(protocol, "id", context)
-  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+function _admit_protocol(protocol, path::String, ids)
+  _admit_exact_object(protocol, ("id", "type", "parameters"), path)
+  id_path = _pointer_child(path, "id")
+  id = _admit_nonblank_string(protocol["id"], id_path)
+  id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
   push!(ids, id)
-  _required_nonempty_string(protocol, "type", context)
-  _admit_assignment_array(protocol["parameters"], "$context.parameters")
+  _admit_nonblank_string(protocol["type"], _pointer_child(path, "type"))
+  _admit_assignment_array(protocol["parameters"], _pointer_child(path, "parameters"))
 end
 
-function _admit_slot(slot, context, ids)
-  _require_exact_object_fields(slot, ("id", "type", "backgroundNoise"); context)
-  id = _required_nonempty_string(slot, "id", context)
-  id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+function _admit_slot(slot, path::String, ids)
+  _admit_exact_object(slot, ("id", "type", "backgroundNoise"), path)
+  id_path = _pointer_child(path, "id")
+  id = _admit_nonblank_string(slot["id"], id_path)
+  id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
   push!(ids, id)
-  _required_nonempty_string(slot, "type", context)
+  _admit_nonblank_string(slot["type"], _pointer_child(path, "type"))
   noise = slot["backgroundNoise"]
-  _require_exact_object_fields(noise, ("type", "parameters"); context="$context.backgroundNoise")
-  noise_type = _required_nonempty_string(noise, "type", "$context.backgroundNoise")
-  _admit_assignment_array(noise["parameters"], "$context.backgroundNoise.parameters")
-  noise_type == "default" && !isempty(noise["parameters"]) && throw(validation_error(
-    "$context default background noise must have no parameters",
-  ))
+  noise_path = _pointer_child(path, "backgroundNoise")
+  _admit_exact_object(noise, ("type", "parameters"), noise_path)
+  noise_type = _admit_nonblank_string(noise["type"], _pointer_child(noise_path, "type"))
+  parameter_path = _pointer_child(noise_path, "parameters")
+  _admit_assignment_array(noise["parameters"], parameter_path)
+  noise_type == "default" && !isempty(noise["parameters"]) && _admission_error(
+    "Default background noise must have no parameters",
+    parameter_path,
+  )
 end
 
 function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapshot())
-  _require_exact_object_fields(
-    payload,
-    ("name", "simulationConfig", "variables", "net");
-    context="Simulation payload",
-  )
-  _required_nonempty_string(payload, "name", "Simulation payload")
+  _admit_exact_object(payload, ("name", "simulationConfig", "variables", "net"), "")
+  _admit_nonblank_string(payload["name"], "/name")
+
+  config_path = "/simulationConfig"
   config = payload["simulationConfig"]
-  _require_exact_object_fields(
+  _admit_exact_object(
     config,
     ("qubitRepresentation", "qumodeRepresentation"),
-    ("time", "timeStep");
-    context="Simulation configuration",
+    ("time", "timeStep"),
+    config_path,
   )
-  haskey(config, "time") == haskey(config, "timeStep") || throw(validation_error(
-    "Simulation configuration time and timeStep must be supplied together",
-  ))
-  _required_nonempty_string(config, "qubitRepresentation", "Simulation configuration")
-  _required_nonempty_string(config, "qumodeRepresentation", "Simulation configuration")
+  haskey(config, "time") == haskey(config, "timeStep") || _admission_error(
+    "time and timeStep must be supplied together",
+    config_path,
+  )
+  for (field, trait) in (
+    ("qubitRepresentation", Qubit),
+    ("qumodeRepresentation", Qumode),
+  )
+    path = _pointer_child(config_path, field)
+    name = _admit_nonblank_string(config[field], path)
+    spec = get(_REPRESENTATION_SPECS, name, nothing)
+    spec === nothing && _admission_error("Unknown representation '$name'", path)
+    trait in spec.traits || _admission_error(
+      "Representation '$name' does not support $(_representation_trait_name(trait)) slots",
+      path,
+    )
+  end
   for field in ("time", "timeStep")
     haskey(config, field) || continue
-    _contract_number(config[field], "Simulation configuration.$field")
-    config[field] > 0 || throw(validation_error("Simulation configuration.$field must be positive"))
+    path = _pointer_child(config_path, field)
+    _contract_number(config[field], "Simulation configuration $field"; path)
+    config[field] > 0 || _admission_error("Expected a positive number", path)
   end
 
   ids = Set{String}()
-  names = Set{String}()
+  variable_names = Set{String}()
   variable_by_id = Dict{String,Any}()
+  variable_path_by_id = Dict{String,String}()
   variables = payload["variables"]
-  variables isa AbstractVector || throw(validation_error("Variables must be an array"))
+  variables isa AbstractVector || _admission_error("Expected an array", "/variables")
   for (index, variable) in enumerate(variables)
-    context = "Variable $index"
-    _require_exact_object_fields(
+    path = "/variables/$(index - 1)"
+    _admit_exact_object(
       variable,
       ("id", "name", "type", "value"),
-      ("statesZooTraceSourceId",);
-      context,
+      ("statesZooTraceSourceId",),
+      path,
     )
-    id = _required_nonempty_string(variable, "id", context)
-    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    id_path = _pointer_child(path, "id")
+    id = _admit_nonblank_string(variable["id"], id_path)
+    id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
     push!(ids, id)
     variable_by_id[id] = variable
-    name = _required_nonempty_string(variable, "name", context)
-    name in names && throw(validation_error("Duplicate variable name: '$name'"))
-    push!(names, name)
-    type_name = _required_nonempty_string(variable, "type", context)
-    if lowercase(type_name) == "default" || type_name in ("Any", "DataType")
-      throw(validation_error("$context requires a concrete supported type"))
-    end
-    _contract_typed_value(variable["value"], type_name, "$context.value"; variable=true)
-    haskey(variable, "statesZooTraceSourceId") &&
-      _required_nonempty_string(variable, "statesZooTraceSourceId", context)
+    variable_path_by_id[id] = path
+    name_path = _pointer_child(path, "name")
+    name = _admit_nonblank_string(variable["name"], name_path)
+    name in variable_names && _admission_error("Duplicate Variable name '$name'", name_path)
+    push!(variable_names, name)
+    type_path = _pointer_child(path, "type")
+    type_name = _admit_nonblank_string(variable["type"], type_path)
+    type_name in _SUPPORTED_WIRE_CODECS || _admission_error(
+      "Unsupported wire codec '$type_name'",
+      type_path,
+    )
+    type_name in ("Any", "DataType") && _admission_error(
+      "Variables require a concrete supported wire type",
+      type_path,
+    )
+    _contract_typed_value(
+      variable["value"],
+      type_name,
+      "Variable '$name'";
+      variable=true,
+      path=_pointer_child(path, "value"),
+    )
+    haskey(variable, "statesZooTraceSourceId") && _admit_nonblank_string(
+      variable["statesZooTraceSourceId"],
+      _pointer_child(path, "statesZooTraceSourceId"),
+    )
   end
   for (id, variable) in variable_by_id
     haskey(variable, "statesZooTraceSourceId") || continue
+    path = variable_path_by_id[id]
+    link_path = _pointer_child(path, "statesZooTraceSourceId")
     source_id = String(variable["statesZooTraceSourceId"])
     source = get(variable_by_id, source_id, nothing)
+    source_value = source === nothing ? nothing : source["value"]
+    state_type = _is_object_like(source_value) ?
+      get(source_value, "state_type", nothing) : nothing
+    state_entry = state_type isa AbstractString ?
+      get(STATES_ZOO_TYPE_REGISTRY, String(state_type), nothing) : nothing
     valid = source !== nothing && id == "$(source_id)_tr" &&
-      _is_object_like(source["value"]) &&
-      get(source["value"], "kind", nothing) == "states_zoo"
-    valid ||
-      throw(validation_error("Variable '$id' has invalid States Zoo trace linkage"))
+      variable["type"] == "Float64" &&
+      _is_object_like(source_value) &&
+      get(source_value, "kind", nothing) == "states_zoo" &&
+      state_entry !== nothing && state_entry.weighted
+    valid || _admission_error("Invalid States Zoo trace linkage", link_path)
   end
 
+  net_path = "/net"
   net = payload["net"]
-  _require_exact_object_fields(net, ("nodes", "edges", "protocols"); context="Network")
+  _admit_exact_object(net, ("nodes", "edges", "protocols"), net_path)
   nodes, edges, protocols = (net[field] for field in ("nodes", "edges", "protocols"))
-  all(value -> value isa AbstractVector, (nodes, edges, protocols)) ||
-    throw(validation_error("Network collections must be arrays"))
+  for (field, collection) in (("nodes", nodes), ("edges", edges), ("protocols", protocols))
+    collection isa AbstractVector || _admission_error(
+      "Expected an array",
+      _pointer_child(net_path, field),
+    )
+  end
+
   node_ids = Set{String}()
+  node_names = Set{String}()
   for (index, node) in enumerate(nodes)
-    context = "Node $index"
-    _require_exact_object_fields(node, ("id", "name", "position", "data"); context)
-    id = _required_nonempty_string(node, "id", context)
-    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
-    push!(ids, id); push!(node_ids, id)
-    _required_nonempty_string(node, "name", context)
+    path = "/net/nodes/$(index - 1)"
+    _admit_exact_object(node, ("id", "name", "position", "data"), path)
+    id_path = _pointer_child(path, "id")
+    id = _admit_nonblank_string(node["id"], id_path)
+    id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
+    push!(ids, id)
+    push!(node_ids, id)
+    name_path = _pointer_child(path, "name")
+    name = _admit_nonblank_string(node["name"], name_path)
+    name in node_names && _admission_error("Duplicate node name '$name'", name_path)
+    push!(node_names, name)
+    position_path = _pointer_child(path, "position")
     position = node["position"]
-    position isa AbstractVector && length(position) == 2 ||
-      throw(validation_error("$context position must contain two numbers"))
+    position isa AbstractVector && length(position) == 2 || _admission_error(
+      "Expected exactly two coordinates",
+      position_path,
+    )
     foreach(enumerate(position)) do (coordinate, value)
-      _contract_number(value, "$context.position[$coordinate]")
+      _contract_number(
+        value,
+        "Node coordinate";
+        path=_pointer_child(position_path, coordinate - 1),
+      )
     end
+    data_path = _pointer_child(path, "data")
     data = node["data"]
-    _require_exact_object_fields(data, ("type", "slots", "protocols"); context="$context data")
-    _required_nonempty_string(data, "type", "$context data")
-    data["slots"] isa AbstractVector || throw(validation_error("$context slots must be an array"))
-    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    _admit_exact_object(data, ("type", "slots", "protocols"), data_path)
+    _admit_nonblank_string(data["type"], _pointer_child(data_path, "type"))
+    slots_path = _pointer_child(data_path, "slots")
+    node_protocols_path = _pointer_child(data_path, "protocols")
+    data["slots"] isa AbstractVector || _admission_error("Expected an array", slots_path)
+    data["protocols"] isa AbstractVector || _admission_error(
+      "Expected an array",
+      node_protocols_path,
+    )
     foreach(enumerate(data["slots"])) do (slot_index, slot)
-      _admit_slot(slot, "$context slot $slot_index", ids)
-      slot_type = String(slot["type"])
-      _resolve_slot_catalog_entry(slot_type, catalogs) === nothing && throw(validation_error(
-        "$context slot $slot_index has unknown slot type '$slot_type'",
-      ))
+      _admit_slot(slot, _pointer_child(slots_path, slot_index - 1), ids)
     end
     foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
-      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+      _admit_protocol(
+        protocol,
+        _pointer_child(node_protocols_path, protocol_index - 1),
+        ids,
+      )
     end
   end
+
+  physical_pairs = Set{Tuple{String,String}}()
   for (index, edge) in enumerate(edges)
-    context = "Edge $index"
-    _require_exact_object_fields(edge, ("id", "source", "target", "isLogic", "data"); context)
-    id = _required_nonempty_string(edge, "id", context)
-    id in ids && throw(validation_error("Duplicate durable ID: '$id'"))
+    path = "/net/edges/$(index - 1)"
+    _admit_exact_object(edge, ("id", "source", "target", "isLogic", "data"), path)
+    id_path = _pointer_child(path, "id")
+    id = _admit_nonblank_string(edge["id"], id_path)
+    id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
     push!(ids, id)
-    source = _required_nonempty_string(edge, "source", context)
-    target = _required_nonempty_string(edge, "target", context)
-    source in node_ids && target in node_ids || throw(validation_error(
-      "$context endpoints must reference existing nodes",
-    ))
-    source == target && throw(validation_error("$context endpoints must be distinct"))
-    edge["isLogic"] isa Bool || throw(validation_error("$context isLogic must be a boolean"))
+    source_path = _pointer_child(path, "source")
+    target_path = _pointer_child(path, "target")
+    source = _admit_nonblank_string(edge["source"], source_path)
+    target = _admit_nonblank_string(edge["target"], target_path)
+    source in node_ids || _admission_error("Unknown source node '$source'", source_path)
+    target in node_ids || _admission_error("Unknown target node '$target'", target_path)
+    source == target && _admission_error("Edge endpoints must be distinct", target_path)
+    logic_path = _pointer_child(path, "isLogic")
+    edge["isLogic"] isa Bool || _admission_error("Expected a Boolean", logic_path)
+    data_path = _pointer_child(path, "data")
     data = edge["data"]
     fields = edge["isLogic"] ? ("type", "protocols") : (
       "type", "protocols", "distanceMeters", "propagationDelaySeconds",
       "refractiveIndex", "lossDbPerKm", "transmissivity",
     )
-    _require_exact_object_fields(data, fields; context="$context data")
-    _required_nonempty_string(data, "type", "$context data")
-    data["protocols"] isa AbstractVector || throw(validation_error("$context protocols must be an array"))
+    _admit_exact_object(data, fields, data_path)
+    _admit_nonblank_string(data["type"], _pointer_child(data_path, "type"))
+    edge_protocols_path = _pointer_child(data_path, "protocols")
+    data["protocols"] isa AbstractVector || _admission_error(
+      "Expected an array",
+      edge_protocols_path,
+    )
     foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
-      _admit_protocol(protocol, "$context protocol $protocol_index", ids)
+      _admit_protocol(
+        protocol,
+        _pointer_child(edge_protocols_path, protocol_index - 1),
+        ids,
+      )
     end
-    edge["isLogic"] || foreach(fields[3:end]) do field
-      _contract_number(data[field], "$context data.$field")
+    if !edge["isLogic"]
+      pair = minmax(source, target)
+      pair in physical_pairs && _admission_error(
+        "Duplicate physical edge endpoints",
+        path,
+      )
+      push!(physical_pairs, pair)
+      domains = (
+        ("distanceMeters", false, nothing),
+        ("propagationDelaySeconds", false, nothing),
+        ("refractiveIndex", true, nothing),
+        ("lossDbPerKm", false, nothing),
+        ("transmissivity", false, 1.0),
+      )
+      for (field, positive, maximum) in domains
+        field_path = _pointer_child(data_path, field)
+        value = _contract_number(data[field], "Physical edge field '$field'"; path=field_path)
+        (positive ? value > 0 : value >= 0) || _admission_error(
+          positive ? "Expected a positive number" : "Expected a nonnegative number",
+          field_path,
+        )
+        maximum !== nothing && value > maximum && _admission_error(
+          "Expected a number no greater than $maximum",
+          field_path,
+        )
+      end
     end
   end
+
+  floating_path = "/net/protocols"
   foreach(enumerate(protocols)) do (index, protocol)
-    _admit_protocol(protocol, "Floating protocol $index", ids)
+    _admit_protocol(protocol, _pointer_child(floating_path, index - 1), ids)
   end
   return payload
 end
@@ -1271,22 +805,15 @@ end
 function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
   try
     _admit_simulation_payload(payload; catalogs)
-    representation_config(payload)
     net = payload["net"]
     nodes = _to_vector(net["nodes"])
     edges = _to_vector(net["edges"])
     node_ids = Set(String(node["id"]) for node in nodes)
     edge_connections = Dict{String,String}[]
-    physical_endpoint_pairs = Set{Tuple{String,String}}()
     for (index, edge) in enumerate(edges)
       source = String(edge["source"])
       target = String(edge["target"])
       if !_is_virtual_edge(edge)
-        endpoint_pair = minmax(source, target)
-        endpoint_pair in physical_endpoint_pairs && throw(validation_error(
-          "Duplicate physical edge endpoints: '$source' and '$target'",
-        ))
-        push!(physical_endpoint_pairs, endpoint_pair)
         _physical_edge_delay(edge, "Physical edge $index")
       end
       push!(edge_connections, Dict("source" => source, "target" => target))
@@ -1294,7 +821,7 @@ function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
     _normalize_project_transport(payload; catalogs)
     return Dict(
       "success" => true,
-      "message" => "Network graph parsed successfully",
+      "message" => "Project is structurally valid",
       "data" => payload,
       "graph_info" => Dict(
         "node_count" => length(nodes),
@@ -1315,9 +842,8 @@ function validate_payload(payload; catalogs=_constructor_catalog_snapshot())
 end
 
 function build_graph(data)
-  payload = _canonical_payload(data)
-  nodes = payload["net"]["nodes"]
-  edges = payload["net"]["edges"]
+  nodes = data["net"]["nodes"]
+  edges = data["net"]["edges"]
 
   # Map external node ids (e.g., "node1") to 1..N indices
   id_to_idx = Dict(String(n["id"]) => i for (i, n) in enumerate(nodes))
@@ -1335,10 +861,9 @@ end
 _register_names(nodes) = [string(node["name"]) for node in nodes]
 
 function create_registers_from_nodes(data; catalogs=_constructor_catalog_snapshot())
-  payload = _canonical_payload(data)
-  nodes = payload["net"]["nodes"]
-  default_representations = representation_config(payload)
-  variables, _, _ = _normalize_variable_recipes(payload)
+  nodes = data["net"]["nodes"]
+  default_representations = representation_config(data)
+  variables, _, _ = _normalize_variable_recipes(data)
   node_name_to_index = _node_name_to_index(nodes)
 
   # Create array of Register objects based on slots data
@@ -1433,449 +958,6 @@ function _instantiate_noise(
   return _invoke_constructor(catalog_entry.type, kwargs, entity, tstr, recipes)
 end
 
-"""
-Handle Function or Lambda parameter conversion.
-
-The optional `self_node_index` enables node-relative comparison functions for
-node protocols. Leave it as `nothing` for edge and floating protocols.
-"""
-function _handle_function_lambda_parameter!(
-  kwargs::Dict{Symbol,Any},
-  name::Symbol,
-  special_type::String,
-  value,
-  state=nothing;
-  self_node_index::Union{Nothing,Int}=nothing,
-  node_name_to_index::Dict{String,Int}=Dict{String,Int}(),
-  edge_context::Union{Nothing,_EdgeFunctionContext}=nothing,
-)
-  if isa(value, Function)
-    kwargs[name] = value
-    return true
-  elseif isa(value, String)
-    # Try to resolve by name first (works for both Function and Lambda cases),
-    # then fall back to creating a lambda from code.
-    resolved = resolve_function_reference(value)
-    resolved === nothing && (resolved = resolve_self_comparison_reference(value, self_node_index))
-    if resolved === nothing && special_type == "Lambda"
-      require_unsafe_code_evaluation()
-      try
-        resolved = create_lambda(
-          value;
-          node_name_to_index=node_name_to_index,
-          self_node_index=self_node_index,
-          edge_context=edge_context,
-        )
-        # Validate the lambda - try calling it with a test value if it's a filter
-        if name in (:filter, :chooseslotA, :chooseslotB)
-          msg = "Created lambda for parameter: $name"
-          if state !== nothing
-            @log_event state Logging.Info msg parameter_name=string(name) lambda_string=value
-          else
-            @info msg parameter_name=name lambda_string=value
-          end
-          
-          # Warn about common mistakes
-          if !occursin("return", value) && !occursin("=>", value)
-            warning_msg = "Lambda function may not return a value (no 'return' statement or '=>' found). Slot selectors must return an integer and filters must return a boolean."
-            if state !== nothing
-              @log_event state Logging.Warn warning_msg parameter_name=string(name) lambda_string=value
-            else
-              @warn warning_msg parameter_name=name lambda_string=value
-            end
-          end
-        end
-      catch e
-        isa(e, APIError) && rethrow(e)
-        msg = "Failed to create lambda from string"
-        if state !== nothing
-          @log_event state Logging.Warn msg parameter_name=string(name) value=value error=string(e)
-        else
-          @warn msg parameter_name=name value=value error=e
-        end
-      end
-    end
-    if resolved !== nothing
-      kwargs[name] = resolved
-      return true
-    else
-      msg = "Could not resolve function/lambda parameter"
-      if state !== nothing
-        @log_event state Logging.Warn msg parameter_name=string(name) value=value special_type=special_type
-      else
-        @warn msg parameter_name=name value=value special_type=special_type
-      end
-      return false
-    end
-  else
-    msg = "Function/Lambda parameter has unsupported value type; skipping"
-    if state !== nothing
-      @log_event state Logging.Warn msg parameter_name=string(name) value_type=string(typeof(value))
-    else
-      @warn msg parameter_name=name value_type=typeof(value)
-    end
-    return false
-  end
-end
-
-"""
-Handle Symbolic parameter conversion
-"""
-function _handle_symbolic_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, value)
-  if isa(value, String)
-    require_unsafe_code_evaluation()
-    try
-      # Use evaluate_symbolic_expression to get the actual symbolic object
-      success, symbolic_value, error = Sandbox.evaluate_symbolic_expression(value)
-      if success
-        kwargs[name] = symbolic_value  # Pass the actual evaluated symbolic object
-        return true
-      else
-        @warn "Failed to evaluate symbolic expression" parameter_name=name value=value error=error
-      end
-    catch e
-      isa(e, APIError) && rethrow(e)
-      @warn "Failed to create symbolic expression from string" parameter_name=name value=value error=e
-    end
-  elseif _states_zoo_object_like(value) && get(value, "kind", nothing) == "states_zoo"
-    kwargs[name] = construct_states_zoo_recipe(value)
-    return true
-  else
-    @warn "Symbolic parameter has unsupported value type; skipping" parameter_name=name value_type=typeof(value)
-  end
-  return false
-end
-
-function _handle_numeric_expression_parameter!(
-  kwargs::Dict{Symbol,Any},
-  name::Symbol,
-  target_type::String,
-  expression::NumericExpression,
-  ctx;
-  minimum=nothing,
-  maximum=nothing,
-)
-  node_name_to_index = get(
-    ctx,
-    NODE_NAME_TO_INDEX_CONTEXT_KEY,
-    Dict{String,Int}(),
-  )
-  try
-    kwargs[name] = _evaluate_numeric_expression_source(
-      expression.source,
-      target_type;
-      node_name_to_index,
-      self_node_index=get(ctx, :node, nothing),
-      edge_context=get(ctx, EDGE_FUNCTION_CONTEXT_KEY, nothing),
-      minimum,
-      maximum,
-    )
-    return true
-  catch error
-    error isa APIError && rethrow(error)
-    throw(validation_error(
-      "Failed to evaluate numeric expression for parameter '$(name)'",
-      evaluation_failure_details(error, Dict{String,Any}(
-        "parameter_name" => string(name),
-        "target_type" => target_type,
-      )),
-    ))
-  end
-end
-
-"""
-Handle regular parameter conversion
-"""
-function _handle_regular_parameter!(kwargs::Dict{Symbol,Any}, name::Symbol, ptype::String, value)
-  ok, converted = _convert_parameter_value(ptype, value)
-  if ok
-    kwargs[name] = converted
-    return true
-  end
-
-  # Numeric Julia source is accepted only through the explicit tagged
-  # representation. Untagged strings remain numeric literals and never enter
-  # the fallback evaluator.
-  if ptype in NUMERIC_EXPRESSION_TARGETS || (
-    startswith(ptype, "Union{") &&
-    occursin(r"(^|[,{ ])(Float64|Int64)([}, ]|$)", ptype)
-  )
-    return false
-  end
-  
-  # For complex types, try eval with value::type pattern
-  eval_expr = "$(value)::$(ptype)"
-  require_unsafe_code_evaluation()
-  try
-    @info "Attempting eval" parameter_name=name eval_expr=eval_expr
-    kwargs[name] = eval(Meta.parse(eval_expr))
-    @info "Eval successful" parameter_name=name
-    return true
-  catch eval_error
-    @warn "Eval failed, skipping parameter" parameter_name=name eval_expr=eval_expr eval_error=eval_error
-    # If eval fails, skip the parameter entirely - let constructor use default
-  end
-  return false
-end
-
-function _special_parameter_type(p_raw_type)
-  declared_types = p_raw_type isa AbstractVector ? p_raw_type : (p_raw_type,)
-  for declared_type in declared_types
-    type_string = string(declared_type)
-    if type_string in ("Function", "Lambda")
-      return type_string
-    elseif _is_symbolic_parameter_type(declared_type)
-      return "Symbolic"
-    end
-  end
-  return nothing
-end
-
-"""Convert and assign one concrete typed value to a protocol keyword."""
-function _handle_typed_parameter!(
-  kwargs,
-  name,
-  p_raw_type,
-  value,
-  ctx,
-  state=nothing;
-  constructor_metadata=nothing,
-  parameter_context::String="Constructor parameter",
-)
-  ptype = p_raw_type === nothing ? "Any" : string(p_raw_type)
-  special_type = _special_parameter_type(p_raw_type)
-
-  try
-    debug_msg = "Processing parameter: $name, type: $ptype, special_type: $special_type"
-    if state !== nothing
-      @log_event state Logging.Debug debug_msg
-    else
-      @debug debug_msg
-    end
-
-    numeric_expression = _parse_numeric_expression(
-      value;
-      context="$parameter_context '$(name)'",
-    )
-    if numeric_expression !== nothing
-      target_type = _numeric_expression_target(p_raw_type)
-      target_type === nothing && throw(validation_error(
-        "$parameter_context '$(name)' does not authoritatively accept a Float64 or Int64 expression",
-      ))
-      return _handle_numeric_expression_parameter!(
-        kwargs,
-        name,
-        target_type,
-        numeric_expression,
-        ctx;
-        minimum=_constructor_numeric_bound(constructor_metadata, :min),
-        maximum=_constructor_numeric_bound(constructor_metadata, :max),
-      )
-    end
-
-    if p_raw_type isa Type && value isa p_raw_type
-      kwargs[name] = value
-      return true
-    end
-
-    if special_type == "Function" || special_type == "Lambda"
-      return _handle_function_lambda_parameter!(
-        kwargs,
-        name,
-        special_type,
-        value,
-        state;
-        self_node_index=get(ctx, :node, nothing),
-        node_name_to_index=get(
-          ctx,
-          NODE_NAME_TO_INDEX_CONTEXT_KEY,
-          Dict{String,Int}(),
-        ),
-        edge_context=get(ctx, EDGE_FUNCTION_CONTEXT_KEY, nothing),
-      )
-    elseif special_type == "Symbolic"
-      return _handle_symbolic_parameter!(kwargs, name, value)
-    else
-      converted = _handle_regular_parameter!(kwargs, name, ptype, value)
-      if converted && kwargs[name] isa Real && !(kwargs[name] isa Bool)
-        minimum = _constructor_numeric_bound(constructor_metadata, :min)
-        maximum = _constructor_numeric_bound(constructor_metadata, :max)
-        minimum !== nothing && kwargs[name] < minimum && throw(validation_error(
-          "$parameter_context '$(name)' is below its minimum",
-          Dict{String,Any}("parameter_name" => string(name), "minimum" => minimum),
-        ))
-        maximum !== nothing && kwargs[name] > maximum && throw(validation_error(
-          "$parameter_context '$(name)' is above its maximum",
-          Dict{String,Any}("parameter_name" => string(name), "maximum" => maximum),
-        ))
-      end
-      return converted
-    end
-  catch e
-    isa(e, APIError) && rethrow(e)
-    msg = "Failed to convert parameter"
-    if state !== nothing
-      @log_event state Logging.Warn msg parameter_name=string(name) parameter_type=ptype value=value error=string(e)
-    else
-      @warn msg parameter_name=name parameter_type=ptype value=value error=e
-    end
-    # Don't set the parameter - let the constructor use its default value.
-    return false
-  end
-end
-
-"""
-Convert wire parameters through one catalog-authoritative constructor path.
-
-The returned assignment metadata is used to translate constructor failures
-that involve Variables into client-facing validation errors.
-"""
-function _constructor_parameter_kwargs(
-  params,
-  constructor_type,
-  ctx::Dict{Symbol,Any},
-  state=nothing;
-  variables=Dict{String,Variable}(),
-  parameter_context::String="Constructor parameter",
-  declared_parameter_types=_constructor_parameter_types(constructor_type),
-  constructor_parameter_metadata=_constructor_parameter_metadata(constructor_type),
-  required_parameters=Set{String}(),
-)
-  kwargs = Dict{Symbol,Any}()
-  variable_assignments = Dict{String,Any}[]
-  parameters = _validated_catalog_parameters(
-    params,
-    declared_parameter_types;
-    context=parameter_context,
-    constructor_type,
-    parameter_label=parameter_context,
-  )
-
-  for parameter in parameters
-    original_name = parameter.name
-    value = parameter.value
-
-    name = Symbol(original_name)
-    declared_type = parameter.declared_type
-    metadata = get(constructor_parameter_metadata, original_name, nothing)
-    named_tag_semantics = _named_tag_parameter_semantics(declared_type)
-
-    if named_tag_semantics !== nothing
-      _parse_variable_reference(
-        value;
-        context="$parameter_context '$original_name'",
-      ) === nothing || throw(validation_error(
-        "Named tag type parameters cannot use variables",
-        Dict{String,Any}("parameter_name" => original_name),
-      ))
-      kwargs[name] = _resolve_named_abstract_tag_type(
-        value;
-        nullable=named_tag_semantics.nullable,
-        context="$parameter_context '$original_name'",
-      )
-      continue
-    end
-
-    reference = _parse_variable_reference(
-      value;
-      context="$parameter_context '$original_name'",
-    )
-    if reference !== nothing
-      variable = get(variables, reference.id, nothing)
-      variable === nothing && throw(validation_error(
-        "Unknown variable reference: '$(reference.id)'",
-        Dict{String,Any}(
-          "variable_id" => reference.id,
-          "parameter_name" => original_name,
-        ),
-      ))
-      _parameter_type_supports_variable_type(declared_type, variable.type) ||
-        throw(validation_error(
-          "Variable '$(variable.name)' is incompatible with $parameter_context '$original_name'",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => original_name,
-          ),
-        ))
-
-      variable_expression = _parse_numeric_expression(
-        variable.value;
-        context="Variable '$(variable.name)'",
-      )
-      if variable_expression !== nothing
-        target_type = _numeric_expression_target_for_parameter(
-          declared_type,
-          variable.type,
-        )
-        target_type == variable.type || throw(validation_error(
-          "Variable '$(variable.name)' numeric expression is incompatible with $parameter_context '$original_name'",
-          Dict{String,Any}(
-            "variable_id" => variable.id,
-            "variable_type" => variable.type,
-            "parameter_name" => original_name,
-          ),
-        ))
-      end
-
-      converted = _handle_typed_parameter!(
-        kwargs,
-        name,
-        variable.type,
-        variable.value,
-        ctx,
-        state;
-        constructor_metadata=metadata,
-        parameter_context,
-      )
-      converted || throw(validation_error(
-        "Failed to convert variable '$(variable.name)' for $parameter_context '$original_name'",
-        Dict{String,Any}(
-          "variable_id" => variable.id,
-          "variable_name" => variable.name,
-          "variable_type" => variable.type,
-          "parameter_name" => original_name,
-        ),
-      ))
-      push!(variable_assignments, Dict{String,Any}(
-        "variable_id" => variable.id,
-        "variable_name" => variable.name,
-        "variable_type" => variable.type,
-        "parameter_name" => original_name,
-        "parameter_type" => string(get(parameter.definition, "type", "Any")),
-      ))
-      continue
-    end
-
-    handling_type = _constructor_parameter_handling_type(
-      declared_type,
-      get(parameter.definition, "type", nothing),
-      value,
-    )
-    _handle_typed_parameter!(
-      kwargs,
-      name,
-      handling_type,
-      value,
-      ctx,
-      state;
-      constructor_metadata=metadata,
-      parameter_context,
-    )
-  end
-
-  _require_catalog_parameters(
-    required_parameters,
-    Set(string(parameter) for parameter in keys(kwargs)),
-    "Constructor '$(constructor_type)'";
-    details=Dict{String,Any}(
-      "constructor_type" => string(constructor_type),
-    ),
-  )
-
-  return kwargs, variable_assignments
-end
-
 function _instantiate_protocol(
   prot_def,
   ctx::Dict{Symbol,Any},
@@ -1920,7 +1002,12 @@ function _instantiate_protocol(
 end
 
 function simulation_is_running_exception(simulation_name)
-  return APIError("Simulation $simulation_name is running, cannot destroy it", 400)
+  return APIError(
+    "Simulation $simulation_name is running",
+    409,
+    "SIMULATION_RUNNING",
+    Dict{String,Any}("simulation_name" => String(simulation_name)),
+  )
 end
 
 function simulation_blocked_exception(simulation_name)
@@ -1940,39 +1027,29 @@ function action_is_valid(
 end
 
 function build_simulation_state(data; catalogs=_constructor_catalog_snapshot())
-  payload = _canonical_payload(data)
-  g = build_graph(data)
-
-  # Create registers array based on node slots data
-  registers, slot_mapping, slot_reverse_mapping = create_registers_from_nodes(
-    data;
-    catalogs,
-  )
-
-  # Create the RegisterNet from the graph and registers
-  delays = _physical_delay_map(data)
-  link_delay(src, dst) = delays[minmax(src, dst)]
-  net = RegisterNet(
-    g,
-    registers;
-    names=_register_names(payload["net"]["nodes"]),
-    classical_delay=link_delay,
-    quantum_delay=link_delay,
-  )
-
-  simulation_name = payload["name"]
-
   state = WebQuantumSavory.State(
-    name = simulation_name,
-    payload = payload,
-    graph = g,
-    network = net,
-    slot_mapping = slot_mapping,
-    slot_reverse_mapping = slot_reverse_mapping,
+    name = String(data["name"]),
+    payload = data,
   )
-
-  state.simulation_last_active_time = Dates.now()
-  return state
+  try
+    state.graph = build_graph(data)
+    registers, state.slot_mapping, state.slot_reverse_mapping =
+      create_registers_from_nodes(data; catalogs)
+    delays = _physical_delay_map(data)
+    link_delay(src, dst) = delays[minmax(src, dst)]
+    state.network = RegisterNet(
+      state.graph,
+      registers;
+      names=_register_names(data["net"]["nodes"]),
+      classical_delay=link_delay,
+      quantum_delay=link_delay,
+    )
+    state.simulation_last_active_time = Dates.now()
+    return state
+  catch
+    cleanup_state!(state)
+    rethrow()
+  end
 end
 
 """Build, construct, and schedule a complete candidate before publication."""
@@ -1982,8 +1059,10 @@ function build_prepared_simulation_state(
   service=SIMULATION_SERVICE,
 )
   state = build_simulation_state(data; catalogs)
-  return prepare_simulation(state, state.name; service, catalogs)
+  try
+    return prepare_simulation(state, state.name; service, catalogs)
+  catch
+    cleanup_state!(state)
+    rethrow()
+  end
 end
-
-parse_network_graph(data; catalogs=_constructor_catalog_snapshot()) =
-  simulation_create!(SIMULATION_SERVICE, data; validation=data, catalogs)

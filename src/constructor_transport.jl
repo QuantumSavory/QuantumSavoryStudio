@@ -386,9 +386,6 @@ function _materialize_assignments(
     catch error
       error isa APIError && error.error_code == "UNSAFE_EVALUATION_DISABLED" && rethrow(error)
       details = _materialization_details(error, recipe, entity, constructor_type)
-      if recipe.value isa Union{_FunctionSource,_NumericSource,_SymbolicSource}
-        details["evaluation_error"] = details["cause"]
-      end
       throw(APIError(
         "Project value could not be materialized",
         422,
