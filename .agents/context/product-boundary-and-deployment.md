@@ -27,6 +27,10 @@ session: the user continues working through the browser, and the browser remains
 authoritative while an attached agent assists. Repository maintainers make product and
 acceptance decisions.
 
+Here, “private” describes the support and compatibility audience, not access control.
+Browser UUID prefixes reduce simulation-name collisions; they are not user identities,
+capabilities, or authorization.
+
 ## Deployment profiles
 
 | Profile | Intended use | Product boundary |
@@ -82,5 +86,3 @@ no migration is attempted. The v2 storage namespace does not scan or alter older
   desktop browser engines together.
 - The repository does not yet contain the public Podman deployment definition or an
   external-sandbox acceptance artifact.
-- Public README examples can look like an external API promise even though the confirmed
-  product boundary treats that API as frontend support.

@@ -2,8 +2,8 @@
 
 ## Scope
 
-This file applies to Julia package internals under `src/`. Root HTTP routing and
-Swagger remain governed by `../AGENTS.md` and `../routes.jl`.
+This file applies to Julia package internals under `src/`. Root HTTP composition
+remains governed by `../AGENTS.md` and `../routes.jl`.
 
 ## Open selectively
 

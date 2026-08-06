@@ -894,33 +894,6 @@
       @test verify_response.status == 404
   end
 
-  @testset "API Documentation" begin
-      # Test that the Swagger docs endpoint is accessible
-      response = make_request("GET", "/docs")
-      @test response.status == 200
-      # The response should contain HTML content
-      body = String(response.body)
-      @test contains(body, "html") || contains(body, "swagger") || contains(body, "api")
-      @test contains(body, "\"version\":\"$(platform_info["versions"]["app"])\"")
-
-      options_match = match(r"const options = (\{.*\})", body)
-      @test options_match !== nothing
-      if options_match !== nothing
-        swagger = JSON.parse(only(options_match.captures))["swaggerDoc"]
-        paths = swagger["paths"]
-        @test haskey(paths, "/prepare_simulation")
-        @test !haskey(paths, "/parse_network_graph")
-        @test !haskey(paths, "/test_numeric_expression")
-        @test !haskey(paths, "/test_symbolic_expression")
-        prepare_operation = paths["/prepare_simulation"]["post"]
-        prepare_schema =
-          prepare_operation["requestBody"]["content"]["application/json"]["schema"]
-        @test Set(prepare_schema["required"]) ==
-          Set(["name", "simulationConfig", "variables", "net"])
-        @test all(code -> haskey(prepare_operation["responses"], code), ["200", "403", "409", "422"])
-      end
-  end
-
   @testset "Test Code Endpoint" begin
       # The same contract supports default-enabled test servers and explicit
       # disabled-policy integration runs.

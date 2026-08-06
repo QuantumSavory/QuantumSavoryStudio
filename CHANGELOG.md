@@ -2,6 +2,9 @@
 
 ## unreleased
 
+- Removed the embedded Swagger UI, its `/docs` route, and the parallel handwritten HTTP
+  schemas. The exact private frontend-support route and payload surface is now owned by
+  executable routes, validators, serializers, callers, and integration tests.
 - Replaced permissive project persistence with the executable, exact-shape project-v2
   document contract across save/open, import/export, demos, MCP snapshots, and HTTP
   simulation projection. Version admission now happens first, constructor assignments
