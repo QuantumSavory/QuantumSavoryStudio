@@ -1,35 +1,40 @@
-# Backend Package Guidance
+# Backend Guidance
 
-## Scope
-
-This file applies to Julia package internals under `src/`. Root HTTP composition
-remains governed by `../AGENTS.md` and `../routes.jl`.
+This applies to `src/`; root HTTP composition remains in `../routes.jl`.
 
 ## Open selectively
 
-- Open [backend architecture](../.agents/context/backend/architecture.md) when changing
-  module ownership, boot behavior, dependencies, or service boundaries.
-- Open [simulation runtime](../.agents/context/backend/simulation-runtime.md) for state,
-  lifecycle, logs, tags, cleanup, or resource changes.
-- Open [source evaluation](../.agents/context/backend/source-evaluation.md) for any
-  source-bearing value, validator, lexical context, or evaluation-policy change.
-- Open [metadata](../.agents/context/backend/constructor-and-tag-metadata.md),
-  [States Zoo/rendering](../.agents/context/backend/states-zoo-and-rendering.md), or
-  [script export](../.agents/context/backend/script-export.md) only for those domains.
+- [Architecture](../.agents/context/backend/architecture.md): boot, ownership, and
+  service boundaries.
+- [Simulation runtime](../.agents/context/backend/simulation-runtime.md): lifecycle,
+  state, logs, tags, cleanup, and limits.
+- [Source evaluation](../.agents/context/backend/source-evaluation.md): source-bearing
+  values, policy, allowlists, and lexical context.
+- [Metadata](../.agents/context/backend/constructor-and-tag-metadata.md), [States
+  Zoo](../.agents/context/backend/states-zoo-and-rendering.md), and [script
+  export](../.agents/context/backend/script-export.md): open only for those domains.
 
-## Local checks
+## Boundaries
 
-- Focused package checks: `(cd ../test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true
-  julia --project=. runtests.jl test_unit)`
-- Canonical backend unit entry point: `../ci/backend-unit.sh`
+- Keep route registration and endpoint adaptation in `routes.jl`; reuse package helpers
+  for shared parsing, errors, and simulation behavior.
+- Derive constructor catalogs from QuantumSavory metadata. Shared codecs own wire
+  admission and materialization; constructors own accepted keywords, defaults, and
+  domain/cross-field semantics.
+- Keep admission, constructor transport, simulation construction, and script export on
+  their shared codecs and mappings.
+- Treat Julia source evaluation as trusted native execution. Route every source-bearing
+  path through the shared policy and allowlist; export may validate but not evaluate.
+- Propose reusable simulator features upstream instead of adding local substitutes.
+- Preserve imports that activate metadata or rendering extensions unless their runtime
+  consumers have been audited.
 
-## Local rules
+## Checks from the repository root
 
-- Validate canonical project payloads before constructing simulation state.
-- Reuse the shared simulation, error, source-evaluation, and metadata boundaries; do
-  not introduce package-internal HTTP or MCP variants.
-- If a needed simulator feature belongs in QuantumSavory.jl, propose the reusable
-  upstream addition instead of implementing a local substitute.
-- Preserve extension-activating imports in `WebQuantumSavory.jl` unless their runtime
-  consumers are audited.
-- Keep exact machinery in context documents rather than expanding this router.
+```sh
+(cd test && WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true \
+  julia --project=. runtests.jl test_unit)
+./ci/backend-unit.sh
+```
+
+Add `./ci/backend-integration.sh` for route, payload, lifecycle, or export changes.
