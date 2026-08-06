@@ -1,88 +1,26 @@
 # Product Boundary and Deployment
 
 - **Context need:** Explanation
-- **Open when:** Reasoning about users, component authority, deployment profiles,
-  persistence, trust boundaries, or supported environments.
-- **Do not open when:** Looking up one route, project field, tool schema, or test command.
-- **Review when:** Product actors, component roles, deployment profiles, persistence,
-  authentication, or support policy changes.
+- **Open when:** Reasoning about component authority, persistence, trust, or deployment.
+- **Do not open when:** Looking up a route, field, schema, or test command.
+- **Review when:** Product actors, component roles, persistence, or trust boundaries change.
 
-## Product authority
+WebQuantumSavory is one browser-first product: a Vue GUI uses a Julia backend and may
+attach an optional local MCP sidecar. The HTTP API supports the bundled GUI; “private”
+describes its support audience, not authentication.
 
-WebQuantumSavory is one GUI-first product with three components:
+The browser owns project editing and local project persistence. Simulation state is
+process-local and is lost on restart. MCP augments one live browser session and remains
+loopback-only; its capability and origin checks do not isolate mutually untrusted local
+users.
 
-```text
-desktop browser GUI
-  -> private frontend-support HTTP API
-  -> Julia simulation backend
+Julia source evaluation runs natively and is not sandboxed. Publicly exposing it
+requires external containment. CI defines the maintained Julia and Node toolchains;
+do not infer broader platform guarantees from prose.
 
-local GUI session
-  <-> optional local MCP sidecar
-  <-> user-selected agent
-```
+## Sources
 
-The GUI user is the primary actor. The HTTP API exists to support the bundled frontend;
-it is not an independently supported integration product. MCP augments a live local GUI
-session: the user continues working through the browser, and the browser remains
-authoritative while an attached agent assists. Repository maintainers make product and
-acceptance decisions.
-
-Here, “private” describes the support and compatibility audience, not access control.
-Browser UUID prefixes reduce simulation-name collisions; they are not user identities,
-capabilities, or authorization.
-
-## Deployment profiles
-
-| Profile | Intended use | Product boundary |
-| --- | --- | --- |
-| Local | Primary use; one user starts the server and opens it on localhost | Backend and optional MCP are loopback services; projects persist in browser storage |
-| Public education | Onboarding/demo GUI served from a Podman container | No MCP; no accounts, authentication, or server-side saved-project store; browser storage remains client-local |
-
-The confirmed public profile promises no collaborative accounts, durable server
-projects, application-level per-visitor isolation for live simulation state, or
-multi-instance coordination. Current name-addressed simulations share one process-global
-registry. This is an absence of a product guarantee, not a prohibition on adding
-isolation later, and browser-local project persistence must not be mistaken for
-server-state isolation.
-
-Restricted Julia evaluation is independently opt-in through its environment variable in
-either profile. Its whitelist reduces risk but is not a security boundary. A public
-deployment that enables evaluation must place the host process inside an external
-container/host sandbox; the application cannot supply that isolation itself.
-
-## Support boundary
-
-- Local hosts: Linux, macOS, and Windows.
-- Runtime versions: the maintained CI matrix defines supported Julia and Node versions.
-- Clients: standards-compliant HTML5/JavaScript desktop browsers.
-- Mobile browsers are unsupported.
-
-Current CI exercises Ubuntu and Chromium only. The broader operating-system and browser
-support statement is maintainer-confirmed intent, while representative cross-platform
-and cross-engine acceptance evidence remains planned. Planned evidence uses browser
-builds selected by the committed Playwright lock; no independent minimum version policy
-is declared.
-
-## Persistence and compatibility
-
-Named projects are stored only in browser `localStorage`. Neither local-storage key
-names nor saved-project schemas carry backward- or forward-compatibility guarantees
-between releases. The current boundary admits only exact project-v2 documents; a
-missing, malformed, old, or future schema version is a hard compatibility failure and
-no migration is attempted. The v2 storage namespace does not scan or alter older keys.
-
-## Anchors
-
-- **Integrated start and public-facing behavior:** [`README.md`](../../README.md) and
-  [`bin/server`](../../bin/server).
-- **Browser persistence:** [`gui/src/models/ProjectStore.js`](../../gui/src/models/ProjectStore.js).
-- **MCP locality:** [`src/mcp_config.jl`](../../src/mcp_config.jl).
-- **Maintained matrices:** [GitHub Actions](../../.github/workflows/ci.yml) and
-  [Buildkite](../../.buildkite/pipeline.yml).
-
-## Known evidence gaps
-
-- No maintained matrix currently exercises Linux, macOS, Windows, and representative
-  desktop browser engines together.
-- The repository does not yet contain the public Podman deployment definition or an
-  external-sandbox acceptance artifact.
+- [`bin/server`](../../bin/server) and [`routes.jl`](../../routes.jl)
+- [`gui/src/models/ProjectStore.js`](../../gui/src/models/ProjectStore.js)
+- [`src/mcp_config.jl`](../../src/mcp_config.jl)
+- [GitHub CI](../../.github/workflows/ci.yml)

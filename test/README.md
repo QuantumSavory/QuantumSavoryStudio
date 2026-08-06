@@ -1,46 +1,26 @@
-# WebQuantumSavory Test Suite
+# WebQuantumSavory Julia Tests
 
-The Julia suites are split by execution boundary:
+The suites are split by execution boundary:
 
-- `test_unit.jl` exercises backend functions in process.
-- `test_mcp_unit.jl` and `test_sidecar_supervisor.jl` exercise MCP adapters and
-  lifecycle behavior.
-- `test_integration.jl` exercises the HTTP API against a test server.
-- `test_simulation_integration.jl` runs simulation workflows through that API.
+- `test_unit.jl`: backend package behavior.
+- `test_mcp_unit.jl` and `test_sidecar_supervisor.jl`: MCP adapters and lifecycle.
+- `test_integration.jl`: frontend-support HTTP behavior.
+- `test_simulation_integration.jl`: simulations through the HTTP boundary.
 
-`mock/payload.json` and `mock/payload3.json` are the retained network fixtures. Their
-protocol definitions contain only client-editable catalog parameters and use the
-placements advertised by the live QuantumSavory catalog.
+Run maintained entry points from the repository root:
 
-The unit suite compares every live upstream protocol entry with WebQuantumSavory's
-projection instead of freezing an exact protocol inventory. A focused
-`SimpleSwitchDiscreteProt` scenario covers semantic node attachment, required-field
-validation, runtime construction, and generated-script parity. HTTP and MCP catalog
-tests remain shallow boundary smoke tests.
-
-## Canonical checks
-
-Run from the repository root:
-
-```bash
+```sh
 ./ci/backend-unit.sh
 ./ci/mcp-unit.sh
-./ci/frontend-build.sh
 ./ci/backend-integration.sh
-./ci/browser.sh
 ```
 
-The scripts instantiate their declared Julia and npm environments. Integration and
-browser scripts also own the test server lifecycle and ports, so use them instead of
-starting a server by hand.
+For a focused suite after instantiating the environments:
 
-For a focused Julia suite after instantiation:
-
-```bash
+```sh
 cd test
 julia --project=. runtests.jl test_unit
 ```
 
-New tests should use the existing safe-testset organization, unique simulation names,
-and the narrowest relevant fixture. Add dependencies to `test/Project.toml` rather than
-loading undeclared packages from another environment.
+Use unique simulation names, the narrowest useful fixture, and the existing
+`SafeTestsets` organization. Declare test dependencies in `test/Project.toml`.

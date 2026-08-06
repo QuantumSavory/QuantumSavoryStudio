@@ -1,6 +1,9 @@
 # Changelog
 
-## unreleased
+## 1.12.0
+
+- Compacted user and agent documentation around current repository behavior and
+  removed completed plans and duplicate implementation inventories.
 
 - Removed the embedded Swagger UI, its `/docs` route, and the parallel handwritten HTTP
   schemas. The exact private frontend-support route and payload surface is now owned by

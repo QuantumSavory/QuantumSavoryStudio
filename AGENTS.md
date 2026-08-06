@@ -1,59 +1,43 @@
-# WebQuantumSavory Repository Guidance
+# WebQuantumSavory Development Guidance
 
 ## Scope
 
-This repository ships one product with three components: the Julia HTTP/API backend,
-the browser frontend, and an optional local MCP sidecar. This file also governs the
-root backend entry points `bootstrap.jl` and `routes.jl`.
+This repository ships one product with a Julia backend, a Vue frontend, and an optional
+local MCP sidecar. Root entry points such as `bootstrap.jl` and `routes.jl` belong to
+the backend.
 
-## Start here
+Read the component guide that matches the change:
 
-- Read the closest component router before editing:
-  [backend internals](src/AGENTS.md), [frontend](gui/AGENTS.md), or
-  [MCP sidecar](mcp/AGENTS.md).
-- Use [the agent context index](.agents/index.md) only when the closest router does not
-  identify the context needed for the task. Do not read `.agents/` recursively.
-- Keep the selectively routed context synchronized when changing observable behavior,
-  interfaces, compatibility, or verification boundaries.
+- [`src/AGENTS.md`](src/AGENTS.md) for backend packages, simulation, and HTTP behavior.
+- [`gui/AGENTS.md`](gui/AGENTS.md) for the browser application and frontend tests.
+- [`mcp/AGENTS.md`](mcp/AGENTS.md) for the isolated MCP process and contract.
+- [`.agents/index.md`](.agents/index.md) when the component guide does not identify the
+  needed context. Do not preload `.agents/`.
 
-## Primary commands
+## Checks
 
-- Launch the integrated application: `./bin/server`
-- Backend unit checks: `./ci/backend-unit.sh`
-- Backend integration checks: `./ci/backend-integration.sh`
-- All maintained check entry points and focused alternatives are in
-  [repository workflows](.agents/context/repository-workflows.md).
+- Backend unit: `./ci/backend-unit.sh`
+- MCP boundary: `./ci/mcp-unit.sh`
+- Frontend unit and build: `./ci/frontend-build.sh`
+- HTTP integration: `./ci/backend-integration.sh`
+- Browser system: `./ci/browser.sh`
 
-## Engineering workflow
+Use the narrowest relevant check while iterating, then run the owning script before
+handoff. Integration scripts own server startup, diagnostics, and cleanup.
 
-- Above all, compare plausible designs and favor simplicity, maintainability, and clear
-  separation of concerns; factor shared behavior into one owner rather than duplicate
-  it here or reimplement another library's responsibility.
-- Run relevant tests locally before each commit and before opening or updating a PR; do
-  not rely on remote CI alone.
-- Keep commits small, coherent, and easy to review; rebase each fixup into the commit it
-  corrects.
-- On every PR you create, post a detailed comment describing the initiating user prompts
-  (verbatim when useful) and scope-defining follow-ups.
+## Repository rules
 
-## Root backend rules
+- Keep one clear owner for each behavior. Prefer executable routes, codecs, contracts,
+  callers, and tests over prose inventories.
+- Keep documentation limited to current behavior and task-required context.
+- Register HTTP handlers through the `route(...)` wrapper in `routes.jl`.
+- Keep ModelContextProtocol in the isolated `mcp/` environment.
+- Edit frontend source under `gui/`; never edit generated Vite output under root
+  `public/index.html`, `public/vite.svg`, or `public/assets/`.
+- Do not commit Julia manifests, runtime databases or logs, `node_modules/`, Playwright
+  output, or generated frontend assets.
+- Preserve unrelated changes and follow the containing workspace's worktree policy.
 
-- Register HTTP handlers through the local `route(...)` wrapper in `routes.jl`. Open
-  [frontend-support HTTP intent](.agents/context/backend/api-routing-and-errors.md)
-  before changing cross-route response behavior or validation ownership.
-- Treat a shared interface document as authoritative only when its consumers load or
-  derive from it. Otherwise the handler, invoked backend code, first-party callers, and
-  tests own exact HTTP behavior; keep them synchronized without a parallel endpoint or
-  payload-schema inventory.
-- Do not edit generated Vite output under `public/index.html`, `public/vite.svg`, or
-  `public/assets/`.
-- Keep ModelContextProtocol out of the root Julia project; the dependency belongs only
-  to the isolated `mcp/` environment.
-- Do not commit Julia manifests, runtime databases/logs, Playwright output,
-  `node_modules/`, or generated frontend assets.
-- Preserve unrelated work and follow the containing workspace's worktree policy.
-
-## Handoff
-
-Report behavior and documentation changed, checks run, unresolved behavior or evidence
-gaps, and checks not run.
+Run relevant tests before committing and before opening or updating a PR. Keep commits
+coherent. On every PR you create, add a detailed comment with the initiating user
+request and any scope-defining follow-ups.
