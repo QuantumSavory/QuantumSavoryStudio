@@ -1,36 +1,26 @@
 # MCP Sidecar Guidance
 
-## Scope
+This file applies to the optional Julia application under `mcp/`. It is part of
+WebQuantumSavory and is not released independently.
 
-This file applies to the isolated Julia MCP application under `mcp/`. It is one
-optional component of WebQuantumSavory, not an independently released product.
+## Boundaries
 
-## Open selectively
-
-- Open [MCP architecture](../.agents/context/mcp/architecture.md) for process,
-  ownership, trust-boundary, or failure-model changes.
-- Open [the tool contract](../.agents/context/mcp/tool-contract.md) to look up tools,
-  resources, schemas, dispatch, sessions, revisions, or stable errors.
-- Open [browser collaboration](../.agents/context/mcp/browser-collaboration.md) for
-  binding, leases, snapshots, commands, or lifecycle relaying.
-- Open [sidecar operations](../.agents/context/mcp/sidecar-operations.md) before
-  enabling, upgrading, testing, recovering, or coordinating a cross-component
-  tool/resource rollout.
+- Keep ModelContextProtocol and its dependencies out of the root Julia project.
+- Load tool names, metadata, and schemas from `../contracts/mcp/contract.json`; do not
+  maintain a second registry or version constant.
+- Communicate with the backend only through the capability-authenticated loopback
+  bridge, and keep the external listener on loopback.
+- Preserve the single-session transport and safe logger. Before changing the exact
+  ModelContextProtocol pin, compare the upstream implementation with the assumptions
+  documented in `src/single_session_http_transport.jl`.
+- Do not commit manifests, capabilities, session data, or transport logs.
 
 ## Commands
 
-- Instantiate: `julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'`
-- Sidecar unit checks: `julia --startup-file=no --project=. test/runtests.jl`
-- Full MCP boundary checks: `../ci/mcp-unit.sh`
+```sh
+julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
+julia --startup-file=no --project=. test/runtests.jl
+```
 
-## Local rules
-
-- Do not import the root `WebQuantumSavory` package or add ModelContextProtocol there.
-- Communicate with the backend only through the capability-authenticated loopback
-  bridge; keep the external listener on IPv4 loopback.
-- Load tool metadata and schemas from `../contracts/mcp/contract.json`; do not create a
-  second registry.
-- Preserve the single-session transport and safe logger. Before changing the exact
-  dependency pin, re-diff the upstream sources named in
-  `src/single_session_http_transport.jl`.
-- Do not commit `Manifest.toml`, capabilities, session data, or transport logs.
+Run `./ci/mcp-unit.sh` from the repository root for the complete MCP boundary. Add
+`./ci/browser.sh` when browser binding, authoring, or lifecycle relay changes.

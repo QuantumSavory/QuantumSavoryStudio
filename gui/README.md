@@ -1,63 +1,26 @@
-# Interactive Map Application
+# WebQuantumSavory Frontend
 
-A Vue 3 + Vite application for interactive quantum network visualization and simulation.
+The frontend is a Vue 3 application built with Vite. Use Node.js 24 and the locked npm
+dependencies.
 
-## Development
-
-### Prerequisites
-- Node.js (v18 or higher)
-- npm
-
-### Getting Started
-```bash
-# Install locked dependencies
+```sh
 npm ci
-
-# Install the Chromium browser and Linux packages used by Playwright
-npx playwright install --with-deps chromium
-
-# Start development server
 npm run dev
-
-# Build for production
+npm run test:unit
 npm run build
-
-# Preview production build
-npm run preview
 ```
 
-The production build is emitted into the backend's `../public/` directory. Those generated
-files are ignored by Git; the root `./bin/server` launcher installs dependencies and rebuilds
-the GUI automatically before starting the API server.
+The production build is written to the backend's `../public/` directory. That output is
+generated and ignored by Git.
 
-## Testing
+End-to-end tests use Playwright and require the WebQuantumSavory backend at
+`http://localhost:8000`:
 
-### End-to-End Tests
-This project uses Playwright for automated end-to-end testing.
-
-```bash
-# Run all e2e tests headlessly in Chromium
+```sh
+npx playwright install chromium
 npm test
-
-# Equivalent explicit headless command
-npm run test:headless
-
-# Run headed in Chromium for local debugging
-npm run test:headed
-
-# Run headed on a host without an attached display (requires Xvfb)
-xvfb-run -a npm run test:headed
 ```
 
-The e2e tests automatically start the Vite dev server and run tests in Chromium. They also expect the backend API to be running at `http://localhost:8000`.
-
-### Test Structure
-- Tests are located in `tests/e2e/`
-- Configuration is in `playwright.config.js`
-- Tests verify core functionality like app loading, UI rendering, and user interactions
-
-## Learn More
-
-- [Vue 3 Documentation](https://v3.vuejs.org/)
-- [Vite Documentation](https://vitejs.dev/)
-- [Playwright Documentation](https://playwright.dev/)
+Use `npm run test:headed` for local headed debugging. From the repository root,
+`./ci/browser.sh` installs dependencies, builds the frontend, and manages the backend
+and Chromium test run.
