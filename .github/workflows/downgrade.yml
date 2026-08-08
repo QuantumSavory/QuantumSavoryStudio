@@ -53,12 +53,9 @@ jobs:
           projects: '.,test'
           skip: Base64,Dates,InteractiveUtils,LinearAlgebra,Logging,Pkg,REPL,TOML
           mode: 'forcedeps'
-          julia_version: '1.12'
       - uses: julia-actions/julia-buildpkg@v1
-      - name: Instantiate the locked test environment
-        run: julia --color=yes --project=test -e 'import Pkg; Pkg.instantiate()'
-      - name: Run tests without re-resolving
-        working-directory: test
-        env:
-          JULIA_LOAD_PATH: ${{ github.workspace }}/test:${{ github.workspace }}:@stdlib
-        run: julia --color=yes --check-bounds=yes --project=. runtests.jl test_unit
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          allow_reresolve: false
+          force_latest_compatible_version: false
+          test_args: test_unit
