@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: 'min'
+          version: '1.12'
       - uses: julia-actions/cache@v3
         with:
           delete-old-caches: false
@@ -53,7 +53,7 @@ jobs:
           projects: '.,test'
           skip: Base64,Dates,InteractiveUtils,LinearAlgebra,Logging,Pkg,REPL,TOML
           mode: 'forcedeps'
-          julia_version: 'min'
+          julia_version: '1.12'
       - uses: julia-actions/julia-buildpkg@v1
       - name: Run tests without re-resolving
         working-directory: test
