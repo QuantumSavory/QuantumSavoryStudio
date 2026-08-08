@@ -1,0 +1,62 @@
+name: Downgrade
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1.12'
+      - uses: julia-actions/cache@v3
+        with:
+          delete-old-caches: false
+      - name: Materialize the declared QuantumSavory source
+        run: |
+          julia --color=yes -e '
+            using TOML
+
+            source = TOML.parsefile("Project.toml")["sources"]["QuantumSavory"]
+            source_path = joinpath(".downgrade", "QuantumSavory")
+            mkpath(source_path)
+            run(Cmd(["git", "-C", source_path, "init", "--quiet"]))
+            run(Cmd(["git", "-C", source_path, "remote", "add", "origin", source["url"]]))
+            run(Cmd(["git", "-C", source_path, "fetch", "--depth=1", "origin", source["rev"]]))
+            run(Cmd(["git", "-C", source_path, "checkout", "--detach", "FETCH_HEAD"]))
+            commit = readchomp(Cmd(["git", "-C", source_path, "rev-parse", "HEAD"]))
+            println("QuantumSavory source commit: ", commit)
+
+            for (project_path, relative_path) in (
+              ("Project.toml", ".downgrade/QuantumSavory"),
+              ("test/Project.toml", "../.downgrade/QuantumSavory"),
+            )
+              project = TOML.parsefile(project_path)
+              project["sources"]["QuantumSavory"] = Dict("path" => relative_path)
+              open(project_path, "w") do io
+                TOML.print(io, project)
+              end
+            end
+          '
+      - uses: julia-actions/julia-downgrade-compat@v2.7.0
+        with:
+          projects: '.,test'
+          skip: Base64,Dates,InteractiveUtils,LinearAlgebra,Logging,Pkg,REPL,TOML
+          mode: 'forcedeps'
+          julia_version: '1.12'
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          test_args: test_unit
+          allow_reresolve: false
+          force_latest_compatible_version: false
