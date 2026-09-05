@@ -1121,8 +1121,9 @@
   end
 
   @testset "Logs Endpoint - Success" begin
-      # First create a simulation to have logs
-      logs_test_name = "logs_test_sim"
+      # Exercise the percent-encoded project names used by the browser API.
+      logs_test_name = "logs test sim"
+      logs_test_path = HTTP.escapeuri(logs_test_name)
       payload = deepcopy(test_payload)
       payload["name"] = logs_test_name
 
@@ -1130,7 +1131,7 @@
       @test prepare_response.status == 200
 
       # Test getting logs with default purge=true
-      logs_response = make_request("GET", "/logs/$logs_test_name")
+      logs_response = make_request("GET", "/logs/$logs_test_path")
       @test logs_response.status == 200
       logs_data = parse_response(logs_response)
       @test logs_data["success"] == true
@@ -1141,7 +1142,7 @@
       @test logs_data["count"] == length(logs_data["logs"])
 
       # Test getting logs with purge=false
-      logs_response_no_purge = make_request("GET", "/logs/$logs_test_name", query=Dict("purge" => "false"))
+      logs_response_no_purge = make_request("GET", "/logs/$logs_test_path", query=Dict("purge" => "false"))
       @test logs_response_no_purge.status == 200
       logs_data_no_purge = parse_response(logs_response_no_purge)
       @test logs_data_no_purge["success"] == true
@@ -1149,7 +1150,7 @@
       @test haskey(logs_data_no_purge, "count")
 
       # Test getting logs with purge=true explicitly
-      logs_response_purge = make_request("GET", "/logs/$logs_test_name", query=Dict("purge" => "true"))
+      logs_response_purge = make_request("GET", "/logs/$logs_test_path", query=Dict("purge" => "true"))
       @test logs_response_purge.status == 200
       logs_data_purge = parse_response(logs_response_purge)
       @test logs_data_purge["success"] == true
@@ -1159,7 +1160,7 @@
       # Test various purge parameter values
       purge_values = ["1", "yes", "on", "0", "no", "off"]
       for purge_val in purge_values
-          purge_response = make_request("GET", "/logs/$logs_test_name", query=Dict("purge" => purge_val))
+          purge_response = make_request("GET", "/logs/$logs_test_path", query=Dict("purge" => purge_val))
           @test purge_response.status == 200
           purge_data = parse_response(purge_response)
           @test purge_data["success"] == true
