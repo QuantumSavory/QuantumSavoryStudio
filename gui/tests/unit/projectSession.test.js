@@ -6,7 +6,8 @@ import { useProjectSession } from '../../src/composables/useProjectSession'
 function createHarness({
   projects = {},
   destroySimulation = vi.fn(async () => ({ success: true })),
-  beforeProjectReplacement = vi.fn(async () => {})
+  beforeProjectReplacement = vi.fn(async () => {}),
+  canRenameProject = vi.fn(() => true),
 } = {}) {
   const records = new Map(Object.entries(projects))
   const projectData = ref(createEmptyProject('A'))
@@ -27,6 +28,11 @@ function createHarness({
   const store = {
     loadProject: vi.fn(name => records.get(name) || null),
     saveProject: vi.fn((name, data) => records.set(name, data)),
+    renameProject: vi.fn((previousName, name, data) => {
+      records.set(name, data)
+      if (previousName) records.delete(previousName)
+      window.localStorage.setItem('cqn_v2_recent_project_name', name)
+    }),
     openProject: vi.fn((name, data) => records.set(name, data)),
     deleteProject: vi.fn(name => records.delete(name)),
     listProjects: vi.fn(() => [...records.keys()]),
@@ -60,6 +66,7 @@ function createHarness({
     closeAllResultWindows: calls.closeWindows,
     hideSlotState: calls.hide,
     beforeProjectReplacement,
+    canRenameProject,
     showError,
     store,
     api
@@ -69,6 +76,7 @@ function createHarness({
     records,
     projectData,
     currentProjectName,
+    isDemoProject,
     selectedItem,
     selectedType,
     mapCenter,
@@ -77,7 +85,8 @@ function createHarness({
     store,
     api,
     addLog,
-    showError
+    showError,
+    beforeProjectReplacement,
   }
 }
 
@@ -141,6 +150,128 @@ describe('project session', () => {
     expect(harness.calls.closeWindows).toHaveBeenCalledOnce()
     expect(harness.store.setRecentProjectName).toHaveBeenCalledWith('B')
     expect(window.localStorage.getItem('cqn_v2_recent_project_name')).toBe('B')
+  })
+
+  it('renames the active saved project instead of retaining a copy', async () => {
+    const original = encodeProject(createEmptyProject('A'))
+    const harness = createHarness({ projects: { A: original } })
+    harness.projectData.value.description = 'Unsaved before rename'
+
+    expect(await harness.session.rename(' B ')).toBe(true)
+
+    expect(harness.records.has('A')).toBe(false)
+    expect(harness.records.get('B')).toMatchObject({
+      name: 'B',
+      description: 'Unsaved before rename',
+    })
+    expect(harness.currentProjectName.value).toBe('B')
+    expect(harness.projectData.value.name).toBe('B')
+    expect(harness.store.renameProject).toHaveBeenCalledOnce()
+    expect(window.localStorage.getItem('cqn_v2_recent_project_name')).toBe('B')
+    expect(harness.calls.reset).toHaveBeenCalledOnce()
+    expect(harness.calls.markSaved).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a colliding rename before project teardown', async () => {
+    const original = encodeProject(createEmptyProject('A'))
+    const target = encodeProject(createEmptyProject('B'))
+    const harness = createHarness({ projects: { A: original, B: target } })
+
+    expect(await harness.session.rename('B')).toBe(false)
+
+    expect(harness.records.get('A')).toEqual(original)
+    expect(harness.records.get('B')).toEqual(target)
+    expect(harness.currentProjectName.value).toBe('A')
+    expect(harness.beforeProjectReplacement).not.toHaveBeenCalled()
+    expect(harness.store.renameProject).not.toHaveBeenCalled()
+    expect(harness.calls.reset).not.toHaveBeenCalled()
+    expect(harness.showError).toHaveBeenCalledWith(
+      'Failed to rename project: A project named "B" already exists'
+    )
+  })
+
+  it('rejects a rename while a simulation owns the current project name', async () => {
+    const harness = createHarness({ canRenameProject: vi.fn(() => false) })
+
+    expect(await harness.session.rename('B')).toBe(false)
+
+    expect(harness.currentProjectName.value).toBe('A')
+    expect(harness.beforeProjectReplacement).not.toHaveBeenCalled()
+    expect(harness.store.renameProject).not.toHaveBeenCalled()
+    expect(harness.calls.reset).not.toHaveBeenCalled()
+    expect(harness.showError).toHaveBeenCalledWith(
+      'Failed to rename project: Reset or stop the simulation before renaming the project.'
+    )
+  })
+
+  it('aborts when a simulation starts during rename teardown', async () => {
+    let releaseTeardown
+    let canRename = true
+    const harness = createHarness({
+      beforeProjectReplacement: vi.fn(() => new Promise(resolve => {
+        releaseTeardown = resolve
+      })),
+      canRenameProject: vi.fn(() => canRename),
+    })
+
+    const renaming = harness.session.rename('B')
+    await vi.waitFor(() => expect(releaseTeardown).toBeTypeOf('function'))
+    canRename = false
+    releaseTeardown()
+
+    expect(await renaming).toBe(false)
+    expect(harness.currentProjectName.value).toBe('A')
+    expect(harness.store.renameProject).not.toHaveBeenCalled()
+    expect(harness.showError).toHaveBeenCalledWith(
+      'Failed to rename project: Reset or stop the simulation before renaming the project.'
+    )
+  })
+
+  it('materializes a renamed demo without moving a same-named saved project', async () => {
+    const savedProject = encodeProject(createEmptyProject('Demo'))
+    const harness = createHarness({ projects: { Demo: savedProject } })
+    harness.currentProjectName.value = 'Demo'
+    harness.projectData.value = createEmptyProject('Demo')
+    harness.projectData.value.description = 'Live demo'
+    harness.isDemoProject.value = true
+
+    expect(await harness.session.rename('My Demo')).toBe(true)
+
+    expect(harness.records.get('Demo')).toEqual(savedProject)
+    expect(harness.records.get('My Demo')).toMatchObject({
+      name: 'My Demo',
+      description: 'Live demo',
+    })
+    expect(harness.store.renameProject).toHaveBeenCalledWith(
+      null,
+      'My Demo',
+      expect.objectContaining({ name: 'My Demo' })
+    )
+    expect(harness.store.saveProject).not.toHaveBeenCalled()
+    expect(harness.isDemoProject.value).toBe(false)
+  })
+
+  it('does not let a stale rename replace a newer project transition', async () => {
+    let releaseRename
+    const beforeProjectReplacement = vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { releaseRename = resolve }))
+      .mockResolvedValue(undefined)
+    const original = encodeProject(createEmptyProject('A'))
+    const harness = createHarness({
+      projects: { A: original },
+      beforeProjectReplacement,
+    })
+
+    const renaming = harness.session.rename('B')
+    await vi.waitFor(() => expect(releaseRename).toBeTypeOf('function'))
+    expect(await harness.session.create('C')).toBe(true)
+    releaseRename()
+
+    expect(await renaming).toBe(false)
+    expect(harness.currentProjectName.value).toBe('C')
+    expect(harness.records.get('A')).toEqual(original)
+    expect(harness.records.has('B')).toBe(false)
+    expect(harness.records.get('C').name).toBe('C')
   })
 
   it('awaits collaboration teardown before replacing the active project', async () => {

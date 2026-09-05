@@ -7,6 +7,15 @@ const STORAGE_PREFIX = 'cqn_v2_project_'
 const METADATA_INDEX_KEY = 'cqn_v2_projects_metadata_index'
 const RECENT_PROJECT_NAME_KEY = 'cqn_v2_recent_project_name'
 
+function restoreStorageValue(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch (error) {
+    console.error(`Failed to restore browser storage key ${key}:`, error)
+  }
+}
+
 export default class ProjectStore {
   static getRecentProjectName() {
     return localStorage.getItem(RECENT_PROJECT_NAME_KEY)
@@ -37,9 +46,9 @@ export default class ProjectStore {
   }
 
   // Update metadata for a specific project
-  static updateProjectMetadata(name, projectData, isOpening = false) {
+  static updateProjectMetadata(name, projectData, isOpening = false, previousName = name) {
     const index = this.getMetadataIndex()
-    const existingMetadata = index[name] || {}
+    const existingMetadata = Object.hasOwn(index, previousName) ? index[previousName] : {}
     const now = new Date().toISOString()
     
     const summary = summarizeProject(projectData)
@@ -52,7 +61,13 @@ export default class ProjectStore {
       ...summary
     }
     
-    index[name] = metadata
+    Object.defineProperty(index, name, {
+      configurable: true,
+      enumerable: true,
+      value: metadata,
+      writable: true,
+    })
+    if (previousName !== name) delete index[previousName]
     this.saveMetadataIndex(index)
   }
 
@@ -70,6 +85,33 @@ export default class ProjectStore {
     
     // Update metadata index (not opening, just saving)
     this.updateProjectMetadata(name, data, false)
+  }
+
+  static renameProject(previousName, name, data) {
+    if (!name) throw new Error('Project name required')
+    if (previousName === name) return
+
+    const previousKey = previousName ? STORAGE_PREFIX + previousName : null
+    const targetKey = STORAGE_PREFIX + name
+    if (localStorage.getItem(targetKey) !== null) {
+      throw new Error(`A project named "${name}" already exists`)
+    }
+
+    const previousProject = previousKey ? localStorage.getItem(previousKey) : null
+    const previousMetadata = localStorage.getItem(METADATA_INDEX_KEY)
+    const previousRecentName = localStorage.getItem(RECENT_PROJECT_NAME_KEY)
+    try {
+      localStorage.setItem(targetKey, JSON.stringify(data))
+      this.updateProjectMetadata(name, data, false, previousName || name)
+      this.setRecentProjectName(name)
+      if (previousKey) localStorage.removeItem(previousKey)
+    } catch (error) {
+      restoreStorageValue(targetKey, null)
+      restoreStorageValue(METADATA_INDEX_KEY, previousMetadata)
+      restoreStorageValue(RECENT_PROJECT_NAME_KEY, previousRecentName)
+      if (previousKey) restoreStorageValue(previousKey, previousProject)
+      throw error
+    }
   }
 
   // Open a project and update openedAt timestamp
