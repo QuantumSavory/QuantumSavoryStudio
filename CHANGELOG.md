@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Restored simulation routes for project names containing spaces after an
+  upstream URI parser compatibility change.
+
 - Expanded QuantumSavory compatibility to include the 0.8 development line.
 
 - Updated the Repeater Chain Generator to support chains without a repeater template,
