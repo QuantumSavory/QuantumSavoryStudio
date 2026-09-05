@@ -50,6 +50,7 @@ test.describe('Background-noise constructor inputs', () => {
     await page.goto('/')
     await backgroundsLoaded
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.topbar-loading-indicator')).toHaveCount(0, { timeout: 15_000 })
     await createProject(page, 'Contextual Background E2E')
 
     await addNode(page, { x: 390, y: 235 })

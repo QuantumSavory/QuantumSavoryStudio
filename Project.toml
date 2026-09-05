@@ -24,6 +24,7 @@ ResumableFunctions = "c5292f4c-5179-55e1-98c5-05642aab7184"
 SearchLight = "340e8cb6-72eb-11e8-37ce-c97ebeb32050"
 SearchLightSQLite = "21a827c4-482a-11ea-3a19-4d2243a4a2c5"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 
 [sources]
 QuantumSavory = {rev = "master", url = "https://github.com/QuantumSavory/QuantumSavory.jl.git"}
@@ -49,3 +50,4 @@ ResumableFunctions = "1.0.4"
 SearchLight = "2.11.1"
 SearchLightSQLite = "2.2.2"
 TOML = "1.0.3"
+URIs = "~1.6.3"
