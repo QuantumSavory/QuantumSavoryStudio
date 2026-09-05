@@ -242,6 +242,58 @@ describe('ApiConnector project namespaces', () => {
     })
   })
 
+  it('keeps States Zoo trace evaluation separate from preview rendering', async () => {
+    globalThis.fetch = vi.fn(async url => ({
+      ok: true,
+      json: async () => new URL(url).pathname === '/states_zoo_preview'
+        ? { success: true, png_base64: 'png', trace: 0.5 }
+        : { success: true, trace: 0.5 },
+    }))
+    const connector = new ApiConnector('http://api.test')
+    const parameters = { p: { kind: 'variable', id: 'probability' } }
+    const variables = [{ id: 'probability', name: 'p', type: 'Float64', value: 0.5 }]
+
+    await connector.fetchStatesZooPreview('DepolarizedBellPair', parameters, { variables })
+    await connector.fetchStatesZooTrace('DepolarizedBellPair', parameters, { variables })
+
+    expect(fetch.mock.calls.map(call => call[0])).toEqual([
+      'http://api.test/states_zoo_preview',
+      'http://api.test/states_zoo_trace',
+    ])
+    expect(fetch.mock.calls.map(call => JSON.parse(call[1].body))).toEqual([
+      { state_type: 'DepolarizedBellPair', parameters, variables },
+      { state_type: 'DepolarizedBellPair', parameters, variables },
+    ])
+  })
+
+  it('shares an in-flight States Zoo catalog without coupling caller cancellation', async () => {
+    const types = [{ id: 'DepolarizedBellPair', parameters: [] }]
+    let resolveResponse
+    globalThis.fetch = vi.fn(() => new Promise(resolve => {
+      resolveResponse = () => resolve({
+        ok: true,
+        json: async () => ({ states_zoo_types: types }),
+      })
+    }))
+    const connector = new ApiConnector('http://api.test')
+    const controller = new AbortController()
+
+    const abandoned = connector.fetchStatesZooTypes({ signal: controller.signal, force: true })
+    const retained = connector.fetchStatesZooTypes()
+    controller.abort()
+
+    await expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetch).toHaveBeenCalledOnce()
+    resolveResponse()
+    await expect(retained).resolves.toEqual(types)
+    await expect(connector.fetchStatesZooTypes()).resolves.toEqual(types)
+    const cachedController = new AbortController()
+    cachedController.abort()
+    await expect(connector.fetchStatesZooTypes({ signal: cachedController.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it('fetches and caches the authoritative simulation log groups', async () => {
     const groups = ['backend', 'network', 'protocol', 'simulation', 'visualization']
     globalThis.fetch = vi.fn(async () => ({

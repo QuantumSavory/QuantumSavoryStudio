@@ -190,7 +190,7 @@ test.describe('Global protocol variables', () => {
     await expect(deleteButton).toBeDisabled()
     await expect(deleteButton).toHaveAttribute(
       'title',
-      'Unlink this variable from protocol or background parameters before deleting it',
+      'Unlink this variable from constructor parameters before deleting it',
     )
 
     await nameInput.fill('retry_rounds')

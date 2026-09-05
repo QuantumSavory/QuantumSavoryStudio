@@ -2,7 +2,7 @@
   <div class="variables-panel" data-testid="variables-panel">
     <div class="variables-header">
       <p class="variables-description">
-        Define values once and link them to protocol parameters.
+        Define values once and link them to constructor parameters.
       </p>
       <button
         type="button"
@@ -303,7 +303,7 @@ function isReferenced(variableId) {
 function deleteTitle(variableId) {
   if (props.disabled) return 'Reset the simulation to edit variables'
   if (isReferenced(variableId)) {
-    return 'Unlink this variable from protocol or background parameters before deleting it'
+    return 'Unlink this variable from constructor parameters before deleting it'
   }
   return 'Delete variable'
 }

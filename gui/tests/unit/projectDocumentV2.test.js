@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import FloatingProtocol from '../../src/models/FloatingProtocol.js'
-import Variable from '../../src/models/Variable.js'
+import Variable, { VariableReference } from '../../src/models/Variable.js'
 import {
   PROJECT_SCHEMA_VERSION,
   ProjectDocumentError,
@@ -318,10 +318,11 @@ describe('project document v2 constructor assignments', () => {
 })
 
 describe('project document v2 values and determinism', () => {
-  it('persists concrete Variables without selectedType or null/default values', () => {
+  it('persists concrete Variables and States Zoo parameter references', () => {
     const project = createEmptyProject('Variables')
     project.variables.push(
       new Variable({ id: 'count', name: 'Count', type: 'Int64', value: 2, selectedType: 'Int64' }),
+      new Variable({ id: 'probability', name: 'Probability', type: 'Float64', value: 0.75 }),
       new Variable({
         id: 'duration',
         name: 'Duration',
@@ -333,13 +334,18 @@ describe('project document v2 values and determinism', () => {
         id: 'state',
         name: 'State',
         type: 'Symbolic',
-        value: { kind: 'states_zoo', state_type: 'BellPair', parameters: { z: 2, a: 1 } },
+        value: {
+          kind: 'states_zoo',
+          state_type: 'BellPair',
+          parameters: { z: 2, a: new VariableReference('probability') },
+        },
         selectedType: 'Symbolic',
       }),
     )
     const document = encodeProject(project, catalogs())
     expect(document.variables).toEqual([
       { id: 'count', name: 'Count', type: 'Int64', value: 2 },
+      { id: 'probability', name: 'Probability', type: 'Float64', value: 0.75 },
       {
         id: 'duration',
         name: 'Duration',
@@ -350,9 +356,24 @@ describe('project document v2 values and determinism', () => {
         id: 'state',
         name: 'State',
         type: 'Symbolic',
-        value: { kind: 'states_zoo', state_type: 'BellPair', parameters: { a: 1, z: 2 } },
+        value: {
+          kind: 'states_zoo',
+          state_type: 'BellPair',
+          parameters: { a: { kind: 'variable', id: 'probability' }, z: 2 },
+        },
       },
     ])
+
+    expect(decodeProject(document, catalogs()).project.variables.at(-1).value.parameters.a)
+      .toEqual({ kind: 'variable', id: 'probability' })
+
+    const paddedStateType = structuredClone(document)
+    paddedStateType.variables.at(-1).value.state_type = ' BellPair '
+    expectContractError(
+      () => decodeProject(paddedStateType, catalogs()),
+      'INVALID_PROJECT',
+      '/variables/3/value/state_type',
+    )
 
     for (const [type, value] of [['default', null], ['Float64', null]]) {
       const invalid = structuredClone(document)
@@ -360,6 +381,43 @@ describe('project document v2 values and determinism', () => {
       invalid.variables[0].value = value
       expectContractError(() => decodeProject(invalid, catalogs()), 'INVALID_PROJECT')
     }
+  })
+
+  it('rejects missing and context-dependent States Zoo parameter sources', () => {
+    const project = createEmptyProject('State sources')
+    project.variables.push(
+      new Variable({ id: 'probability', name: 'Probability', type: 'Float64', value: 0.75 }),
+      new Variable({
+        id: 'state',
+        name: 'State',
+        type: 'Symbolic',
+        value: {
+          kind: 'states_zoo',
+          state_type: 'BellPair',
+          parameters: { p: new VariableReference('probability') },
+        },
+      }),
+    )
+    const document = encodeProject(project, catalogs())
+
+    const missing = structuredClone(document)
+    missing.variables[1].value.parameters.p.id = 'missing'
+    expectContractError(
+      () => decodeProject(missing, catalogs()),
+      'INVALID_PROJECT',
+      '/variables/1/value/parameters/p/id',
+    )
+
+    const contextual = structuredClone(document)
+    contextual.variables[0].value = {
+      kind: 'numeric_expression',
+      source: 'delay',
+    }
+    expectContractError(
+      () => decodeProject(contextual, catalogs()),
+      'INVALID_PROJECT',
+      '/variables/1/value/parameters/p',
+    )
   })
 
   it('enforces exact tags, intrinsic sentinels, finite numbers, and safe integers', () => {

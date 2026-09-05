@@ -107,12 +107,34 @@
               class="states-zoo-parameter-control"
               :data-parameter-name="parameter.name"
             >
-              <div class="states-zoo-parameter-label">
+              <div
+                v-tooltip.top="{
+                  value: parameter.doc || 'NO DOC',
+                  pt: { arrow: { style: { borderTopColor: 'var(--app-color-surface)' } } },
+                }"
+                class="states-zoo-parameter-label"
+              >
                 <span>{{ parameter.name }}</span>
                 <span class="states-zoo-parameter-range-text">
                   {{ parameter.min }}–{{ parameter.max }}
                 </span>
               </div>
+              <select
+                class="states-zoo-parameter-source"
+                :value="parameterSourceId(variable, parameter.name)"
+                :aria-label="`Source for ${parameter.name} of ${variable.name || variable.id}`"
+                :disabled="disabled"
+                @change="changeParameterSource(variable, parameter, $event.target.value)"
+              >
+                <option value="">Direct value</option>
+                <option
+                  v-for="source in compatibleParameterVariables"
+                  :key="source.id"
+                  :value="source.id"
+                >
+                  {{ source.name }} ({{ source.type }})
+                </option>
+              </select>
               <div class="states-zoo-parameter-inputs">
                 <input
                   type="range"
@@ -120,10 +142,10 @@
                   :min="parameter.min"
                   :max="parameter.max"
                   step="any"
-                  :value="stateDraft(variable).value.parameters[parameter.name]"
+                  :value="parameterDisplayValue(variable, parameter.name)"
                   :aria-label="`${parameter.name} range for ${variable.name || variable.id}`"
                   :aria-invalid="parameterValueInvalid(variable, parameter)"
-                  :disabled="disabled"
+                  :disabled="disabled || parameterIsLinked(variable, parameter.name)"
                   @input="changeParameter(variable, parameter.name, $event.target.value)"
                 />
                 <input
@@ -132,10 +154,10 @@
                   :min="parameter.min"
                   :max="parameter.max"
                   step="any"
-                  :value="stateDraft(variable).value.parameters[parameter.name]"
+                  :value="parameterDisplayValue(variable, parameter.name)"
                   :aria-label="`${parameter.name} value for ${variable.name || variable.id}`"
                   :aria-invalid="parameterValueInvalid(variable, parameter)"
-                  :disabled="disabled"
+                  :disabled="disabled || parameterIsLinked(variable, parameter.name)"
                   @input="changeParameter(variable, parameter.name, $event.target.value)"
                 />
               </div>
@@ -211,9 +233,14 @@ import { computed, inject, onMounted, onUnmounted, reactive, ref, toRaw, watch }
 import { LoaderCircle, Plus, Trash2 } from '@lucide/vue'
 import { EDITOR_DRAFT_REGISTRY_KEY } from '../../composables/editorDraftRegistry'
 import {
+  VariableReference,
+  isStatesZooParameterSourceVariable,
   isStatesZooTraceVariable,
   isStatesZooVariable,
-  isVariableReferenced
+  isVariableReference,
+  isVariableReferenced,
+  referencedStatesZooParameterVariables,
+  statesZooValueReferencesVariable
 } from '../../models/Variable'
 import { api } from '../../utils/ApiConnector'
 import { watermarkGeneratedPng } from '../../utils/pngWatermark'
@@ -253,13 +280,17 @@ let catalogController = null
 let isUnmounted = false
 
 const zooVariables = computed(() => props.variables.filter(isStatesZooVariable))
+const compatibleParameterVariables = computed(() => (
+  props.variables.filter(isStatesZooParameterSourceVariable)
+))
 
 function normalizeParameter(parameter) {
   return {
     name: String(parameter.name),
     min: Number(parameter.min),
     max: Number(parameter.max),
-    good: Number(parameter.good)
+    good: Number(parameter.good),
+    doc: String(parameter.doc || '')
   }
 }
 
@@ -340,7 +371,10 @@ function setTraceLifecycleError(variable, message) {
 
 function clearTraceLifecycleError(variable) {
   const state = previewState(variable.id)
-  if (state.error.startsWith('Cannot generate trace variable')) state.error = ''
+  if (
+    state.error.startsWith('Cannot generate trace variable')
+    || state.error.startsWith('Unlink the generated trace variable')
+  ) state.error = ''
 }
 
 function traceIsReferenced(variable) {
@@ -441,13 +475,49 @@ function changeParameter(variable, parameterName, rawValue) {
   schedulePreview(variable)
 }
 
+function parameterSourceId(variable, parameterName) {
+  const value = stateDraft(variable).value.parameters[parameterName]
+  return isVariableReference(value) ? value.id : ''
+}
+
+function parameterSourceVariable(variable, parameterName) {
+  const sourceId = parameterSourceId(variable, parameterName)
+  return compatibleParameterVariables.value.find(source => source.id === sourceId)
+}
+
+function parameterIsLinked(variable, parameterName) {
+  return isVariableReference(stateDraft(variable).value.parameters[parameterName])
+}
+
+function parameterDisplayValue(variable, parameterName) {
+  if (!parameterIsLinked(variable, parameterName)) {
+    return stateDraft(variable).value.parameters[parameterName]
+  }
+  return parameterSourceVariable(variable, parameterName)?.value ?? ''
+}
+
+function changeParameterSource(variable, parameter, sourceId) {
+  if (props.disabled) return
+  const parameters = stateDraft(variable).value.parameters
+  if (sourceId) {
+    const source = compatibleParameterVariables.value.find(candidate => candidate.id === sourceId)
+    if (!source) return
+    parameters[parameter.name] = new VariableReference(source.id)
+  } else {
+    const displayed = Number(parameterDisplayValue(variable, parameter.name))
+    parameters[parameter.name] = Number.isFinite(displayed) ? displayed : parameter.good
+  }
+  markStateDraftDirty(variable.id)
+  schedulePreview(variable)
+}
+
 function markStateDraftDirty(variableId) {
   dirtyStateDrafts.add(variableId)
   stateDraftVersions.set(variableId, (stateDraftVersions.get(variableId) || 0) + 1)
 }
 
 function parameterValueInvalid(variable, parameter) {
-  const rawValue = stateDraft(variable).value.parameters[parameter.name]
+  const rawValue = parameterDisplayValue(variable, parameter.name)
   if (rawValue == null || rawValue === '') return true
   const value = Number(rawValue)
   return !Number.isFinite(value)
@@ -605,7 +675,7 @@ function stateDeleteBlocked(variable) {
 function deleteTitle(variable) {
   if (props.disabled) return 'Reset the simulation to edit state variables'
   if (isReferenced(variable.id)) {
-    return 'Unlink this variable from protocol or background parameters before deleting it'
+    return 'Unlink this variable from constructor parameters before deleting it'
   }
   if (traceIsReferenced(variable)) {
     return 'Unlink the generated trace variable from protocol or background parameters before deleting this state'
@@ -695,7 +765,13 @@ async function renderPreview(variable, generation) {
     const response = await api.fetchStatesZooPreview(
       stateDraft(liveVariable).value.state_type,
       { ...stateDraft(liveVariable).value.parameters },
-      { signal: controller.signal }
+      {
+        signal: controller.signal,
+        variables: referencedStatesZooParameterVariables(
+          stateDraft(liveVariable).value,
+          props.variables,
+        ),
+      }
     )
     if (response?.success === false) {
       throw new Error(response.error || response.message || 'State preview failed')
@@ -708,6 +784,21 @@ async function renderPreview(variable, generation) {
     const imageUrl = await previewImageUrl(response, { signal: controller.signal })
     if (previewGenerations.get(variableId) !== generation || isUnmounted) return
     state.imageUrl = imageUrl
+    const previewTrace = Number(response?.trace)
+    const companion = traceVariable(liveVariable)
+    const traceNeedsSync = isWeighted(liveVariable)
+      ? Number.isFinite(previewTrace)
+        && previewTrace > 0
+        && (
+          !companion
+          || companion.name !== traceName(liveVariable)
+          || companion.type !== 'Float64'
+          || !Object.is(Number(companion.value), previewTrace)
+        )
+      : !!companion
+    if (!props.disabled && traceNeedsSync && !dirtyStateDrafts.has(variableId)) {
+      markStateDraftDirty(variableId)
+    }
     if (dirtyStateDrafts.has(variableId)) commitStateDraft(liveVariable)
   } catch (error) {
     if (error?.name === 'AbortError') return
@@ -796,6 +887,36 @@ watch(
     })
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  () => props.variables
+    .filter(variable => !isStatesZooVariable(variable) && !isStatesZooTraceVariable(variable))
+    .map(variable => ({ id: variable.id, type: variable.type, value: variable.value })),
+  (sources, previousSources = []) => {
+    const previousById = new Map(previousSources.map(source => [source.id, source]))
+    const changedIds = new Set(sources
+      .filter(source => {
+        const previous = previousById.get(source.id)
+        return previous && (
+          previous.type !== source.type || !Object.is(previous.value, source.value)
+        )
+      })
+      .map(source => source.id))
+    const currentIds = new Set(sources.map(source => source.id))
+    previousSources.forEach(source => {
+      if (!currentIds.has(source.id)) changedIds.add(source.id)
+    })
+    if (changedIds.size === 0) return
+
+    zooVariables.value.forEach(variable => {
+      const draftValue = stateDraft(variable).value
+      if ([...changedIds].some(id => statesZooValueReferencesVariable(draftValue, id))) {
+        schedulePreview(variable, 0)
+      }
+    })
+  },
+  { deep: true },
 )
 
 onMounted(loadStatesZooTypes)
@@ -938,6 +1059,13 @@ onUnmounted(() => {
   grid-template-columns: minmax(90px, 1fr) 92px;
   align-items: center;
   gap: 8px;
+}
+
+.states-zoo-parameter-source {
+  width: 100%;
+  min-width: 0;
+  margin: 2px 0;
+  font-size: 0.8rem;
 }
 
 .states-zoo-parameter-range,

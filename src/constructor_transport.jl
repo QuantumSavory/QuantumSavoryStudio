@@ -42,8 +42,12 @@ struct _StatesZooValue <: _TransportValue
   type_id::String
   constructor::Any
   parameter_names::Vector{String}
-  values::Vector{Any}
+  values::Vector{_TransportValue}
   weighted::Bool
+end
+
+struct _StatesZooTrace <: _TransportValue
+  state_variable_index::Int
 end
 
 struct _VariableUse <: _TransportValue
@@ -114,8 +118,22 @@ function _self_function_reference(source::String)
   return nothing
 end
 
-function _normalize_states_zoo_value(value, path::String)
-  type_id = String(value["state_type"])
+function _normalize_states_zoo_value(
+  value,
+  path::String;
+  variable_indices=Dict{String,Int}(),
+  variable_types=Dict{String,String}(),
+)
+  raw_type_id = value["state_type"]
+  raw_type_id isa AbstractString || _admission_error(
+    "States Zoo type must be a nonblank string",
+    _pointer_child(path, "state_type"),
+  )
+  type_id = String(raw_type_id)
+  isempty(type_id) && _admission_error(
+    "States Zoo type must be a nonblank string",
+    _pointer_child(path, "state_type"),
+  )
   entry = get(STATES_ZOO_TYPE_REGISTRY, type_id, nothing)
   entry === nothing && _admission_error(
     "Unknown States Zoo type '$type_id'",
@@ -133,11 +151,38 @@ function _normalize_states_zoo_value(value, path::String)
       "extra" => sort!([name for name in actual if !(name in expected)]),
     ),
   )
+  values = map(parameter_names) do name
+    parameter_path = _pointer_child(_pointer_child(path, "parameters"), name)
+    parameter = parameters[name]
+    reference = _parse_variable_reference(parameter; context=parameter_path)
+    if reference === nothing
+      parameter isa Real && !(parameter isa Bool) && isfinite(parameter) ||
+        _admission_error("States Zoo parameters must be finite numbers", parameter_path)
+      return _LiteralValue(parameter)
+    end
+
+    index = get(variable_indices, reference.id, 0)
+    index == 0 && _admission_error(
+      "Unknown variable reference '$(reference.id)'",
+      _pointer_child(parameter_path, "id");
+      details=Dict{String,Any}("variable_id" => reference.id),
+    )
+    variable_type = variable_types[reference.id]
+    variable_type in ("Float64", "Int64") || _admission_error(
+      "States Zoo parameters require a Float64 or Int64 Variable",
+      parameter_path;
+      details=Dict{String,Any}(
+        "variable_id" => reference.id,
+        "variable_type" => variable_type,
+      ),
+    )
+    return _VariableUse(index)
+  end
   return _StatesZooValue(
     type_id,
     entry.type,
     parameter_names,
-    Any[parameters[name] for name in parameter_names],
+    _TransportValue[values...],
     entry.weighted,
   )
 end
@@ -208,7 +253,12 @@ function _normalize_transport_value(
     return _FunctionSource(_source_recipe(String(value), path))
   elseif wire_type == "Symbolic"
     if _states_zoo_object_like(value) && get(value, "kind", nothing) == "states_zoo"
-      return _normalize_states_zoo_value(value, path)
+      return _normalize_states_zoo_value(
+        value,
+        path;
+        variable_indices,
+        variable_types,
+      )
     end
     return _SymbolicSource(_source_recipe(String(value), path; symbolic=true))
   elseif wire_type in ("Int", "Int64")
@@ -243,11 +293,19 @@ function _normalize_variable_recipes(payload)
   for (index, variable) in enumerate(raw_variables)
     path = "/variables/$(index - 1)"
     wire_type = String(variable["type"])
-    push!(recipes, _VariableRecipe(
-      String(variable["id"]),
-      String(variable["name"]),
-      path,
-      wire_type,
+    value = if haskey(variable, "statesZooTraceSourceId")
+      wire_type == "Float64" || _admission_error(
+        "States Zoo trace Variables require the Float64 wire codec",
+        _pointer_child(path, "type"),
+      )
+      source_id = String(variable["statesZooTraceSourceId"])
+      source_index = get(variable_indices, source_id, 0)
+      source_index == 0 && _admission_error(
+        "Unknown States Zoo trace source '$source_id'",
+        _pointer_child(path, "statesZooTraceSourceId"),
+      )
+      _StatesZooTrace(source_index)
+    else
       _normalize_transport_value(
         wire_type,
         variable["value"],
@@ -255,7 +313,14 @@ function _normalize_variable_recipes(payload)
         variable_indices,
         variable_types,
         allow_variable=false,
-      ),
+      )
+    end
+    push!(recipes, _VariableRecipe(
+      String(variable["id"]),
+      String(variable["name"]),
+      path,
+      wire_type,
+      value,
     ))
   end
   return recipes, variable_indices, variable_types
@@ -323,6 +388,17 @@ function _materialization_details(error, recipe, entity, constructor_type; stage
   )
 end
 
+function _materialize_states_zoo_state(
+  recipe::_StatesZooValue,
+  context::Dict{Symbol,Any},
+  variables::Vector{_VariableRecipe},
+)
+  values = map(recipe.values) do value
+    _materialize_transport_value(value, context, variables)
+  end
+  return _construct_states_zoo_values(recipe.type_id, recipe.constructor, values)
+end
+
 function _materialize_transport_value(
   recipe::_TransportValue,
   context::Dict{Symbol,Any},
@@ -362,9 +438,16 @@ function _materialize_transport_value(
     success || throw(error === nothing ? ArgumentError("Symbolic source evaluation failed") : error)
     return value
   elseif recipe isa _StatesZooValue
-    state = recipe.constructor(recipe.values...)
+    state = _materialize_states_zoo_state(recipe, context, variables)
     recipe.weighted || return state
     return state / _states_zoo_absolute_trace(recipe.type_id, state)
+  elseif recipe isa _StatesZooTrace
+    state_recipe = variables[recipe.state_variable_index].value
+    state_recipe isa _StatesZooValue || throw(ArgumentError(
+      "States Zoo trace source must be a States Zoo value",
+    ))
+    state = _materialize_states_zoo_state(state_recipe, context, variables)
+    return _states_zoo_absolute_trace(state_recipe.type_id, state)
   elseif recipe isa _VariableUse
     variable = variables[recipe.variable_index]
     return _materialize_transport_value(variable.value, context, variables)

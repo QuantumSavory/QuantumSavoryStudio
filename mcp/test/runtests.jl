@@ -145,6 +145,41 @@ end
     @test valid_edit == "design_edit"
     @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
 
+    state_reference_edit = Dict{String,Any}(
+        "operation_id" => "state-variable-reference",
+        "expected_revision" => 0,
+        "operations" => Any[
+            Dict(
+                "kind" => "variables.create",
+                "id" => "probability",
+                "value" => Dict(
+                    "name" => "probability",
+                    "type" => "Float64",
+                    "value" => 0.8,
+                ),
+            ),
+            Dict(
+                "kind" => "states.create",
+                "id" => "state",
+                "value" => Dict(
+                    "name" => "state",
+                    "state_type" => "DepolarizedBellPair",
+                    "parameters" => Dict(
+                        "p" => Dict("kind" => "variable", "id" => "probability"),
+                    ),
+                ),
+            ),
+        ],
+    )
+    @test isnothing(JSONSchema.validate(validators["design_edit"], state_reference_edit))
+
+    contextual_state_edit = deepcopy(state_reference_edit)
+    contextual_state_edit["operations"][2]["value"]["parameters"]["p"] = Dict(
+        "kind" => "numeric_expression",
+        "source" => "delay",
+    )
+    @test !isnothing(JSONSchema.validate(validators["design_edit"], contextual_state_edit))
+
     function repeater_edit(operation_id, options)
         getfield(design_edit, :handler)(Dict{String,Any}(
             "operation_id" => operation_id,

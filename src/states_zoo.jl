@@ -42,7 +42,7 @@ _states_zoo_object_like(value) =
   value isa AbstractDict || startswith(string(typeof(value)), "JSON3.Object")
 
 function _states_zoo_entry(state_type::AbstractString)
-  id = strip(String(state_type))
+  id = String(state_type)
   entry = get(STATES_ZOO_TYPE_REGISTRY, id, nothing)
   entry === nothing && throw(validation_error(
     "Unknown States Zoo type: '$id'",
@@ -54,11 +54,17 @@ function _states_zoo_entry(state_type::AbstractString)
   return id, entry
 end
 
-function _validate_states_zoo_object_keys(object, expected::Vector{String}, context::String)
+function _validate_states_zoo_object_keys(
+  object,
+  expected::Vector{String},
+  context::String;
+  optional=String[],
+)
   actual = Set(String(key) for key in keys(object))
   expected_set = Set(expected)
+  allowed = union(expected_set, Set(optional))
   missing = [key for key in expected if !(key in actual)]
-  extra = sort!([key for key in actual if !(key in expected_set)])
+  extra = sort!([key for key in actual if !(key in allowed)])
 
   if !isempty(missing) || !isempty(extra)
     throw(validation_error(
@@ -83,6 +89,10 @@ function get_states_zoo_types()
       T = entry.type
       parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
       parameter_ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
+      metadata = Dict(
+        string(parameter.field) => parameter
+        for parameter in QuantumSavory.constructor_metadata(T)
+      )
       Dict{String,Any}(
         "id" => id,
         "display_name" => entry.display_name,
@@ -95,6 +105,7 @@ function get_states_zoo_types()
               "min" => bounds.min,
               "max" => bounds.max,
               "good" => bounds.good,
+              "doc" => string(metadata[string(parameter_name)].doc),
             )
           end for parameter_name in parameter_names
         ],
@@ -143,6 +154,21 @@ function _states_zoo_preview_density_operator(state_type::AbstractString, state)
   return density_operator, absolute_trace
 end
 
+function _construct_states_zoo_values(state_type::AbstractString, constructor, values)
+  try
+    return constructor(values...)
+  catch error
+    isa(error, APIError) && rethrow(error)
+    throw(validation_error(
+      "Failed to construct States Zoo type '$state_type'",
+      Dict{String,Any}(
+        "state_type" => String(state_type),
+        "constructor_error" => sprint(showerror, error),
+      ),
+    ))
+  end
+end
+
 """
 Validate one StatesZoo parameter object and construct only its allowlisted type.
 
@@ -185,59 +211,73 @@ function construct_states_zoo_state(state_type, parameters)
     push!(values, value)
   end
 
-  try
-    return T(values...)
-  catch error
-    isa(error, APIError) && rethrow(error)
-    throw(validation_error(
-      "Failed to construct States Zoo type '$id'",
-      Dict{String,Any}(
-        "state_type" => id,
-        "constructor_error" => sprint(showerror, error),
-      ),
-    ))
-  end
+  return _construct_states_zoo_values(id, T, values)
 end
 
-"""Validate and construct the tagged value stored by a Symbolic variable."""
-function construct_states_zoo_recipe(recipe)
-  _states_zoo_object_like(recipe) || throw(validation_error(
-    "States Zoo recipe must be an object",
-    Dict{String,Any}("received_type" => string(typeof(recipe))),
-  ))
-  _validate_states_zoo_object_keys(
-    recipe,
-    ["kind", "state_type", "parameters"],
-    "States Zoo recipe",
+function _states_zoo_request_variables(parameters, variables)
+  variables isa AbstractVector || _admission_error("Expected an array", "/variables")
+  _states_zoo_object_like(parameters) || _admission_error(
+    "States Zoo parameters must be an object",
+    "/parameters",
   )
-
-  get(recipe, "kind", nothing) == "states_zoo" || throw(validation_error(
-    "States Zoo recipe field 'kind' must equal 'states_zoo'",
-  ))
-  state_type = recipe["state_type"]
-  state = construct_states_zoo_state(state_type, recipe["parameters"])
-  state_type, entry = _states_zoo_entry(state_type)
-  entry.weighted || return state
-
-  absolute_trace = _states_zoo_absolute_trace(state_type, state)
-  return state / absolute_trace
+  referenced_ids = Set{String}()
+  for (name, parameter) in pairs(parameters)
+    path = _pointer_child("/parameters", name)
+    reference = _parse_variable_reference(parameter; context=path)
+    reference === nothing || push!(referenced_ids, reference.id)
+  end
+  return [
+    variable for variable in variables
+    if _states_zoo_object_like(variable) && get(variable, "id", nothing) in referenced_ids
+  ]
 end
 
-"""Validate the POST preview body and return its constructed state and stable ID."""
-function parse_states_zoo_preview_payload(payload)
+"""Validate a States Zoo request and return its constructed state and stable ID."""
+function materialize_states_zoo_payload(payload)
   _states_zoo_object_like(payload) || throw(validation_error(
-    "States Zoo preview payload must be an object",
+    "States Zoo request payload must be an object",
     Dict{String,Any}("received_type" => string(typeof(payload))),
   ))
   _validate_states_zoo_object_keys(
     payload,
     ["state_type", "parameters"],
-    "States Zoo preview payload",
+    "States Zoo request payload",
+    optional=["variables"],
   )
 
   state_type = payload["state_type"]
-  state = construct_states_zoo_state(state_type, payload["parameters"])
-  return strip(String(state_type)), state
+  raw_variables = _states_zoo_request_variables(
+    payload["parameters"],
+    get(payload, "variables", Any[]),
+  )
+  variable_by_id, variable_path_by_id = _admit_variables(raw_variables, Set{String}())
+  _admit_states_zoo_parameter_references(
+    payload["parameters"],
+    "/parameters",
+    variable_by_id,
+    variable_path_by_id,
+  )
+  variables, variable_indices, variable_types = _normalize_variable_recipes(Dict(
+    "variables" => raw_variables,
+  ))
+  recipe = _normalize_states_zoo_value(
+    Dict(
+      "kind" => "states_zoo",
+      "state_type" => state_type,
+      "parameters" => payload["parameters"],
+    ),
+    "";
+    variable_indices,
+    variable_types,
+  )
+  state = _materialize_states_zoo_state(recipe, Dict{Symbol,Any}(), variables)
+  return recipe.type_id, state
+end
+
+"""Validate a States Zoo request and return its trace without rendering a preview."""
+function states_zoo_payload_trace(payload)
+  state_type, state = materialize_states_zoo_payload(payload)
+  return _states_zoo_absolute_trace(state_type, state)
 end
 
 """Render a state preview and return its PNG plus the original absolute trace."""

@@ -6,6 +6,7 @@ import Variable, {
   STATES_ZOO_VALUE_KIND,
   VARIABLE_REFERENCE_KIND,
   isNumericExpressionValue,
+  isStatesZooParameterSourceVariable,
   isVariableReference,
 } from '../models/Variable.js'
 import { setEdgeCorrectNodeOrder } from './Utils.js'
@@ -196,11 +197,20 @@ function canonicalStatesZooValue(value, path) {
   const parameters = record(source.parameters, pointer(path, 'parameters'))
   return {
     kind: STATES_ZOO_VALUE_KIND,
-    state_type: string(source.state_type, pointer(path, 'state_type'), { nonblank: true }),
+    state_type: string(source.state_type, pointer(path, 'state_type'), {
+      nonblank: true,
+      trim: true,
+    }),
     parameters: Object.fromEntries(
       Object.keys(parameters)
         .sort()
-        .map(key => [key, number(parameters[key], pointer(pointer(path, 'parameters'), key))]),
+        .map(key => {
+          const parameterPath = pointer(pointer(path, 'parameters'), key)
+          const parameter = parameters[key]
+          return [key, taggedKind(parameter) === VARIABLE_REFERENCE_KIND
+            ? canonicalVariableReference(parameter, parameterPath)
+            : number(parameter, parameterPath)]
+        }),
     ),
   }
 }
@@ -551,6 +561,24 @@ function encodeVariables(values, ids) {
 
 function verifyVariableLinks(variables, assignments) {
   const variableById = new Map(variables.map(variable => [variable.id, variable]))
+  const verifyStatesZooParameters = (value, path) => {
+    if (taggedKind(value) !== STATES_ZOO_VALUE_KIND) return
+    const parametersPath = pointer(path, 'parameters')
+    for (const [name, parameter] of Object.entries(value.parameters)) {
+      if (!isVariableReference(parameter)) continue
+      const parameterPath = pointer(parametersPath, name)
+      const source = variableById.get(parameter.id)
+      if (!source) {
+        fail(pointer(parameterPath, 'id'), `unknown Variable reference: ${parameter.id}`)
+      }
+      if (!isStatesZooParameterSourceVariable(source)) {
+        fail(
+          parameterPath,
+          'States Zoo parameters require a direct finite Float64 or Int64 Variable',
+        )
+      }
+    }
+  }
   for (const { type, value, path } of assignments) {
     if (taggedKind(value) === VARIABLE_REFERENCE_KIND) {
       const variable = variableById.get(value.id)
@@ -559,9 +587,11 @@ function verifyVariableLinks(variables, assignments) {
         fail(path, `Variable wire type ${variable.type} does not match assignment wire type ${type}`)
       }
     }
+    verifyStatesZooParameters(value, path)
   }
   for (let index = 0; index < variables.length; index += 1) {
     const variable = variables[index]
+    verifyStatesZooParameters(variable.value, pointer(pointer('/variables', index), 'value'))
     if (!variable.statesZooTraceSourceId) continue
     const source = variableById.get(variable.statesZooTraceSourceId)
     if (

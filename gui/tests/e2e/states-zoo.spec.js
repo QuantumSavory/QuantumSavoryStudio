@@ -10,7 +10,7 @@ const STATES_ZOO_TYPES = [
     display_name: 'Barrett-Kok Bell Pair',
     weighted: false,
     parameters: [
-      { name: 'ηᴬ', min: 0, max: 1, good: 1 },
+      { name: 'ηᴬ', min: 0, max: 1, good: 1, doc: 'The **emission efficiency** at endpoint A.' },
       { name: 'ηᴮ', min: 0, max: 1, good: 1 },
       { name: 'Pᵈ', min: 0, max: 1, good: 0 },
       { name: 'ηᵈ', min: 0, max: 1, good: 1 },
@@ -80,7 +80,7 @@ const TRACE_CONSUMER_PROTOCOL_TYPE = {
   }],
 }
 
-async function mockConfiguration(page, { previewHandler } = {}) {
+async function mockConfiguration(page, { previewHandler, traceHandler } = {}) {
   await page.route('**/known_functions', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -115,6 +115,17 @@ async function mockConfiguration(page, { previewHandler } = {}) {
       status: 200,
       contentType: 'application/json',
       json: { success: true, png_base64: TRANSPARENT_PNG, trace: 1 },
+    })
+  })
+  await page.route('**/states_zoo_trace', async route => {
+    const parameters = route.request().postDataJSON()
+    if (traceHandler) {
+      return traceHandler(route, parameters)
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      json: { success: true, trace: 1 },
     })
   })
   await page.route('**/platform_info', route => route.fulfill({
@@ -254,10 +265,18 @@ test.describe('States Zoo variables', () => {
       await expect(number).toHaveValue(String(parameter.good))
     }
 
-    expect(previewRequests[0]).toEqual({
+    expect(previewRequests[0]).toMatchObject({
       state_type: 'BarrettKokBellPair',
       parameters: { ηᴬ: 1, ηᴮ: 1, Pᵈ: 0, ηᵈ: 1, 𝒱: 1 },
     })
+
+    const firstParameterLabel = row.locator(
+      '.states-zoo-parameter-control[data-parameter-name="ηᴬ"] .states-zoo-parameter-label',
+    )
+    await firstParameterLabel.hover()
+    const tooltip = page.locator('.p-tooltip-text')
+    await expect(tooltip).toContainText('The emission efficiency at endpoint A.')
+    await expect(tooltip.locator('strong')).toHaveText('emission efficiency')
 
     const nameBox = await row.locator('.states-zoo-name-input').boundingBox()
     const typeBox = await typeSelect.boundingBox()
@@ -275,7 +294,7 @@ test.describe('States Zoo variables', () => {
       '.states-zoo-parameter-control[data-parameter-name="p"]',
     )
     await expect(depolarizedControl.locator('.states-zoo-parameter-input')).toHaveValue('1')
-    expect(previewRequests.at(-1)).toEqual({
+    expect(previewRequests.at(-1)).toMatchObject({
       state_type: 'DepolarizedBellPair',
       parameters: { p: 1 },
     })
@@ -290,6 +309,80 @@ test.describe('States Zoo variables', () => {
     const narrowTypeBox = await typeSelect.boundingBox()
     const narrowPreviewBox = await row.locator('.states-zoo-preview').boundingBox()
     expect(narrowPreviewBox.y).toBeGreaterThan(narrowTypeBox.y)
+  })
+
+  test('uses a literal global variable without hiding or dereferencing the preview', async ({ page }) => {
+    await mockConfiguration(page)
+    await loadApp(page)
+
+    await page.getByRole('tab', { name: 'Variables', exact: true }).click()
+    const variablesPanel = page.getByTestId('variables-panel')
+    await variablesPanel.getByRole('button', { name: 'Add Variable' }).click()
+    const variableRow = variablesPanel.locator('.variable-row')
+    const variableId = await variableRow.getAttribute('data-variable-id')
+    await variableRow.locator('.variable-name-input').fill('state_probability')
+    const variableInput = variableRow.locator('.variable-value-input input[type="number"]')
+    await variableInput.fill('0.4')
+    await variableInput.press('Tab')
+
+    const panel = await openStatesZoo(page)
+    const row = await addState(page, panel)
+    const typePreview = page.waitForResponse(response => (
+      response.url().endsWith('/states_zoo_preview') && response.ok()
+    ))
+    await row.locator('.states-zoo-type-select').selectOption('DepolarizedBellPair')
+    await typePreview
+
+    const control = row.locator('.states-zoo-parameter-control[data-parameter-name="p"]')
+    const sourceSelect = control.getByRole('combobox', { name: /Source for p/ })
+    await expect(sourceSelect.locator('option')).toHaveText([
+      'Direct value',
+      'state_probability (Float64)',
+    ])
+
+    const linkedPreview = page.waitForRequest(request => {
+      if (!request.url().endsWith('/states_zoo_preview')) return false
+      return request.postDataJSON()?.parameters?.p?.id === variableId
+    })
+    await sourceSelect.selectOption(variableId)
+    const linkedPayload = (await linkedPreview).postDataJSON()
+    expect(linkedPayload.parameters.p).toEqual({ kind: 'variable', id: variableId })
+    expect(linkedPayload.variables).toEqual([
+      expect.objectContaining({
+        id: variableId,
+        name: 'state_probability',
+        type: 'Float64',
+        value: 0.4,
+      }),
+    ])
+    await expect(control.locator('.states-zoo-parameter-input')).toBeDisabled()
+    await expect(control.locator('.states-zoo-parameter-input')).toHaveValue('0.4')
+    await expect(row.locator('.states-zoo-preview-image')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Variables', exact: true }).click()
+    await expect(variableRow.locator('.delete-variable-button')).toBeDisabled()
+    const updatedPreview = page.waitForRequest(request => {
+      if (!request.url().endsWith('/states_zoo_preview')) return false
+      const payload = request.postDataJSON()
+      return payload?.parameters?.p?.id === variableId
+        && payload.variables?.find(variable => variable.id === variableId)?.value === 0.6
+    })
+    await variableInput.fill('0.6')
+    await variableInput.press('Tab')
+    await updatedPreview
+
+    await page.getByRole('tab', { name: 'States Zoo' }).click()
+    await expect(control.locator('.states-zoo-parameter-input')).toHaveValue('0.6')
+    await expect(row.locator('.states-zoo-preview-image')).toBeVisible()
+    expect(await page.evaluate(({ stateId, sourceId }) => {
+      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+        ?.projectData?.variables
+      return variables?.find(variable => variable.id === stateId)?.value?.parameters?.p
+        ?? { missing: sourceId }
+    }, {
+      stateId: await row.getAttribute('data-variable-id'),
+      sourceId: variableId,
+    })).toEqual({ kind: 'variable', id: variableId })
   })
 
   test('stays out of Variables while remaining assignable, protected, and simulation-locked', async ({ page }) => {
@@ -322,7 +415,7 @@ test.describe('States Zoo variables', () => {
     await expect(deleteButton).toBeDisabled()
     await expect(deleteButton).toHaveAttribute(
       'title',
-      'Unlink this variable from protocol or background parameters before deleting it',
+      'Unlink this variable from constructor parameters before deleting it',
     )
 
     await setSimulationPhase(page, 'prepared')
@@ -344,15 +437,25 @@ test.describe('States Zoo variables', () => {
   })
 
   test('creates, synchronizes, explains, updates, and persists weighted trace variables', async ({ page }) => {
+    const requestCounts = { preview: 0, trace: 0 }
+    const traceFor = payload => payload.state_type === 'BarrettKokBellPairW'
+      ? Number(payload.parameters.ηᴬ) / 4
+      : 1
     await mockConfiguration(page, {
       previewHandler: (route, payload) => {
-        const trace = payload.state_type === 'BarrettKokBellPairW'
-          ? -Number(payload.parameters.ηᴬ) / 4
-          : 1
+        requestCounts.preview += 1
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          json: { success: true, png_base64: TRANSPARENT_PNG, trace },
+          json: { success: true, png_base64: TRANSPARENT_PNG, trace: traceFor(payload) },
+        })
+      },
+      traceHandler: (route, payload) => {
+        requestCounts.trace += 1
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          json: { success: true, trace: traceFor(payload) },
         })
       },
     })
@@ -411,14 +514,23 @@ test.describe('States Zoo variables', () => {
       return variables?.find(variable => variable.id === id)?.name
     }, traceId)).toBe('heralded_pair_tr')
 
+    const requestBaseline = { ...requestCounts }
     const updatedPreview = page.waitForResponse(response => (
       response.url().endsWith('/states_zoo_preview') && response.ok()
+    ))
+    const updatedTrace = page.waitForResponse(response => (
+      response.url().endsWith('/states_zoo_trace') && response.ok()
     ))
     await row.locator(
       '.states-zoo-parameter-control[data-parameter-name="ηᴬ"] .states-zoo-parameter-input',
     ).fill('0.5')
-    await updatedPreview
+    await Promise.all([updatedPreview, updatedTrace])
     await expect(note).toContainText('0.125')
+    await page.waitForTimeout(100)
+    expect(requestCounts).toEqual({
+      preview: requestBaseline.preview + 1,
+      trace: requestBaseline.trace + 1,
+    })
 
     await page.getByRole('tab', { name: 'Variables', exact: true }).click()
     const variablesPanel = page.getByTestId('variables-panel')
@@ -438,12 +550,26 @@ test.describe('States Zoo variables', () => {
       value: 0.125,
       statesZooTraceSourceId: stateId,
     })
+    await page.evaluate(({ projectName, id }) => {
+      const key = `cqn_v2_project_${projectName}`
+      const project = JSON.parse(localStorage.getItem(key))
+      const trace = project.variables.find(variable => variable.id === id)
+      trace.name = 'stale_trace_name'
+      trace.value = 0.9
+      localStorage.setItem(key, JSON.stringify(project))
+    }, { projectName: 'Weighted States Zoo Project', id: traceId })
 
     await page.reload()
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
     const reloadedPanel = await openStatesZoo(page)
     const reloadedRow = reloadedPanel.locator(`.states-zoo-row[data-variable-id="${stateId}"]`)
     await expect(reloadedRow.locator('.states-zoo-trace-note')).toContainText('heralded_pair_tr')
+    await expect(reloadedRow.locator('.states-zoo-trace-note')).toContainText('0.125')
+    await expect.poll(() => page.evaluate(id => {
+      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+        ?.projectData?.variables
+      return variables?.find(variable => variable.id === id)?.value
+    }, traceId)).toBe(0.125)
     expect(await page.evaluate(id => {
       const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
         ?.projectData?.variables
@@ -596,11 +722,11 @@ test.describe('States Zoo variables', () => {
         ?.projectData?.variables
       variables.splice(variables.findIndex(variable => variable.id === 'unrelated_name'), 1)
     })
-    const recoveredPreview = page.waitForResponse(response => (
-      response.url().endsWith('/states_zoo_preview') && response.ok()
+    const recoveredTrace = page.waitForResponse(response => (
+      response.url().endsWith('/states_zoo_trace') && response.ok()
     ))
     await row.locator('.states-zoo-name-input').fill('recovered_state')
-    await recoveredPreview
+    await recoveredTrace
     await expect(row.locator('.states-zoo-preview-error')).toHaveCount(0)
     await expect(row.locator('.states-zoo-trace-note')).toContainText('recovered_state_tr')
     expect(await page.evaluate(id => {
@@ -654,6 +780,18 @@ test.describe('States Zoo variables', () => {
         parameters: { p: 0.75 },
       },
     })
+    await page.evaluate(({ projectName, stateId }) => {
+      const key = `cqn_v2_project_${projectName}`
+      const project = JSON.parse(localStorage.getItem(key))
+      project.variables.push({
+        id: `${stateId}_tr`,
+        name: 'saved_state_tr',
+        type: 'Float64',
+        value: 1,
+        statesZooTraceSourceId: stateId,
+      })
+      localStorage.setItem(key, JSON.stringify(project))
+    }, { projectName: 'Saved States Zoo Project', stateId: variableId })
 
     await page.reload()
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
@@ -662,6 +800,13 @@ test.describe('States Zoo variables', () => {
     await expect(reloadedRow.locator('.states-zoo-name-input')).toHaveValue('saved_state')
     await expect(reloadedRow.locator('.states-zoo-type-select')).toHaveValue('DepolarizedBellPair')
     await expect(reloadedRow.locator('.states-zoo-parameter-input')).toHaveValue('0.75')
+    await expect.poll(() => page.evaluate(stateId => {
+      const variables = document.querySelector('#app')?.__vue_app__?._instance?.setupState
+        ?.projectData?.variables
+      return variables?.some(variable => variable.id === `${stateId}_tr`)
+    }, variableId)).toBe(false)
+    await page.locator('.hamburger-btn').click()
+    await page.getByText('Save', { exact: true }).click()
 
     const importedProject = await page.evaluate(() => {
       const setup = document.querySelector('#app')?.__vue_app__?._instance?.setupState

@@ -63,6 +63,26 @@ function abortError() {
   return error
 }
 
+function abortable(promise, signal) {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (callback, value) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', handleAbort)
+      callback(value)
+    }
+    const handleAbort = () => finish(reject, abortError())
+    signal.addEventListener('abort', handleAbort, { once: true })
+    promise.then(
+      value => finish(resolve, value),
+      error => finish(reject, error),
+    )
+  })
+}
+
 async function readJsonResponse(response, fallbackMessage) {
   const body = await response.json().catch(() => null)
   if (!response.ok || body?.success === false) {
@@ -94,6 +114,7 @@ export class ApiConnector {
     this._loading = ref(false)
     this._error   = ref(null)
     this.known_functions = ref([]);
+    this._statesZooTypesRequest = null
     this._tagTypesRequest = null
     this._tagTypesRequestGeneration = 0
     this.requestHeaders = {
@@ -115,24 +136,39 @@ export class ApiConnector {
   }
 
   async fetchStatesZooTypes({ signal, force = false } = {}) {
+    if (this._statesZooTypesRequest) {
+      return abortable(this._statesZooTypesRequest, signal)
+    }
     const cachedTypes = this._config.value.statesZooTypes
-    if (!force && Array.isArray(cachedTypes)) return cachedTypes
-
-    const res = await fetch(`${this.baseUrl}/states_zoo_types`, {
-      headers: this.requestHeaders,
-      signal,
-    })
-    const responseObject = await readJsonResponse(res, 'States Zoo types fetch failed')
-    const types = responseObject?.states_zoo_types
-    if (!Array.isArray(types)) {
-      throw new Error('States Zoo types response is invalid')
+    if (!force && Array.isArray(cachedTypes)) {
+      return signal?.aborted ? Promise.reject(abortError()) : cachedTypes
     }
 
-    this._config.value = {
-      ...this._config.value,
-      statesZooTypes: types,
-    }
-    return types
+    const request = (async () => {
+      const res = await fetch(`${this.baseUrl}/states_zoo_types`, {
+        headers: this.requestHeaders,
+      })
+      const responseObject = await readJsonResponse(res, 'States Zoo types fetch failed')
+      const types = responseObject?.states_zoo_types
+      if (!Array.isArray(types)) {
+        throw new Error('States Zoo types response is invalid')
+      }
+      this._config.value = {
+        ...this._config.value,
+        statesZooTypes: types,
+      }
+      return types
+    })()
+    this._statesZooTypesRequest = request
+    request.then(
+      () => {
+        if (this._statesZooTypesRequest === request) this._statesZooTypesRequest = null
+      },
+      () => {
+        if (this._statesZooTypesRequest === request) this._statesZooTypesRequest = null
+      },
+    )
+    return abortable(request, signal)
   }
 
   async fetchSimulationLogGroups({ signal, force = false } = {}) {
@@ -159,17 +195,38 @@ export class ApiConnector {
     return this._config.value.simulationLogGroups
   }
 
-  async fetchStatesZooPreview(stateType, parameters, { signal } = {}) {
-    const res = await fetch(`${this.baseUrl}/states_zoo_preview`, {
+  async _fetchStatesZooResult(path, failureMessage, stateType, parameters, { signal, variables = [] } = {}) {
+    const res = await fetch(`${this.baseUrl}/${path}`, {
       headers: this.requestHeaders,
       method: 'POST',
       body: JSON.stringify({
         state_type: stateType,
         parameters,
+        variables,
       }),
       signal,
     })
-    return readJsonResponse(res, 'States Zoo preview failed')
+    return readJsonResponse(res, failureMessage)
+  }
+
+  fetchStatesZooPreview(stateType, parameters, options) {
+    return this._fetchStatesZooResult(
+      'states_zoo_preview',
+      'States Zoo preview failed',
+      stateType,
+      parameters,
+      options,
+    )
+  }
+
+  fetchStatesZooTrace(stateType, parameters, options) {
+    return this._fetchStatesZooResult(
+      'states_zoo_trace',
+      'States Zoo trace failed',
+      stateType,
+      parameters,
+      options,
+    )
   }
 
   async exportScript(data, { signal } = {}) {
