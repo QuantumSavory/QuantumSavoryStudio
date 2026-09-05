@@ -872,6 +872,16 @@
             },
             "additionalProperties": false
           },
+          "stateParameter": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/jsonNumber"
+              },
+              {
+                "$ref": "#/definitions/variableReference"
+              }
+            ]
+          },
           "statesZooValue": {
             "type": "object",
             "required": [
@@ -889,7 +899,7 @@
               "parameters": {
                 "type": "object",
                 "additionalProperties": {
-                  "$ref": "#/definitions/jsonNumber"
+                  "$ref": "#/definitions/stateParameter"
                 }
               }
             },
@@ -1715,7 +1725,7 @@
           "stateParameters": {
             "type": "object",
             "additionalProperties": {
-              "$ref": "#/definitions/jsonNumber"
+              "$ref": "#/definitions/stateParameter"
             }
           },
           "stateCreate": {

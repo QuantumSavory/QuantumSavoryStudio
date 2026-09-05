@@ -106,7 +106,40 @@ export function isStatesZooTraceVariable(variable) {
     && variable?.id === `${sourceId}_tr`
 }
 
+export function isStatesZooParameterSourceVariable(variable) {
+  const value = variable?.value
+  if (
+    isStatesZooVariable(variable)
+    || isStatesZooTraceVariable(variable)
+    || !['Float64', 'Int64'].includes(variable?.type)
+    || typeof value !== 'number'
+    || !Number.isFinite(value)
+    || (Number.isInteger(value) && Math.abs(value) > Number.MAX_SAFE_INTEGER)
+  ) {
+    return false
+  }
+  return variable.type !== 'Int64' || Number.isInteger(value)
+}
+
+export function statesZooValueReferencesVariable(value, variableId) {
+  return isStatesZooValue(value) && Object.values(value.parameters).some(parameter => (
+    isVariableReference(parameter) && parameter.id === variableId
+  ))
+}
+
+export function referencedStatesZooParameterVariables(value, variables = []) {
+  if (!isStatesZooValue(value)) return []
+  const referencedIds = new Set(Object.values(value.parameters)
+    .filter(isVariableReference)
+    .map(parameter => parameter.id))
+  return variables.filter(variable => referencedIds.has(variable.id))
+}
+
 export function isVariableReferenced(projectData, variableId) {
+  if ((projectData?.variables || []).some(variable => (
+    statesZooValueReferencesVariable(variable?.value, variableId)
+  ))) return true
+
   const net = projectData?.net
   if (!net) return false
 
@@ -118,7 +151,8 @@ export function isVariableReferenced(projectData, variableId) {
 
   if (protocols.some(protocol => (
     (protocol.parameters || []).some(parameter => (
-      isVariableReference(parameter.value) && parameter.value.id === variableId
+      (isVariableReference(parameter.value) && parameter.value.id === variableId)
+      || statesZooValueReferencesVariable(parameter.value, variableId)
     ))
   ))) return true
 
@@ -128,7 +162,8 @@ export function isVariableReferenced(projectData, variableId) {
   ]
   return slots.some(slot => (
     (slot.backgroundNoise?.parameters || []).some(parameter => (
-      isVariableReference(parameter.value) && parameter.value.id === variableId
+      (isVariableReference(parameter.value) && parameter.value.id === variableId)
+      || statesZooValueReferencesVariable(parameter.value, variableId)
     ))
   ))
 }

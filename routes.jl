@@ -124,12 +124,22 @@ end
 
 route("/states_zoo_preview", method="POST") do
   payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
-  state_type, state = parse_states_zoo_preview_payload(payload)
+  state_type, state = materialize_states_zoo_payload(payload)
   preview = render_states_zoo_preview(state_type, state)
   json(Dict(
     :success => true,
     :png_base64 => preview.png_base64,
     :trace => preview.trace,
+  ))
+end
+
+########################################################
+
+route("/states_zoo_trace", method="POST") do
+  payload = extract_payload(Genie.Requests.jsonpayload(), Genie.Requests.rawpayload())
+  json(Dict(
+    :success => true,
+    :trace => states_zoo_payload_trace(payload),
   ))
 end
 

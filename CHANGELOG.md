@@ -2,6 +2,8 @@
 
 ## 1.12.0
 
+- Added constructor-documentation tooltips and Variables-tab numeric inputs to States Zoo
+  parameters, including live preview and weighted-state trace updates.
 - Compacted user and agent documentation around current repository behavior and
   removed completed plans and duplicate implementation inventories.
 

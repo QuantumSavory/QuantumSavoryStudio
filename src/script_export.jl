@@ -173,16 +173,44 @@ function _script_factory_source(source::String)
   return "(begin\n$source\nend)"
 end
 
-function _script_states_zoo_call(recipe::_StatesZooValue)
+function _script_states_zoo_call(
+  recipe::_StatesZooValue,
+  context_values,
+  variables::Vector{_VariableRecipe},
+  factory_names::AbstractVector{<:AbstractString};
+  path::String,
+  in_factory::Bool,
+)
   constructor = _script_binding_reference(recipe.constructor)
-  arguments = join((
-    _script_literal(value, "States Zoo parameter") for value in recipe.values
-  ), ", ")
+  arguments = join((begin
+    parameter_type = value isa _VariableUse ?
+      variables[value.variable_index].wire_type : "Any"
+    _script_transport_expression(
+      value,
+      parameter_type,
+      context_values,
+      variables,
+      factory_names;
+      path=_pointer_child(_pointer_child(path, "parameters"), name),
+      in_factory,
+    )
+  end for (name, value) in zip(recipe.parameter_names, recipe.values)), ", ")
   return "$constructor($arguments)"
 end
 
 function _script_normalized_states_zoo(call::String, trace_expression::String)
   return "(let state = $call; state / ($trace_expression); end)"
+end
+
+function _script_states_zoo_trace_expression()
+  trace = "Base.Float64(Base.abs(QuantumSavory.express(LinearAlgebra.tr(state))))"
+  message = _script_literal("States Zoo trace must be finite and positive")
+  return "(let trace = $trace; Base.isfinite(trace) && trace > 0 || " *
+    "Base.throw(Base.ArgumentError($message)); trace; end)"
+end
+
+function _script_states_zoo_trace(call::String)
+  return "(let state = $call; $(_script_states_zoo_trace_expression()); end)"
 end
 
 function _script_transport_expression(
@@ -193,8 +221,6 @@ function _script_transport_expression(
   factory_names::AbstractVector{<:AbstractString};
   path::String="/",
   in_factory::Bool=false,
-  variable_index::Union{Nothing,Int}=nothing,
-  trace_companions=Dict{Int,Int}(),
 )
   if recipe isa _LiteralValue
     return _script_wire_literal(recipe.value, wire_type, "transport literal")
@@ -219,22 +245,39 @@ function _script_transport_expression(
     return in_factory ? _script_factory_source(recipe.source) :
       _script_scoped_source(recipe.source, context_values)
   elseif recipe isa _StatesZooValue
-    call = _script_states_zoo_call(recipe)
+    call = _script_states_zoo_call(
+      recipe,
+      context_values,
+      variables,
+      factory_names;
+      path,
+      in_factory,
+    )
     recipe.weighted || return call
-    if variable_index !== nothing && haskey(trace_companions, variable_index)
-      trace_factory = factory_names[trace_companions[variable_index]]
-      trace_context = in_factory ? _script_forwarded_context_keywords() :
-        _script_context_keywords(context_values)
-      trace_call = "$trace_factory(; $trace_context)"
-      return _script_normalized_states_zoo(call, trace_call)
-    end
-    _admission_error(
-      "Weighted States Zoo export requires its persisted trace companion",
+    return _script_normalized_states_zoo(
+      call,
+      _script_states_zoo_trace_expression(),
+    )
+  elseif recipe isa _StatesZooTrace
+    state_recipe = variables[recipe.state_variable_index].value
+    state_recipe isa _StatesZooValue || _admission_error(
+      "States Zoo trace source must be a States Zoo value",
       path,
     )
+    call = _script_states_zoo_call(
+      state_recipe,
+      context_values,
+      variables,
+      factory_names;
+      path,
+      in_factory,
+    )
+    return _script_states_zoo_trace(call)
   elseif recipe isa _VariableUse
     factory = factory_names[recipe.variable_index]
-    return "$factory(; $(_script_context_keywords(context_values)))"
+    context = in_factory ? _script_forwarded_context_keywords() :
+      _script_context_keywords(context_values)
+    return "$factory(; $context)"
   end
   throw(ArgumentError("Unsupported transport recipe $(typeof(recipe))"))
 end
@@ -242,20 +285,12 @@ end
 function _script_variable_factories!(
   lines::Vector{String},
   variables::Vector{_VariableRecipe},
-  payload,
   used::Set{String},
 )
   factory_names = [
     _script_identifier("variable_$(variable.name)", used, "variable_$index")
     for (index, variable) in enumerate(variables)
   ]
-  indices = Dict(variable.id => index for (index, variable) in enumerate(variables))
-  trace_companions = Dict{Int,Int}()
-  for (index, raw_variable) in enumerate(payload["variables"])
-    haskey(raw_variable, "statesZooTraceSourceId") || continue
-    owner_index = get(indices, String(raw_variable["statesZooTraceSourceId"]), 0)
-    owner_index == 0 || (trace_companions[owner_index] = index)
-  end
 
   signature = join(("$(name) = nothing" for name in _SCRIPT_FACTORY_CONTEXT), ", ")
   factory_context = Dict{Symbol,Any}(name => nothing for name in _SCRIPT_FACTORY_CONTEXT)
@@ -268,8 +303,6 @@ function _script_variable_factories!(
       factory_names;
       path=_pointer_child(variable.path, "value"),
       in_factory=true,
-      variable_index=index,
-      trace_companions,
     )
     push!(lines, "# GUI Variable $(_script_literal(variable.name)) (ID: $(_script_comment(variable.id)))")
     push!(lines, "$(factory_names[index])(; $signature) = $expression")
@@ -457,7 +490,7 @@ function generate_julia_script(payload; catalogs=_constructor_catalog_snapshot()
     "# -----------------------------------------------------------------------------",
   ])
   used = copy(_SCRIPT_RESERVED_IDENTIFIERS)
-  factory_names = _script_variable_factories!(lines, variables, data, used)
+  factory_names = _script_variable_factories!(lines, variables, used)
 
   append!(lines, [
     "",

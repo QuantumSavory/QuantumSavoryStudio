@@ -3,10 +3,14 @@ import FloatingProtocol from '../../models/FloatingProtocol.js'
 import Node from '../../models/Node.js'
 import Variable, {
   STATES_ZOO_VALUE_KIND,
+  VariableReference,
+  isStatesZooParameterSourceVariable,
   isStatesZooTraceVariable,
   isStatesZooVariable,
   isVariableReference,
   isVariableReferenced,
+  referencedStatesZooParameterVariables,
+  statesZooValueReferencesVariable,
 } from '../../models/Variable.js'
 import { generateUUid, setEdgeCorrectNodeOrder } from '../../utils/Utils.js'
 import {
@@ -375,7 +379,7 @@ export class DesignCommandService {
     backgroundCatalog = () => [],
     protocolCatalog = () => ({ node: [], edge: [], floating: [] }),
     statesCatalog = () => [],
-    previewState = async () => ({ trace: 1 }),
+    fetchStateTrace = async () => ({ trace: 1 }),
     generators = {},
     markDirty = () => {},
     clearDeletedSelection = () => {},
@@ -390,7 +394,7 @@ export class DesignCommandService {
     this.backgroundCatalog = backgroundCatalog
     this.protocolCatalog = protocolCatalog
     this.statesCatalog = statesCatalog
-    this.previewState = previewState
+    this.fetchStateTrace = fetchStateTrace
     this.generators = generators
     this.markDirty = markDirty
     this.clearDeletedSelection = clearDeletedSelection
@@ -504,11 +508,13 @@ export class DesignCommandService {
       origin,
       affectedIds: new Set(),
       deletedIds: new Set(),
+      pendingTraceStateIds: new Set(),
       warnings: [],
     }
     for (const { operation, registration } of normalized) {
       await registration.handler(candidate, operation, context)
     }
+    await this.synchronizePendingTraces(candidate, context)
     const affectedEdges = candidate.net.edges.filter(edge => (
       context.affectedIds.has(edge.id)
       || context.affectedIds.has(edge.source.id)
@@ -962,7 +968,22 @@ export class DesignCommandService {
     return normalized
   }
 
-  requireTypedValue(type, value, label) {
+  stateParameter(value, label, project) {
+    if (!isVariableReference(value)) return finiteNumber(value, label)
+    if (!exactTaggedValue(value, ['kind', 'id'])) {
+      throw new DesignCommandError('VALIDATION_FAILED', `${label} has an invalid Variable reference.`)
+    }
+    const source = project?.variables.find(variable => variable.id === value.id)
+    if (!isStatesZooParameterSourceVariable(source)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        `${label} requires a direct finite Float64 or Int64 Variable.`,
+      )
+    }
+    return new VariableReference(source.id)
+  }
+
+  requireTypedValue(type, value, label, project) {
     if (!WIRE_TYPES.has(type)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -993,7 +1014,7 @@ export class DesignCommandService {
         state_type: value.state_type,
         parameters: Object.fromEntries(Object.entries(value.parameters).map(([name, item]) => [
           name,
-          finiteNumber(item, `${label} state parameter ${name}`),
+          this.stateParameter(item, `${label} state parameter ${name}`, project),
         ])),
       }
     }
@@ -1259,6 +1280,7 @@ export class DesignCommandService {
           type,
           parameter.value,
           `${label} parameter ${name}`,
+          project,
         )
       }
       normalizedParameters.push({
@@ -1311,6 +1333,7 @@ export class DesignCommandService {
       type,
       Object.hasOwn(value, 'value') ? value.value : 0,
       `Variable ${value.name || id}`,
+      project,
     )
     const variable = new Variable({
       id,
@@ -1342,11 +1365,12 @@ export class DesignCommandService {
     if (Object.hasOwn(value, 'name')) {
       variable.name = this.ensureUniqueVariableName(project, value.name, variable.id)
     }
-    if (
+    const valueChanged = (
       Object.hasOwn(value, 'type')
       || Object.hasOwn(value, 'selectedType')
       || Object.hasOwn(value, 'value')
-    ) {
+    )
+    if (valueChanged) {
       const proposed = {
         type: value.type ?? variable.type,
         ...(Object.hasOwn(value, 'selectedType') ? { selectedType: value.selectedType } : {}),
@@ -1362,18 +1386,33 @@ export class DesignCommandService {
         type,
         Object.hasOwn(value, 'value') ? value.value : variable.value,
         `Variable ${variable.name}`,
+        project,
       )
+    }
+    const dependentStates = valueChanged
+      ? project.variables.filter(candidate => (
+          statesZooValueReferencesVariable(candidate.value, variable.id)
+        ))
+      : []
+    for (const state of dependentStates) {
+      context.pendingTraceStateIds.add(state.id)
     }
     context.affectedIds.add(variable.id)
   }
 
   removeVariable(project, operation, context) {
     const id = operation.id || operation.variable_id
-    byId(project.variables, id, 'Variable')
+    const variable = byId(project.variables, id, 'Variable')
+    if (isStatesZooTraceVariable(variable)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'Trace variables are removed with their source state.',
+      )
+    }
     if (isVariableReferenced(project, id)) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
-        'Unlink this variable from protocol or background parameters before deleting it.',
+        'Unlink this variable from constructor parameters before deleting it.',
       )
     }
     project.variables = project.variables.filter(variable => variable.id !== id)
@@ -1388,11 +1427,26 @@ export class DesignCommandService {
     return definition
   }
 
-  stateParameters(definition, supplied) {
+  async synchronizePendingTraces(project, context) {
+    for (const stateId of context.pendingTraceStateIds) {
+      const variable = project.variables.find(candidate => candidate.id === stateId)
+      if (!isStatesZooVariable(variable)) continue
+      const definition = this.stateDefinition(variable.value.state_type)
+      variable.value.parameters = this.stateParameters(
+        definition,
+        variable.value.parameters,
+        project,
+      )
+      await this.synchronizeTrace(project, variable, definition, context)
+      context.affectedIds.add(variable.id)
+    }
+    context.pendingTraceStateIds.clear()
+  }
+
+  stateParameters(definition, supplied, project) {
     const parameterDefinitions = Array.isArray(definition.parameters)
       ? definition.parameters
       : []
-    if (parameterDefinitions.length === 0) return deepClone(supplied || {})
     const values = supplied || Object.fromEntries(
       parameterDefinitions.map(parameter => [parameter.name, Number(parameter.good)]),
     )
@@ -1415,39 +1469,48 @@ export class DesignCommandService {
     }
     return Object.fromEntries(parameterDefinitions.map(parameter => {
       const name = String(parameter.name)
-      return [name, finiteNumber(values[name], `States Zoo parameter ${name}`)]
+      return [name, this.stateParameter(
+        values[name],
+        `States Zoo parameter ${name}`,
+        project,
+      )]
     }))
   }
 
   async synchronizeTrace(project, variable, definition, context) {
     const companionId = `${variable.id}_tr`
     const existing = project.variables.find(candidate => candidate.id === companionId)
+    const companion = isStatesZooTraceVariable(existing)
+      && existing.statesZooTraceSourceId === variable.id
+      ? existing
+      : null
     if (!definition.weighted) {
-      if (existing && isVariableReferenced(project, existing.id)) {
+      if (companion && isVariableReferenced(project, companion.id)) {
         throw new DesignCommandError(
           'VALIDATION_FAILED',
           'Unlink the generated trace variable before choosing an unweighted state.',
         )
       }
-      if (existing) {
-        project.variables.splice(project.variables.indexOf(existing), 1)
-        context.deletedIds.add(existing.id)
+      if (companion) {
+        project.variables.splice(project.variables.indexOf(companion), 1)
+        context.deletedIds.add(companion.id)
       }
-      return
+      return null
     }
-    if (existing && existing.statesZooTraceSourceId !== variable.id) {
+    if (existing && !companion) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
         `Cannot generate trace variable because ID ${companionId} is already in use.`,
       )
     }
-    const preview = await this.previewState(
+    const result = await this.fetchStateTrace(
       variable.value.state_type,
       deepClone(variable.value.parameters),
+      deepClone(referencedStatesZooParameterVariables(variable.value, project.variables)),
     )
-    const trace = Math.abs(Number(preview?.trace))
-    if (!Number.isFinite(trace)) {
-      throw new DesignCommandError('VALIDATION_FAILED', 'The state preview returned an invalid trace.')
+    const trace = Number(result?.trace)
+    if (!Number.isFinite(trace) || trace <= 0) {
+      throw new DesignCommandError('VALIDATION_FAILED', 'The States Zoo trace response is invalid.')
     }
     const companionName = `${variable.name}_tr`
     const collision = project.variables.some(candidate => (
@@ -1459,20 +1522,21 @@ export class DesignCommandService {
         `Cannot generate trace variable because name ${companionName} is already in use.`,
       )
     }
-    if (existing) {
-      existing.name = companionName
-      existing.type = 'Float64'
-      existing.value = trace
-    } else {
-      project.variables.push(new Variable({
-        id: companionId,
-        name: companionName,
-        type: 'Float64',
-        value: trace,
-        statesZooTraceSourceId: variable.id,
-      }))
-      context.affectedIds.add(companionId)
+    if (companion) {
+      companion.name = companionName
+      companion.type = 'Float64'
+      companion.value = trace
+      context.affectedIds.add(companion.id)
+      return
     }
+    project.variables.push(new Variable({
+      id: companionId,
+      name: companionName,
+      type: 'Float64',
+      value: trace,
+      statesZooTraceSourceId: variable.id,
+    }))
+    context.affectedIds.add(companionId)
   }
 
   async createState(project, operation, context) {
@@ -1489,7 +1553,7 @@ export class DesignCommandService {
       value: {
         kind: STATES_ZOO_VALUE_KIND,
         state_type: definition.id,
-        parameters: this.stateParameters(definition, value.parameters),
+        parameters: this.stateParameters(definition, value.parameters, project),
       },
     })
     project.variables.push(variable)
@@ -1501,6 +1565,10 @@ export class DesignCommandService {
     if (variable.value?.kind !== STATES_ZOO_VALUE_KIND) {
       throw new DesignCommandError('VALIDATION_FAILED', 'The selected variable is not a States Zoo variable.')
     }
+    const companion = project.variables.find(candidate => (
+      isStatesZooTraceVariable(candidate)
+      && candidate.statesZooTraceSourceId === variable.id
+    ))
     const value = operation.value || operation
     if (Object.hasOwn(value, 'name')) {
       variable.name = this.ensureUniqueVariableName(project, value.name, variable.id)
@@ -1508,16 +1576,31 @@ export class DesignCommandService {
     const definition = this.stateDefinition(value.state_type || variable.value.state_type)
     if (Object.hasOwn(value, 'state_type')) variable.value.state_type = definition.id
     if (Object.hasOwn(value, 'parameters') || Object.hasOwn(value, 'state_type')) {
-      variable.value.parameters = this.stateParameters(definition, value.parameters)
+      variable.value.parameters = this.stateParameters(definition, value.parameters, project)
     }
-    await this.synchronizeTrace(project, variable, definition, context)
+    if (companion) {
+      context.pendingTraceStateIds.add(variable.id)
+    } else if (definition.weighted) {
+      await this.synchronizeTrace(project, variable, definition, context)
+    }
     context.affectedIds.add(variable.id)
   }
 
   removeState(project, operation, context) {
     const id = operation.id || operation.variable_id
     const variable = byId(project.variables, id, 'State variable')
-    const companion = project.variables.find(candidate => candidate.id === `${id}_tr`)
+    if (!isStatesZooVariable(variable)) {
+      throw new DesignCommandError(
+        'VALIDATION_FAILED',
+        'The selected variable is not a States Zoo variable.',
+      )
+    }
+    context.pendingTraceStateIds.delete(id)
+    const candidate = project.variables.find(item => item.id === `${id}_tr`)
+    const companion = isStatesZooTraceVariable(candidate)
+      && candidate.statesZooTraceSourceId === id
+      ? candidate
+      : null
     if (isVariableReferenced(project, id) || (companion && isVariableReferenced(project, companion.id))) {
       throw new DesignCommandError(
         'VALIDATION_FAILED',
@@ -1525,7 +1608,7 @@ export class DesignCommandService {
       )
     }
     project.variables = project.variables.filter(candidate => (
-      candidate.id !== id && candidate.id !== `${id}_tr`
+      candidate.id !== id && candidate !== companion
     ))
     context.deletedIds.add(variable.id)
     if (companion) context.deletedIds.add(companion.id)

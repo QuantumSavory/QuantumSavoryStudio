@@ -455,10 +455,12 @@ function _contract_typed_value(
         _pointer_child(path, "parameters"),
       )
       foreach(pairs(parameters)) do (name, parameter)
-        _contract_number(
+        parameter_path = _pointer_child(_pointer_child(path, "parameters"), name)
+        reference = _parse_variable_reference(parameter; context=parameter_path)
+        reference === nothing && _contract_number(
           parameter,
           "$context.parameters.$name";
-          path=_pointer_child(_pointer_child(path, "parameters"), name),
+          path=parameter_path,
         )
       end
       return
@@ -511,7 +513,12 @@ end
 
 _is_symbolic_wire_type(type_name) = type_name == "Symbolic"
 
-function _admit_assignment_array(parameters, path::String)
+function _admit_assignment_array(
+  parameters,
+  path::String,
+  variable_by_id=nothing,
+  variable_path_by_id=nothing,
+)
   parameters isa AbstractVector || _admission_error("Expected an array", path)
   names = Set{String}()
   for (index, parameter) in enumerate(parameters)
@@ -535,20 +542,47 @@ function _admit_assignment_array(parameters, path::String)
       "Constructor assignment '$name'";
       path=_pointer_child(item_path, "value"),
     )
+    value = parameter["value"]
+    if variable_by_id !== nothing && _is_object_like(value) &&
+       get(value, "kind", nothing) == "states_zoo"
+      _admit_states_zoo_parameter_references(
+        value["parameters"],
+        _pointer_child(_pointer_child(item_path, "value"), "parameters"),
+        variable_by_id,
+        variable_path_by_id,
+      )
+    end
   end
 end
 
-function _admit_protocol(protocol, path::String, ids)
+function _admit_protocol(
+  protocol,
+  path::String,
+  ids,
+  variable_by_id=nothing,
+  variable_path_by_id=nothing,
+)
   _admit_exact_object(protocol, ("id", "type", "parameters"), path)
   id_path = _pointer_child(path, "id")
   id = _admit_nonblank_string(protocol["id"], id_path)
   id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
   push!(ids, id)
   _admit_nonblank_string(protocol["type"], _pointer_child(path, "type"))
-  _admit_assignment_array(protocol["parameters"], _pointer_child(path, "parameters"))
+  _admit_assignment_array(
+    protocol["parameters"],
+    _pointer_child(path, "parameters"),
+    variable_by_id,
+    variable_path_by_id,
+  )
 end
 
-function _admit_slot(slot, path::String, ids)
+function _admit_slot(
+  slot,
+  path::String,
+  ids,
+  variable_by_id=nothing,
+  variable_path_by_id=nothing,
+)
   _admit_exact_object(slot, ("id", "type", "backgroundNoise"), path)
   id_path = _pointer_child(path, "id")
   id = _admit_nonblank_string(slot["id"], id_path)
@@ -560,11 +594,162 @@ function _admit_slot(slot, path::String, ids)
   _admit_exact_object(noise, ("type", "parameters"), noise_path)
   noise_type = _admit_nonblank_string(noise["type"], _pointer_child(noise_path, "type"))
   parameter_path = _pointer_child(noise_path, "parameters")
-  _admit_assignment_array(noise["parameters"], parameter_path)
+  _admit_assignment_array(
+    noise["parameters"],
+    parameter_path,
+    variable_by_id,
+    variable_path_by_id,
+  )
   noise_type == "default" && !isempty(noise["parameters"]) && _admission_error(
     "Default background noise must have no parameters",
     parameter_path,
   )
+end
+
+function _admit_states_zoo_parameter_references(
+  parameters,
+  path::String,
+  variable_by_id,
+  variable_path_by_id,
+)
+  _is_object_like(parameters) || _admission_error(
+    "States Zoo parameters must be an object",
+    path,
+  )
+  for (name, parameter) in pairs(parameters)
+    parameter_path = _pointer_child(path, name)
+    reference = _parse_variable_reference(parameter; context=parameter_path)
+    reference === nothing && continue
+
+    target = get(variable_by_id, reference.id, nothing)
+    target === nothing && _admission_error(
+      "Unknown variable reference '$(reference.id)'",
+      _pointer_child(parameter_path, "id");
+      details=Dict{String,Any}("variable_id" => reference.id),
+    )
+    target_path = variable_path_by_id[reference.id]
+    target_type = String(target["type"])
+    target_type in ("Float64", "Int64") || _admission_error(
+      "States Zoo parameters require a Float64 or Int64 Variable",
+      parameter_path;
+      details=Dict{String,Any}(
+        "variable_id" => reference.id,
+        "variable_path" => target_path,
+        "variable_type" => target_type,
+      ),
+    )
+    haskey(target, "statesZooTraceSourceId") && _admission_error(
+      "States Zoo parameters cannot use a trace companion Variable",
+      parameter_path;
+      details=Dict{String,Any}(
+        "variable_id" => reference.id,
+        "variable_path" => target_path,
+      ),
+    )
+    target_value = target["value"]
+    target_value isa Real && !(target_value isa Bool) && isfinite(target_value) ||
+      _admission_error(
+        "States Zoo parameters require a direct finite numeric Variable value",
+        parameter_path;
+        details=Dict{String,Any}(
+          "variable_id" => reference.id,
+          "variable_path" => target_path,
+        ),
+      )
+  end
+  return nothing
+end
+
+function _admit_variables(variables, ids=Set{String}(); path::String="/variables")
+  variables isa AbstractVector || _admission_error("Expected an array", path)
+  variable_names = Set{String}()
+  variable_by_id = Dict{String,Any}()
+  variable_path_by_id = Dict{String,String}()
+  for (index, variable) in enumerate(variables)
+    variable_path = _pointer_child(path, index - 1)
+    _admit_exact_object(
+      variable,
+      ("id", "name", "type", "value"),
+      ("statesZooTraceSourceId",),
+      variable_path,
+    )
+    id_path = _pointer_child(variable_path, "id")
+    id = _admit_nonblank_string(variable["id"], id_path)
+    id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
+    push!(ids, id)
+    variable_by_id[id] = variable
+    variable_path_by_id[id] = variable_path
+    name_path = _pointer_child(variable_path, "name")
+    name = _admit_nonblank_string(variable["name"], name_path)
+    name in variable_names && _admission_error("Duplicate Variable name '$name'", name_path)
+    push!(variable_names, name)
+    type_path = _pointer_child(variable_path, "type")
+    type_name = _admit_nonblank_string(variable["type"], type_path)
+    type_name in _SUPPORTED_WIRE_CODECS || _admission_error(
+      "Unsupported wire codec '$type_name'",
+      type_path,
+    )
+    type_name in ("Any", "DataType") && _admission_error(
+      "Variables require a concrete supported wire type",
+      type_path,
+    )
+    _contract_typed_value(
+      variable["value"],
+      type_name,
+      "Variable '$name'";
+      variable=true,
+      path=_pointer_child(variable_path, "value"),
+    )
+    haskey(variable, "statesZooTraceSourceId") && _admit_nonblank_string(
+      variable["statesZooTraceSourceId"],
+      _pointer_child(variable_path, "statesZooTraceSourceId"),
+    )
+  end
+
+  for (id, variable) in variable_by_id
+    source_value = variable["value"]
+    if _is_object_like(source_value) && get(source_value, "kind", nothing) == "states_zoo"
+      _admit_states_zoo_parameter_references(
+        source_value["parameters"],
+        _pointer_child(_pointer_child(variable_path_by_id[id], "value"), "parameters"),
+        variable_by_id,
+        variable_path_by_id,
+      )
+      state_type = get(source_value, "state_type", nothing)
+      state_entry = state_type isa AbstractString ?
+        get(STATES_ZOO_TYPE_REGISTRY, String(state_type), nothing) : nothing
+      if state_entry !== nothing && state_entry.weighted
+        companion_id = "$(id)_tr"
+        companion = get(variable_by_id, companion_id, nothing)
+        valid = companion !== nothing &&
+          get(companion, "statesZooTraceSourceId", nothing) == id &&
+          get(companion, "type", nothing) == "Float64"
+        valid || _admission_error(
+          "Weighted States Zoo Variables require their generated trace companion",
+          _pointer_child(variable_path_by_id[id], "value");
+          details=Dict{String,Any}("trace_variable_id" => companion_id),
+        )
+      end
+    end
+
+    haskey(variable, "statesZooTraceSourceId") || continue
+    variable_path = variable_path_by_id[id]
+    link_path = _pointer_child(variable_path, "statesZooTraceSourceId")
+    source_id = String(variable["statesZooTraceSourceId"])
+    source = get(variable_by_id, source_id, nothing)
+    source_value = source === nothing ? nothing : source["value"]
+    state_type = _is_object_like(source_value) ?
+      get(source_value, "state_type", nothing) : nothing
+    state_entry = state_type isa AbstractString ?
+      get(STATES_ZOO_TYPE_REGISTRY, String(state_type), nothing) : nothing
+    valid = source !== nothing && id == "$(source_id)_tr" &&
+      variable["type"] == "Float64" &&
+      _is_object_like(source_value) &&
+      get(source_value, "kind", nothing) == "states_zoo" &&
+      state_entry !== nothing && state_entry.weighted
+    valid || _admission_error("Invalid States Zoo trace linkage", link_path)
+  end
+  return variable_by_id, variable_path_by_id
 end
 
 function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapshot())
@@ -604,69 +789,8 @@ function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapsh
   end
 
   ids = Set{String}()
-  variable_names = Set{String}()
-  variable_by_id = Dict{String,Any}()
-  variable_path_by_id = Dict{String,String}()
   variables = payload["variables"]
-  variables isa AbstractVector || _admission_error("Expected an array", "/variables")
-  for (index, variable) in enumerate(variables)
-    path = "/variables/$(index - 1)"
-    _admit_exact_object(
-      variable,
-      ("id", "name", "type", "value"),
-      ("statesZooTraceSourceId",),
-      path,
-    )
-    id_path = _pointer_child(path, "id")
-    id = _admit_nonblank_string(variable["id"], id_path)
-    id in ids && _admission_error("Duplicate durable ID '$id'", id_path)
-    push!(ids, id)
-    variable_by_id[id] = variable
-    variable_path_by_id[id] = path
-    name_path = _pointer_child(path, "name")
-    name = _admit_nonblank_string(variable["name"], name_path)
-    name in variable_names && _admission_error("Duplicate Variable name '$name'", name_path)
-    push!(variable_names, name)
-    type_path = _pointer_child(path, "type")
-    type_name = _admit_nonblank_string(variable["type"], type_path)
-    type_name in _SUPPORTED_WIRE_CODECS || _admission_error(
-      "Unsupported wire codec '$type_name'",
-      type_path,
-    )
-    type_name in ("Any", "DataType") && _admission_error(
-      "Variables require a concrete supported wire type",
-      type_path,
-    )
-    _contract_typed_value(
-      variable["value"],
-      type_name,
-      "Variable '$name'";
-      variable=true,
-      path=_pointer_child(path, "value"),
-    )
-    haskey(variable, "statesZooTraceSourceId") && _admit_nonblank_string(
-      variable["statesZooTraceSourceId"],
-      _pointer_child(path, "statesZooTraceSourceId"),
-    )
-  end
-  for (id, variable) in variable_by_id
-    haskey(variable, "statesZooTraceSourceId") || continue
-    path = variable_path_by_id[id]
-    link_path = _pointer_child(path, "statesZooTraceSourceId")
-    source_id = String(variable["statesZooTraceSourceId"])
-    source = get(variable_by_id, source_id, nothing)
-    source_value = source === nothing ? nothing : source["value"]
-    state_type = _is_object_like(source_value) ?
-      get(source_value, "state_type", nothing) : nothing
-    state_entry = state_type isa AbstractString ?
-      get(STATES_ZOO_TYPE_REGISTRY, String(state_type), nothing) : nothing
-    valid = source !== nothing && id == "$(source_id)_tr" &&
-      variable["type"] == "Float64" &&
-      _is_object_like(source_value) &&
-      get(source_value, "kind", nothing) == "states_zoo" &&
-      state_entry !== nothing && state_entry.weighted
-    valid || _admission_error("Invalid States Zoo trace linkage", link_path)
-  end
+  variable_by_id, variable_path_by_id = _admit_variables(variables, ids)
 
   net_path = "/net"
   net = payload["net"]
@@ -718,13 +842,21 @@ function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapsh
       node_protocols_path,
     )
     foreach(enumerate(data["slots"])) do (slot_index, slot)
-      _admit_slot(slot, _pointer_child(slots_path, slot_index - 1), ids)
+      _admit_slot(
+        slot,
+        _pointer_child(slots_path, slot_index - 1),
+        ids,
+        variable_by_id,
+        variable_path_by_id,
+      )
     end
     foreach(enumerate(data["protocols"])) do (protocol_index, protocol)
       _admit_protocol(
         protocol,
         _pointer_child(node_protocols_path, protocol_index - 1),
         ids,
+        variable_by_id,
+        variable_path_by_id,
       )
     end
   end
@@ -764,6 +896,8 @@ function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapsh
         protocol,
         _pointer_child(edge_protocols_path, protocol_index - 1),
         ids,
+        variable_by_id,
+        variable_path_by_id,
       )
     end
     if !edge["isLogic"]
@@ -797,7 +931,13 @@ function _admit_simulation_payload(payload; catalogs=_constructor_catalog_snapsh
 
   floating_path = "/net/protocols"
   foreach(enumerate(protocols)) do (index, protocol)
-    _admit_protocol(protocol, _pointer_child(floating_path, index - 1), ids)
+    _admit_protocol(
+      protocol,
+      _pointer_child(floating_path, index - 1),
+      ids,
+      variable_by_id,
+      variable_path_by_id,
+    )
   end
   return payload
 end

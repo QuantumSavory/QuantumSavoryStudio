@@ -472,7 +472,9 @@
         "value" => Dict(
           "kind" => "states_zoo",
           "state_type" => "DepolarizedBellPair",
-          "parameters" => Dict("p" => 0.8),
+          "parameters" => Dict(
+            "p" => Dict("kind" => "variable", "id" => "literal"),
+          ),
         ),
       ),
       Dict(
@@ -561,12 +563,14 @@
     @test occursin("Base.minimum", transport_script)
     @test occursin("values -> first(values)", transport_script)
     @test occursin("Base.Int64((begin", transport_script)
-    @test occursin("QuantumSavory.StatesZoo.DepolarizedBellPair(0.8)", transport_script)
+    @test occursin(
+      "QuantumSavory.StatesZoo.DepolarizedBellPair(variable_literal_rate(",
+      transport_script,
+    )
     @test occursin("QuantumSavory.StatesZoo.BarrettKokBellPairW", transport_script)
     @test occursin("variable_weighted_state_trace", transport_script)
-    @test !occursin("LinearAlgebra.tr(state)", transport_script)
-    @test occursin("Base.Float64(0.125)", transport_script)
-    @test !occursin("LinearAlgebra.tr(state)", transport_script)
+    @test length(findall("LinearAlgebra.tr(state)", transport_script)) == 2
+    @test !occursin("Base.Float64(0.125)", transport_script)
     @test occursin(
       "QuantumSavory.ProtocolZoo.EntanglementCounterpart",
       transport_script,
@@ -1371,8 +1375,18 @@
     for (catalog_entry, (id, T)) in zip(catalog, expected)
       parameter_names = QuantumSavory.StatesZoo.stateparameters(T)
       ranges = QuantumSavory.StatesZoo.stateparametersrange(T)
+      metadata = Dict(
+        string(parameter.field) => parameter
+        for parameter in QuantumSavory.constructor_metadata(T)
+      )
       @test [parameter["name"] for parameter in catalog_entry["parameters"]] ==
         string.(collect(parameter_names))
+      @test [parameter["doc"] for parameter in catalog_entry["parameters"]] ==
+        [string(metadata[string(name)].doc) for name in parameter_names]
+      @test all(
+        !isempty(strip(parameter["doc"]))
+        for parameter in catalog_entry["parameters"]
+      )
       parameters = Dict(
         string(parameter) => ranges[parameter].good for parameter in parameter_names
       )
@@ -1411,20 +1425,49 @@
       "BarrettKokBellPairW",
       weighted,
     ) ≈ 0.5
-    normalized = WebQuantumSavory.construct_states_zoo_recipe(Dict(
-      "kind" => "states_zoo",
-      "state_type" => "BarrettKokBellPairW",
-      "parameters" => weighted_parameters,
-    ))
-    @test abs(LinearAlgebra.tr(QuantumSavory.express(normalized))) ≈ 1
-
-    zero_trace_error = try
-      WebQuantumSavory.construct_states_zoo_recipe(Dict(
+    weighted_recipe = WebQuantumSavory._normalize_states_zoo_value(
+      Dict(
         "kind" => "states_zoo",
         "state_type" => "BarrettKokBellPairW",
-        "parameters" =>
-          Dict("ηᴬ" => 0.0, "ηᴮ" => 0.0, "Pᵈ" => 0.0, "ηᵈ" => 1.0, "𝒱" => 1.0),
-      ))
+        "parameters" => weighted_parameters,
+      ),
+      "/inline-state",
+    )
+    materialized_weighted = WebQuantumSavory._materialize_transport_value(
+      weighted_recipe,
+      Dict{Symbol,Any}(),
+      WebQuantumSavory._VariableRecipe[],
+    )
+    @test abs(LinearAlgebra.tr(QuantumSavory.express(materialized_weighted))) ≈ 1
+    exported_weighted = Core.eval(
+      @__MODULE__,
+      Meta.parse(WebQuantumSavory._script_transport_expression(
+        weighted_recipe,
+        "Symbolic",
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
+        String[],
+      )),
+    )
+    @test QuantumSavory.express(exported_weighted) ≈
+      QuantumSavory.express(materialized_weighted)
+
+    zero_weighted_parameters =
+      Dict("ηᴬ" => 0.0, "ηᴮ" => 0.0, "Pᵈ" => 0.0, "ηᵈ" => 1.0, "𝒱" => 1.0)
+    zero_weighted_recipe = WebQuantumSavory._normalize_states_zoo_value(
+      Dict(
+        "kind" => "states_zoo",
+        "state_type" => "BarrettKokBellPairW",
+        "parameters" => zero_weighted_parameters,
+      ),
+      "/zero-state",
+    )
+    zero_trace_error = try
+      WebQuantumSavory._materialize_transport_value(
+        zero_weighted_recipe,
+        Dict{Symbol,Any}(),
+        WebQuantumSavory._VariableRecipe[],
+      )
       nothing
     catch error
       error
@@ -1465,6 +1508,153 @@
       WebQuantumSavory._VariableRecipe[],
     )
     @test materialized isa QuantumSavory.StatesZoo.DepolarizedBellPair
+
+    variable_backed = Any[
+      Dict(
+        "id" => "depolarization",
+        "name" => "depolarization",
+        "type" => "Float64",
+        "value" => 0.7,
+      ),
+      Dict(
+        "id" => "variable-backed-state",
+        "name" => "variable-backed state",
+        "type" => "Symbolic",
+        "value" => Dict(
+          "kind" => "states_zoo",
+          "state_type" => "DepolarizedBellPair",
+          "parameters" => Dict(
+            "p" => Dict("kind" => "variable", "id" => "depolarization"),
+          ),
+        ),
+      ),
+    ]
+    WebQuantumSavory._admit_variables(variable_backed, Set{String}())
+    variable_recipes, _, _ = WebQuantumSavory._normalize_variable_recipes(Dict(
+      "variables" => variable_backed,
+    ))
+    variable_backed_state = WebQuantumSavory._materialize_transport_value(
+      variable_recipes[2].value,
+      Dict{Symbol,Any}(),
+      variable_recipes,
+    )
+    direct_state = WebQuantumSavory.construct_states_zoo_state(
+      "DepolarizedBellPair",
+      Dict("p" => 0.7),
+    )
+    @test QuantumSavory.express(variable_backed_state) == QuantumSavory.express(direct_state)
+
+    weighted_variables = Any[
+      Dict(
+        "id" => "weighted",
+        "name" => "weighted",
+        "type" => "Symbolic",
+        "value" => Dict(
+          "kind" => "states_zoo",
+          "state_type" => "BarrettKokBellPairW",
+          "parameters" => weighted_parameters,
+        ),
+      ),
+      Dict(
+        "id" => "weighted_tr",
+        "name" => "weighted trace",
+        "type" => "Float64",
+        "value" => 0.125,
+        "statesZooTraceSourceId" => "weighted",
+      ),
+    ]
+    WebQuantumSavory._admit_variables(weighted_variables, Set{String}())
+    weighted_recipes, _, _ = WebQuantumSavory._normalize_variable_recipes(Dict(
+      "variables" => weighted_variables,
+    ))
+    @test WebQuantumSavory._materialize_transport_value(
+      weighted_recipes[2].value,
+      Dict{Symbol,Any}(),
+      weighted_recipes,
+    ) ≈ 0.5
+
+    missing_trace_error = try
+      WebQuantumSavory._admit_variables(weighted_variables[1:1], Set{String}())
+      nothing
+    catch error
+      error
+    end
+    @test missing_trace_error isa WebQuantumSavory.APIError
+    @test occursin("trace companion", missing_trace_error.message)
+
+    zero_weighted_variables = deepcopy(weighted_variables)
+    zero_weighted_variables[1]["value"]["parameters"] = zero_weighted_parameters
+    WebQuantumSavory._admit_variables(zero_weighted_variables, Set{String}())
+    zero_weighted_recipes, _, _ = WebQuantumSavory._normalize_variable_recipes(Dict(
+      "variables" => zero_weighted_variables,
+    ))
+    for recipe in zero_weighted_recipes
+      @test_throws WebQuantumSavory.APIError WebQuantumSavory._materialize_transport_value(
+        recipe.value,
+        Dict{Symbol,Any}(),
+        zero_weighted_recipes,
+      )
+      expression = WebQuantumSavory._script_transport_expression(
+        recipe.value,
+        recipe.wire_type,
+        Dict{Symbol,Any}(),
+        zero_weighted_recipes,
+        ["weighted_state", "weighted_trace"],
+      )
+      @test_throws ArgumentError Core.eval(@__MODULE__, Meta.parse(expression))
+    end
+
+    state_value(parameter) = Dict(
+      "kind" => "states_zoo",
+      "state_type" => "DepolarizedBellPair",
+      "parameters" => Dict("p" => parameter),
+    )
+    function state_reference_error(target_id, target)
+      variables = target === nothing ? Dict{String,Any}() : Dict(target_id => target)
+      paths = target === nothing ? Dict{String,String}() : Dict(target_id => "/variables/0")
+      return try
+        WebQuantumSavory._admit_states_zoo_parameter_references(
+          Dict("p" => Dict("kind" => "variable", "id" => target_id)),
+          "/parameters",
+          variables,
+          paths,
+        )
+        nothing
+      catch error
+        error
+      end
+    end
+
+    direct_integer = Dict("type" => "Int64", "value" => 1)
+    @test state_reference_error("integer", direct_integer) === nothing
+
+    rejected_targets = [
+      ("missing", nothing, "Unknown variable"),
+      ("text", Dict("type" => "String", "value" => "0.7"), "Float64 or Int64"),
+      (
+        "contextual",
+        Dict(
+          "type" => "Float64",
+          "value" => Dict("kind" => "numeric_expression", "source" => "delay"),
+        ),
+        "direct finite numeric",
+      ),
+      ("other-state", Dict("type" => "Symbolic", "value" => state_value(0.5)), "Float64 or Int64"),
+      (
+        "weighted_tr",
+        Dict(
+          "type" => "Float64",
+          "value" => 0.5,
+          "statesZooTraceSourceId" => "weighted",
+        ),
+        "trace companion",
+      ),
+    ]
+    for (id, target, message) in rejected_targets
+      error = state_reference_error(id, target)
+      @test error isa WebQuantumSavory.APIError
+      @test occursin(message, error.message)
+    end
   end
   @testset "States Zoo Preview Rendering" begin
       state = WebQuantumSavory.construct_states_zoo_state(

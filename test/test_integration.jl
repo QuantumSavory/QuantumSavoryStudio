@@ -510,12 +510,13 @@
         entry -> entry["id"] == "DepolarizedBellPair",
         types_data["states_zoo_types"],
       ))
-      @test depolarized["parameters"] == [Dict(
-        "name" => "p",
-        "min" => 0,
-        "max" => 1,
-        "good" => 1,
-      )]
+      depolarized_parameter = only(depolarized["parameters"])
+      @test depolarized_parameter["name"] == "p"
+      @test depolarized_parameter["min"] == 0
+      @test depolarized_parameter["max"] == 1
+      @test depolarized_parameter["good"] == 1
+      @test depolarized_parameter["doc"] isa String
+      @test !isempty(strip(depolarized_parameter["doc"]))
 
       preview_response = make_request(
         "POST",
@@ -534,6 +535,58 @@
       @test length(png) > 8
       @test png[1:8] == UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
+      variable_preview_response = make_request(
+        "POST",
+        "/states_zoo_preview";
+        body=Dict(
+          "state_type" => "DepolarizedBellPair",
+          "parameters" => Dict(
+            "p" => Dict("kind" => "variable", "id" => "preview-probability"),
+          ),
+          "variables" => [
+            Dict(
+              "id" => "preview-probability",
+              "name" => "preview probability",
+              "type" => "Float64",
+              "value" => 0.65,
+            ),
+            Dict(
+              "id" => "unrelated-state",
+              "name" => "unrelated state",
+              "type" => "Symbolic",
+              "value" => Dict(
+                "kind" => "states_zoo",
+                "state_type" => "UnavailableState",
+                "parameters" => Dict(),
+              ),
+            ),
+          ],
+        ),
+      )
+      @test variable_preview_response.status == 200
+      @test parse_response(variable_preview_response)["trace"] ≈ 1
+
+      contextual_preview_response = make_request(
+        "POST",
+        "/states_zoo_preview";
+        body=Dict(
+          "state_type" => "DepolarizedBellPair",
+          "parameters" => Dict(
+            "p" => Dict("kind" => "variable", "id" => "contextual-probability"),
+          ),
+          "variables" => [Dict(
+            "id" => "contextual-probability",
+            "name" => "contextual probability",
+            "type" => "Float64",
+            "value" => Dict("kind" => "numeric_expression", "source" => "delay"),
+          )],
+        ),
+      )
+      @test contextual_preview_response.status == 400
+      contextual_preview_data = parse_response(contextual_preview_response)
+      @test contextual_preview_data["error_code"] == "VALIDATION_ERROR"
+      @test contextual_preview_data["details"]["path"] == "/parameters/p"
+
       weighted_preview_response = make_request(
         "POST",
         "/states_zoo_preview";
@@ -545,6 +598,31 @@
       @test weighted_preview_response.status == 200
       weighted_preview_data = parse_response(weighted_preview_response)
       @test weighted_preview_data["trace"] ≈ 0.5
+
+      weighted_trace_response = make_request(
+        "POST",
+        "/states_zoo_trace";
+        body=Dict(
+          "state_type" => "BarrettKokBellPairW",
+          "parameters" => Dict(
+            "ηᴬ" => Dict("kind" => "variable", "id" => "trace-efficiency"),
+            "ηᴮ" => 1,
+            "Pᵈ" => 0,
+            "ηᵈ" => 1,
+            "𝒱" => 1,
+          ),
+          "variables" => [Dict(
+            "id" => "trace-efficiency",
+            "name" => "trace efficiency",
+            "type" => "Float64",
+            "value" => 1,
+          )],
+        ),
+      )
+      @test weighted_trace_response.status == 200
+      weighted_trace_data = parse_response(weighted_trace_response)
+      @test weighted_trace_data["trace"] ≈ 0.5
+      @test !haskey(weighted_trace_data, "png_base64")
 
       zero_trace_response = make_request(
         "POST",
@@ -568,6 +646,18 @@
       unknown_data = parse_response(unknown_response)
       @test unknown_data["success"] == false
       @test unknown_data["error_code"] == "VALIDATION_ERROR"
+
+      for endpoint in ("/states_zoo_preview", "/states_zoo_trace")
+        invalid_type_response = make_request(
+          "POST",
+          endpoint;
+          body=Dict("state_type" => nothing, "parameters" => Dict()),
+        )
+        @test invalid_type_response.status == 400
+        invalid_type_data = parse_response(invalid_type_response)
+        @test invalid_type_data["error_code"] == "VALIDATION_ERROR"
+        @test invalid_type_data["details"]["path"] == "/state_type"
+      end
 
       out_of_range_response = make_request(
         "POST",
@@ -611,22 +701,48 @@
       simulation_name = "states_zoo_variable_integration"
       payload = deepcopy(test_payload)
       payload["name"] = simulation_name
-      payload["variables"] = [Dict(
-        "id" => "zoo_pair_state",
-        "name" => "zoo pair state",
-        "type" => "Symbolic",
-        "value" => Dict(
-          "kind" => "states_zoo",
-          "state_type" => "BarrettKokBellPairW",
-          "parameters" => Dict("ηᴬ" => 1, "ηᴮ" => 1, "Pᵈ" => 0, "ηᵈ" => 1, "𝒱" => 1),
+      payload["variables"] = [
+        Dict(
+          "id" => "channel_efficiency",
+          "name" => "channel efficiency",
+          "type" => "Float64",
+          "value" => 0.9,
         ),
-      )]
+        Dict(
+          "id" => "zoo_pair_state",
+          "name" => "zoo pair state",
+          "type" => "Symbolic",
+          "value" => Dict(
+            "kind" => "states_zoo",
+            "state_type" => "BarrettKokBellPairW",
+            "parameters" => Dict(
+              "ηᴬ" => Dict("kind" => "variable", "id" => "channel_efficiency"),
+              "ηᴮ" => 1,
+              "Pᵈ" => 0,
+              "ηᵈ" => 1,
+              "𝒱" => 1,
+            ),
+          ),
+        ),
+        Dict(
+          "id" => "zoo_pair_state_tr",
+          "name" => "zoo pair state trace",
+          "type" => "Float64",
+          "value" => 0.45,
+          "statesZooTraceSourceId" => "zoo_pair_state",
+        ),
+      ]
 
       entangler = payload["net"]["edges"][1]["data"]["protocols"][1]
       push!(entangler["parameters"], Dict(
         "name" => "pairstate",
         "type" => "Symbolic",
         "value" => Dict("kind" => "variable", "id" => "zoo_pair_state"),
+      ))
+      push!(entangler["parameters"], Dict(
+        "name" => "success_prob",
+        "type" => "Float64",
+        "value" => Dict("kind" => "variable", "id" => "zoo_pair_state_tr"),
       ))
 
       try

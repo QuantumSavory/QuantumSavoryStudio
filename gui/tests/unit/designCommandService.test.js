@@ -273,7 +273,7 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('protocol or background parameters'),
+      message: expect.stringContaining('constructor parameters'),
     })
 
     await service.execute({
@@ -307,7 +307,7 @@ describe('DesignCommandService', () => {
       }],
     })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
-      message: expect.stringContaining('protocol or background parameters'),
+      message: expect.stringContaining('constructor parameters'),
     })
   })
 
@@ -647,7 +647,7 @@ describe('DesignCommandService', () => {
     const onCommitted = vi.fn()
     const service = serviceFor(project, {
       statesCatalog: () => [{ id: 'WeightedBell', weighted: true }],
-      previewState: vi.fn(async () => {
+      fetchStateTrace: vi.fn(async () => {
         throw new Error('Preview unavailable')
       }),
       markDirty,
@@ -1465,7 +1465,7 @@ describe('DesignCommandService', () => {
     })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
   })
 
-  it('links exact Symbolic Variables without persisting editor mode metadata', async () => {
+  it('links Symbolic Variables and nested state parameters without editor metadata', async () => {
     const project = createEmptyProject('Symbolic aliases')
     project.net.nodes.push(new Node({
       id: 'node_a',
@@ -1483,6 +1483,12 @@ describe('DesignCommandService', () => {
         parameters: { p: 1 },
       },
     }))
+    project.variables.push(new Variable({
+      id: 'variable_probability',
+      name: 'probability',
+      type: 'Float64',
+      value: 0.25,
+    }))
     const symbolicType = 'Symbolic'
     const service = serviceFor(project, {
       protocolCatalog: () => ({
@@ -1496,19 +1502,40 @@ describe('DesignCommandService', () => {
     })
 
     await service.execute({
-      operations: [{
-        kind: 'protocols.create',
-        placement: 'node',
-        owner_id: 'node_a',
-        value: {
-          type: 'Example.SymbolicProtocol',
-          parameters: [{
-            name: 'observable',
-            selectedType: symbolicType,
-            value: new VariableReference('variable_state'),
-          }],
+      operations: [
+        {
+          kind: 'protocols.create',
+          placement: 'node',
+          owner_id: 'node_a',
+          value: {
+            type: 'Example.SymbolicProtocol',
+            parameters: [{
+              name: 'observable',
+              selectedType: symbolicType,
+              value: new VariableReference('variable_state'),
+            }],
+          },
         },
-      }],
+        {
+          kind: 'protocols.create',
+          placement: 'node',
+          owner_id: 'node_a',
+          value: {
+            type: 'Example.SymbolicProtocol',
+            parameters: [{
+              name: 'observable',
+              selectedType: symbolicType,
+              value: {
+                kind: 'states_zoo',
+                state_type: 'DepolarizedBellPair',
+                parameters: {
+                  p: new VariableReference('variable_probability'),
+                },
+              },
+            }],
+          },
+        },
+      ],
     })
 
     expect(project.net.nodes[0].data.protocols[0].parameters[0]).toMatchObject({
@@ -1518,6 +1545,8 @@ describe('DesignCommandService', () => {
     })
     expect(project.net.nodes[0].data.protocols[0].parameters[0])
       .not.toHaveProperty('selectedType')
+    expect(project.net.nodes[0].data.protocols[1].parameters[0].value.parameters.p)
+      .toEqual({ kind: 'variable', id: 'variable_probability' })
   })
 
   it('stores nonblank Lambda source verbatim', async () => {
@@ -1548,10 +1577,24 @@ describe('DesignCommandService', () => {
 
   it('synchronizes weighted States Zoo trace companions atomically', async () => {
     const project = createEmptyProject('States')
-    const previewState = vi.fn(async () => ({ trace: -0.25 }))
+    project.variables.push(new Variable({
+      id: 'variable_visibility',
+      name: 'visibility',
+      type: 'Float64',
+      value: 0.75,
+    }))
+    const fetchStateTrace = vi.fn(async (_stateType, parameters, variables) => {
+      const source = variables.find(variable => variable.id === parameters.visibility.id)
+      if (source.value === 0.9) throw new Error('Preview unavailable')
+      return { trace: source.value / 2 }
+    })
     const service = serviceFor(project, {
-      statesCatalog: () => [{ id: 'WeightedBell', weighted: true }],
-      previewState,
+      statesCatalog: () => [{
+        id: 'WeightedBell',
+        weighted: true,
+        parameters: [{ name: 'visibility', min: 0, max: 1, good: 1 }],
+      }],
+      fetchStateTrace,
     })
 
     await service.execute({
@@ -1561,20 +1604,125 @@ describe('DesignCommandService', () => {
         value: {
           name: 'rho',
           state_type: 'WeightedBell',
-          parameters: { visibility: 0.5 },
+          parameters: { visibility: new VariableReference('variable_visibility') },
         },
       }],
     })
 
-    expect(previewState).toHaveBeenCalledWith('WeightedBell', { visibility: 0.5 })
+    expect(fetchStateTrace).toHaveBeenCalledWith(
+      'WeightedBell',
+      { visibility: { kind: 'variable', id: 'variable_visibility' } },
+      [expect.objectContaining({ id: 'variable_visibility', value: 0.75 })],
+    )
     expect(project.variables).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'variable_state', name: 'rho' }),
       expect.objectContaining({
         id: 'variable_state_tr',
         name: 'rho_tr',
-        value: 0.25,
+        value: 0.375,
         statesZooTraceSourceId: 'variable_state',
       }),
     ]))
+
+    await expect(service.execute({
+      operations: [{ kind: 'variables.remove', variable_id: 'variable_state_tr' }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('removed with their source state'),
+    })
+
+    await service.execute({
+      operations: [
+        {
+          kind: 'states.update',
+          variable_id: 'variable_state',
+          value: { name: 'updated_rho' },
+        },
+        ...[0.6, 0.5].map(value => ({
+          kind: 'variables.update',
+          variable_id: 'variable_visibility',
+          value: { type: 'Float64', selectedType: 'Float64', value },
+        })),
+      ],
+    })
+    expect(fetchStateTrace).toHaveBeenCalledTimes(2)
+    expect(project.variables.find(variable => variable.id === 'variable_state_tr')).toMatchObject({
+      name: 'updated_rho_tr',
+      value: 0.25,
+    })
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.update',
+        variable_id: 'variable_visibility',
+        value: { type: 'Float64', selectedType: 'Float64', value: 0.9 },
+      }],
+    })).rejects.toThrow('Preview unavailable')
+    expect(project.variables.find(variable => variable.id === 'variable_visibility').value).toBe(0.5)
+    expect(project.variables.find(variable => variable.id === 'variable_state_tr').value).toBe(0.25)
+
+    await expect(service.execute({
+      operations: [{ kind: 'variables.remove', variable_id: 'variable_visibility' }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: expect.stringContaining('Unlink this variable'),
+    })
+
+    await expect(service.execute({
+      operations: [{
+        kind: 'variables.update',
+        variable_id: 'variable_visibility',
+        value: {
+          type: 'Float64',
+          selectedType: 'expression:Float64',
+          value: { kind: 'numeric_expression', source: 'delay' },
+        },
+      }],
+    })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+    expect(project.variables.find(variable => variable.id === 'variable_visibility').value).toBe(0.5)
+    expect(project.variables.find(variable => variable.id === 'variable_state_tr').value).toBe(0.25)
+  })
+
+  it('preserves an ordinary Variable whose ID resembles an unweighted trace companion', async () => {
+    const project = createEmptyProject('Trace suffix ownership')
+    project.variables.push(new Variable({
+      id: 'state_tr',
+      name: 'ordinary suffix variable',
+      type: 'Float64',
+      value: 0.4,
+    }))
+    const service = serviceFor(project, {
+      statesCatalog: () => [{
+        id: 'UnweightedBell',
+        weighted: false,
+        parameters: [],
+      }],
+    })
+
+    await expect(service.execute({
+      operations: [{ kind: 'states.remove', variable_id: 'state_tr' }],
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      message: 'The selected variable is not a States Zoo variable.',
+    })
+
+    await service.execute({
+      operations: [{
+        kind: 'states.create',
+        id: 'state',
+        value: { name: 'rho', state_type: 'UnweightedBell', parameters: {} },
+      }],
+    })
+    await service.execute({
+      operations: [{ kind: 'states.remove', variable_id: 'state' }],
+    })
+
+    expect(project.variables).toEqual([
+      expect.objectContaining({
+        id: 'state_tr',
+        name: 'ordinary suffix variable',
+        value: 0.4,
+      }),
+    ])
   })
 })

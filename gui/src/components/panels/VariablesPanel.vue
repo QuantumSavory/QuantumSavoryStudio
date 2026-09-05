@@ -303,7 +303,7 @@ function isReferenced(variableId) {
 function deleteTitle(variableId) {
   if (props.disabled) return 'Reset the simulation to edit variables'
   if (isReferenced(variableId)) {
-    return 'Unlink this variable from protocol or background parameters before deleting it'
+    return 'Unlink this variable from constructor parameters before deleting it'
   }
   return 'Delete variable'
 }

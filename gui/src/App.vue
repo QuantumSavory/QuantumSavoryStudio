@@ -450,7 +450,11 @@ designCommands = new DesignCommandService({
   backgroundCatalog: () => api.config.value.bgNoiseOptions || [],
   protocolCatalog: () => api.config.value.protocolTypes || {},
   statesCatalog: () => api.config.value.statesZooTypes || [],
-  previewState: (stateType, parameters) => api.fetchStatesZooPreview(stateType, parameters),
+  fetchStateTrace: (stateType, parameters, variables) => api.fetchStatesZooTrace(
+    stateType,
+    parameters,
+    { variables },
+  ),
   markDirty: () => markProjectDirtyRef.value(),
   generators: {
     repeater_chain: generateRepeaterChain,
