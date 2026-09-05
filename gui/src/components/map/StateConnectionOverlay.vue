@@ -105,6 +105,7 @@ function updatePositions() {
 // Map event handlers
 let mapMoveHandler = null
 let mapZoomHandler = null
+let markerResizeObserver = null
 
 onMounted(() => {
   if (props.map && props.isVisible) {
@@ -116,6 +117,12 @@ onMounted(() => {
     props.map.on('zoom', mapZoomHandler)
     props.map.on('rotate', mapMoveHandler)
   }
+
+  const nodeElement = props.slotElement?.nodeElement
+  if (nodeElement && typeof ResizeObserver !== 'undefined') {
+    markerResizeObserver = new ResizeObserver(updatePositions)
+    markerResizeObserver.observe(nodeElement)
+  }
 })
 
 onUnmounted(() => {
@@ -124,6 +131,7 @@ onUnmounted(() => {
     props.map.off('zoom', mapZoomHandler)
     props.map.off('rotate', mapMoveHandler)
   }
+  markerResizeObserver?.disconnect()
 })
 
 // Watch for position changes

@@ -29,7 +29,7 @@ const emit = defineEmits([
 ])
 const marker = ref(null)
 const markerEl = ref(null)
-const isHovered = ref(false)
+const isDraggingMarker = ref(false)
 const isDraggingConnector = ref(false)
 const { showEntangledSlots } = useUiServices()
 let dragStartPosition = null
@@ -53,6 +53,11 @@ function currentProjectWorldPosition() {
   )
 }
 
+function setMarkerDragging(isDragging) {
+  isDraggingMarker.value = isDragging
+  markerEl.value?.classList.toggle('is-dragging', isDragging)
+}
+
 onMounted(() => {
   // Create and initialize marker
   marker.value = new maplibregl.Marker({
@@ -63,10 +68,14 @@ onMounted(() => {
   // Set marker position and add to map
   marker.value.setLngLat(props.node.position)
     .addTo(props.map)
+  // MapLibre assigns its generic marker label in addTo(). Restore the node's
+  // identity after that assignment so compact markers remain accessible.
+  markerEl.value.setAttribute('aria-label', props.node.name)
 
   // Handle drag events
   marker.value.on('dragstart', () => {
     if (props.editingLocked) return
+    setMarkerDragging(true)
     if (!dragStartPosition || !displayedDragStartPosition) {
       captureDragStartPosition()
     }
@@ -90,6 +99,7 @@ onMounted(() => {
       previousPosition: [...dragStartPosition],
       finish: () => marker.value?.setLngLat(props.node.position),
     })
+    setMarkerDragging(false)
     dragStartPosition = null
     displayedDragStartPosition = null
     emit('interactionBusy', false)
@@ -190,17 +200,6 @@ function handleConnectorMousedown(e) {
   window.addEventListener('mouseup', handleMouseup)
 }
 
-// Remove node hover handlers since we're handling it in mousemove
-function handleNodeEnter(e) {
-  e.stopPropagation() // Prevent event from reaching line layers below
-  isHovered.value = true
-}
-
-function handleNodeLeave(e) {
-  e.stopPropagation() // Prevent event from reaching line layers below
-  isHovered.value = false
-}
-
 function handleSlotClick(slot, e){
   e.stopPropagation()
   showEntangledSlots(slot.id)
@@ -214,29 +213,28 @@ function handleSlotClick(slot, e){
     class="node-marker"
     :class="[
       `node-marker--${detailLevel}`,
-      { 'is-selected': isSelected, 'is-hovered': isHovered },
+      { 'is-selected': isSelected, 'is-dragging': isDraggingMarker },
     ]"
     :data-node-id="node.id"
     :data-detail-level="detailLevel"
+    :aria-label="node.name"
+    role="button"
+    tabindex="0"
     @pointerdown="captureDragStartPosition"
     @click="handleClick"
-    @mouseenter="handleNodeEnter"
-    @mouseleave="handleNodeLeave" 
+    @keydown.enter="handleClick"
+    @keydown.space="handleClick"
     
   >
     <div 
       class="connector output" 
-      v-show="isHovered"
+      aria-hidden="true"
       @mousedown.stop="handleConnectorMousedown"
     ></div>
-    <div
-      class="node-name"
-      :aria-hidden="detailLevel !== NODE_MARKER_DETAIL.FULL && !isHovered"
-    >{{ node.name }}</div>
+    <div class="node-name">{{ node.name }}</div>
     <div
       v-if="node.data.slots.length > 0"
       class="node-slots"
-      :aria-hidden="detailLevel === NODE_MARKER_DETAIL.DOT && !isHovered"
     >
       <SlotIcon
         v-for="slot in node.data.slots"
@@ -250,6 +248,8 @@ function handleSlotClick(slot, e){
 
 <style scoped>
 .node-marker {
+  --node-marker-transition-duration: 0.15s;
+
   padding: 4px 8px;
   background-color: var(--app-color-map-node);
   border-radius: 6px;
@@ -269,12 +269,12 @@ function handleSlotClick(slot, e){
   position: absolute;
   transform: translate(-50%, -50%);
   transition:
-    background-color 0.16s ease,
-    border-radius 0.16s ease,
-    box-shadow 0.16s ease,
-    min-height 0.16s ease,
-    min-width 0.16s ease,
-    padding 0.16s ease;
+    background-color var(--node-marker-transition-duration) ease,
+    border-radius var(--node-marker-transition-duration) ease,
+    box-shadow var(--node-marker-transition-duration) ease,
+    min-height var(--node-marker-transition-duration) ease,
+    min-width var(--node-marker-transition-duration) ease,
+    padding var(--node-marker-transition-duration) ease;
   z-index: var(--app-z-map-node);
 }
 
@@ -285,20 +285,27 @@ function handleSlotClick(slot, e){
   z-index: var(--app-z-map-node-selected);
 }
 
-.node-marker.is-hovered {
+.node-marker:hover,
+.node-marker:focus-visible,
+.node-marker.is-dragging {
   background-color: var(--app-color-map-node-hover);
   box-shadow: 0 0 8px 2px var(--app-color-map-node-glow);
   z-index: var(--app-z-map-node-hover);
 }
 
-.node-marker--slots:not(.is-hovered) {
+.node-marker:focus-visible {
+  outline: 2px solid var(--app-color-on-primary);
+  outline-offset: 2px;
+}
+
+.node-marker--slots:not(:hover):not(:focus-visible):not(.is-dragging) {
   min-width: 24px;
   min-height: 24px;
   padding: 3px 5px;
   border-radius: 12px;
 }
 
-.node-marker--dot:not(.is-hovered) {
+.node-marker--dot:not(:hover):not(:focus-visible):not(.is-dragging) {
   width: 16px;
   min-width: 16px;
   height: 16px;
@@ -334,25 +341,23 @@ function handleSlotClick(slot, e){
   transform: scale(1);
   visibility: visible;
   transition:
-    max-width 0.16s ease,
-    opacity 0.16s ease,
-    transform 0.16s ease,
+    max-width var(--node-marker-transition-duration) ease,
+    opacity var(--node-marker-transition-duration) ease,
+    transform var(--node-marker-transition-duration) ease,
     visibility 0s linear;
 }
 
-.node-marker--slots:not(.is-hovered) .node-name,
-.node-marker--dot:not(.is-hovered) .node-name,
-.node-marker--dot:not(.is-hovered) .node-slots {
+:is(.node-marker--slots, .node-marker--dot):not(:hover):not(:focus-visible):not(.is-dragging) .node-name,
+.node-marker--dot:not(:hover):not(:focus-visible):not(.is-dragging) .node-slots {
   max-width: 0;
   opacity: 0;
   pointer-events: none;
   transform: scale(0.75);
   visibility: hidden;
-  transition-delay: 0s, 0s, 0s, 0.16s;
+  transition-delay: 0s, 0s, 0s, var(--node-marker-transition-duration);
 }
 
-.node-marker--slots:not(.is-hovered) .node-slots,
-.node-marker--dot:not(.is-hovered) .node-slots {
+:is(.node-marker--slots, .node-marker--dot):not(:hover):not(:focus-visible):not(.is-dragging) .node-slots {
   margin-left: 0;
 }
 
@@ -366,6 +371,22 @@ function handleSlotClick(slot, e){
   transform: translateY(-50%);
   cursor: crosshair;
   z-index: 1;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.node-marker:hover .connector,
+.node-marker:focus-visible .connector,
+.node-marker.is-dragging .connector {
+  pointer-events: auto;
+  visibility: visible;
+  transition: visibility 0s linear var(--node-marker-transition-duration);
+}
+
+.node-marker.is-dragging,
+.node-marker.is-dragging .node-name,
+.node-marker.is-dragging .node-slots {
+  transition-duration: 0s;
 }
 
 .connector:hover {
@@ -394,10 +415,8 @@ function handleSlotClick(slot, e){
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-marker,
-  .node-name,
-  .node-slots {
-    transition-duration: 0.01ms;
+  .node-marker {
+    --node-marker-transition-duration: 0.01ms;
   }
 }
 </style>

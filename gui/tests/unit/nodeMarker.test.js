@@ -57,6 +57,7 @@ describe('NodeMarker', () => {
     marker.position = { lng: 289, lat: 42 }
     await wrapper.get('.node-marker').trigger('pointerdown')
     marker.handlers.get('dragstart')()
+    expect(wrapper.get('.node-marker').classes()).toContain('is-dragging')
     marker.position = { lng: 290, lat: 43 }
     marker.handlers.get('drag')()
 
@@ -69,6 +70,7 @@ describe('NodeMarker', () => {
 
     marker.position = { lng: 541, lat: 43 }
     marker.handlers.get('dragend')()
+    expect(wrapper.get('.node-marker').classes()).not.toContain('is-dragging')
     const change = wrapper.emitted('nodePositionChanged').at(-1)[0]
     expect(change).toMatchObject({
       node,
@@ -83,7 +85,7 @@ describe('NodeMarker', () => {
     wrapper.unmount()
   })
 
-  it('retains hidden register details and reveals them only while hovered', async () => {
+  it('retains register details across compact levels and supports keyboard selection', async () => {
     const node = new Node({
       id: 'node-a',
       name: 'Alice',
@@ -109,26 +111,19 @@ describe('NodeMarker', () => {
       },
     })
     const marker = wrapper.get('.node-marker')
+    const slotElements = wrapper.findAll('.slot-icon').map(slot => slot.element)
 
     expect(marker.attributes('data-detail-level')).toBe(NODE_MARKER_DETAIL.DOT)
-    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
-    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('true')
+    expect(marker.attributes('role')).toBe('button')
+    expect(marker.attributes('tabindex')).toBe('0')
+    expect(marker.attributes('aria-label')).toBe('Alice')
     expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
-
-    await marker.trigger('mouseenter')
-    expect(marker.classes()).toContain('is-hovered')
-    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('false')
-    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('false')
-
-    await marker.trigger('mouseleave')
-    expect(marker.classes()).not.toContain('is-hovered')
-    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
-    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('true')
 
     await wrapper.setProps({ detailLevel: NODE_MARKER_DETAIL.SLOTS })
-    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
-    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('false')
-    expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
+    expect(wrapper.findAll('.slot-icon').map(slot => slot.element)).toEqual(slotElements)
+
+    await marker.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('select')).toEqual([[node, 'node']])
     wrapper.unmount()
   })
 })

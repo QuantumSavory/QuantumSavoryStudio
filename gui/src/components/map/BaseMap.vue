@@ -92,10 +92,13 @@ function updateNodeMarkerDetails() {
       }]
     }),
   )
-  markerDetailLevels.value = nodeMarkerDetailLevels(
+  const nextLevels = nodeMarkerDetailLevels(
     props.nodes,
     node => displayedCenters.get(node.id),
   )
+  const levelsChanged = nextLevels.size !== markerDetailLevels.value.size
+    || [...nextLevels].some(([nodeId, level]) => markerDetailLevels.value.get(nodeId) !== level)
+  if (levelsChanged) markerDetailLevels.value = nextLevels
 }
 
 function scheduleNodeMarkerDetails() {
@@ -501,7 +504,6 @@ function handleNodePositionPreview(change) {
       // reject an invalid final position and surface the standard alert.
     }
   }
-  scheduleNodeMarkerDetails()
   if (isStateVisible.value && activeSlotConnectionState.value) {
     // Update slot connection positions when a node moves
     updateSlotConnectionPositions()
@@ -510,6 +512,7 @@ function handleNodePositionPreview(change) {
 
 function handleNodePositionChanged(change) {
   handleNodePositionPreview(change)
+  scheduleNodeMarkerDetails()
   const finishMarkerDrag = change.finish
   emit('node-position-changed', {
     ...change,

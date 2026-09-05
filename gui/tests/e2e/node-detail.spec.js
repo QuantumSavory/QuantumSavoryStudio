@@ -81,13 +81,66 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
       .split(',')
       .some(duration => Number.parseFloat(duration) > 0)
   ))).toBe(true)
+  await expect(markers.first()).toHaveAttribute('role', 'button')
+  await expect(markers.first()).toHaveAttribute('aria-label', 'Node 1')
 
   await markers.first().hover()
   await expect(markers.first().locator('.node-name')).toBeVisible()
   await expect(markers.first().locator('.slot-icon')).toHaveCount(2)
   await expect(markers.first().locator('.slot-icon').first()).toBeVisible()
 
-  await page.mouse.move(20, 20)
+  const hoveredBounds = await markers.first().boundingBox()
+  await page.evaluate(() => {
+    const setup = document.querySelector('#app').__vue_app__._instance.setupState
+    const exposedMap = setup.baseMapInstance?.map
+    const map = exposedMap?.value ?? exposedMap
+    map.panBy([400, 0], { duration: 0 })
+  })
+  await expect.poll(async () => (await markers.first().boundingBox()).x)
+    .toBeLessThan(hoveredBounds.x - 300)
   await expect(markers.first().locator('.node-name')).toBeHidden()
+
+  await markers.first().focus()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(markers.first()).toBeFocused()
+  await expect(markers.first().locator('.node-name')).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(markers.first()).toHaveClass(/is-selected/)
+  await page.getByRole('button', { name: 'Menu' }).first().focus()
+  await expect(markers.first().locator('.node-name')).toBeHidden()
+
+  const stateShown = await page.evaluate(() => {
+    const setup = document.querySelector('#app').__vue_app__._instance.setupState
+    const baseMap = setup.baseMapInstance?.value ?? setup.baseMapInstance
+    const node = setup.projectData.net.nodes[0]
+    return baseMap.showSlotConnectionState({
+      id: 'node-detail-state',
+      slots: [{ nodeId: node.id, slotId: node.data.slots[0].id }],
+    })
+  })
+  expect(stateShown).toBe(true)
+  await expect(page.locator('.connection-line')).toHaveCount(1)
+
+  const slotConnectionOffset = () => page.evaluate(() => {
+    const mapBounds = document.querySelector('.map-container').getBoundingClientRect()
+    const slotBounds = document.querySelector('.node-marker .slot-icon').getBoundingClientRect()
+    const line = document.querySelector('.connection-line')
+    return Math.hypot(
+      Number(line.getAttribute('x1')) - (slotBounds.left + slotBounds.width / 2 - mapBounds.left),
+      Number(line.getAttribute('y1')) - (slotBounds.top + slotBounds.height / 2 - mapBounds.top),
+    )
+  })
+  await expect.poll(slotConnectionOffset).toBeLessThan(1)
+
+  await markers.first().focus()
+  await expect.poll(async () => (await markers.first().boundingBox()).width)
+    .toBeGreaterThan(dotBounds.width + 20)
+  await expect.poll(slotConnectionOffset).toBeLessThan(1)
+
+  await page.getByRole('button', { name: 'Menu' }).first().focus()
+  await expect.poll(async () => (await markers.first().boundingBox()).width)
+    .toBeLessThan(dotBounds.width + 1)
+  await expect.poll(slotConnectionOffset).toBeLessThan(1)
   await expect(markers.locator('.slot-icon')).toHaveCount(4)
 })
