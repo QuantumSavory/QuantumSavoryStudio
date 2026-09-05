@@ -42,7 +42,7 @@
   @testset "contract version authority" begin
     contract = WebQuantumSavory.JSON.parsefile(WebQuantumSavory.MCP_CONTRACT_FILE)
     @test WebQuantumSavory.MCP_CONTRACT_VERSION == contract["contract_version"]
-    @test WebQuantumSavory.MCP_CONTRACT_VERSION == 2
+    @test WebQuantumSavory.MCP_CONTRACT_VERSION == 3
   end
 
   @testset "binding admits the MCP version before inspecting other fields" begin
@@ -53,7 +53,7 @@
     original_hash = hub.snapshot_hash
     original_revision = hub.revision
 
-    for received_version in Any[nothing, true, "2", 1, 3, 2.5]
+    for received_version in Any[nothing, true, "3", 1, 2, 4, 3.5]
       request = Dict{String,Any}(
         "contract_version" => received_version,
         "editor_id" => "",
@@ -76,7 +76,7 @@
       @test mismatch.details["details"] == Dict{String,Any}(
         "contract" => "mcp",
         "received_version" => received_version,
-        "supported_versions" => [2],
+        "supported_versions" => [3],
       )
       @test hub.binding === original_binding
       @test hub.snapshot == original_snapshot

@@ -73,7 +73,7 @@ end
     validators = compile_input_schemas(contract)
     tools = load_tools(Dict{String,Any}(); result_handler=handler)
 
-    @test contract["contract_version"] == 2
+    @test contract["contract_version"] == 3
     @test length(validators) == length(contract["tools"])
     @test length(tools) == 15
     @test getfield(first(tools), :name) == "design_get"
@@ -145,6 +145,52 @@ end
     @test valid_edit == "design_edit"
     @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
 
+    function repeater_edit(operation_id, options)
+        getfield(design_edit, :handler)(Dict{String,Any}(
+            "operation_id" => operation_id,
+            "expected_revision" => 0,
+            "operations" => Any[Dict{String,Any}(
+                "kind" => "network.generate",
+                "value" => Dict(
+                    "generator" => "repeater_chain",
+                    "options" => options,
+                ),
+            )],
+        ))
+    end
+
+    repeater_options = Dict{String,Any}(
+        "startNodeId" => "node-start",
+        "endNodeId" => "node-end",
+        "repeaterCount" => 2,
+        "automation" => Dict(
+            "swapper" => Dict(
+                "enabled" => true,
+                "predicateStrategy" => "custom",
+            ),
+        ),
+    )
+    @test repeater_edit("repeater-without-template", repeater_options) == "design_edit"
+    @test repeater_edit(
+        "repeater-with-null-template",
+        merge(repeater_options, Dict("templateNodeId" => nothing)),
+    ) == "design_edit"
+
+    legacy_repeater = repeater_edit(
+        "repeater-with-edge-selector",
+        merge(repeater_options, Dict("templateEdgeId" => "edge-template")),
+    )
+    @test getfield(legacy_repeater, :is_error)
+    @test getfield(legacy_repeater, :structured_content)["code"] ==
+        "VALIDATION_FAILED"
+
+    legacy_strategy = deepcopy(repeater_options)
+    legacy_strategy["automation"]["swapper"]["predicateStrategy"] = "template"
+    legacy_repeater = repeater_edit("repeater-with-template-strategy", legacy_strategy)
+    @test getfield(legacy_repeater, :is_error)
+    @test getfield(legacy_repeater, :structured_content)["code"] ==
+        "VALIDATION_FAILED"
+
     malformed_edit = getfield(design_edit, :handler)(Dict{String,Any}(
         "operation_id" => "create-node",
         "expected_revision" => 0,
@@ -158,7 +204,13 @@ end
         "VALIDATION_FAILED"
     @test getfield(malformed_edit, :structured_content)["details"]["contract_path"] ==
         "/operations/0"
-    @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
+    @test dispatched == [
+        "catalog_list",
+        "simulation_logs",
+        "design_edit",
+        "design_edit",
+        "design_edit",
+    ]
 
     catalog_get = only(filter(tool -> getfield(tool, :name) == "catalog_get", tools))
     invalid = getfield(catalog_get, :handler)(Dict{String,Any}("kind" => "protocols"))
@@ -169,7 +221,13 @@ end
         "retryable" => false,
         "details" => Dict{String,Any}("contract_path" => "/type"),
     )
-    @test dispatched == ["catalog_list", "simulation_logs", "design_edit"]
+    @test dispatched == [
+        "catalog_list",
+        "simulation_logs",
+        "design_edit",
+        "design_edit",
+        "design_edit",
+    ]
 
     @test_throws ErrorException validate_schema_keywords!(
         Dict{String,Any}("prefixItems" => Any[]),
