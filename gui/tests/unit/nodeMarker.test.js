@@ -31,10 +31,11 @@ vi.mock('maplibre-gl', () => {
 import NodeMarker from '../../src/components/map/NodeMarker.vue'
 import { UI_SERVICES_KEY } from '../../src/composables/uiServices'
 import Node from '../../src/models/Node'
+import { NODE_MARKER_DETAIL } from '../../src/utils/mapMarkers'
 
 beforeEach(() => markerInstances.splice(0))
 
-describe('NodeMarker dragging', () => {
+describe('NodeMarker', () => {
   it('previews without mutating project state and restores an invalid wrapped move', async () => {
     const node = new Node({
       id: 'node-a',
@@ -79,5 +80,55 @@ describe('NodeMarker dragging', () => {
     change.finish()
     expect(marker.position).toEqual({ lng: -71, lat: 42 })
     expect(wrapper.emitted('interactionBusy')).toEqual([[true], [false]])
+    wrapper.unmount()
+  })
+
+  it('retains hidden register details and reveals them only while hovered', async () => {
+    const node = new Node({
+      id: 'node-a',
+      name: 'Alice',
+      position: [-71, 42],
+      data: {
+        slots: [
+          { id: 'qubit', type: 'Qubit', assignment: true, isLocked: false },
+          { id: 'qumode', type: 'Qumode', assignment: false, isLocked: true },
+        ],
+        protocols: [],
+      },
+    })
+    const wrapper = mount(NodeMarker, {
+      props: {
+        node,
+        map: {},
+        detailLevel: NODE_MARKER_DETAIL.DOT,
+      },
+      global: {
+        provide: {
+          [UI_SERVICES_KEY]: { showEntangledSlots: vi.fn() },
+        },
+      },
+    })
+    const marker = wrapper.get('.node-marker')
+
+    expect(marker.attributes('data-detail-level')).toBe(NODE_MARKER_DETAIL.DOT)
+    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
+
+    await marker.trigger('mouseenter')
+    expect(marker.classes()).toContain('is-hovered')
+    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('false')
+    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('false')
+
+    await marker.trigger('mouseleave')
+    expect(marker.classes()).not.toContain('is-hovered')
+    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('true')
+
+    await wrapper.setProps({ detailLevel: NODE_MARKER_DETAIL.SLOTS })
+    expect(wrapper.get('.node-name').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.node-slots').attributes('aria-hidden')).toBe('false')
+    expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
+    wrapper.unmount()
   })
 })

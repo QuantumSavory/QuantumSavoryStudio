@@ -110,6 +110,72 @@ describe('BaseMap initialization', () => {
     return map
   }
 
+  async function nextFrame() {
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    await nextTick()
+  }
+
+  it('recomputes node detail from displayed marker distance', async () => {
+    const map = makeInteractiveMap()
+    const nodeA = new Node({ id: 'a', name: 'A', position: [0, 0] })
+    const nodeB = new Node({ id: 'b', name: 'B', position: [20, 0] })
+    let screenScale = 10
+    const markerBounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function () {
+        const node = this.dataset.nodeId === nodeA.id
+          ? nodeA
+          : this.dataset.nodeId === nodeB.id
+            ? nodeB
+            : null
+        const left = (node?.position[0] ?? 0) * screenScale
+        return { left, top: 0, width: 0, height: 0 }
+      })
+    const NodeMarkerStub = {
+      name: 'NodeMarker',
+      props: ['node', 'detailLevel'],
+      template: '<div class="node-marker" :data-node-id="node.id" />',
+    }
+    mapConstructor.mockImplementation(() => map)
+    wrapper = mount(BaseMap, {
+      props: { nodes: [nodeA, nodeB] },
+      global: {
+        stubs: {
+          NodeMarker: NodeMarkerStub,
+          StateNode: true,
+          StateConnectionOverlay: true,
+        },
+      },
+    })
+    map.handlers.get('load')()
+    await nextTick()
+    await nextFrame()
+
+    const detailLevels = () => wrapper.findAllComponents(NodeMarkerStub)
+      .map(marker => marker.props('detailLevel'))
+    expect(detailLevels()).toEqual(['full', 'full'])
+
+    screenScale = 4
+    map.handlers.get('move')()
+    await nextFrame()
+    expect(detailLevels()).toEqual(['slots', 'slots'])
+
+    screenScale = 2
+    map.handlers.get('move')()
+    await nextFrame()
+    expect(detailLevels()).toEqual(['dot', 'dot'])
+
+    nodeB.position = [80, 0]
+    await wrapper.setProps({ nodes: [nodeA, nodeB] })
+    await nextFrame()
+    expect(detailLevels()).toEqual(['full', 'full'])
+
+    const moveHandler = map.handlers.get('move')
+    wrapper.unmount()
+    wrapper = undefined
+    expect(map.off).toHaveBeenCalledWith('move', moveHandler)
+    markerBounds.mockRestore()
+  })
+
   it('creates one canonical annotation on a wrapped world copy without background deselection', async () => {
     const map = makeInteractiveMap()
     mapConstructor.mockImplementation(() => map)

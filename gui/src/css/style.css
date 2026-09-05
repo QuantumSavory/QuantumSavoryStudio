@@ -26,6 +26,11 @@
   --app-color-warning-text: #8a4b08;
   --app-color-qubit: #48ca82;
   --app-color-qmode: #ffac2d;
+  --app-color-map-node: #76769e;
+  --app-color-map-node-hover: #484ab2;
+  --app-color-map-node-selected: #2d2e81;
+  --app-color-map-node-glow: #6e6fd3;
+  --app-color-map-node-selected-glow: #8586f6;
   --app-color-tag-named: #3730a3;
   --app-color-tag-named-soft: #e8e8ff;
   --app-color-tag-general: #0f5f57;
@@ -53,6 +58,7 @@
   --app-z-map-handle: 30;
   --app-z-map-node: 40;
   --app-z-map-node-selected: 41;
+  --app-z-map-node-hover: 42;
   --app-z-map-state-connection: 1000;
   --app-z-map-state-node: 1001;
   --app-shadow-dialog: 0 2px 16px rgba(0, 0, 0, 0.13);

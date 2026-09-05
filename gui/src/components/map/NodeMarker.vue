@@ -1,16 +1,21 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import maplibregl from 'maplibre-gl'
-import Slot from '../../models/Slot'
 import SlotIcon from './SlotIcon.vue';
 import { useUiServices } from '../../composables/uiServices'
 import { positionInProjectWorld } from '../../utils/mapCoordinates'
+import { NODE_MARKER_DETAIL } from '../../utils/mapMarkers'
 
 const props = defineProps({
   node: {       type: Object,   required: true },
   map: {        type: Object,   required: true },
   isSelected: { type: Boolean,  default: false },
-  editingLocked: { type: Boolean, default: false }
+  editingLocked: { type: Boolean, default: false },
+  detailLevel: {
+    type: String,
+    default: NODE_MARKER_DETAIL.FULL,
+    validator: value => Object.values(NODE_MARKER_DETAIL).includes(value),
+  },
 })
 
 const emit = defineEmits([
@@ -26,7 +31,6 @@ const marker = ref(null)
 const markerEl = ref(null)
 const isHovered = ref(false)
 const isDraggingConnector = ref(false)
-const slots = ref([])
 const { showEntangledSlots } = useUiServices()
 let dragStartPosition = null
 let displayedDragStartPosition = null
@@ -108,13 +112,6 @@ onUnmounted(() => {
     marker.value.remove()
   }
 })
-
-// Update marker if node position changes externally
-function updatePosition(position) {
-  if (marker.value) {
-    marker.value.setLngLat(position)
-  }
-}
 
 // Handle click
 function handleClick(e) {
@@ -209,17 +206,18 @@ function handleSlotClick(slot, e){
   showEntangledSlots(slot.id)
 }
 
-
-// Expose methods to parent
-defineExpose({ updatePosition })
 </script>
 
 <template>
   <div 
     ref="markerEl"
     class="node-marker"
-    :class="{ 'is-selected': isSelected, 'is-hovered': isHovered }"
+    :class="[
+      `node-marker--${detailLevel}`,
+      { 'is-selected': isSelected, 'is-hovered': isHovered },
+    ]"
     :data-node-id="node.id"
+    :data-detail-level="detailLevel"
     @pointerdown="captureDragStartPosition"
     @click="handleClick"
     @mouseenter="handleNodeEnter"
@@ -231,56 +229,34 @@ defineExpose({ updatePosition })
       v-show="isHovered"
       @mousedown.stop="handleConnectorMousedown"
     ></div>
-    <div class="node-name">{{ node.name }}</div>
-    <div style="margin-left: 10px;" v-if="node.data.slots.length > 0">
-      <div style="display: flex; flex-direction: row; max-width:120px; flex-wrap: wrap;">
-        <SlotIcon 
-          v-for="slot in node.data.slots"
-          :key="slot.id" 
-          :registerSlot="slot" 
-          :node="node" 
-          @click="handleSlotClick(slot, $event  )"
-         
-          />
-      </div>
+    <div
+      class="node-name"
+      :aria-hidden="detailLevel !== NODE_MARKER_DETAIL.FULL && !isHovered"
+    >{{ node.name }}</div>
+    <div
+      v-if="node.data.slots.length > 0"
+      class="node-slots"
+      :aria-hidden="detailLevel === NODE_MARKER_DETAIL.DOT && !isHovered"
+    >
+      <SlotIcon
+        v-for="slot in node.data.slots"
+        :key="slot.id"
+        :registerSlot="slot"
+        @click="handleSlotClick(slot, $event)"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.slot {
-  background: #ffffff;
-  width: 9px;
-  height: 9px;
-  position: relative;
-  margin: 1px;
-  border: 1px solid transparent; 
-  border-radius: 1px;
-}
-
-.slot::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 150%; 
-  height: 1px; 
-  background: #fff; 
-  transform: rotate(45deg);
-  transform-origin: top left;
-}
-
-.slot:hover{
-  border: solid 1px #fff;
-}
 .node-marker {
   padding: 4px 8px;
-  background-color: #76769e;
+  background-color: var(--app-color-map-node);
   border-radius: 6px;
   border: 2px solid transparent;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  box-shadow: var(--app-shadow-marker);
   cursor: pointer;
-  color: white;
+  color: var(--app-color-on-primary);
   font-size: 1rem;
   font-weight: 500;
   white-space: nowrap;
@@ -292,28 +268,92 @@ defineExpose({ updatePosition })
   min-height: 30px;
   position: absolute;
   transform: translate(-50%, -50%);
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  transition:
+    background-color 0.16s ease,
+    border-radius 0.16s ease,
+    box-shadow 0.16s ease,
+    min-height 0.16s ease,
+    min-width 0.16s ease,
+    padding 0.16s ease;
   z-index: var(--app-z-map-node);
 }
 
 .node-marker.is-selected {
-  background-color: #2d2e81;
-  box-shadow: 0 0px 10px 3px #8586f6;
+  background-color: var(--app-color-map-node-selected);
+  box-shadow: 0 0 10px 3px var(--app-color-map-node-selected-glow);
   font-weight: 600;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
   z-index: var(--app-z-map-node-selected);
 }
 
 .node-marker.is-hovered {
-  background-color: #484ab2;
-  box-shadow: 0 0px 8px 2px #6e6fd3;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  background-color: var(--app-color-map-node-hover);
+  box-shadow: 0 0 8px 2px var(--app-color-map-node-glow);
+  z-index: var(--app-z-map-node-hover);
+}
+
+.node-marker--slots:not(.is-hovered) {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 3px 5px;
+  border-radius: 12px;
+}
+
+.node-marker--dot:not(.is-hovered) {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  background-color: var(--app-color-map-node);
+  box-shadow: var(--app-shadow-marker);
+  font-weight: 500;
+  z-index: var(--app-z-map-node);
 }
 
 .node-name {
+  max-width: 100vw;
+  overflow: hidden;
   margin: 0;
   padding: 0;
   line-height: 1.2;
+}
+
+.node-slots {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: 120px;
+  margin-left: 10px;
+  overflow: hidden;
+}
+
+.node-name,
+.node-slots {
+  opacity: 1;
+  transform: scale(1);
+  visibility: visible;
+  transition:
+    max-width 0.16s ease,
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0s linear;
+}
+
+.node-marker--slots:not(.is-hovered) .node-name,
+.node-marker--dot:not(.is-hovered) .node-name,
+.node-marker--dot:not(.is-hovered) .node-slots {
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.75);
+  visibility: hidden;
+  transition-delay: 0s, 0s, 0s, 0.16s;
+}
+
+.node-marker--slots:not(.is-hovered) .node-slots,
+.node-marker--dot:not(.is-hovered) .node-slots {
+  margin-left: 0;
 }
 
 .connector {
@@ -351,5 +391,13 @@ defineExpose({ updatePosition })
 
 .is-selected .connector {
   border-color: #4345ac;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-marker,
+  .node-name,
+  .node-slots {
+    transition-duration: 0.01ms;
+  }
 }
 </style>
