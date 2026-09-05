@@ -31,10 +31,11 @@ vi.mock('maplibre-gl', () => {
 import NodeMarker from '../../src/components/map/NodeMarker.vue'
 import { UI_SERVICES_KEY } from '../../src/composables/uiServices'
 import Node from '../../src/models/Node'
+import { NODE_MARKER_DETAIL } from '../../src/utils/mapMarkers'
 
 beforeEach(() => markerInstances.splice(0))
 
-describe('NodeMarker dragging', () => {
+describe('NodeMarker', () => {
   it('previews without mutating project state and restores an invalid wrapped move', async () => {
     const node = new Node({
       id: 'node-a',
@@ -56,6 +57,7 @@ describe('NodeMarker dragging', () => {
     marker.position = { lng: 289, lat: 42 }
     await wrapper.get('.node-marker').trigger('pointerdown')
     marker.handlers.get('dragstart')()
+    expect(wrapper.get('.node-marker').classes()).toContain('is-dragging')
     marker.position = { lng: 290, lat: 43 }
     marker.handlers.get('drag')()
 
@@ -66,8 +68,10 @@ describe('NodeMarker dragging', () => {
     })
     expect(node.position).toEqual([-71, 42])
 
+    await wrapper.setProps({ editingLocked: true })
     marker.position = { lng: 541, lat: 43 }
     marker.handlers.get('dragend')()
+    expect(wrapper.get('.node-marker').classes()).not.toContain('is-dragging')
     const change = wrapper.emitted('nodePositionChanged').at(-1)[0]
     expect(change).toMatchObject({
       node,
@@ -79,5 +83,49 @@ describe('NodeMarker dragging', () => {
     change.finish()
     expect(marker.position).toEqual({ lng: -71, lat: 42 })
     expect(wrapper.emitted('interactionBusy')).toEqual([[true], [false]])
+    wrapper.unmount()
+  })
+
+  it('retains register details across compact levels and supports keyboard selection', async () => {
+    const node = new Node({
+      id: 'node-a',
+      name: 'Alice',
+      position: [-71, 42],
+      data: {
+        slots: [
+          { id: 'qubit', type: 'Qubit', assignment: true, isLocked: false },
+          { id: 'qumode', type: 'Qumode', assignment: false, isLocked: true },
+        ],
+        protocols: [],
+      },
+    })
+    const wrapper = mount(NodeMarker, {
+      props: {
+        node,
+        map: {},
+        detailLevel: NODE_MARKER_DETAIL.DOT,
+      },
+      global: {
+        provide: {
+          [UI_SERVICES_KEY]: { showEntangledSlots: vi.fn() },
+        },
+      },
+    })
+    const marker = wrapper.get('.node-marker')
+    const slotElements = wrapper.findAll('.slot-icon').map(slot => slot.element)
+
+    expect(marker.attributes('data-detail-level')).toBe(NODE_MARKER_DETAIL.DOT)
+    expect(marker.attributes('role')).toBe('button')
+    expect(marker.attributes('tabindex')).toBe('0')
+    expect(marker.attributes('aria-label')).toBe('Alice')
+    expect(marker.attributes('aria-pressed')).toBe('false')
+    expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
+
+    await wrapper.setProps({ detailLevel: NODE_MARKER_DETAIL.SLOTS })
+    expect(wrapper.findAll('.slot-icon').map(slot => slot.element)).toEqual(slotElements)
+
+    await marker.trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('select')).toEqual([[node, 'node']])
+    wrapper.unmount()
   })
 })

@@ -9,6 +9,8 @@
   parameters, including live preview and weighted-state trace updates.
 - Restored simulation routes for project names containing spaces after an
   upstream URI parser compatibility change.
+- Made dense map nodes progressively hide names and collapse register slots into
+  uniform dots based on screen-space proximity, with full details restored on hover.
 - Expanded QuantumSavory compatibility to include the 0.8 development line.
 - Updated the Repeater Chain Generator to support chains without a repeater template,
   infer the only eligible template edge from the start node, and restrict protocol

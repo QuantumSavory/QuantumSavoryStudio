@@ -1,16 +1,21 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import maplibregl from 'maplibre-gl'
-import Slot from '../../models/Slot'
 import SlotIcon from './SlotIcon.vue';
 import { useUiServices } from '../../composables/uiServices'
 import { positionInProjectWorld } from '../../utils/mapCoordinates'
+import { NODE_MARKER_DETAIL } from '../../utils/mapMarkers'
 
 const props = defineProps({
   node: {       type: Object,   required: true },
   map: {        type: Object,   required: true },
   isSelected: { type: Boolean,  default: false },
-  editingLocked: { type: Boolean, default: false }
+  editingLocked: { type: Boolean, default: false },
+  detailLevel: {
+    type: String,
+    default: NODE_MARKER_DETAIL.FULL,
+    validator: value => Object.values(NODE_MARKER_DETAIL).includes(value),
+  },
 })
 
 const emit = defineEmits([
@@ -25,11 +30,14 @@ const emit = defineEmits([
 const marker = ref(null)
 const markerEl = ref(null)
 const isHovered = ref(false)
+const isDraggingMarker = ref(false)
 const isDraggingConnector = ref(false)
-const slots = ref([])
 const { showEntangledSlots } = useUiServices()
 let dragStartPosition = null
 let displayedDragStartPosition = null
+let pointerPosition = null
+let hoverCheckFrame = null
+let watchesMapMovement = false
 
 function markerPosition() {
   const position = marker.value?.getLngLat()
@@ -49,6 +57,61 @@ function currentProjectWorldPosition() {
   )
 }
 
+function rememberPointerPosition(event) {
+  if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+    pointerPosition = { x: event.clientX, y: event.clientY }
+  }
+}
+
+function scheduleHoverCheck() {
+  if (hoverCheckFrame !== null) return
+  hoverCheckFrame = requestAnimationFrame(() => {
+    hoverCheckFrame = null
+    const target = pointerPosition
+      ? document.elementFromPoint(pointerPosition.x, pointerPosition.y)
+      : null
+    setHovered(target?.closest?.('.node-marker') === markerEl.value)
+  })
+}
+
+function setHovered(hovered) {
+  isHovered.value = hovered
+  if (hovered && !watchesMapMovement) {
+    props.map.on('move', scheduleHoverCheck)
+    watchesMapMovement = true
+  } else if (!hovered && watchesMapMovement) {
+    props.map.off('move', scheduleHoverCheck)
+    watchesMapMovement = false
+  }
+}
+
+function handlePointerEnter(event) {
+  rememberPointerPosition(event)
+  setHovered(true)
+}
+
+function handlePointerDown(event) {
+  rememberPointerPosition(event)
+  captureDragStartPosition()
+}
+
+function handlePointerLeave(event) {
+  rememberPointerPosition(event)
+  setHovered(false)
+}
+
+function setMarkerDragging(isDragging) {
+  isDraggingMarker.value = isDragging
+  markerEl.value?.classList.toggle('is-dragging', isDragging)
+  if (isDragging) {
+    setHovered(false)
+    window.addEventListener('pointermove', rememberPointerPosition, { passive: true })
+  } else {
+    window.removeEventListener('pointermove', rememberPointerPosition)
+    scheduleHoverCheck()
+  }
+}
+
 onMounted(() => {
   // Create and initialize marker
   marker.value = new maplibregl.Marker({
@@ -59,10 +122,14 @@ onMounted(() => {
   // Set marker position and add to map
   marker.value.setLngLat(props.node.position)
     .addTo(props.map)
+  // MapLibre assigns its generic marker label in addTo(). Restore the node's
+  // identity after that assignment so compact markers remain accessible.
+  markerEl.value.setAttribute('aria-label', props.node.name)
 
   // Handle drag events
   marker.value.on('dragstart', () => {
     if (props.editingLocked) return
+    setMarkerDragging(true)
     if (!dragStartPosition || !displayedDragStartPosition) {
       captureDragStartPosition()
     }
@@ -70,7 +137,7 @@ onMounted(() => {
   })
 
   marker.value.on('drag', () => {
-    if (props.editingLocked) return
+    if (props.editingLocked && !isDraggingMarker.value) return
     emit('nodePositionPreview', {
       node: props.node,
       position: currentProjectWorldPosition(),
@@ -79,13 +146,17 @@ onMounted(() => {
   })
 
   marker.value.on('dragend', () => {
-    if (props.editingLocked) return
+    if (props.editingLocked && !isDraggingMarker.value) return
     emit('nodePositionChanged', {
       node: props.node,
       position: currentProjectWorldPosition(),
       previousPosition: [...dragStartPosition],
-      finish: () => marker.value?.setLngLat(props.node.position),
+      finish: () => {
+        marker.value?.setLngLat(props.node.position)
+        scheduleHoverCheck()
+      },
     })
+    setMarkerDragging(false)
     dragStartPosition = null
     displayedDragStartPosition = null
     emit('interactionBusy', false)
@@ -99,22 +170,21 @@ watch(
 
 watch(
   () => props.node.position,
-  position => marker.value?.setLngLat(position),
+  position => {
+    marker.value?.setLngLat(position)
+    if (isHovered.value) scheduleHoverCheck()
+  },
   { deep: true },
 )
 
 onUnmounted(() => {
+  if (watchesMapMovement) props.map.off('move', scheduleHoverCheck)
+  if (hoverCheckFrame !== null) cancelAnimationFrame(hoverCheckFrame)
+  window.removeEventListener('pointermove', rememberPointerPosition)
   if (marker.value) {
     marker.value.remove()
   }
 })
-
-// Update marker if node position changes externally
-function updatePosition(position) {
-  if (marker.value) {
-    marker.value.setLngLat(position)
-  }
-}
 
 // Handle click
 function handleClick(e) {
@@ -193,94 +263,71 @@ function handleConnectorMousedown(e) {
   window.addEventListener('mouseup', handleMouseup)
 }
 
-// Remove node hover handlers since we're handling it in mousemove
-function handleNodeEnter(e) {
-  e.stopPropagation() // Prevent event from reaching line layers below
-  isHovered.value = true
-}
-
-function handleNodeLeave(e) {
-  e.stopPropagation() // Prevent event from reaching line layers below
-  isHovered.value = false
-}
-
 function handleSlotClick(slot, e){
   e.stopPropagation()
   showEntangledSlots(slot.id)
 }
 
-
-// Expose methods to parent
-defineExpose({ updatePosition })
 </script>
 
 <template>
   <div 
     ref="markerEl"
     class="node-marker"
-    :class="{ 'is-selected': isSelected, 'is-hovered': isHovered }"
+    :class="[
+      `node-marker--${detailLevel}`,
+      {
+        'is-selected': isSelected,
+        'is-hovered': isHovered,
+        'is-dragging': isDraggingMarker,
+      },
+    ]"
     :data-node-id="node.id"
-    @pointerdown="captureDragStartPosition"
+    :data-detail-level="detailLevel"
+    :aria-label="node.name"
+    :aria-pressed="isSelected"
+    role="button"
+    tabindex="0"
+    @pointerenter="handlePointerEnter"
+    @pointermove="rememberPointerPosition"
+    @pointerleave="handlePointerLeave"
+    @pointerdown="handlePointerDown"
     @click="handleClick"
-    @mouseenter="handleNodeEnter"
-    @mouseleave="handleNodeLeave" 
+    @keydown.enter="handleClick"
+    @keydown.space="handleClick"
     
   >
     <div 
       class="connector output" 
-      v-show="isHovered"
+      aria-hidden="true"
       @mousedown.stop="handleConnectorMousedown"
     ></div>
     <div class="node-name">{{ node.name }}</div>
-    <div style="margin-left: 10px;" v-if="node.data.slots.length > 0">
-      <div style="display: flex; flex-direction: row; max-width:120px; flex-wrap: wrap;">
-        <SlotIcon 
-          v-for="slot in node.data.slots"
-          :key="slot.id" 
-          :registerSlot="slot" 
-          :node="node" 
-          @click="handleSlotClick(slot, $event  )"
-         
-          />
-      </div>
+    <div
+      v-if="node.data.slots.length > 0"
+      class="node-slots"
+    >
+      <SlotIcon
+        v-for="slot in node.data.slots"
+        :key="slot.id"
+        :registerSlot="slot"
+        @click="handleSlotClick(slot, $event)"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-.slot {
-  background: #ffffff;
-  width: 9px;
-  height: 9px;
-  position: relative;
-  margin: 1px;
-  border: 1px solid transparent; 
-  border-radius: 1px;
-}
-
-.slot::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 150%; 
-  height: 1px; 
-  background: #fff; 
-  transform: rotate(45deg);
-  transform-origin: top left;
-}
-
-.slot:hover{
-  border: solid 1px #fff;
-}
 .node-marker {
+  --node-marker-transition-duration: 0.15s;
+
   padding: 4px 8px;
-  background-color: #76769e;
+  background-color: var(--app-color-map-node);
   border-radius: 6px;
   border: 2px solid transparent;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  box-shadow: var(--app-shadow-marker);
   cursor: pointer;
-  color: white;
+  color: var(--app-color-on-primary);
   font-size: 1rem;
   font-weight: 500;
   white-space: nowrap;
@@ -292,28 +339,122 @@ defineExpose({ updatePosition })
   min-height: 30px;
   position: absolute;
   transform: translate(-50%, -50%);
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  transition:
+    background-color var(--node-marker-transition-duration) ease,
+    border-radius var(--node-marker-transition-duration) ease,
+    box-shadow var(--node-marker-transition-duration) ease,
+    min-height var(--node-marker-transition-duration) ease,
+    min-width var(--node-marker-transition-duration) ease,
+    padding var(--node-marker-transition-duration) ease;
   z-index: var(--app-z-map-node);
 }
 
 .node-marker.is-selected {
-  background-color: #2d2e81;
-  box-shadow: 0 0px 10px 3px #8586f6;
+  background-color: var(--app-color-map-node-selected);
+  box-shadow: 0 0 10px 3px var(--app-color-map-node-selected-glow);
   font-weight: 600;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
   z-index: var(--app-z-map-node-selected);
 }
 
-.node-marker.is-hovered {
-  background-color: #484ab2;
-  box-shadow: 0 0px 8px 2px #6e6fd3;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+.node-marker.is-hovered,
+.node-marker:focus-visible,
+.node-marker.is-dragging {
+  background-color: var(--app-color-map-node-hover);
+  box-shadow: 0 0 8px 2px var(--app-color-map-node-glow);
+  z-index: var(--app-z-map-node-hover);
+}
+
+.node-marker:focus-visible {
+  outline: 2px solid var(--app-color-on-primary);
+  outline-offset: 2px;
+}
+
+.node-marker--slots:not(.is-hovered):not(:focus-visible):not(.is-dragging) {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 3px 5px;
+  border-radius: 12px;
+}
+
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background-color: var(--app-color-map-node);
+  box-shadow: var(--app-shadow-marker);
+  font-weight: 500;
+  overflow: hidden;
+  z-index: var(--app-z-map-node);
 }
 
 .node-name {
+  max-width: 100vw;
+  overflow: hidden;
   margin: 0;
   padding: 0;
   line-height: 1.2;
+}
+
+.node-slots {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: 120px;
+  margin-left: 10px;
+  opacity: 1;
+  overflow: hidden;
+  visibility: visible;
+  transition:
+    opacity var(--node-marker-transition-duration) ease,
+    visibility 0s linear;
+}
+
+.node-name {
+  opacity: 1;
+  transform: scale(1);
+  visibility: visible;
+  transition:
+    max-width var(--node-marker-transition-duration) ease,
+    opacity var(--node-marker-transition-duration) ease,
+    transform var(--node-marker-transition-duration) ease,
+    visibility 0s linear;
+}
+
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-name,
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-name {
+  max-width: 0;
+  transform: scale(0.75);
+  transition-delay: 0s, 0s, 0s, var(--node-marker-transition-duration);
+}
+
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  transition-delay: 0s, var(--node-marker-transition-duration);
+}
+
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots > :deep(.slot-icon) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
+  margin-left: 0;
 }
 
 .connector {
@@ -326,6 +467,22 @@ defineExpose({ updatePosition })
   transform: translateY(-50%);
   cursor: crosshair;
   z-index: 1;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.node-marker.is-hovered .connector,
+.node-marker:focus-visible .connector,
+.node-marker.is-dragging .connector {
+  pointer-events: auto;
+  visibility: visible;
+  transition: visibility 0s linear var(--node-marker-transition-duration);
+}
+
+.node-marker.is-dragging,
+.node-marker.is-dragging .node-name,
+.node-marker.is-dragging .node-slots {
+  transition-duration: 0s;
 }
 
 .connector:hover {
@@ -351,5 +508,11 @@ defineExpose({ updatePosition })
 
 .is-selected .connector {
   border-color: #4345ac;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-marker {
+    --node-marker-transition-duration: 0.01ms;
+  }
 }
 </style>

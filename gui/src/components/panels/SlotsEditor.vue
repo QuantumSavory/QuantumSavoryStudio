@@ -21,7 +21,6 @@
           <div class="slot-cell type-cell">
             <SlotIcon
               :register-slot="slot"
-              :node="node"
               :class="{ 'slot-type-icon--disabled': disabled }"
               :style="{ cursor: disabled ? 'not-allowed' : 'pointer' }"
               @click="switchSlotType(slot)"

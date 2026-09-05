@@ -175,7 +175,15 @@ test('rejects an out-of-world node drag without breaking a curved edge', async (
   const markerAfter = await secondNode.boundingBox()
   // At a whole-world zoom, MapLibre's world-copy choice and subpixel rounding
   // can shift the restored marker by a few display pixels.
-  expect(Math.abs(markerAfter.x - markerBefore.x)).toBeLessThan(5)
-  expect(Math.abs(markerAfter.y - markerBefore.y)).toBeLessThan(5)
+  const markerCenterBefore = {
+    x: markerBefore.x + markerBefore.width / 2,
+    y: markerBefore.y + markerBefore.height / 2,
+  }
+  const markerCenterAfter = {
+    x: markerAfter.x + markerAfter.width / 2,
+    y: markerAfter.y + markerAfter.height / 2,
+  }
+  expect(Math.abs(markerCenterAfter.x - markerCenterBefore.x)).toBeLessThan(5)
+  expect(Math.abs(markerCenterAfter.y - markerCenterBefore.y)).toBeLessThan(5)
   await warning.getByRole('button', { name: 'OK' }).click()
 })

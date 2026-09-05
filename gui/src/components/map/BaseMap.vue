@@ -15,7 +15,11 @@ import {
 } from '../../utils/annotationGeometry'
 import { assertNodeMoveGeometry } from '../../utils/edgeGeometry'
 import { isEdgeLayerId } from '../../utils/mapLayers'
-import { isInteractiveMapMarkerTarget } from '../../utils/mapMarkers'
+import {
+  NODE_MARKER_DETAIL,
+  isInteractiveMapMarkerTarget,
+  nodeMarkerDetailLevels,
+} from '../../utils/mapMarkers'
 import { 
   findSlotElements, 
   calculateStateNodePosition, 
@@ -73,6 +77,40 @@ const emit = defineEmits([
   'node-position-changed',
 ])
 
+const markerDetailLevels = ref(new Map())
+let markerDetailFrame = null
+
+function updateNodeMarkerDetails() {
+  markerDetailFrame = null
+  if (!map.value || !isMapLoaded.value || !mapContainer.value) return
+  const displayedCenters = new Map(
+    [...mapContainer.value.querySelectorAll('.node-marker')].map(element => {
+      const bounds = element.getBoundingClientRect()
+      return [element.dataset.nodeId, {
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      }]
+    }),
+  )
+  const nextLevels = nodeMarkerDetailLevels(
+    props.nodes,
+    node => displayedCenters.get(node.id),
+  )
+  const levelsChanged = nextLevels.size !== markerDetailLevels.value.size
+    || [...nextLevels].some(([nodeId, level]) => markerDetailLevels.value.get(nodeId) !== level)
+  if (levelsChanged) markerDetailLevels.value = nextLevels
+}
+
+function scheduleNodeMarkerDetails() {
+  if (markerDetailFrame === null) {
+    markerDetailFrame = requestAnimationFrame(updateNodeMarkerDetails)
+  }
+}
+
+function markerDetail(node) {
+  return markerDetailLevels.value.get(node.id) ?? NODE_MARKER_DETAIL.FULL
+}
+
 // MapLibre moves each marker element outside Vue's normal DOM tree. Keep the
 // component render order stable when simulator IDs change so Vue updates the
 // existing marker instances instead of trying to move MapLibre-owned elements.
@@ -99,6 +137,11 @@ watch(
     renderedNodes.value = renderedIds.map(id => nodesById.get(id))
   },
   { immediate: true }
+)
+
+watch(
+  () => props.nodes.map(node => [node.id, ...node.position]),
+  scheduleNodeMarkerDetails,
 )
 
 // SlotConnectionState management functions
@@ -365,6 +408,7 @@ onMounted(() => {
       map.value.off('error', handleInitializationError)
       // Apply any pending prop updates that may have occurred before map was loaded
       applyMapStateFromProps()
+      nextTick(scheduleNodeMarkerDetails)
       emit('map-ready')
     })
 
@@ -389,6 +433,8 @@ onMounted(() => {
         zoom: zoom
       })
     })
+
+    map.value.on('move', scheduleNodeMarkerDetails)
   }
 })
 
@@ -431,6 +477,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('blur', onBlur);
   document.removeEventListener('visibilitychange', onVisibilityChange);
   map.value?.off('mousedown', handleMapMousedown)
+  map.value?.off('move', scheduleNodeMarkerDetails)
+  if (markerDetailFrame !== null) cancelAnimationFrame(markerDetailFrame)
 });
 
 
@@ -464,20 +512,17 @@ function handleNodePositionPreview(change) {
 
 function handleNodePositionChanged(change) {
   handleNodePositionPreview(change)
+  scheduleNodeMarkerDetails()
   const finishMarkerDrag = change.finish
   emit('node-position-changed', {
     ...change,
     finish: () => {
       nodePositionPreviews.delete(change.node.id)
       finishMarkerDrag?.()
+      scheduleNodeMarkerDetails()
       updateSlotConnectionPositions()
     },
   })
-}
-
-// Handle delete request from child components
-function handleDelete(node) {
-  emit('delete', node)
 }
 
 // Function to set refs for connection overlay components
@@ -565,6 +610,7 @@ defineExpose({
         :map="map"
         :is-selected="selectedItem === node"
         :editing-locked="editingLocked"
+        :detail-level="markerDetail(node)"
         @select="handleSelect"
         @startConnection="handleStartConnection"
         @updateConnection="handleUpdateConnection"
