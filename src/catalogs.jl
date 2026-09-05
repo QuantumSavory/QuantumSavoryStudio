@@ -168,6 +168,49 @@ function _protocol_attachment_pairs(entry, semantic_values; context::String="Pro
   ]
 end
 
+"""Construct one disposable protocol so its native keyword defaults can be read."""
+function _dummy_protocol(entry)
+  network = RegisterNet([Register(1), Register(1)])
+  attachment_values = (node=1, node_a=1, node_b=2)
+  required_values = (
+    parameter.field => parameter.type()
+    for parameter in entry.parameters
+    if parameter.required
+  )
+  kwargs = (;
+    sim=get_time_tracker(network),
+    net=network,
+    _protocol_attachment_pairs(
+      entry,
+      attachment_values;
+      context="Protocol default introspection",
+    )...,
+    required_values...,
+  )
+  return entry.type(; kwargs...)
+end
+
+"""Return Julia representations of one protocol's native keyword defaults."""
+function _protocol_default_reprs(entry)
+  defaulted_parameters = filter(parameter -> !parameter.required, entry.parameters)
+  isempty(defaulted_parameters) && return Dict{Symbol,String}()
+
+  protocol = _dummy_protocol(entry)
+  return Dict(
+    parameter.field => repr(getfield(protocol, parameter.field))
+    for parameter in defaulted_parameters
+  )
+end
+
+function _protocol_parameter_metadata(entry)
+  defaults = _protocol_default_reprs(entry)
+  parameters = [
+    merge(parameter, (default_repr=get(defaults, parameter.field, nothing),))
+    for parameter in entry.parameters
+  ]
+  return parse_pt_type(parameters)
+end
+
 function get_background_types()
   return [
     Dict(
@@ -192,7 +235,7 @@ function get_protocol_types()
       "type" => entry.wire_type,
       "doc" => string(entry.doc),
       "group" => entry.group,
-      "parameters" => parse_pt_type(entry.parameters),
+      "parameters" => _protocol_parameter_metadata(entry),
       "virtual" => entry.permits_virtual_edge,
     )
     for entry in _protocol_catalog()

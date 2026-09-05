@@ -271,6 +271,16 @@
       @test response.status == 200
       data = parse_response(response)
       @test !isempty(data["protocol_types"])
+
+      entangler = only(filter(
+        protocol -> protocol["type"] == "QuantumSavory.ProtocolZoo.EntanglerProt",
+        data["protocol_types"],
+      ))
+      success_prob = only(filter(
+        parameter -> parameter["field"] == "success_prob",
+        entangler["parameters"],
+      ))
+      @test success_prob["default_repr"] == "0.001"
   end
 
   @testset "Named AbstractTag Protocol Boundaries" begin
