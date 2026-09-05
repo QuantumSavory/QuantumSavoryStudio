@@ -550,6 +550,22 @@
       ),
     ]
 
+    padded_weighted_payload = deepcopy(transport_payload)
+    filter!(
+      variable -> variable["id"] != "weighted_tr",
+      padded_weighted_payload["variables"],
+    )
+    padded_weighted_payload["variables"][8]["value"]["state_type"] =
+      " BarrettKokBellPairW "
+    padded_state_type_error = try
+      WebQuantumSavory.validate_payload(padded_weighted_payload)
+      nothing
+    catch error
+      error
+    end
+    @test padded_state_type_error isa WebQuantumSavory.APIError
+    @test padded_state_type_error.details["path"] == "/variables/7/value/state_type"
+
     transport_script = withenv(
       WebQuantumSavory.UNSAFE_EVALUATION_ENV_VAR => "false",
     ) do

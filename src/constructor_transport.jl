@@ -129,7 +129,7 @@ function _normalize_states_zoo_value(
     "States Zoo type must be a nonblank string",
     _pointer_child(path, "state_type"),
   )
-  type_id = strip(String(raw_type_id))
+  type_id = String(raw_type_id)
   isempty(type_id) && _admission_error(
     "States Zoo type must be a nonblank string",
     _pointer_child(path, "state_type"),

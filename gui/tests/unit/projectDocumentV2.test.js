@@ -367,6 +367,14 @@ describe('project document v2 values and determinism', () => {
     expect(decodeProject(document, catalogs()).project.variables.at(-1).value.parameters.a)
       .toEqual({ kind: 'variable', id: 'probability' })
 
+    const paddedStateType = structuredClone(document)
+    paddedStateType.variables.at(-1).value.state_type = ' BellPair '
+    expectContractError(
+      () => decodeProject(paddedStateType, catalogs()),
+      'INVALID_PROJECT',
+      '/variables/3/value/state_type',
+    )
+
     for (const [type, value] of [['default', null], ['Float64', null]]) {
       const invalid = structuredClone(document)
       invalid.variables[0].type = type

@@ -42,7 +42,7 @@ _states_zoo_object_like(value) =
   value isa AbstractDict || startswith(string(typeof(value)), "JSON3.Object")
 
 function _states_zoo_entry(state_type::AbstractString)
-  id = strip(String(state_type))
+  id = String(state_type)
   entry = get(STATES_ZOO_TYPE_REGISTRY, id, nothing)
   entry === nothing && throw(validation_error(
     "Unknown States Zoo type: '$id'",
@@ -271,7 +271,7 @@ function materialize_states_zoo_payload(payload)
     variable_types,
   )
   state = _materialize_states_zoo_state(recipe, Dict{Symbol,Any}(), variables)
-  return strip(String(state_type)), state
+  return recipe.type_id, state
 end
 
 """Validate a States Zoo request and return its trace without rendering a preview."""

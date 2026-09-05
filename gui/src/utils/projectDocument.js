@@ -197,7 +197,10 @@ function canonicalStatesZooValue(value, path) {
   const parameters = record(source.parameters, pointer(path, 'parameters'))
   return {
     kind: STATES_ZOO_VALUE_KIND,
-    state_type: string(source.state_type, pointer(path, 'state_type'), { nonblank: true }),
+    state_type: string(source.state_type, pointer(path, 'state_type'), {
+      nonblank: true,
+      trim: true,
+    }),
     parameters: Object.fromEntries(
       Object.keys(parameters)
         .sort()

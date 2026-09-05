@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Expanded QuantumSavory compatibility to include the 0.8 development line.
+- Added constructor-documentation tooltips and Variables-tab numeric inputs to States Zoo
+  parameters, including live preview and weighted-state trace updates.
+
+- Raised the minimum QuantumSavory compatibility to 0.8.
 
 - Updated the Repeater Chain Generator to support chains without a repeater template,
   infer the only eligible template edge from the start node, and restrict protocol
@@ -13,8 +16,6 @@
 
 ## 1.12.0
 
-- Added constructor-documentation tooltips and Variables-tab numeric inputs to States Zoo
-  parameters, including live preview and weighted-state trace updates.
 - Compacted user and agent documentation around current repository behavior and
   removed completed plans and duplicate implementation inventories.
 
