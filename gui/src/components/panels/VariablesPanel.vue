@@ -2,7 +2,7 @@
   <div class="variables-panel" data-testid="variables-panel">
     <div class="variables-header">
       <p class="variables-description">
-        Define values once and link them to protocol parameters.
+        Define values once and link them to constructor parameters.
       </p>
       <button
         type="button"
