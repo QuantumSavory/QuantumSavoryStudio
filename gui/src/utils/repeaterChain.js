@@ -52,6 +52,40 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** Resolve the only edge that can supply repeater-chain template data. */
+export function inspectRepeaterTemplate(net, startNodeId, templateNodeId) {
+  if (templateNodeId == null) {
+    return { valid: true, error: null, templateNode: null, templateEdge: null }
+  }
+
+  const templateNode = net.nodes.find(node => node.id === templateNodeId)
+  if (!templateNode) return invalid('Select a valid repeater template node.')
+
+  const incidentEdges = net.edges.filter(edge => edgeHasNode(edge, templateNodeId))
+  const candidates = edgesBetween(net.edges, startNodeId, templateNodeId)
+  if (candidates.length > 1) {
+    return {
+      ...invalid('The start node and repeater template must have at most one edge between them.'),
+      templateNode,
+      templateEdge: null
+    }
+  }
+  if (incidentEdges.length > candidates.length) {
+    return {
+      ...invalid('The repeater template must be isolated or connected only to the start node.'),
+      templateNode,
+      templateEdge: null
+    }
+  }
+
+  return {
+    valid: true,
+    error: null,
+    templateNode,
+    templateEdge: candidates[0] ?? null
+  }
+}
+
 /** Encode an exact node name as a non-interpolating Julia string literal. */
 export function juliaStringLiteral(value) {
   if (typeof value !== 'string') throw new Error('Julia node names must be strings.')
@@ -389,19 +423,16 @@ function resolveSelection(net, options) {
     }
   }
 
-  const usesTemplate = templateNodeId != null
-  const templateNode = usesTemplate
-    ? net.nodes.find(node => node.id === templateNodeId)
-    : null
-  if (usesTemplate && !templateNode) {
-    return { valid: false, error: 'Select a valid repeater template node.' }
-  }
-  if (templateNode && (templateNodeId === startNodeId || templateNodeId === endNodeId)) {
+  if (templateNodeId != null
+    && (templateNodeId === startNodeId || templateNodeId === endNodeId)) {
     return {
       valid: false,
       error: 'Start, end, and repeater template nodes must be distinct.'
     }
   }
+  const template = inspectRepeaterTemplate(net, startNodeId, templateNodeId)
+  if (!template.valid) return template
+  const { templateNode, templateEdge } = template
 
   if (!Number.isInteger(repeaterCount)
     || repeaterCount < MIN_REPEATER_COUNT
@@ -417,25 +448,6 @@ function resolveSelection(net, options) {
       valid: false,
       error: 'The end-to-end virtual edge option must be enabled or disabled.'
     }
-  }
-
-  let templateEdge = null
-  if (templateNode) {
-    const incidentEdges = net.edges.filter(edge => edgeHasNode(edge, templateNodeId))
-    const candidates = edgesBetween(net.edges, startNodeId, templateNodeId)
-    if (candidates.length > 1) {
-      return {
-        valid: false,
-        error: 'The start node and repeater template must have at most one edge between them.'
-      }
-    }
-    if (incidentEdges.length > candidates.length) {
-      return {
-        valid: false,
-        error: 'The repeater template must be isolated or connected only to the start node.'
-      }
-    }
-    templateEdge = candidates[0] ?? null
   }
 
   if (!isMapPosition(startNode.position) || !isMapPosition(endNode.position)) {

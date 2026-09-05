@@ -70,7 +70,7 @@ const nodes = [
 const templateEdge = {
   id: 'template-edge',
   source: nodes[2],
-  target: nodes[3]
+  target: nodes[0]
 }
 
 let wrappers = []
@@ -161,7 +161,6 @@ describe('dialog form submission', () => {
     await wrapper.get('#chain-start-node').setValue('start')
     await wrapper.get('#chain-end-node').setValue('end')
     await wrapper.get('#chain-template-node').setValue('template')
-    await wrapper.get('#chain-template-edge').setValue('template-edge')
     await clickSubmit(wrapper)
 
     expect(wrapper.emitted('confirm')).toHaveLength(1)

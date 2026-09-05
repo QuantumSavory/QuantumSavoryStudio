@@ -395,9 +395,9 @@ const collapsedAriaLabel = computed(() => {
     return description.join('; ')
   }
   if (!props.showLatex) {
-    return props.modelValue ? 'Edit custom function' : 'Enter custom function'
+    return props.modelValue ? `${action} custom function` : `${action} empty custom function`
   }
-  return props.latexExpression ? 'Edit symbolic expression' : 'Enter symbolic expression'
+  return props.latexExpression ? `${action} symbolic expression` : `${action} empty symbolic expression`
 })
 const renderedLatex = computed(() => {
   if (!props.latexExpression) return ''

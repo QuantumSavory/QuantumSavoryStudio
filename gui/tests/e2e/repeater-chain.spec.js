@@ -199,11 +199,15 @@ async function fillGenerator(page, {
   template = 'Node 3',
   count = 3,
   createVirtualEdge = true,
+  noTemplate = false,
 } = {}) {
   await page.locator('#chain-start-node').selectOption({ label: start })
   await page.locator('#chain-end-node').selectOption({ label: end })
-  await page.locator('#chain-template-node').selectOption({ label: template })
-  await page.locator('#chain-template-edge').selectOption({ index: 1 })
+  if (noTemplate) {
+    await page.locator('#chain-no-repeater-template').check()
+  } else {
+    await page.locator('#chain-template-node').selectOption({ label: template })
+  }
   await page.locator('#chain-repeater-count').fill(String(count))
   await page.locator('#chain-create-virtual-edge').setChecked(createVirtualEdge)
 }
@@ -229,7 +233,7 @@ test.describe('Layout Tools repeater chain generator', () => {
     await openGenerator(page)
     await expect(page.locator('#chain-create-virtual-edge')).toBeChecked()
     await fillGenerator(page)
-    await expect(page.getByRole('alert')).toContainText('must have exactly one incident edge')
+    await expect(page.getByRole('alert')).toContainText('isolated or connected only to the start node')
     await expect(page.getByRole('button', { name: 'Generate Chain' })).toBeDisabled()
 
     await page.getByRole('button', { name: 'Cancel' }).click()
@@ -433,7 +437,7 @@ test.describe('Layout Tools repeater chain generator', () => {
     })
   })
 
-  test('replaces seeded chain protocols with configured automation and eager predicates', async ({ page }) => {
+  test('configures a no-template chain with eager predicates', async ({ page }) => {
     await createProjectWithNodes(page, 'Repeater Protocol Automation', 3, {
       knownFunctions: ['minimum', 'maximum'],
       protocolTypes: REPEATER_AUTOMATION_PROTOCOL_TYPES,
@@ -564,25 +568,27 @@ test.describe('Layout Tools repeater chain generator', () => {
     })
 
     await openGenerator(page)
-    await fillGenerator(page, { count: 3 })
+    await fillGenerator(page, { count: 3, noTemplate: true })
     const dialog = page.getByRole('dialog', { name: 'Repeater Chain Generator' })
 
-    await dialog.locator('#chain-replace-entangler').setChecked(true)
+    await dialog.locator('#chain-configure-entangler').setChecked(true)
     const entanglerConstructor = dialog.locator('.constructor-panel', {
       hasText: 'EntanglerProt constructor',
     })
-    const successProbability = entanglerConstructor.locator('.param-item', {
+    const successProbabilityRow = entanglerConstructor.locator('.param-item', {
       hasText: 'success_prob',
-    }).locator('input[type="number"]')
-    await expect(successProbability).toHaveValue('0.35')
+    })
+    await successProbabilityRow.locator('.complexTypeSelector').selectOption('Float64')
+    const successProbability = successProbabilityRow.locator('input[type="number"]')
     await successProbability.fill('0.73')
 
-    await dialog.locator('#chain-replace-swapper').setChecked(true)
+    await dialog.locator('#chain-configure-swapper').setChecked(true)
     const swapperConstructor = dialog.locator('.constructor-panel', {
       hasText: 'SwapperProt constructor',
     })
     const chooseL = swapperConstructor.locator('.param-item', { hasText: 'chooseL' })
-    await expect(chooseL.locator('.complexTypeSelector')).toHaveValue('Function')
+    await chooseL.locator('.complexTypeSelector').selectOption('Function')
+    await chooseL.locator('.functionSelector').selectOption('minimum')
     await expect(chooseL.locator('.functionSelector')).toHaveValue('minimum')
 
     await dialog.getByRole('radio', { name: 'Eager swaps' }).check()
@@ -590,14 +596,18 @@ test.describe('Layout Tools repeater chain generator', () => {
       const parameter = swapperConstructor.locator('.param-item', { hasText: parameterName })
       await expect(parameter.locator('.complexTypeSelector')).toBeDisabled()
       await expect(parameter).toContainText(
-        'Strategy-controlled: Set separately for each repeater by the selected predicate strategy.',
+        'Strategy-controlled: Example for Repeater-1; set separately for each repeater by the selected strategy.',
+      )
+      await expect(parameter.getByTestId('code-collapsed-view')).toHaveAttribute(
+        'aria-label',
+        'View custom function',
       )
     }
     await expect(swapperConstructor).toContainText(
-      'nodeL and nodeH are set separately for each repeater by the selected strategy.',
+      'The disabled Custom Function fields show examples for Repeater-1.',
     )
 
-    await dialog.locator('#chain-replace-tracker').setChecked(true)
+    await dialog.locator('#chain-configure-tracker').setChecked(true)
     const trackerConstructor = dialog.locator('.constructor-panel', {
       hasText: 'EntanglementTracker constructor',
     })
@@ -610,8 +620,8 @@ test.describe('Layout Tools repeater chain generator', () => {
 
     await dialog.getByRole('button', { name: 'Generate Chain' }).click()
     await expect(dialog).toHaveCount(0)
-    await expect(page.locator('.node-marker')).toHaveCount(5)
-    await expect(page.locator('.edge-list-item')).toHaveCount(5)
+    await expect(page.locator('.node-marker')).toHaveCount(6)
+    await expect(page.locator('.edge-list-item')).toHaveCount(6)
 
     const generated = await page.evaluate(() => {
       const app = document.querySelector('#app')?.__vue_app__
@@ -633,8 +643,11 @@ test.describe('Layout Tools repeater chain generator', () => {
 
       const startNode = nodes.find(node => node.name === 'Node 1')
       const endNode = nodes.find(node => node.name === 'Node 2')
-      const repeaters = nodes.filter(node => node.name.startsWith('Node 3-'))
-      const physicalEdges = edges.filter(edge => edge.isLogic !== true)
+      const repeaters = nodes.filter(node => node.name.startsWith('Repeater-'))
+      const physicalEdges = edges.filter(edge => (
+        edge.isLogic !== true
+        && [edge.source.name, edge.target.name].some(name => name.startsWith('Repeater-'))
+      ))
       const directVirtualEdge = edges.find(edge => (
         edge.isLogic === true
         && [edge.source.name, edge.target.name].includes('Node 1')
@@ -698,7 +711,7 @@ test.describe('Layout Tools repeater chain generator', () => {
           type: directVirtualEdge.data.type,
           protocolCount: directVirtualEdge.data.protocols.length,
         },
-        templateNodeRemoved: !nodes.some(node => node.name === 'Node 3'),
+        templateNodeRetained: nodes.some(node => node.name === 'Node 3'),
         targetedIds: [
           ...edgeSummaries.map(edge => edge.entangler.id),
           ...repeaterSummaries.map(node => node.swapper.id),
@@ -708,36 +721,38 @@ test.describe('Layout Tools repeater chain generator', () => {
       }
     })
 
-    expect(generated.templateNodeRemoved).toBe(true)
+    expect(generated.templateNodeRetained).toBe(true)
     expect(generated.edgeSummaries).toHaveLength(4)
     for (const edge of generated.edgeSummaries) {
       expect(edge.entanglerCount).toBe(1)
-      expect(edge.unrelatedCount).toBe(1)
-      expect(edge.unrelatedMarker).toBe('keep-edge')
+      expect(edge.unrelatedCount).toBe(0)
+      expect(edge.unrelatedMarker).toBeUndefined()
       expect(edge.entangler.successProbability).toBeCloseTo(0.73)
     }
 
-    const eagerNodeL = 'x -> (x < self && x >= nodeid("Node 3-1")) || x == nodeid("Node 1")'
-    const eagerNodeH = 'x -> (x > self && x <= nodeid("Node 3-3")) || x == nodeid("Node 2")'
     expect(generated.repeaterSummaries.map(node => node.name)).toEqual([
-      'Node 3-1',
-      'Node 3-2',
-      'Node 3-3',
+      'Repeater-1',
+      'Repeater-2',
+      'Repeater-3',
     ])
     for (const repeater of generated.repeaterSummaries) {
       expect(repeater.swapperCount).toBe(1)
       expect(repeater.trackerCount).toBe(1)
-      expect(repeater.unrelatedCount).toBe(1)
-      expect(repeater.unrelatedMarker).toBe('keep-repeater')
+      expect(repeater.unrelatedCount).toBe(0)
+      expect(repeater.unrelatedMarker).toBeUndefined()
       expect(repeater.swapper.chooseL).toBe('minimum')
       expect(repeater.swapper.nodeL).toMatchObject({
         type: 'Lambda',
-        value: eagerNodeL,
       })
+      expect(repeater.swapper.nodeL.value).toContain('start_node = nodeid("Node 1")')
+      expect(repeater.swapper.nodeL.value).toContain('start_repeater = nodeid("Repeater-1")')
+      expect(repeater.swapper.nodeL.value).toContain('(start_repeater <= x < self) || x == start_node')
       expect(repeater.swapper.nodeH).toMatchObject({
         type: 'Lambda',
-        value: eagerNodeH,
       })
+      expect(repeater.swapper.nodeH.value).toContain('end_node = nodeid("Node 2")')
+      expect(repeater.swapper.nodeH.value).toContain('end_repeater = nodeid("Repeater-3")')
+      expect(repeater.swapper.nodeH.value).toContain('(self < x <= end_repeater) || x == end_node')
       expect(repeater.tracker.parameters).toEqual([])
     }
 
@@ -786,32 +801,18 @@ test.describe('Layout Tools repeater chain generator', () => {
       knownFunctions: ['minimum'],
       protocolTypes: taggedProtocolTypes,
     })
-    await connectNodes(page, 2, 0)
-    await page.evaluate(({ savedTag }) => {
-      const app = document.querySelector('#app')?.__vue_app__
-      const projectData = app?._instance?.setupState?.projectData
-      projectData.net.edges[0].data.protocols.push({
-        id: 'protocol_entangler_named_tag',
-        type: 'QuantumSavory.ProtocolZoo.EntanglerProt',
-        parameters: [{
-          name: 'tag',
-          type: 'Union{Nothing, Type{<:QuantumSavory.AbstractTag}}',
-          selectedType: 'DataType',
-          value: savedTag,
-        }],
-      })
-    }, { savedTag: TAG_BETA })
 
     await openGenerator(page)
-    await fillGenerator(page, { count: 2 })
+    await fillGenerator(page, { count: 2, noTemplate: true })
     const dialog = page.getByRole('dialog', { name: 'Repeater Chain Generator' })
-    await dialog.locator('#chain-replace-entangler').setChecked(true)
+    await dialog.locator('#chain-configure-entangler').setChecked(true)
     const constructor = dialog.locator('.constructor-panel', {
       hasText: 'EntanglerProt constructor',
     })
-    const tagInput = constructor.getByRole('combobox', { name: 'tag named tag type' })
+    const tagRow = constructor.locator('.param-item', { hasText: 'tag' })
+    await tagRow.locator('.complexTypeSelector').selectOption('DataType')
+    const tagInput = tagRow.getByRole('combobox', { name: 'tag named tag type' })
 
-    await expect(tagInput).toHaveValue(`ReadyTag — ${TAG_BETA}`)
     await tagInput.fill('Example.Alpha')
     const overlay = page.locator('.p-autocomplete-overlay.named-tag-type-overlay')
     await expect(overlay).toBeVisible()
