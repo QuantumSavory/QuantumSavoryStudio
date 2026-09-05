@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Expanded QuantumSavory compatibility to include the 0.8 development line.
+
+- Updated the Repeater Chain Generator to support chains without a repeater template,
+  infer the only eligible template edge from the start node, and restrict protocol
+  configuration to no-template chains. Generated Swapper predicates now bind endpoint
+  and repeater node IDs separately, and automatic strategies show their per-repeater
+  Custom Function examples in the constructor form. The MCP authoring contract is now
+  version 3 and removes the repeater template-edge input.
+
 ## 1.12.0
 
 - Compacted user and agent documentation around current repository behavior and

@@ -73,7 +73,7 @@ describe('McpEditorBridge', () => {
     expect(client.bind).toHaveBeenCalledWith(expect.objectContaining({
       project_name: 'Bridge Project',
       simulation_name: 'user_Bridge Project',
-      contract_version: 2,
+      contract_version: 3,
       snapshot: expect.objectContaining({
         name: 'Bridge Project',
         schemaVersion: 2,

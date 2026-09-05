@@ -1,5 +1,5 @@
 {
-  "contract_version": 2,
+  "contract_version": 3,
   "default_output_schema": {
     "type": "object"
   },
@@ -1872,7 +1872,7 @@
               },
               "predicateStrategy": {
                 "enum": [
-                  "template",
+                  "custom",
                   "eager",
                   "sequential-forward",
                   "sequential-backward",
@@ -1902,8 +1902,6 @@
             "required": [
               "startNodeId",
               "endNodeId",
-              "templateNodeId",
-              "templateEdgeId",
               "repeaterCount"
             ],
             "properties": {
@@ -1914,10 +1912,14 @@
                 "$ref": "#/definitions/id"
               },
               "templateNodeId": {
-                "$ref": "#/definitions/id"
-              },
-              "templateEdgeId": {
-                "$ref": "#/definitions/id"
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "repeaterCount": {
                 "type": "integer",
