@@ -43,7 +43,7 @@ test('About describes the project, its support, and ways to participate', async 
   await expect(localSteps).toHaveCount(4)
   await expect(localSteps.nth(0)).toContainText('Install Juliaup through the Julia installation page.')
   await expect(localSteps.nth(1).locator('code')).toHaveText(
-    'git clone https://github.com/QuantumSavory/WebQuantumSavory.git'
+    'git clone https://github.com/QuantumSavory/QuantumSavoryStudio.git'
   )
   await expect(localSteps.nth(2).locator('code')).toHaveText(
     "julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'"

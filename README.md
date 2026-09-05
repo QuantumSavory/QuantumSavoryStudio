@@ -2,16 +2,17 @@
 
 QuantumSavory Studio is a browser application for designing and simulating quantum
 networks with [QuantumSavory](https://github.com/QuantumSavory/QuantumSavory.jl).
-This `WebQuantumSavory` repository contains the Julia/Genie backend, the Vue interface,
-and their private support API.
+Use the hosted application at [studio.quantumsavory.org](https://studio.quantumsavory.org/).
+This `QuantumSavoryStudio` repository contains the Julia/Genie backend, the Vue
+interface, and their private support API.
 
 ## Run locally
 
 The CI toolchains use Julia 1.12, Node.js 24, and npm.
 
 ```sh
-git clone https://github.com/QuantumSavory/WebQuantumSavory.git
-cd WebQuantumSavory
+git clone https://github.com/QuantumSavory/QuantumSavoryStudio.git
+cd QuantumSavoryStudio
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ./bin/server
 ```

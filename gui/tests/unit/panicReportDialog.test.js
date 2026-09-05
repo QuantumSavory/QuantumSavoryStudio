@@ -131,7 +131,7 @@ describe('PanicReportDialog', () => {
     expect(openIssue).toHaveBeenCalledOnce()
     const issueUrl = new URL(openIssue.mock.calls[0][0])
     expect(`${issueUrl.origin}${issueUrl.pathname}`).toBe(
-      'https://github.com/QuantumSavory/WebQuantumSavory/issues/new',
+      'https://github.com/QuantumSavory/QuantumSavoryStudio/issues/new',
     )
     expect(issueUrl.searchParams.get('body')).toContain('attach the downloaded')
     expect(wrapper.get('[role="status"]').text()).toContain('Report copied')

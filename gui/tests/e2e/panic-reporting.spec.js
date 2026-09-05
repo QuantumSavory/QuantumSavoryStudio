@@ -198,7 +198,7 @@ test('reports a diagnostic protocol panic without uploading the project', async 
   expect(issueOpenCall.features).toBeNull()
   expect(issueOpenCall.openerCleared).toBe(true)
   expect(`${issueUrl.origin}${issueUrl.pathname}`).toBe(
-    'https://github.com/QuantumSavory/WebQuantumSavory/issues/new',
+    'https://github.com/QuantumSavory/QuantumSavoryStudio/issues/new',
   )
   expect(issueUrl.searchParams.get('body')).toContain('attach the downloaded')
   expect(issueUrl.searchParams.get('body')).toContain('Panic-Diagnostic-panic.json')

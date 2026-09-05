@@ -2,7 +2,7 @@
 
 ## Scope
 
-The `WebQuantumSavory` repository ships QuantumSavory Studio with a Julia backend, a
+The `QuantumSavoryStudio` repository ships QuantumSavory Studio with a Julia backend, a
 Vue frontend, and an optional local MCP sidecar. Root entry points such as
 `bootstrap.jl` and `routes.jl` belong to the backend.
 

@@ -5,7 +5,7 @@
 - **Do not open when:** Looking up a route, field, schema, or test command.
 - **Review when:** Product actors, component roles, persistence, or trust boundaries change.
 
-QuantumSavory Studio is the browser-first product in the `WebQuantumSavory` repository.
+QuantumSavory Studio is the browser-first product in the `QuantumSavoryStudio` repository.
 Its Vue GUI uses a Julia backend and may attach an optional local MCP sidecar. The HTTP
 API supports the bundled GUI; “private” describes its support audience, not
 authentication.

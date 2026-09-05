@@ -1,6 +1,6 @@
 import { normalizeSystemInformation } from './systemInformation.js'
 
-export const PANIC_ISSUE_URL = 'https://github.com/QuantumSavory/WebQuantumSavory/issues/new'
+export const PANIC_ISSUE_URL = 'https://github.com/QuantumSavory/QuantumSavoryStudio/issues/new'
 
 const UNKNOWN_VALUE = 'Unknown'
 const PROJECT_FALLBACK_NAME = 'quantumsavory-studio-project'

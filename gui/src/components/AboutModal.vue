@@ -55,7 +55,7 @@
           <h4 id="local-run-title">Run QuantumSavory Studio locally</h4>
           <p>
             After cloning the repository, run the remaining commands from its
-            <code>WebQuantumSavory</code> directory.
+            <code>QuantumSavoryStudio</code> directory.
           </p>
           <ol class="local-run-steps">
             <li>
@@ -63,7 +63,7 @@
               <a href="https://julialang.org/install/" target="_blank" rel="noopener noreferrer">
                 Julia installation page</a>.
             </li>
-            <li><code>git clone https://github.com/QuantumSavory/WebQuantumSavory.git</code></li>
+            <li><code>git clone https://github.com/QuantumSavory/QuantumSavoryStudio.git</code></li>
             <li><code>julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'</code></li>
             <li><code>GENIE_ENV=dev WEBQUANTUMSAVORY_ENABLE_UNSAFE_EVALUATION=true ./bin/server</code></li>
           </ol>
