@@ -482,6 +482,33 @@ describe('repeater-chain protocol automation', () => {
     })
   })
 
+  it('keeps generated names and automatic predicates unambiguous across chains', () => {
+    const { net } = makeNetwork()
+    const options = baseOptions({
+      templateNodeId: null,
+      repeaterCount: 2,
+      createVirtualEdge: false,
+      automation: enabledAutomation({
+        entangler: false,
+        tracker: false,
+        predicateStrategy: SWAPPER_PREDICATE_STRATEGIES.EAGER
+      })
+    })
+
+    const first = generateRepeaterChain(net, options)
+    const second = generateRepeaterChain(net, options)
+
+    expect(first.generatedNodes.map(node => node.name)).toEqual(['Repeater-1', 'Repeater-2'])
+    expect(second.generatedNodes.map(node => node.name)).toEqual(['Repeater-3', 'Repeater-4'])
+    expect(new Set(net.nodes.map(node => node.name)).size).toBe(net.nodes.length)
+
+    second.generatedNodes.forEach(node => {
+      const parameters = parametersByName(protocolsNamed(node.data.protocols, 'SwapperProt')[0])
+      expect(parameters.nodeL.value).toContain('start_repeater = nodeid("Repeater-3")')
+      expect(parameters.nodeH.value).toContain('end_repeater = nodeid("Repeater-4")')
+    })
+  })
+
   it('permits protocol customization only without a repeater template', () => {
     const { net } = makeNetwork()
     const automation = enabledAutomation({ swapper: false, tracker: false })

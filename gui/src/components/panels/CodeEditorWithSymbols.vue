@@ -376,7 +376,6 @@ const summaryTestId = computed(() => {
   return props.showLatex ? 'symbolic-collapsed-view' : 'code-collapsed-view'
 })
 const collapsedAriaLabel = computed(() => {
-  const action = props.summaryEditable ? 'Edit' : 'View'
   if (effectiveEditorKind.value === 'numeric') {
     const description = [
       props.summaryEditable
@@ -395,9 +394,11 @@ const collapsedAriaLabel = computed(() => {
     return description.join('; ')
   }
   if (!props.showLatex) {
-    return props.modelValue ? `${action} custom function` : `${action} empty custom function`
+    if (!props.summaryEditable) return 'View custom function'
+    return props.modelValue ? 'Edit custom function' : 'Enter custom function'
   }
-  return props.latexExpression ? `${action} symbolic expression` : `${action} empty symbolic expression`
+  if (!props.summaryEditable) return 'View symbolic expression'
+  return props.latexExpression ? 'Edit symbolic expression' : 'Enter symbolic expression'
 })
 const renderedLatex = computed(() => {
   if (!props.latexExpression) return ''

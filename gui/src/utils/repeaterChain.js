@@ -113,6 +113,22 @@ export function repeaterName(templateName, index) {
   return `${templateName}-${index}`
 }
 
+/** Choose one collision-free, consecutively numbered repeater-name sequence. */
+export function planRepeaterNames(nodes, repeaterCount, templateNode = null) {
+  const retainedNames = new Set(
+    nodes.filter(node => node !== templateNode).map(node => node.name)
+  )
+  const baseName = templateNode?.name || DEFAULT_REPEATER_NAME
+
+  for (let firstIndex = 1; ; firstIndex += 1) {
+    const names = Array.from(
+      { length: repeaterCount },
+      (_, index) => repeaterName(baseName, firstIndex + index)
+    )
+    if (names.every(name => !retainedNames.has(name))) return names
+  }
+}
+
 function isBinaryTreeRepeaterCount(repeaterCount) {
   return Number.isInteger(repeaterCount)
     && repeaterCount > 0
@@ -331,7 +347,7 @@ function resolveAutomation(rawAutomation, selection) {
         repeaterCount: selection.repeaterCount,
         startNodeName: selection.startNode.name,
         endNodeName: selection.endNode.name,
-        repeaterNameAt: index => repeaterName(selection.repeaterBaseName, index + 1)
+        repeaterNameAt: index => selection.repeaterNames[index]
       })
     }
     swapper.protocol = normalizeEnabledConstructor(
@@ -462,7 +478,7 @@ function resolveSelection(net, options) {
     endNode,
     templateNode,
     templateEdge,
-    repeaterBaseName: templateNode?.name || DEFAULT_REPEATER_NAME,
+    repeaterNames: planRepeaterNames(net.nodes, repeaterCount, templateNode),
     repeaterCount,
     createVirtualEdge
   }
@@ -517,7 +533,7 @@ export function generateRepeaterChain(net, options) {
     endNode,
     templateNode,
     templateEdge,
-    repeaterBaseName,
+    repeaterNames,
     repeaterCount,
     createVirtualEdge,
     automation
@@ -534,7 +550,7 @@ export function generateRepeaterChain(net, options) {
 
     generatedNodes.push(new Node({
       id: nextId('node'),
-      name: repeaterName(repeaterBaseName, index),
+      name: repeaterNames[index - 1],
       position,
       data: cloneNodeData(
         templateNode?.data || { slots: net.physicalConfig?.nodeTemplate?.slots || [] },

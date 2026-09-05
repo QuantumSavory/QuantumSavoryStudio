@@ -114,8 +114,8 @@
       "swapper-repeater",
       "QuantumSavory.ProtocolZoo.SwapperProt";
       parameters=Any[
-        protocol_parameter("nodeL", "Function", eager_low_predicate),
-        protocol_parameter("nodeH", "Function", eager_high_predicate),
+        protocol_parameter("nodeL", "Lambda", eager_low_predicate),
+        protocol_parameter("nodeH", "Lambda", eager_high_predicate),
         protocol_parameter("retry_lock_time", "Float64", 0.01),
         protocol_parameter("rounds", "Int64", 1),
       ],

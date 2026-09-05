@@ -235,7 +235,7 @@ describe('RepeaterChainDialog protocol configuration', () => {
       expect(wrapper.get(id).element.checked).toBe(false)
       expect(wrapper.get(id).element.disabled).toBe(true)
     }
-    expect(wrapper.text()).toContain('Protocol customization is disabled because a repeater template is selected.')
+    expect(wrapper.text()).toContain('Select No repeater template to enable protocol customization.')
 
     await selectGeneratedChain(wrapper, { count: 3 })
     await wrapper.get('#chain-create-virtual-edge').setValue(false)
@@ -341,7 +341,9 @@ describe('RepeaterChainDialog protocol configuration', () => {
   })
 
   it('shows generated predicates as disabled Custom Function examples', async () => {
-    const wrapper = mountDialog()
+    const fixture = makeFixture()
+    fixture.nodes.push(makeNode('existing', 'Repeater-1'))
+    const wrapper = mountDialog({ fixture })
     await selectGeneratedChain(wrapper, { count: 3 })
     await wrapper.get('#chain-configure-swapper').setValue(true)
     await wrapper.get('#chain-swapper-strategy-eager').setValue()
@@ -352,7 +354,7 @@ describe('RepeaterChainDialog protocol configuration', () => {
       const parameter = parameterByName(constructor, name)
       const note = parameter.get('.controlled-parameter-note')
       const summary = parameter.get('[data-testid="code-collapsed-view"]')
-      expect(note.text()).toContain('Example for Repeater-1')
+      expect(note.text()).toContain('Example for Repeater-2')
       expect(parameter.get('.complexTypeSelector').element.disabled).toBe(true)
       expect(parameter.get('.complexTypeSelector').element.value).toBe('Lambda')
       expect(parameter.get('.complexTypeSelector').find('option:checked').text()).toBe('Custom Function')
@@ -361,6 +363,7 @@ describe('RepeaterChainDialog protocol configuration', () => {
       expect(summary.attributes('aria-label')).toBe('View custom function')
       expect(summary.text()).toContain('nodeid(')
     }
+    expect(parameterByName(constructor, 'nodeL').text()).toContain('start_repeater = nodeid("Repeater-2")')
     expect(parameterByName(constructor, 'nodeL').text()).toContain('start_repeater <= x < self')
     expect(parameterByName(constructor, 'nodeH').text()).toContain('self < x <= end_repeater')
 

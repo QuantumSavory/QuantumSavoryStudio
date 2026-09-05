@@ -192,7 +192,7 @@
             <div class="constructor-panel">
               <h4>SwapperProt constructor</h4>
               <p v-if="generatedPredicateStrategy" class="controlled-fields-note">
-                The disabled Custom Function fields show examples for Repeater-1. The strategy sets distinct values for each repeater.
+                The disabled Custom Function fields show examples for {{ exampleRepeaterName }}. The strategy sets distinct values for each repeater.
               </p>
               <ProtocolConstructorForm
                 :protocol="swapperProtocol"
@@ -267,7 +267,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import {
   buildSwapperPredicateSources,
   inspectRepeaterTemplate,
-  repeaterName,
+  planRepeaterNames,
   SWAPPER_PREDICATE_STRATEGIES,
   validateRepeaterChain
 } from '../utils/repeaterChain.js'
@@ -332,9 +332,15 @@ const swapperAvailable = computed(() => !!swapperDefinition.value)
 const trackerAvailable = computed(() => !!trackerDefinition.value)
 const protocolCustomizationAllowed = computed(() => form.noRepeaterTemplate)
 const generatedPredicateStrategy = computed(() => form.predicateStrategy !== customStrategy)
+const plannedRepeaterNames = computed(() => (
+  Number.isInteger(form.repeaterCount) && form.repeaterCount >= 1 && form.repeaterCount <= 100
+    ? planRepeaterNames(props.nodes, form.repeaterCount)
+    : []
+))
+const exampleRepeaterName = computed(() => plannedRepeaterNames.value[0] || 'the first repeater')
 const controlledSwapperParameters = computed(() => {
   if (!generatedPredicateStrategy.value) return {}
-  const reason = 'Example for Repeater-1; set separately for each repeater by the selected strategy.'
+  const reason = `Example for ${exampleRepeaterName.value}; set separately for each repeater by the selected strategy.`
   return { nodeL: reason, nodeH: reason }
 })
 
@@ -354,7 +360,7 @@ const templateStatus = computed(() => {
 const protocolCustomizationStatus = computed(() => (
   protocolCustomizationAllowed.value
     ? 'Configure the protocols to add to the generated chain. Leave an option off to omit that protocol.'
-    : 'Protocol customization is disabled because a repeater template is selected. The generated chain copies protocols from the template node and its optional edge.'
+    : 'Select No repeater template to enable protocol customization. Template-backed chains copy protocols from the template node and its optional edge.'
 ))
 const entanglerDescription = computed(() => {
   if (!protocolCustomizationAllowed.value) return protocolCustomizationStatus.value
@@ -494,7 +500,8 @@ watch(
   () => [
     form.repeaterCount,
     form.startNodeId,
-    form.endNodeId
+    form.endNodeId,
+    ...plannedRepeaterNames.value
   ],
   () => {
     if (generatedPredicateStrategy.value) applyGeneratedPredicatePreview()
@@ -594,7 +601,7 @@ function applyGeneratedPredicatePreview() {
       repeaterCount: form.repeaterCount,
       startNodeName: startNode.name,
       endNodeName: endNode.name,
-      repeaterNameAt: index => repeaterName('Repeater', index + 1)
+      repeaterNameAt: index => plannedRepeaterNames.value[index]
     })
   } catch {
     setGeneratedPredicatePreview()
