@@ -11,6 +11,10 @@
   Custom Function examples in the constructor form. The MCP authoring contract is now
   version 3 and removes the repeater template-edge input.
 
+- Renamed the user-facing application and repository to QuantumSavory Studio. The
+  `WebQuantumSavory` Julia package, environment variables, and compatibility identifiers
+  keep their existing names.
+
 ## 1.12.0
 
 - Compacted user and agent documentation around current repository behavior and

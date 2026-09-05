@@ -113,7 +113,7 @@ describe('PanicReportDialog', () => {
     expect(writeClipboard).toHaveBeenCalledOnce()
     const report = writeClipboard.mock.calls[0][0]
     expect(report).toContain(panic.stacktrace)
-    expect(report).toContain('- WebQuantumSavory: 1.6.0')
+    expect(report).toContain('- QuantumSavory Studio: 1.6.0')
     expect(report).toContain('- QuantumSavory: 0.7.2')
     expect(report).toContain('- Julia: 1.12.1')
     expect(report).toContain('- Genie: 5.33.8')
@@ -131,7 +131,7 @@ describe('PanicReportDialog', () => {
     expect(openIssue).toHaveBeenCalledOnce()
     const issueUrl = new URL(openIssue.mock.calls[0][0])
     expect(`${issueUrl.origin}${issueUrl.pathname}`).toBe(
-      'https://github.com/QuantumSavory/WebQuantumSavory/issues/new',
+      'https://github.com/QuantumSavory/QuantumSavoryStudio/issues/new',
     )
     expect(issueUrl.searchParams.get('body')).toContain('attach the downloaded')
     expect(wrapper.get('[role="status"]').text()).toContain('Report copied')

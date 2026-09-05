@@ -203,7 +203,7 @@ async function expectCustomFunctionValidationLifecycle(
   if (checkSmallViewport) {
     await page.setViewportSize({ width: 390, height: 420 })
     const warning = page.getByRole('alertdialog', {
-      name: 'WebQuantumSavory works best on a larger screen',
+      name: 'QuantumSavory Studio works best on a larger screen',
     })
     await warning.getByRole('button', { name: 'Continue anyway' }).click()
 

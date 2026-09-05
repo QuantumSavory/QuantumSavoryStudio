@@ -6,7 +6,7 @@ test('About describes the project, its support, and ways to participate', async 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'About' }).click()
 
-  const dialog = page.getByRole('dialog', { name: 'About WebQuantumSavory Simulation Builder' })
+  const dialog = page.getByRole('dialog', { name: 'About QuantumSavory Studio' })
   await expect(dialog).toBeVisible()
 
   await expect(dialog.getByRole('link', { name: 'QuantumSavory', exact: true })).toHaveAttribute(
@@ -43,7 +43,7 @@ test('About describes the project, its support, and ways to participate', async 
   await expect(localSteps).toHaveCount(4)
   await expect(localSteps.nth(0)).toContainText('Install Juliaup through the Julia installation page.')
   await expect(localSteps.nth(1).locator('code')).toHaveText(
-    'git clone https://github.com/QuantumSavory/WebQuantumSavory.git'
+    'git clone https://github.com/QuantumSavory/QuantumSavoryStudio.git'
   )
   await expect(localSteps.nth(2).locator('code')).toHaveText(
     "julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'"

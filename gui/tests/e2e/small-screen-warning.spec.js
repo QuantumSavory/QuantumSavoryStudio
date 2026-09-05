@@ -31,7 +31,7 @@ test('warns on a phone-sized viewport and supports explicit dismissal', async ({
   await page.goto('/')
 
   const warning = page.getByRole('alertdialog', {
-    name: 'WebQuantumSavory works best on a larger screen',
+    name: 'QuantumSavory Studio works best on a larger screen',
   })
   const continueButton = warning.getByRole('button', { name: 'Continue anyway' })
 
@@ -58,7 +58,7 @@ test('reacts to viewport changes and can be dismissed with Escape', async ({ pag
   await page.goto('/')
 
   const warning = page.getByRole('alertdialog', {
-    name: 'WebQuantumSavory works best on a larger screen',
+    name: 'QuantumSavory Studio works best on a larger screen',
   })
   await expect(warning).toBeHidden()
 
@@ -74,6 +74,6 @@ test('warns on a short landscape viewport', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByRole('alertdialog', {
-    name: 'WebQuantumSavory works best on a larger screen',
+    name: 'QuantumSavory Studio works best on a larger screen',
   })).toBeVisible()
 })

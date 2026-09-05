@@ -11,7 +11,7 @@
     <div class="small-screen-warning-content">
       <MonitorX :size="56" :stroke-width="1.75" aria-hidden="true" />
       <h1 id="small-screen-warning-title">
-        WebQuantumSavory works best on a larger screen
+        QuantumSavory Studio works best on a larger screen
       </h1>
       <p id="small-screen-warning-description">
         This simulator is designed for desktop-sized displays and may be difficult to use on a

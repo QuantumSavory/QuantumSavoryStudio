@@ -13,7 +13,7 @@
         <h3 id="system-runtime-heading">Application runtime</h3>
         <dl class="system-information-list">
           <div>
-            <dt>WebQuantumSavory</dt>
+            <dt>QuantumSavory Studio</dt>
             <dd data-testid="system-webquantumsavory-version">{{ information.webQuantumSavory }}</dd>
           </div>
           <div>
