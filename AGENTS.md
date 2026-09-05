@@ -1,10 +1,10 @@
-# WebQuantumSavory Development Guidance
+# QuantumSavory Studio Development Guidance
 
 ## Scope
 
-This repository ships one product with a Julia backend, a Vue frontend, and an optional
-local MCP sidecar. Root entry points such as `bootstrap.jl` and `routes.jl` belong to
-the backend.
+The `WebQuantumSavory` repository ships QuantumSavory Studio with a Julia backend, a
+Vue frontend, and an optional local MCP sidecar. Root entry points such as
+`bootstrap.jl` and `routes.jl` belong to the backend.
 
 Read the component guide that matches the change:
 

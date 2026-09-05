@@ -6,7 +6,7 @@ test('About describes the project, its support, and ways to participate', async 
   await page.getByRole('button', { name: 'Menu' }).click()
   await page.getByRole('menuitem', { name: 'About' }).click()
 
-  const dialog = page.getByRole('dialog', { name: 'About WebQuantumSavory Simulation Builder' })
+  const dialog = page.getByRole('dialog', { name: 'About QuantumSavory Studio' })
   await expect(dialog).toBeVisible()
 
   await expect(dialog.getByRole('link', { name: 'QuantumSavory', exact: true })).toHaveAttribute(

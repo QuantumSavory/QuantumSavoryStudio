@@ -140,7 +140,7 @@ end
 Read and validate the opt-in local MCP configuration.
 
 The host check is intentionally performed only when the feature is enabled so a
-normal WebQuantumSavory deployment has no MCP-specific startup work.
+normal QuantumSavory Studio deployment has no MCP-specific startup work.
 """
 function read_mcp_configuration(
   environment=ENV;

@@ -1,4 +1,4 @@
-# WebQuantumSavory Agent Context
+# QuantumSavory Studio Agent Context
 
 Open only the context required by the task; do not recursively load `.agents/`.
 

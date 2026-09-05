@@ -3,7 +3,7 @@ import { normalizeSystemInformation } from './systemInformation.js'
 export const PANIC_ISSUE_URL = 'https://github.com/QuantumSavory/WebQuantumSavory/issues/new'
 
 const UNKNOWN_VALUE = 'Unknown'
-const PROJECT_FALLBACK_NAME = 'webquantumsavory-project'
+const PROJECT_FALLBACK_NAME = 'quantumsavory-studio-project'
 
 function firstString(...values) {
   return values.find(value => typeof value === 'string' && value.trim())?.trim() || ''
@@ -83,7 +83,7 @@ export function buildPanicReport(panic, platformInfo = {}) {
   ].filter(Boolean)
 
   return [
-    '# WebQuantumSavory simulator panic report',
+    '# QuantumSavory Studio simulator panic report',
     '',
     '## Panic details',
     '',
@@ -103,7 +103,7 @@ export function buildPanicReport(panic, platformInfo = {}) {
     '',
     '## Environment',
     '',
-    `- WebQuantumSavory: ${markdownText(system.webQuantumSavory)}`,
+    `- QuantumSavory Studio: ${markdownText(system.webQuantumSavory)}`,
     `- QuantumSavory: ${markdownText(system.quantumSavory.version)}`,
     `- Julia: ${markdownText(system.julia)}`,
     `- Genie: ${markdownText(system.genie)}`,
@@ -184,7 +184,7 @@ export function buildPanicIssueUrl(panic, projectName = '') {
   const titleDetail = exceptionType ? `${exceptionType}: ${summary}` : summary
   const title = `[Simulator panic] ${titleDetail}`.slice(0, 180)
   const body = [
-    'A WebQuantumSavory simulator panic occurred.',
+    'A QuantumSavory Studio simulator panic occurred.',
     '',
     'Please paste the panic report that was copied to your clipboard below this line,',
     `then attach the downloaded \`${filename}\` project JSON file.`,

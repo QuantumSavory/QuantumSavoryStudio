@@ -1,8 +1,9 @@
-# WebQuantumSavory
+# QuantumSavory Studio
 
-WebQuantumSavory is a browser application for designing and simulating quantum
+QuantumSavory Studio is a browser application for designing and simulating quantum
 networks with [QuantumSavory](https://github.com/QuantumSavory/QuantumSavory.jl).
-A Julia/Genie backend serves the Vue interface and its private support API.
+This `WebQuantumSavory` repository contains the Julia/Genie backend, the Vue interface,
+and their private support API.
 
 ## Run locally
 
@@ -63,4 +64,4 @@ The integration scripts manage their own test servers. Frontend-only commands ar
 
 ## License
 
-WebQuantumSavory is available under the [MIT License](LICENSE.md).
+QuantumSavory Studio is available under the [MIT License](LICENSE.md).

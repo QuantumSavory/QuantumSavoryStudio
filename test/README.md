@@ -1,4 +1,4 @@
-# WebQuantumSavory Julia Tests
+# QuantumSavory Studio Julia Tests
 
 The suites are split by execution boundary:
 

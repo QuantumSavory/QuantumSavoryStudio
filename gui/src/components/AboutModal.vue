@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :show="show"
-    title="About WebQuantumSavory Simulation Builder"
+    title="About QuantumSavory Studio"
     width="min(700px, calc(100vw - 32px))"
     class="about-modal"
     closable
@@ -17,7 +17,7 @@
             </a>
           </h4>
           <p>
-            WebQuantumSavory is an interactive builder for designing and running quantum-network
+            QuantumSavory Studio is an interactive builder for designing and running quantum-network
             simulations. Its simulation engine and reusable network protocols come from the
             QuantumSavory ecosystem for realistic quantum-network modeling.
           </p>
@@ -52,7 +52,7 @@
         </section>
 
         <section class="about-section" aria-labelledby="local-run-title">
-          <h4 id="local-run-title">Run WebQuantumSavory locally</h4>
+          <h4 id="local-run-title">Run QuantumSavory Studio locally</h4>
           <p>
             After cloning the repository, run the remaining commands from its
             <code>WebQuantumSavory</code> directory.

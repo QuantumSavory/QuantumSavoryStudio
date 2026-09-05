@@ -22,7 +22,7 @@ test('version badge opens complete system information with exact locked dependen
   const appVersion = packageLock.packages[''].version
 
   const versionButton = page.getByRole('button', {
-    name: `WebQuantumSavory version ${appVersion}. Open System Information`,
+    name: `QuantumSavory Studio version ${appVersion}. Open System Information`,
   })
   await expect(versionButton).toBeVisible()
   await expect(versionButton).toHaveAttribute('title', 'Open System Information')
