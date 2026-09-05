@@ -198,7 +198,7 @@ function tool_result(configuration, tool_name, arguments)
   catch error
     false, Dict{String,Any}(
       "code" => "INTERNAL_ERROR",
-      "message" => "The WebQuantumSavory backend could not be reached.",
+      "message" => "The QuantumSavory Studio backend could not be reached.",
       "retryable" => true,
       "details" => Dict("exception_type" => string(typeof(error))),
     )
@@ -278,7 +278,7 @@ function resources(configuration)
   static_resources = [
     MCPResource(
       uri="wqs://design/current",
-      name="Current WebQuantumSavory design",
+      name="Current QuantumSavory Studio design",
       description="Canonical read-only mirror of the bound browser design.",
       mime_type="application/json",
       data_provider=() -> text_resource(configuration, "wqs://design/current"),
@@ -296,7 +296,7 @@ function resources(configuration)
       name="Catalog",
       uri_template="wqs://catalog/{kind}",
       mime_type="application/json",
-      description="One live WebQuantumSavory authoring catalog.",
+      description="One live QuantumSavory Studio authoring catalog.",
       data_provider=(uri, _variables) -> text_resource(configuration, uri),
     ),
     ResourceTemplate(
@@ -352,7 +352,7 @@ function main()
   server = mcp_server(
     name="webquantumsavory",
     version="1.0.0",
-    title="WebQuantumSavory local collaboration",
+    title="QuantumSavory Studio local collaboration",
     description="Local browser-mediated quantum-network design and simulation tools.",
     tools=tools,
     resources=static_resources,

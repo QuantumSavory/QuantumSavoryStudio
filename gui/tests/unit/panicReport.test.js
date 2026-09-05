@@ -51,12 +51,12 @@ describe('panic report data', () => {
       },
     })
 
-    expect(report).toContain('# WebQuantumSavory simulator panic report')
+    expect(report).toContain('# QuantumSavory Studio simulator panic report')
     expect(report).toContain('- Panic ID: panic-123')
     expect(report).toContain('- Exception type: BoundsError')
     expect(report).toContain(panic.message)
     expect(report).toContain(panic.stacktrace)
-    expect(report).toContain('- WebQuantumSavory: 1.6.0')
+    expect(report).toContain('- QuantumSavory Studio: 1.6.0')
     expect(report).toContain('- QuantumSavory: 0.7.2')
     expect(report).toContain('- Julia: 1.12.1')
     expect(report).toContain('- Genie: 5.33.8')
@@ -77,7 +77,7 @@ describe('panic report data', () => {
       versions: { app: '2.0', quantumsavory: '1.0', julia: '1.13' },
     })
 
-    expect(report).toContain('- WebQuantumSavory: 2.0')
+    expect(report).toContain('- QuantumSavory Studio: 2.0')
     expect(report).toContain('- QuantumSavory: 1.0')
   })
 
@@ -99,7 +99,7 @@ describe('panic project download', () => {
   it('makes a portable panic filename and handles empty or reserved names', () => {
     expect(safeProjectName('  Démo / network: one  ')).toBe('Demo-network-one')
     expect(panicProjectFilename('  Démo / network: one  ')).toBe('Demo-network-one-panic.json')
-    expect(panicProjectFilename('...')).toBe('webquantumsavory-project-panic.json')
+    expect(panicProjectFilename('...')).toBe('quantumsavory-studio-project-panic.json')
     expect(panicProjectFilename('CON')).toBe('project-CON-panic.json')
   })
 

@@ -1,7 +1,7 @@
 # MCP Sidecar Guidance
 
 This file applies to the optional Julia application under `mcp/`. It is part of
-WebQuantumSavory and is not released independently.
+QuantumSavory Studio and is not released independently.
 
 ## Open selectively
 

@@ -9,7 +9,7 @@ test.describe('App smoke', () => {
     await expect(page.locator('#app')).toBeVisible();
 
     // Title set by index.html
-    await expect(page).toHaveTitle(/WebQuantumSavory/i);
+    await expect(page).toHaveTitle(/QuantumSavory Studio/i);
   });
 
   test('renders top-level panels and map shell', async ({ page }) => {
@@ -24,5 +24,4 @@ test.describe('App smoke', () => {
     await expect(mapCanvas.first()).toBeVisible({ timeout: 15_000 });
   });
 });
-
 

@@ -1,4 +1,4 @@
-# WebQuantumSavory Frontend
+# QuantumSavory Studio Frontend
 
 The frontend is a Vue 3 application built with Vite. Use Node.js 24 and the locked npm
 dependencies.
@@ -13,7 +13,7 @@ npm run build
 The production build is written to the backend's `../public/` directory. That output
 is generated and ignored by Git.
 
-End-to-end tests use Playwright and require the WebQuantumSavory backend at
+End-to-end tests use Playwright and require the QuantumSavory Studio backend at
 `http://localhost:8000`:
 
 ```sh

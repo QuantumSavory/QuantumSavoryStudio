@@ -154,9 +154,9 @@ test('reports a diagnostic protocol panic without uploading the project', async 
   ]))
 
   const copiedReport = await page.evaluate(() => navigator.clipboard.readText())
-  expect(copiedReport).toContain('# WebQuantumSavory simulator panic report')
+  expect(copiedReport).toContain('# QuantumSavory Studio simulator panic report')
   expect(copiedReport).toContain('BoundsError')
-  expect(copiedReport).toContain(`- WebQuantumSavory: ${platformInfo.versions.app}`)
+  expect(copiedReport).toContain(`- QuantumSavory Studio: ${platformInfo.versions.app}`)
   expect(copiedReport).toContain(`- QuantumSavory: ${platformInfo.versions.quantumsavory}`)
   expect(copiedReport).toContain(`- Julia: ${platformInfo.versions.julia}`)
   expect(copiedReport).toContain(`- Genie: ${platformInfo.versions.genie}`)
@@ -198,7 +198,7 @@ test('reports a diagnostic protocol panic without uploading the project', async 
   expect(issueOpenCall.features).toBeNull()
   expect(issueOpenCall.openerCleared).toBe(true)
   expect(`${issueUrl.origin}${issueUrl.pathname}`).toBe(
-    'https://github.com/QuantumSavory/WebQuantumSavory/issues/new',
+    'https://github.com/QuantumSavory/QuantumSavoryStudio/issues/new',
   )
   expect(issueUrl.searchParams.get('body')).toContain('attach the downloaded')
   expect(issueUrl.searchParams.get('body')).toContain('Panic-Diagnostic-panic.json')

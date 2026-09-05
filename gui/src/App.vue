@@ -1320,12 +1320,12 @@ onUnmounted(() => {
     <SmallScreenWarning />
     <div ref="topbarElement" class="topbar">
       <div class="topbar-title">
-        <img src="./assets/logo.png" alt="WebQuantumSavory Logo" class="topbar-logo">
-        WebQuantumSavory Simulation Builder
+        <img src="./assets/logo.png" alt="" class="topbar-logo">
+        QuantumSavory Studio
         <button
           type="button"
           class="version-badge"
-          :aria-label="`WebQuantumSavory version ${appVersion}. Open System Information`"
+          :aria-label="`QuantumSavory Studio version ${appVersion}. Open System Information`"
           title="Open System Information"
           @click="showSystemInformation = true"
         >
