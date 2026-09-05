@@ -169,6 +169,31 @@ describe('ProtocolConstructorForm', () => {
     expect(validateProtocolConstructorDraft(definition, protocol)).toBe(true)
   })
 
+  it('shows the native default representation only while Default is selected', async () => {
+    const definition = {
+      type: 'QuantumSavory.ProtocolZoo.DefaultedNodeProtocol',
+      group: 'node',
+      parameters: [
+        { field: 'rounds', type: 'Int64', default_repr: '-1' },
+        { field: 'required_count', type: 'Int64', default_repr: null },
+      ],
+    }
+    api._config.value = {
+      protocolTypes: { node: [definition], edge: [], floating: [] },
+    }
+    const protocol = createProtocolFromDefinition(definition)
+    const wrapper = mountForm({ protocol, category: 'node' })
+
+    expect(wrapper.findAll('.default-parameter-value').map(value => value.text()))
+      .toEqual(['-1'])
+
+    await wrapper.get('[aria-label="Input option for rounds"]').setValue('Int64')
+    expect(wrapper.find('.default-parameter-value').exists()).toBe(false)
+
+    await wrapper.get('[aria-label="Input option for rounds"]').setValue('default')
+    expect(wrapper.get('.default-parameter-value').text()).toBe('-1')
+  })
+
   it('keeps unsupported catalog metadata visible without forcing an assignment', () => {
     const definition = {
       type: 'Example.RequiredOpenWorldProtocol',

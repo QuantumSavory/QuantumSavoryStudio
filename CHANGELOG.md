@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Protocol constructor fields now show the Julia text representation of their
+  native QuantumSavory default while the Default input option is selected.
 - Added direct project renaming by editing the project name in the top bar.
 - Added constructor-documentation tooltips and Variables-tab numeric inputs to States Zoo
   parameters, including live preview and weighted-state trace updates.

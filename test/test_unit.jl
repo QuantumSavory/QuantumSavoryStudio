@@ -1111,6 +1111,11 @@
         for (field, upstream_parameter) in upstream_parameters
           web_parameter = web_parameters[field]
           @test web_parameter.required === upstream_parameter.required
+          if upstream_parameter.required
+            @test web_parameter.default_repr === nothing
+          else
+            @test web_parameter.default_repr isa String
+          end
           named_tag_semantics =
             WebQuantumSavory._named_tag_parameter_semantics(upstream_parameter.type)
           if named_tag_semantics === nothing
@@ -1124,6 +1129,27 @@
         end
       end
       @test named_tag_parameters > 0
+
+      entangler_parameters = Dict(
+        string(parameter.field) => parameter
+        for parameter in web_entries[
+          "QuantumSavory.ProtocolZoo.EntanglerProt"
+        ]["parameters"]
+      )
+      @test entangler_parameters["success_prob"].default_repr == "0.001"
+      @test entangler_parameters["rounds"].default_repr == "-1"
+
+      switch_parameters = Dict(
+        string(parameter.field) => parameter
+        for parameter in web_entries[
+          WebQuantumSavory._protocol_type_id(
+            QuantumSavory.ProtocolZoo.SimpleSwitchDiscreteProt,
+          )
+        ]["parameters"]
+      )
+      @test switch_parameters["clientnodes"].default_repr === nothing
+      @test switch_parameters["success_probs"].default_repr === nothing
+      @test switch_parameters["ticktock"].default_repr == "1.0"
 
       for override in (nothing, "false")
         withenv(WebQuantumSavory.MOCK_BROKEN_PROTOCOL_ENV_VAR => override) do
