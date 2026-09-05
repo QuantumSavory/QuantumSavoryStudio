@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expanded QuantumSavory compatibility to include the 0.8 development line.
+
 - Updated the Repeater Chain Generator to support chains without a repeater template,
   infer the only eligible template edge from the start node, and restrict protocol
   configuration to no-template chains. Generated Swapper predicates now bind endpoint
