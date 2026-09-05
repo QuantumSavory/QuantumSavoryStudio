@@ -5,6 +5,7 @@ import {
   cloneNodeData,
   createIdGenerator,
   edgeHasNode,
+  edgesBetween,
   isMapPosition,
   normalizeEdges
 } from './layoutTemplates'
@@ -17,6 +18,7 @@ import {
 
 const MIN_REPEATER_COUNT = 1
 const MAX_REPEATER_COUNT = 100
+const DEFAULT_REPEATER_NAME = 'Repeater'
 
 const TARGET_PROTOCOLS = Object.freeze({
   entangler: Object.freeze({ simpleName: 'EntanglerProt', group: 'edge' }),
@@ -25,7 +27,7 @@ const TARGET_PROTOCOLS = Object.freeze({
 })
 
 export const SWAPPER_PREDICATE_STRATEGIES = Object.freeze({
-  TEMPLATE: 'template',
+  CUSTOM: 'custom',
   EAGER: 'eager',
   SEQUENTIAL_FORWARD: 'sequential-forward',
   SEQUENTIAL_BACKWARD: 'sequential-backward',
@@ -48,6 +50,40 @@ function invalid(error) {
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Resolve the only edge that can supply repeater-chain template data. */
+export function inspectRepeaterTemplate(net, startNodeId, templateNodeId) {
+  if (templateNodeId == null) {
+    return { valid: true, error: null, templateNode: null, templateEdge: null }
+  }
+
+  const templateNode = net.nodes.find(node => node.id === templateNodeId)
+  if (!templateNode) return invalid('Select a valid repeater template node.')
+
+  const incidentEdges = net.edges.filter(edge => edgeHasNode(edge, templateNodeId))
+  const candidates = edgesBetween(net.edges, startNodeId, templateNodeId)
+  if (candidates.length > 1) {
+    return {
+      ...invalid('The start node and repeater template must have at most one edge between them.'),
+      templateNode,
+      templateEdge: null
+    }
+  }
+  if (incidentEdges.length > candidates.length) {
+    return {
+      ...invalid('The repeater template must be isolated or connected only to the start node.'),
+      templateNode,
+      templateEdge: null
+    }
+  }
+
+  return {
+    valid: true,
+    error: null,
+    templateNode,
+    templateEdge: candidates[0] ?? null
+  }
 }
 
 /** Encode an exact node name as a non-interpolating Julia string literal. */
@@ -77,22 +113,65 @@ export function repeaterName(templateName, index) {
   return `${templateName}-${index}`
 }
 
+/** Choose one collision-free, consecutively numbered repeater-name sequence. */
+export function planRepeaterNames(nodes, repeaterCount, templateNode = null) {
+  const retainedNames = new Set(
+    nodes.filter(node => node !== templateNode).map(node => node.name)
+  )
+  const baseName = templateNode?.name || DEFAULT_REPEATER_NAME
+
+  for (let firstIndex = 1; ; firstIndex += 1) {
+    const names = Array.from(
+      { length: repeaterCount },
+      (_, index) => repeaterName(baseName, firstIndex + index)
+    )
+    if (names.every(name => !retainedNames.has(name))) return names
+  }
+}
+
 function isBinaryTreeRepeaterCount(repeaterCount) {
   return Number.isInteger(repeaterCount)
     && repeaterCount > 0
     && Number.isInteger(Math.log2(repeaterCount + 1))
 }
 
+function nodePredicateSource(functionName, bindings, condition, warning) {
+  const assignments = Object.entries(bindings)
+    .map(([name, nodeName]) => `${name} = nodeid(${juliaStringLiteral(nodeName)})`)
+    .join(',\n    ')
+  return `let ${assignments}
+    function ${functionName}(x)
+        # ${warning}
+        return ${condition}
+    end
+end`
+}
+
 function namedNodePredicate(nodeName) {
-  return `x -> x == nodeid(${juliaStringLiteral(nodeName)})`
+  return nodePredicateSource(
+    'named_node_predicate',
+    { named_node: nodeName },
+    'x == named_node',
+    'Regenerate this predicate after renaming chain nodes.'
+  )
 }
 
 function eagerLowPredicate(firstRepeaterName, startNodeName) {
-  return `x -> (x < self && x >= nodeid(${juliaStringLiteral(firstRepeaterName)})) || x == nodeid(${juliaStringLiteral(startNodeName)})`
+  return nodePredicateSource(
+    'eager_low_predicate',
+    { start_node: startNodeName, start_repeater: firstRepeaterName },
+    '(start_repeater <= x < self) || x == start_node',
+    'Regenerate this predicate after renaming or reordering chain nodes.'
+  )
 }
 
 function eagerHighPredicate(lastRepeaterName, endNodeName) {
-  return `x -> (x > self && x <= nodeid(${juliaStringLiteral(lastRepeaterName)})) || x == nodeid(${juliaStringLiteral(endNodeName)})`
+  return nodePredicateSource(
+    'eager_high_predicate',
+    { end_node: endNodeName, end_repeater: lastRepeaterName },
+    '(self < x <= end_repeater) || x == end_node',
+    'Regenerate this predicate after renaming or reordering chain nodes.'
+  )
 }
 
 /**
@@ -139,19 +218,17 @@ export function buildSwapperPredicateSources({
   }
 
   if (strategy === SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_FORWARD) {
-    return repeaterNames.map((name, index) => ({
+    return repeaterNames.map((_, index) => ({
       nodeL: eagerNodeL,
-      nodeH: index === repeaterCount - 1
-        ? namedNodePredicate(endNodeName)
-        : 'x -> x == self + 1'
+      nodeH: namedNodePredicate(
+        index === repeaterCount - 1 ? endNodeName : repeaterNames[index + 1]
+      )
     }))
   }
 
   if (strategy === SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_BACKWARD) {
-    return repeaterNames.map((name, index) => ({
-      nodeL: index === 0
-        ? namedNodePredicate(startNodeName)
-        : 'x -> x == self - 1',
+    return repeaterNames.map((_, index) => ({
+      nodeL: namedNodePredicate(index === 0 ? startNodeName : repeaterNames[index - 1]),
       nodeH: eagerNodeH
     }))
   }
@@ -234,7 +311,7 @@ function resolveAutomation(rawAutomation, selection) {
       entangler: { enabled: false },
       swapper: {
         enabled: false,
-        predicateStrategy: SWAPPER_PREDICATE_STRATEGIES.TEMPLATE
+        predicateStrategy: SWAPPER_PREDICATE_STRATEGIES.CUSTOM
       },
       tracker: { enabled: false }
     }
@@ -245,26 +322,24 @@ function resolveAutomation(rawAutomation, selection) {
   const swapper = resolveAutomationSetting(rawAutomation.swapper, 'SwapperProt')
   const tracker = resolveAutomationSetting(rawAutomation.tracker, 'EntanglementTracker')
   const predicateStrategy = swapper.predicateStrategy
-    ?? SWAPPER_PREDICATE_STRATEGIES.TEMPLATE
+    ?? SWAPPER_PREDICATE_STRATEGIES.CUSTOM
 
   if (!SWAPPER_PREDICATE_STRATEGY_VALUES.has(predicateStrategy)) {
     throw new Error('Select a valid Swapper predicate strategy.')
   }
-  if (!swapper.enabled && predicateStrategy !== SWAPPER_PREDICATE_STRATEGIES.TEMPLATE) {
-    throw new Error('Enable SwapperProt replacement to use an automatic predicate strategy.')
+  if (selection.templateNode && [entangler, swapper, tracker].some(setting => setting.enabled)) {
+    throw new Error('Protocol customization is available only without a repeater template.')
+  }
+  if (!swapper.enabled && predicateStrategy !== SWAPPER_PREDICATE_STRATEGIES.CUSTOM) {
+    throw new Error('Enable SwapperProt customization to use an automatic predicate strategy.')
   }
 
   if (entangler.enabled) {
     entangler.protocol = normalizeEnabledConstructor(entangler, TARGET_PROTOCOLS.entangler)
-    if (selection.templateEdge.isLogic === true && entangler.definition.virtual !== true) {
-      throw new Error(
-        'EntanglerProt runtime metadata does not permit assignment to virtual chain edges.'
-      )
-    }
   }
 
   if (swapper.enabled) {
-    if (predicateStrategy !== SWAPPER_PREDICATE_STRATEGIES.TEMPLATE) {
+    if (predicateStrategy !== SWAPPER_PREDICATE_STRATEGIES.CUSTOM) {
       validateDefinition(swapper.definition, TARGET_PROTOCOLS.swapper)
       validateSwapperPredicateMetadata(swapper.definition)
       swapper.predicateSources = buildSwapperPredicateSources({
@@ -272,7 +347,7 @@ function resolveAutomation(rawAutomation, selection) {
         repeaterCount: selection.repeaterCount,
         startNodeName: selection.startNode.name,
         endNodeName: selection.endNode.name,
-        repeaterNameAt: index => repeaterName(selection.templateNode.name, index + 1)
+        repeaterNameAt: index => selection.repeaterNames[index]
       })
     }
     swapper.protocol = normalizeEnabledConstructor(
@@ -343,7 +418,6 @@ function resolveSelection(net, options) {
     startNodeId,
     endNodeId,
     templateNodeId,
-    templateEdgeId,
     repeaterCount,
     createVirtualEdge = true
   } = options || {}
@@ -358,22 +432,23 @@ function resolveSelection(net, options) {
     return { valid: false, error: 'Select a valid end node.' }
   }
 
-  const templateNode = net.nodes.find(node => node.id === templateNodeId)
-  if (!templateNode) {
-    return { valid: false, error: 'Select a valid repeater template node.' }
+  if (startNodeId === endNodeId) {
+    return {
+      valid: false,
+      error: 'Start and end nodes must be distinct.'
+    }
   }
 
-  const templateEdge = net.edges.find(edge => edge.id === templateEdgeId)
-  if (!templateEdge) {
-    return { valid: false, error: 'Select a valid repeater template edge.' }
-  }
-
-  if (new Set([startNodeId, endNodeId, templateNodeId]).size !== 3) {
+  if (templateNodeId != null
+    && (templateNodeId === startNodeId || templateNodeId === endNodeId)) {
     return {
       valid: false,
       error: 'Start, end, and repeater template nodes must be distinct.'
     }
   }
+  const template = inspectRepeaterTemplate(net, startNodeId, templateNodeId)
+  if (!template.valid) return template
+  const { templateNode, templateEdge } = template
 
   if (!Number.isInteger(repeaterCount)
     || repeaterCount < MIN_REPEATER_COUNT
@@ -391,21 +466,6 @@ function resolveSelection(net, options) {
     }
   }
 
-  if (!edgeHasNode(templateEdge, templateNodeId)) {
-    return {
-      valid: false,
-      error: 'The repeater template edge must be connected to the repeater template node.'
-    }
-  }
-
-  const incidentEdges = net.edges.filter(edge => edgeHasNode(edge, templateNodeId))
-  if (incidentEdges.length !== 1 || incidentEdges[0] !== templateEdge) {
-    return {
-      valid: false,
-      error: 'The repeater template node must have exactly one incident edge, and it must be the selected template edge.'
-    }
-  }
-
   if (!isMapPosition(startNode.position) || !isMapPosition(endNode.position)) {
     return {
       valid: false,
@@ -418,6 +478,7 @@ function resolveSelection(net, options) {
     endNode,
     templateNode,
     templateEdge,
+    repeaterNames: planRepeaterNames(net.nodes, repeaterCount, templateNode),
     repeaterCount,
     createVirtualEdge
   }
@@ -443,8 +504,8 @@ function resolveSelection(net, options) {
  * Validate the selections for a repeater-chain transformation.
  *
  * @param {Object} net Network object containing `nodes` and `edges` arrays.
- * @param {Object} options Selected entity IDs, count, virtual-edge flag, and optional
- * metadata-backed `automation` settings for EntanglerProt, SwapperProt, and tracker replacement.
+ * @param {Object} options Selected endpoint IDs, optional template node ID, count,
+ * virtual-edge flag, and metadata-backed protocol customization settings.
  * @returns {{ valid: boolean, error: string|null }}
  */
 export function validateRepeaterChain(net, options) {
@@ -453,12 +514,13 @@ export function validateRepeaterChain(net, options) {
 }
 
 /**
- * Replace a repeater template node and its sole edge with an evenly spaced chain.
+ * Generate an evenly spaced chain, optionally replacing a repeater template and
+ * its edge to the start node.
  * The replacement arrays are completely built before the network is mutated.
  *
  * @param {Object} net Network object containing `nodes` and `edges` arrays.
- * @param {Object} options Selected entity IDs, count, virtual-edge flag, and optional
- * metadata-backed `automation` settings for EntanglerProt, SwapperProt, and tracker replacement.
+ * @param {Object} options Selected endpoint IDs, optional template node ID, count,
+ * virtual-edge flag, and metadata-backed protocol customization settings.
  * @returns {Object} Generated and removed entities plus a logging summary.
  * @throws {Error} When the selections are no longer valid.
  */
@@ -471,6 +533,7 @@ export function generateRepeaterChain(net, options) {
     endNode,
     templateNode,
     templateEdge,
+    repeaterNames,
     repeaterCount,
     createVirtualEdge,
     automation
@@ -487,9 +550,12 @@ export function generateRepeaterChain(net, options) {
 
     generatedNodes.push(new Node({
       id: nextId('node'),
-      name: repeaterName(templateNode.name, index),
+      name: repeaterNames[index - 1],
       position,
-      data: cloneNodeData(templateNode.data, nextId)
+      data: cloneNodeData(
+        templateNode?.data || { slots: net.physicalConfig?.nodeTemplate?.slots || [] },
+        nextId
+      )
     }))
   }
 
@@ -530,8 +596,8 @@ export function generateRepeaterChain(net, options) {
       id: nextId('edge'),
       source: chainNodes[index],
       target: chainNodes[index + 1],
-      data: cloneEdgeData(templateEdge.data, nextId),
-      isLogic: templateEdge.isLogic
+      data: cloneEdgeData(templateEdge?.data, nextId),
+      isLogic: templateEdge?.isLogic === true
     })
     if (automation.entangler.enabled) {
       edge.data.protocols = replaceTargetProtocols(
@@ -557,21 +623,23 @@ export function generateRepeaterChain(net, options) {
     ? [...chainEdges, virtualEdge]
     : chainEdges
 
-  const templateNodeIndex = net.nodes.indexOf(templateNode)
-  const templateEdgeIndex = net.edges.indexOf(templateEdge)
-  const nodes = [
-    ...net.nodes.slice(0, templateNodeIndex),
-    ...generatedNodes,
-    ...net.nodes.slice(templateNodeIndex + 1)
-  ]
+  const nodes = templateNode
+    ? [
+        ...net.nodes.slice(0, net.nodes.indexOf(templateNode)),
+        ...generatedNodes,
+        ...net.nodes.slice(net.nodes.indexOf(templateNode) + 1)
+      ]
+    : [...net.nodes, ...generatedNodes]
 
   normalizeEdges(generatedEdges, nodes)
 
-  const edges = [
-    ...net.edges.slice(0, templateEdgeIndex),
-    ...generatedEdges,
-    ...net.edges.slice(templateEdgeIndex + 1)
-  ]
+  const edges = templateEdge
+    ? [
+        ...net.edges.slice(0, net.edges.indexOf(templateEdge)),
+        ...generatedEdges,
+        ...net.edges.slice(net.edges.indexOf(templateEdge) + 1)
+      ]
+    : [...net.edges, ...generatedEdges]
 
   const endpointProtocolUpdates = automation.tracker.enabled
     ? [startNode, endNode].map(node => ({
@@ -612,8 +680,8 @@ export function generateRepeaterChain(net, options) {
     summary: {
       startNodeId: startNode.id,
       endNodeId: endNode.id,
-      templateNodeId: templateNode.id,
-      templateEdgeId: templateEdge.id,
+      templateNodeId: templateNode?.id ?? null,
+      templateEdgeId: templateEdge?.id ?? null,
       repeaterCount,
       createVirtualEdge,
       virtualEdgeId: virtualEdge?.id ?? null,

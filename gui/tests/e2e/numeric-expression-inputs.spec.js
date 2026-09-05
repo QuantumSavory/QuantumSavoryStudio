@@ -333,7 +333,8 @@ test.describe('Default-first numeric expression inputs', () => {
     await page.getByRole('tab', { name: 'Layout Tools' }).click()
     await page.getByRole('button', { name: 'Repeater Chain Generator' }).click()
     const dialog = page.getByRole('dialog', { name: 'Repeater Chain Generator' })
-    await dialog.locator('#chain-replace-entangler').setChecked(true)
+    await dialog.locator('#chain-no-repeater-template').setChecked(true)
+    await dialog.locator('#chain-configure-entangler').setChecked(true)
 
     const constructor = dialog.getByTestId('template-protocol-constructor')
     const row = parameterRow(constructor, 'delay_scale')
@@ -363,10 +364,9 @@ test.describe('Default-first numeric expression inputs', () => {
     const dialog = page.getByRole('dialog', { name: 'Repeater Chain Generator' })
     await dialog.locator('#chain-start-node').selectOption({ label: 'Node 1' })
     await dialog.locator('#chain-end-node').selectOption({ label: 'Node 2' })
-    await dialog.locator('#chain-template-node').selectOption({ label: 'Node 3' })
-    await dialog.locator('#chain-template-edge').selectOption({ index: 1 })
+    await dialog.locator('#chain-no-repeater-template').setChecked(true)
     await dialog.locator('#chain-repeater-count').fill('2')
-    await dialog.locator('#chain-replace-entangler').setChecked(true)
+    await dialog.locator('#chain-configure-entangler').setChecked(true)
 
     const constructor = dialog.getByTestId('template-protocol-constructor')
     const row = parameterRow(constructor, 'delay_scale')

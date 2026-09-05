@@ -12,7 +12,7 @@ const MCP_TOOL_NAMES = contract.tools.map(tool => tool.name)
 
 describe('shared MCP contract registry', () => {
   it('loads one unique versioned definition for every advertised tool', () => {
-    expect(MCP_CONTRACT_VERSION).toBe(2)
+    expect(MCP_CONTRACT_VERSION).toBe(3)
     expect(new Set(MCP_TOOL_NAMES).size).toBe(MCP_TOOL_NAMES.length)
     expect(MCP_TOOLS).toHaveLength(15)
     expect(MCP_TOOL_NAMES).toEqual([
@@ -107,6 +107,32 @@ describe('shared MCP contract registry', () => {
     expect(overrides.lossDbPerKm.anyOf[1].allOf.at(-1)).toEqual({ minimum: 0 })
     expect(overrides.transmissivity.anyOf[1].allOf.at(-1))
       .toEqual({ minimum: 0, maximum: 1 })
+  })
+
+  it('advertises optional repeater templates without a separate edge selector', () => {
+    const edit = MCP_TOOLS.find(tool => tool.name === 'design_edit')
+    const definitions = edit.input_schema.definitions
+    const repeaterOptions = definitions.repeaterOptions
+
+    expect(repeaterOptions.required).toEqual([
+      'startNodeId',
+      'endNodeId',
+      'repeaterCount',
+    ])
+    expect(repeaterOptions.properties.templateNodeId).toEqual({
+      anyOf: [
+        { $ref: '#/definitions/id' },
+        { type: 'null' },
+      ],
+    })
+    expect(repeaterOptions.properties).not.toHaveProperty('templateEdgeId')
+    expect(definitions.swapperAutomationSetting.properties.predicateStrategy.enum).toEqual([
+      'custom',
+      'eager',
+      'sequential-forward',
+      'sequential-backward',
+      'binary-tree',
+    ])
   })
 
   it('does not advertise the v1 authoring aliases', () => {

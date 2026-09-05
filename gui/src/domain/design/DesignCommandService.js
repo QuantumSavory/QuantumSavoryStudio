@@ -1666,17 +1666,14 @@ export class DesignCommandService {
       entangler: {
         placement: 'edge',
         simpleName: 'EntanglerProt',
-        ownerId: options.templateEdgeId,
       },
       swapper: {
         placement: 'node',
         simpleName: 'SwapperProt',
-        ownerId: options.templateNodeId,
       },
       tracker: {
         placement: 'node',
         simpleName: 'EntanglementTracker',
-        ownerId: options.templateNodeId,
       },
     }
     const automation = {}

@@ -194,7 +194,7 @@ const helpers = [
   {
     id: 'repeater-chain',
     label: 'Repeater Chain Generator',
-    description: 'Create an evenly spaced chain between two endpoints by cloning a configured repeater node and its template edge.',
+    description: 'Create an evenly spaced chain between two endpoints from an optional repeater template or configured protocols.',
     icon: Waypoints,
     event: 'open-repeater-chain-generator',
   },

@@ -59,6 +59,7 @@
       :paramType="type"
       collapsible
       :collapsed="!codeEditorOpen"
+      :summaryEditable="!disabled"
       @update:modelValue="onCodeEditorValueChanged"
       @validate="validateAndCommitCode"
       @edit="openCodeEditor"

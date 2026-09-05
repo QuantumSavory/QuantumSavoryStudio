@@ -365,14 +365,16 @@ describe('DesignCommandService', () => {
         value: {
           generator: 'repeater_chain',
           options: {
-            templateNodeId: 'node_template',
-            templateEdgeId: 'edge_template',
+            startNodeId: 'node_start',
+            endNodeId: 'node_end',
+            templateNodeId: null,
+            repeaterCount: 2,
             automation: {
               entangler: {
                 enabled: true,
                 parameters: [{ name: 'enabled', type: 'Bool', value: true }],
               },
-              swapper: { enabled: false, predicateStrategy: 'template' },
+              swapper: { enabled: false, predicateStrategy: 'custom' },
             },
           },
         },
@@ -394,8 +396,9 @@ describe('DesignCommandService', () => {
     })
     expect(options.automation.swapper).toEqual({
       enabled: false,
-      predicateStrategy: 'template',
+      predicateStrategy: 'custom',
     })
+    expect(options).not.toHaveProperty('templateEdgeId')
   })
 
   it('keeps generated constructor recipes without client-side semantic evaluation', async () => {
