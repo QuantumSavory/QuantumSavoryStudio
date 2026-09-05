@@ -173,7 +173,7 @@
   end
 
   @testset "three-node chain completes and consumes an end-to-end pair" begin
-    simulation_name = "repeater_chain_simulation_integration_$(getpid())"
+    simulation_name = "repeater chain_simulation integration $(getpid())"
     simulation_target = 0.1
     payload = repeater_chain_payload(simulation_name)
 
@@ -206,7 +206,7 @@
 
       protocol_response = make_request(
         "GET",
-        "/protocols/$simulation_name/consumer-a-b",
+        "/protocols/$(HTTP.escapeuri(simulation_name))/consumer-a-b",
       )
       @test protocol_response.status == 200
       protocol_data = parse_response(protocol_response)
