@@ -171,6 +171,95 @@ test('Save As keeps storage, document, reload, and simulation namespaces aligned
   expect(reloaded.stored.name).toBe('Project B')
 })
 
+test('editing the project name renames its saved document in place', async ({ page }) => {
+  await mockBackend(page, [])
+  await page.goto('/')
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+
+  await page.getByRole('button', { name: 'Menu' }).click()
+  await page.getByRole('menuitem', { name: 'New' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New Project' })
+  await dialog.getByPlaceholder('Project name').fill('Project A')
+  await dialog.getByRole('button', { name: 'Create' }).click()
+
+  await page.keyboard.down('Alt')
+  await page.locator('canvas').first().click({ position: { x: 420, y: 280 } })
+  await page.keyboard.up('Alt')
+  await expect(page.locator('.node-marker')).toHaveCount(1)
+  const nodeNameInput = page.locator('#node-name-input')
+  await expect(nodeNameInput).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(nodeNameInput).toHaveCount(0)
+
+  const collisionTarget = JSON.stringify({ sentinel: 'must not be overwritten' })
+  const originalCreatedAt = await page.evaluate(target => {
+    localStorage.setItem('cqn_v2_project_Existing Target', target)
+    return JSON.parse(localStorage.getItem('cqn_v2_projects_metadata_index'))['Project A'].createdAt
+  }, collisionTarget)
+
+  const renameButton = page.getByRole('button', { name: 'Rename project Project A' })
+  await renameButton.focus()
+  await page.keyboard.press('Enter')
+  const nameInput = page.getByRole('textbox', { name: 'Project name' })
+  await expect(nameInput).toBeFocused()
+  await expect(nameInput).toHaveValue('Project A')
+  expect(await nameInput.evaluate(input => [input.selectionStart, input.selectionEnd])).toEqual([0, 9])
+
+  await nameInput.fill('Canceled name')
+  await page.keyboard.press('Escape')
+  await expect(renameButton).toBeFocused()
+  await expect(renameButton).toBeVisible()
+
+  await renameButton.click()
+  await nameInput.fill('Existing Target')
+  await page.keyboard.press('Enter')
+  const errorDialog = page.getByRole('dialog', { name: 'Project Error' })
+  await expect(errorDialog).toContainText(
+    'Failed to rename project: A project named "Existing Target" already exists'
+  )
+  await errorDialog.getByRole('button', { name: 'OK' }).click()
+  await expect(nameInput).toBeFocused()
+
+  await nameInput.fill('  Project B  ')
+  await page.keyboard.press('Enter')
+  const renamedButton = page.getByRole('button', { name: 'Rename project Project B' })
+  await expect(renamedButton).toBeFocused()
+
+  const renamed = await page.evaluate(() => ({
+    oldProject: localStorage.getItem('cqn_v2_project_Project A'),
+    project: JSON.parse(localStorage.getItem('cqn_v2_project_Project B')),
+    collisionTarget: localStorage.getItem('cqn_v2_project_Existing Target'),
+    recent: localStorage.getItem('cqn_v2_recent_project_name'),
+    metadata: JSON.parse(localStorage.getItem('cqn_v2_projects_metadata_index')),
+  }))
+  expect(renamed.oldProject).toBeNull()
+  expect(renamed.collisionTarget).toBe(collisionTarget)
+  expect(renamed.project).toMatchObject({ name: 'Project B' })
+  expect(renamed.project.net.nodes).toHaveLength(1)
+  expect(renamed.recent).toBe('Project B')
+  expect(renamed.metadata['Project A']).toBeUndefined()
+  expect(renamed.metadata['Project B']).toMatchObject({
+    createdAt: originalCreatedAt,
+    nodeCount: 1,
+  })
+
+  await page.reload()
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+  const reloadedRenameButton = page.getByRole('button', { name: 'Rename project Project B' })
+  await expect(reloadedRenameButton).toBeVisible()
+  await expect(page.locator('.node-marker')).toHaveCount(1)
+
+  await page.evaluate(() => {
+    const app = document.querySelector('#app')?.__vue_app__
+    app._instance.setupState.simulationState.phase = 'prepared'
+  })
+  await expect(reloadedRenameButton).toBeDisabled()
+  await expect(reloadedRenameButton).toHaveAttribute(
+    'title',
+    'Reset or stop the simulation before renaming the project.'
+  )
+})
+
 test('Save As refuses to overwrite a different existing project', async ({ page }) => {
   await mockBackend(page, [])
   await page.goto('/')

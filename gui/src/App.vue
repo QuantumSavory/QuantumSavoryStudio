@@ -58,7 +58,10 @@ import { useSimulationController } from './composables/useSimulationController.j
 import { usePanelLayout } from './composables/usePanelLayout.js'
 import { useWindowManagement } from './composables/useWindowManagement.js'
 import { useNodeEdgeOperations } from './composables/useNodeEdgeOperations.js'
-import { useProjectSession } from './composables/useProjectSession.js'
+import {
+  PROJECT_RENAME_LOCKED_MESSAGE,
+  useProjectSession
+} from './composables/useProjectSession.js'
 import { useImportExport } from './composables/useImportExport.js'
 import { useAppState } from './composables/useAppState.js'
 import { useUnsavedChanges } from './composables/useUnsavedChanges.js'
@@ -614,6 +617,7 @@ const {
   openDemo: loadDemoProject,
   create: createNewProject,
   saveAs: createSaveAsProject,
+  rename: renameProject,
   save: saveProject,
   delete: deleteProject,
   importProject: importProjectIntoSession,
@@ -645,6 +649,7 @@ const {
       ? mcpBridge.unbind({ bestEffort: true })
       : undefined
   ),
+  canRenameProject: () => !isNetworkEditingDisabled.value,
   confirmDelete: message => confirmAction({
     title: 'Delete project',
     message,
@@ -654,9 +659,68 @@ const {
   showError: message => showAlert('Project Error', message)
 })
 
+const editingProjectName = ref(false)
+const projectNameDraft = ref('')
+const projectNameButton = ref(null)
+const projectNameInput = ref(null)
+const projectNameRenamePending = ref(false)
+
+async function beginProjectNameEdit() {
+  if (projectNameRenamePending.value) return
+  projectNameDraft.value = currentProjectName.value
+  editingProjectName.value = true
+  await nextTick()
+  projectNameInput.value?.select()
+}
+
+function closeProjectNameEdit(restoreFocus = false) {
+  editingProjectName.value = false
+  projectNameDraft.value = currentProjectName.value
+  if (restoreFocus) nextTick(() => projectNameButton.value?.focus())
+}
+
+function cancelProjectNameEdit(restoreFocus = false) {
+  if (projectNameRenamePending.value) return
+  closeProjectNameEdit(restoreFocus)
+}
+
+async function commitProjectNameEdit(restoreFocus = false) {
+  if (!editingProjectName.value || projectNameRenamePending.value) return
+  const name = projectNameDraft.value.trim()
+  if (!name || name === currentProjectName.value) {
+    cancelProjectNameEdit()
+    return
+  }
+
+  projectNameRenamePending.value = true
+  let renamed = false
+  try {
+    renamed = await renameProject(name)
+  } finally {
+    projectNameRenamePending.value = false
+  }
+
+  if (renamed) {
+    editingProjectName.value = false
+    if (restoreFocus) {
+      await nextTick()
+      projectNameButton.value?.focus()
+    }
+  }
+}
+
 watch(projectTransitionGeneration, () => {
   annotationCreationEnabled.value = false
   designInteractionCount.value = 0
+})
+
+watch(currentProjectName, name => {
+  editingProjectName.value = false
+  projectNameDraft.value = name
+})
+
+watch(isNetworkEditingDisabled, locked => {
+  if (locked && editingProjectName.value) closeProjectNameEdit()
 })
 
 function beginAnnotationCreation() {
@@ -1344,7 +1408,34 @@ onUnmounted(() => {
       <div class="topbar-right">
         <div class="topbar-menu">
           <div v-if="currentProjectName" class="project-name-container">
-            <span class="project-name-label" :title="currentProjectName">{{ currentProjectName }}</span>
+            <input
+              v-if="editingProjectName"
+              ref="projectNameInput"
+              v-model="projectNameDraft"
+              class="project-name-input"
+              aria-label="Project name"
+              :aria-busy="projectNameRenamePending"
+              :readonly="projectNameRenamePending"
+              @blur="commitProjectNameEdit"
+              @keydown.enter.prevent="commitProjectNameEdit(true)"
+              @keydown.esc.prevent.stop="cancelProjectNameEdit(true)"
+            >
+            <button
+              v-else
+              ref="projectNameButton"
+              type="button"
+              class="project-name-label"
+              :disabled="isNetworkEditingDisabled || projectNameRenamePending"
+              :title="isNetworkEditingDisabled
+                ? PROJECT_RENAME_LOCKED_MESSAGE
+                : projectNameRenamePending
+                  ? 'Project rename in progress.'
+                  : `${currentProjectName} — click to rename`"
+              :aria-label="`Rename project ${currentProjectName}`"
+              @click="beginProjectNameEdit"
+            >
+              {{ currentProjectName }}
+            </button>
           </div>
           
           <div class="action-buttons">
