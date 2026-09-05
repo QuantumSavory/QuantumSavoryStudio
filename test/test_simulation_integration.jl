@@ -94,12 +94,28 @@
         protocol_parameter("chooseslotB", "Int64", slot_b),
       ],
     )
+    eager_low_predicate = """
+    let start_node = nodeid("A"),
+        start_repeater = nodeid("Repeater-1")
+        function eager_low_predicate(x)
+            return (start_repeater <= x < self) || x == start_node
+        end
+    end
+    """
+    eager_high_predicate = """
+    let end_node = nodeid("B"),
+        end_repeater = nodeid("Repeater-1")
+        function eager_high_predicate(x)
+            return (self < x <= end_repeater) || x == end_node
+        end
+    end
+    """
     swapper = protocol(
       "swapper-repeater",
       "QuantumSavory.ProtocolZoo.SwapperProt";
       parameters=Any[
-        protocol_parameter("nodeL", "Function", "<(self)"),
-        protocol_parameter("nodeH", "Function", ">(self)"),
+        protocol_parameter("nodeL", "Function", eager_low_predicate),
+        protocol_parameter("nodeH", "Function", eager_high_predicate),
         protocol_parameter("retry_lock_time", "Float64", 0.01),
         protocol_parameter("rounds", "Int64", 1),
       ],
@@ -120,15 +136,16 @@
       ),
       "variables" => Any[],
       "net" => Dict(
+        # Generated chains keep selected endpoints before newly added repeaters.
         "nodes" => Any[
           simulation_node("node-a", "A", Any[default_slot("slot-a")], Any[tracker("a")]),
+          simulation_node("node-b", "B", Any[default_slot("slot-b")], Any[tracker("b")]),
           simulation_node(
             "node-r",
-            "Repeater",
+            "Repeater-1",
             Any[default_slot("slot-r-left"), default_slot("slot-r-right")],
             Any[tracker("r"), swapper],
           ),
-          simulation_node("node-b", "B", Any[default_slot("slot-b")], Any[tracker("b")]),
         ],
         "edges" => Any[
           simulation_edge("edge-a-r", "node-a", "node-r", Any[entangler("entangler-a-r", 1, 1)]),

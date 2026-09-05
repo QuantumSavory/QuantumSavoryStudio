@@ -21,6 +21,16 @@ export function edgeHasNode(edge, nodeId) {
   return endpointId(edge.source) === nodeId || endpointId(edge.target) === nodeId
 }
 
+export function edgesBetween(edges, firstNodeId, secondNodeId) {
+  if (!Array.isArray(edges)) return []
+  return edges.filter(edge => {
+    const sourceId = endpointId(edge.source)
+    const targetId = endpointId(edge.target)
+    return (sourceId === firstNodeId && targetId === secondNodeId)
+      || (sourceId === secondNodeId && targetId === firstNodeId)
+  })
+}
+
 export { isMapPosition }
 
 export function assertGeneratedMapPosition(position) {
@@ -130,6 +140,7 @@ function collectUsedIds(net) {
     edge.data?.protocols?.forEach(addId)
   })
   net.protocols?.forEach(addId)
+  net.physicalConfig?.nodeTemplate?.slots?.forEach(addId)
 
   return ids
 }

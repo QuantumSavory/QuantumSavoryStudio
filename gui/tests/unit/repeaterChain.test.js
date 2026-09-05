@@ -107,7 +107,8 @@ function makeNetwork({
   startProtocols = [],
   endProtocols = [],
   templateProtocols = [],
-  edgeProtocols = []
+  edgeProtocols = [],
+  globalSlots = []
 } = {}) {
   const byId = {
     start: makeNode('start', 'Start', startProtocols),
@@ -119,7 +120,7 @@ function makeNetwork({
   const templateEdge = new Edge({
     id: 'template-edge',
     source: byId.template,
-    target: byId.anchor,
+    target: byId.start,
     isLogic: virtualTemplate,
     data: {
       type: 'connection',
@@ -131,7 +132,8 @@ function makeNetwork({
     net: {
       nodes: order.map(id => byId[id]),
       edges: [templateEdge],
-      protocols: []
+      protocols: [],
+      physicalConfig: { nodeTemplate: { slots: globalSlots } }
     },
     byId,
     templateEdge
@@ -143,7 +145,6 @@ function baseOptions(overrides = {}) {
     startNodeId: 'start',
     endNodeId: 'end',
     templateNodeId: 'template',
-    templateEdgeId: 'template-edge',
     repeaterCount: 3,
     createVirtualEdge: true,
     ...overrides
@@ -154,7 +155,7 @@ function enabledAutomation({
   entangler = true,
   swapper = true,
   tracker = true,
-  predicateStrategy = SWAPPER_PREDICATE_STRATEGIES.TEMPLATE,
+  predicateStrategy = SWAPPER_PREDICATE_STRATEGIES.CUSTOM,
   entanglerProtocol = configuredProtocol(ENTANGLER_TYPE, { success_prob: 0.75 }),
   swapperProtocol = configuredProtocol(SWAPPER_TYPE, {
     nodeL: 'template-low',
@@ -320,7 +321,7 @@ describe('Swapper predicate source generation', () => {
   })
 
   it('only generates sources for automatic strategies', () => {
-    expect(() => sources(SWAPPER_PREDICATE_STRATEGIES.TEMPLATE))
+    expect(() => sources(SWAPPER_PREDICATE_STRATEGIES.CUSTOM))
       .toThrow('automatic Swapper predicate strategy')
   })
 
@@ -340,33 +341,42 @@ describe('Swapper predicate source generation', () => {
   })
 
   it('builds eager and both sequential strategies exactly', () => {
-    expect(sources(SWAPPER_PREDICATE_STRATEGIES.EAGER)).toEqual([
-      {
-        nodeL: 'x -> (x < self && x >= nodeid("R1")) || x == nodeid("Start")',
-        nodeH: 'x -> (x > self && x <= nodeid("R3")) || x == nodeid("End")'
-      },
-      {
-        nodeL: 'x -> (x < self && x >= nodeid("R1")) || x == nodeid("Start")',
-        nodeH: 'x -> (x > self && x <= nodeid("R3")) || x == nodeid("End")'
-      },
-      {
-        nodeL: 'x -> (x < self && x >= nodeid("R1")) || x == nodeid("Start")',
-        nodeH: 'x -> (x > self && x <= nodeid("R3")) || x == nodeid("End")'
-      }
-    ])
+    const eager = sources(SWAPPER_PREDICATE_STRATEGIES.EAGER)
+    expect(new Set(eager.map(value => value.nodeL))).toEqual(new Set([`let start_node = nodeid("Start"),
+    start_repeater = nodeid("R1")
+    function eager_low_predicate(x)
+        # Regenerate this predicate after renaming or reordering chain nodes.
+        return (start_repeater <= x < self) || x == start_node
+    end
+end`]))
+    expect(new Set(eager.map(value => value.nodeH))).toEqual(new Set([`let end_node = nodeid("End"),
+    end_repeater = nodeid("R3")
+    function eager_high_predicate(x)
+        # Regenerate this predicate after renaming or reordering chain nodes.
+        return (self < x <= end_repeater) || x == end_node
+    end
+end`]))
 
     expect(sources(SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_FORWARD).map(value => value.nodeH))
       .toEqual([
-        'x -> x == self + 1',
-        'x -> x == self + 1',
-        'x -> x == nodeid("End")'
-      ])
+        'R2',
+        'R3',
+        'End'
+      ].map(name => expect.stringContaining(`named_node = nodeid("${name}")`)))
+    expect(sources(SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_FORWARD).map(value => value.nodeH))
+      .not.toEqual(expect.arrayContaining([
+        expect.stringContaining('self + 1')
+      ]))
     expect(sources(SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_BACKWARD).map(value => value.nodeL))
       .toEqual([
-        'x -> x == nodeid("Start")',
-        'x -> x == self - 1',
-        'x -> x == self - 1'
-      ])
+        'Start',
+        'R1',
+        'R2'
+      ].map(name => expect.stringContaining(`named_node = nodeid("${name}")`)))
+    expect(sources(SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_BACKWARD).map(value => value.nodeL))
+      .not.toEqual(expect.arrayContaining([
+        expect.stringContaining('self - 1')
+      ]))
   })
 
   it('recursively assigns binary-tree midpoint boundaries', () => {
@@ -378,7 +388,7 @@ describe('Swapper predicate source generation', () => {
       endNodeName: 'End',
       repeaterNameAt: index => binaryNames[index]
     })
-    const boundary = name => `x -> x == nodeid("${name}")`
+    const boundary = name => expect.stringContaining(`named_node = nodeid("${name}")`)
 
     expect(binary).toEqual([
       { nodeL: boundary('Start'), nodeH: boundary('R2') },
@@ -400,6 +410,89 @@ describe('Swapper predicate source generation', () => {
 })
 
 describe('repeater-chain protocol automation', () => {
+  it('derives the optional template edge from the start node', () => {
+    const connected = makeNetwork()
+    const connectedResult = generateRepeaterChain(
+      connected.net,
+      baseOptions({ repeaterCount: 1, createVirtualEdge: false })
+    )
+    expect(connectedResult.removedNode).toBe(connected.byId.template)
+    expect(connectedResult.removedEdge).toBe(connected.templateEdge)
+    expect(connected.net.edges).toEqual(connectedResult.chainEdges)
+
+    const isolated = makeNetwork()
+    isolated.net.edges = []
+    const isolatedResult = generateRepeaterChain(
+      isolated.net,
+      baseOptions({ repeaterCount: 1, createVirtualEdge: false })
+    )
+    expect(isolatedResult.removedEdge).toBeNull()
+    expect(isolated.net.edges).toEqual(isolatedResult.chainEdges)
+  })
+
+  it('rejects ambiguous or unrelated template-node edges', () => {
+    const ambiguous = makeNetwork()
+    ambiguous.net.edges.push(new Edge({
+      id: 'duplicate-template-edge',
+      source: ambiguous.byId.start,
+      target: ambiguous.byId.template
+    }))
+    expect(validateRepeaterChain(ambiguous.net, baseOptions())).toMatchObject({
+      valid: false,
+      error: expect.stringContaining('at most one edge')
+    })
+
+    const unrelated = makeNetwork()
+    unrelated.templateEdge.target = unrelated.byId.anchor
+    expect(validateRepeaterChain(unrelated.net, baseOptions())).toMatchObject({
+      valid: false,
+      error: expect.stringContaining('isolated or connected only to the start node')
+    })
+  })
+
+  it('appends repeaters with fresh global slot templates when no template is used', () => {
+    const globalSlot = {
+      id: 'global-slot',
+      type: 'Qubit',
+      backgroundNoise: { type: 'Example.Noise', parameters: [] }
+    }
+    const { net } = makeNetwork({ globalSlots: [globalSlot] })
+    net.edges = []
+    const originalNodes = [...net.nodes]
+
+    const result = generateRepeaterChain(net, baseOptions({
+      templateNodeId: null,
+      repeaterCount: 2,
+      createVirtualEdge: false
+    }))
+
+    expect(net.nodes).toEqual([...originalNodes, ...result.generatedNodes])
+    expect(result.generatedNodes.map(node => node.name)).toEqual(['Repeater-1', 'Repeater-2'])
+    expect(result.removedNode).toBeNull()
+    expect(result.removedEdge).toBeNull()
+    const generatedSlotIds = result.generatedNodes.map(node => node.data.slots[0].id)
+    expect(new Set(generatedSlotIds).size).toBe(2)
+    expect(generatedSlotIds).not.toContain(globalSlot.id)
+    result.generatedNodes[0].data.slots[0].backgroundNoise.type = 'Changed'
+    expect(result.generatedNodes[1].data.slots[0].backgroundNoise.type).toBe('Example.Noise')
+    expect(globalSlot.backgroundNoise.type).toBe('Example.Noise')
+    result.chainEdges.forEach(edge => {
+      expect(edge.isLogic).toBe(false)
+      expect(edge.data.protocols).toEqual([])
+    })
+  })
+
+  it('permits protocol customization only without a repeater template', () => {
+    const { net } = makeNetwork()
+    const automation = enabledAutomation({ swapper: false, tracker: false })
+    expect(validateRepeaterChain(net, baseOptions({ automation }))).toMatchObject({
+      valid: false,
+      error: 'Protocol customization is available only without a repeater template.'
+    })
+    expect(validateRepeaterChain(net, baseOptions({ templateNodeId: null, automation })))
+      .toMatchObject({ valid: true, error: null })
+  })
+
   it('starts generated physical links straight and retains only material overrides', () => {
     const { net, templateEdge } = makeNetwork()
     templateEdge.data.curvePoints = [
@@ -528,22 +621,21 @@ describe('repeater-chain protocol automation', () => {
     automation.swapper.protocol.extra = { nested: { count: 2 } }
 
     const result = generateRepeaterChain(net, baseOptions({
+      templateNodeId: null,
       repeaterCount: 2,
       automation
     }))
 
     result.chainEdges.forEach(edge => {
       expect(protocolsNamed(edge.data.protocols, 'EntanglerProt')).toHaveLength(1)
-      expect(protocolsNamed(edge.data.protocols, 'EdgeProtocol')).toHaveLength(1)
-      expect(edge.data.protocols.find(value => protocolSimpleName(value) === 'EdgeProtocol').id)
-        .not.toBe(edgeOther.id)
+      expect(protocolsNamed(edge.data.protocols, 'EdgeProtocol')).toHaveLength(0)
     })
     expect(result.virtualEdge.data.protocols).toEqual([])
 
     result.generatedNodes.forEach(node => {
       expect(protocolsNamed(node.data.protocols, 'SwapperProt')).toHaveLength(1)
       expect(protocolsNamed(node.data.protocols, 'EntanglementTracker')).toHaveLength(1)
-      expect(protocolsNamed(node.data.protocols, 'NodeProtocol')).toHaveLength(1)
+      expect(protocolsNamed(node.data.protocols, 'NodeProtocol')).toHaveLength(0)
     })
     for (const endpoint of [byId.start, byId.end]) {
       expect(protocolsNamed(endpoint.data.protocols, 'EntanglementTracker')).toHaveLength(1)
@@ -587,6 +679,7 @@ describe('repeater-chain protocol automation', () => {
   it('omits metadata defaults when no configured constructor is supplied', () => {
     const { net } = makeNetwork()
     const result = generateRepeaterChain(net, baseOptions({
+      templateNodeId: null,
       repeaterCount: 1,
       automation: enabledAutomation({
         tracker: false,
@@ -608,7 +701,7 @@ describe('repeater-chain protocol automation', () => {
   })
 
   it.each([
-    SWAPPER_PREDICATE_STRATEGIES.TEMPLATE,
+    SWAPPER_PREDICATE_STRATEGIES.CUSTOM,
     SWAPPER_PREDICATE_STRATEGIES.EAGER,
     SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_FORWARD,
     SWAPPER_PREDICATE_STRATEGIES.SEQUENTIAL_BACKWARD,
@@ -626,21 +719,25 @@ describe('repeater-chain protocol automation', () => {
       tracker: false,
       predicateStrategy: strategy
     })
-    const result = generateRepeaterChain(net, baseOptions({ automation }))
+    const result = generateRepeaterChain(net, baseOptions({
+      templateNodeId: null,
+      automation
+    }))
 
     expect(net.nodes).toEqual([
       originalEnd,
       originalUnrelated,
-      ...result.generatedNodes,
+      byId.template,
       originalAnchor,
-      originalStart
+      originalStart,
+      ...result.generatedNodes
     ])
-    expect(result.generatedNodes.map(node => net.nodes.indexOf(node))).toEqual([2, 3, 4])
+    expect(result.generatedNodes.map(node => net.nodes.indexOf(node))).toEqual([5, 6, 7])
 
     result.generatedNodes.forEach((node, index) => {
       const swapper = protocolsNamed(node.data.protocols, 'SwapperProt')[0]
       const parameters = parametersByName(swapper)
-      if (strategy === SWAPPER_PREDICATE_STRATEGIES.TEMPLATE) {
+      if (strategy === SWAPPER_PREDICATE_STRATEGIES.CUSTOM) {
         expect(parameters.nodeL.value).toBe('template-low')
         expect(parameters.nodeH.value).toBe('template-high')
         expect(parameters.nodeL.selectedType).toBe('Function')
@@ -665,9 +762,10 @@ describe('repeater-chain protocol automation', () => {
     })
   })
 
-  it('rejects unavailable, mismatched, virtual-edge, and invalid strategy metadata', () => {
+  it('rejects unavailable, mismatched, and invalid strategy metadata', () => {
     const unavailable = makeNetwork().net
     const unavailableOptions = baseOptions({
+      templateNodeId: null,
       automation: {
         entangler: { enabled: true, definition: null, protocol: null }
       }
@@ -679,6 +777,7 @@ describe('repeater-chain protocol automation', () => {
 
     const wrongCategory = makeNetwork().net
     expect(validateRepeaterChain(wrongCategory, baseOptions({
+      templateNodeId: null,
       automation: {
         tracker: {
           enabled: true,
@@ -688,13 +787,9 @@ describe('repeater-chain protocol automation', () => {
       }
     }))).toMatchObject({ valid: false, error: expect.stringContaining('node protocol') })
 
-    const virtual = makeNetwork({ virtualTemplate: true }).net
-    expect(validateRepeaterChain(virtual, baseOptions({
-      automation: enabledAutomation({ swapper: false, tracker: false })
-    }))).toMatchObject({ valid: false, error: expect.stringContaining('virtual chain edges') })
-
     const automaticWithoutSwapper = makeNetwork().net
     expect(validateRepeaterChain(automaticWithoutSwapper, baseOptions({
+      templateNodeId: null,
       automation: {
         swapper: {
           enabled: false,
@@ -705,6 +800,7 @@ describe('repeater-chain protocol automation', () => {
 
     const missingPredicates = makeNetwork().net
     expect(validateRepeaterChain(missingPredicates, baseOptions({
+      templateNodeId: null,
       automation: {
         swapper: {
           enabled: true,
@@ -719,7 +815,7 @@ describe('repeater-chain protocol automation', () => {
     }))).toMatchObject({ valid: false, error: expect.stringContaining('nodeH') })
   })
 
-  it('uses virtual-edge metadata to replace eligible virtual chain edges only', () => {
+  it('clones a derived virtual template edge without protocol customization', () => {
     const edgeOther = protocol('edge-other', 'Example.EdgeProtocol')
     const { net } = makeNetwork({
       virtualTemplate: true,
@@ -728,12 +824,8 @@ describe('repeater-chain protocol automation', () => {
         edgeOther
       ]
     })
-    const automation = enabledAutomation({ swapper: false, tracker: false })
-    automation.entangler.definition = { ...ENTANGLER_DEFINITION, virtual: true }
-
     const result = generateRepeaterChain(net, baseOptions({
-      repeaterCount: 2,
-      automation
+      repeaterCount: 2
     }))
 
     expect(result.chainEdges).toHaveLength(3)
@@ -741,8 +833,7 @@ describe('repeater-chain protocol automation', () => {
       expect(edge.isLogic).toBe(true)
       expect(protocolsNamed(edge.data.protocols, 'EntanglerProt')).toHaveLength(1)
       expect(protocolsNamed(edge.data.protocols, 'EdgeProtocol')).toHaveLength(1)
-      expect(protocolsNamed(edge.data.protocols, 'EntanglerProt')[0].id)
-        .not.toBe('template-entangler')
+      expect(protocolsNamed(edge.data.protocols, 'EntanglerProt')[0].id).not.toBe('template-entangler')
     })
     expect(result.virtualEdge.isLogic).toBe(true)
     expect(result.virtualEdge.data.protocols).toEqual([])
@@ -758,6 +849,7 @@ describe('repeater-chain protocol automation', () => {
     const startProtocols = byId.start.data.protocols
     const endProtocols = byId.end.data.protocols
     const options = baseOptions({
+      templateNodeId: null,
       repeaterCount: 4,
       automation: enabledAutomation({
         entangler: false,
@@ -803,6 +895,7 @@ describe('repeater-chain protocol automation', () => {
       ]
     }
     const options = baseOptions({
+      templateNodeId: null,
       automation: enabledAutomation({
         entangler: false,
         tracker: true,
