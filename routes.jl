@@ -1,19 +1,21 @@
 using Genie.Router
 using Genie.Renderer.Json
 
-function _derive_route_name(args...; kwargs...)
-  if !isempty(args) && isa(args[1], AbstractString)
-    return String(args[1])
-  elseif haskey(kwargs, :path)
-    return String(get(kwargs, :path, ""))
-  else
-    return "route"
+# Keep the accepted path alphabet explicit because project and generated IDs
+# use underscores. The `#pattern` suffix is Genie's custom-parameter syntax.
+const ROUTE_PARAMETER_PATTERN = raw"[\p{L}\p{N}\p{S}_\-\.\+\,\s\%\:\(\)\[\]]+"
+
+function _route_pattern(path::AbstractString)
+  segments = map(split(path, '/'; keepempty=true)) do segment
+    startswith(segment, ':') && !occursin('#', segment) ?
+      "$segment#$ROUTE_PARAMETER_PATTERN" : segment
   end
+  join(segments, '/')
 end
 
-function route(f::Function, args...; name=nothing, kwargs...)
-  Genie.Router.route(args...; kwargs...) do
-    route_name = isnothing(name) ? _derive_route_name(args...; kwargs...) : name
+function route(f::Function, path::AbstractString; name=nothing, kwargs...)
+  Genie.Router.route(_route_pattern(path); kwargs...) do
+    route_name = isnothing(name) ? String(path) : String(name)
     safe_route_handler(() -> f(), route_name)
   end
 end
