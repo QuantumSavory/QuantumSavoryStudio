@@ -104,7 +104,14 @@
               </div>
             </div>
 
-            <template v-else-if="effectiveOption(param).inputKind === 'default'" />
+            <template v-else-if="effectiveOption(param).inputKind === 'default'">
+              <span
+                v-if="parameterDefaultRepr(param)"
+                class="default-parameter-value"
+              >
+                {{ parameterDefaultRepr(param) }}
+              </span>
+            </template>
             <span v-else-if="effectiveOption(param).inputKind === 'intrinsic'">
               {{ effectiveOption(param).id === 'Nothing' ? 'Nothing' : 'Wildcard' }}
             </span>
@@ -241,6 +248,11 @@ function runtimeParameterDefinition(param) {
 
 function declaredParameterType(param) {
   return runtimeParameterDefinition(param)?.type ?? param.type
+}
+
+function parameterDefaultRepr(param) {
+  const value = runtimeParameterDefinition(param)?.default_repr
+  return typeof value === 'string' ? value : ''
 }
 
 function parameterInputOptions(param) {
@@ -638,5 +650,13 @@ watchEffect(() => {
 .unsupported-parameter-value {
   color: var(--app-color-text-muted);
   font-size: 0.8rem;
+}
+
+.default-parameter-value {
+  overflow-wrap: anywhere;
+  color: var(--app-color-text-muted);
+  font-family: var(--app-font-monospace);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
 }
 </style>
