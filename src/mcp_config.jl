@@ -4,6 +4,7 @@ const DEFAULT_MCP_PORT = 8001
 const MCP_CONTRACT_FILE = normpath(
   joinpath(@__DIR__, "..", "contracts", "mcp", "contract.json"),
 )
+Base.include_dependency(MCP_CONTRACT_FILE)
 const MCP_CONTRACT_VERSION = let contract = JSON.parsefile(MCP_CONTRACT_FILE)
   version = get(contract, "contract_version", nothing)
   version isa Integer && !(version isa Bool) || error(
