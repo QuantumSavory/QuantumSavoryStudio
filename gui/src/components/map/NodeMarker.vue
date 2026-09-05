@@ -137,7 +137,7 @@ onMounted(() => {
   })
 
   marker.value.on('drag', () => {
-    if (props.editingLocked) return
+    if (props.editingLocked && !isDraggingMarker.value) return
     emit('nodePositionPreview', {
       node: props.node,
       position: currentProjectWorldPosition(),
@@ -146,7 +146,7 @@ onMounted(() => {
   })
 
   marker.value.on('dragend', () => {
-    if (props.editingLocked) return
+    if (props.editingLocked && !isDraggingMarker.value) return
     emit('nodePositionChanged', {
       node: props.node,
       position: currentProjectWorldPosition(),
@@ -285,6 +285,7 @@ function handleSlotClick(slot, e){
     :data-node-id="node.id"
     :data-detail-level="detailLevel"
     :aria-label="node.name"
+    :aria-pressed="isSelected"
     role="button"
     tabindex="0"
     @pointerenter="handlePointerEnter"
@@ -376,10 +377,10 @@ function handleSlotClick(slot, e){
 }
 
 .node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
-  min-height: 16px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   border-radius: 50%;
   background-color: var(--app-color-map-node);

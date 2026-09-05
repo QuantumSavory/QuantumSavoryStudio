@@ -135,6 +135,7 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   await expect(markers.first().locator('.node-name')).toBeVisible()
   await page.keyboard.press('Enter')
   await expect(markers.first()).toHaveClass(/is-selected/)
+  await expect(markers.first()).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Menu' }).first().focus()
   await expect(markers.first().locator('.node-name')).toBeHidden()
 

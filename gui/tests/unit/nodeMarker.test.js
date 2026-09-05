@@ -68,6 +68,7 @@ describe('NodeMarker', () => {
     })
     expect(node.position).toEqual([-71, 42])
 
+    await wrapper.setProps({ editingLocked: true })
     marker.position = { lng: 541, lat: 43 }
     marker.handlers.get('dragend')()
     expect(wrapper.get('.node-marker').classes()).not.toContain('is-dragging')
@@ -117,6 +118,7 @@ describe('NodeMarker', () => {
     expect(marker.attributes('role')).toBe('button')
     expect(marker.attributes('tabindex')).toBe('0')
     expect(marker.attributes('aria-label')).toBe('Alice')
+    expect(marker.attributes('aria-pressed')).toBe('false')
     expect(wrapper.findAll('.slot-icon')).toHaveLength(2)
 
     await wrapper.setProps({ detailLevel: NODE_MARKER_DETAIL.SLOTS })
