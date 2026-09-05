@@ -8,6 +8,8 @@ import {
   normalizeProjectName
 } from '../utils/projectDocument.js'
 
+export const PROJECT_RENAME_LOCKED_MESSAGE = 'Reset or stop the simulation before renaming the project.'
+
 export function useProjectSession({
   projectData,
   currentProjectName,
@@ -28,6 +30,7 @@ export function useProjectSession({
   closeAllResultWindows,
   hideSlotState = () => {},
   beforeProjectReplacement = () => {},
+  canRenameProject = () => true,
   confirmDelete = message => window.confirm(message),
   showError = message => window.alert(message),
   store = ProjectStore,
@@ -39,6 +42,7 @@ export function useProjectSession({
   function cancelTransition(nextPhase = 'idle') {
     transitionGeneration.value += 1
     transitionPhase.value = nextPhase
+    return transitionGeneration.value
   }
 
   function projectReplacementBarrier() {
@@ -50,6 +54,14 @@ export function useProjectSession({
     const name = normalizeProjectName(value, '')
     if (!name) throw new Error('Project name cannot be empty')
     return name
+  }
+
+  function assertNameAvailable(name, previousName, overwrite) {
+    const targetIsDifferentProject = name !== previousName
+      && store.listProjects().includes(name)
+    if (targetIsDifferentProject && !overwrite) {
+      throw new Error(`A project named "${name}" already exists`)
+    }
   }
 
   function codecContext() {
@@ -252,35 +264,74 @@ export function useProjectSession({
     return true
   }
 
-  async function saveAs(name, { overwrite = false } = {}) {
-    try {
-      name = canonicalName(name)
-      const targetIsDifferentProject = name !== currentProjectName.value
-        && store.listProjects().includes(name)
-      if (targetIsDifferentProject && !overwrite) {
-        throw new Error(`A project named "${name}" already exists`)
-      }
-      cancelTransition()
-      const replacementBarrier = projectReplacementBarrier()
-      if (replacementBarrier) await replacementBarrier
-      const encoded = encodeProject(projectData.value, {
-        ...codecContext(),
-        name,
-        map: { position: [...mapCenter.value], zoom: mapZoom.value },
-      })
+  async function persistUnderName(name, { overwrite = false, renameCurrent = false } = {}) {
+    name = canonicalName(name)
+    const previousName = currentProjectName.value
+    const previousIsDemo = isDemoProject.value
+    if (renameCurrent && !canRenameProject()) {
+      throw new Error(PROJECT_RENAME_LOCKED_MESSAGE)
+    }
+    assertNameAvailable(name, previousName, overwrite)
+
+    const generation = cancelTransition()
+    const replacementBarrier = projectReplacementBarrier()
+    if (replacementBarrier) await replacementBarrier
+    if (
+      generation !== transitionGeneration.value
+      || currentProjectName.value !== previousName
+      || isDemoProject.value !== previousIsDemo
+    ) return null
+    if (renameCurrent && !canRenameProject()) {
+      throw new Error(PROJECT_RENAME_LOCKED_MESSAGE)
+    }
+    assertNameAvailable(name, previousName, overwrite)
+    const encoded = encodeProject(projectData.value, {
+      ...codecContext(),
+      name,
+      map: { position: [...mapCenter.value], zoom: mapZoom.value },
+    })
+    if (renameCurrent) {
+      store.renameProject(previousIsDemo ? null : previousName, name, encoded)
+    } else {
       store.saveProject(name, encoded)
       store.setRecentProjectName(name)
-      stopSessionActivity()
-      clearLogs?.()
-      currentProjectName.value = name
-      projectData.value.name = name
-      isDemoProject.value = false
-      markAsSaved?.()
+    }
+    stopSessionActivity()
+    clearLogs?.()
+    currentProjectName.value = name
+    projectData.value.name = name
+    isDemoProject.value = false
+    markAsSaved?.()
+    return name
+  }
+
+  async function saveAs(name, { overwrite = false } = {}) {
+    try {
+      name = await persistUnderName(name, { overwrite })
+      if (!name) return false
       addLog?.('info', `Project saved as: ${name}`, 'System')
       return true
     } catch (error) {
       addLog?.('error', `Failed to save project: ${error.message}`, 'System')
       showError(`Failed to save project: ${error.message}`)
+      return false
+    }
+  }
+
+  async function rename(name) {
+    const previousName = currentProjectName.value
+    try {
+      if (!previousName) throw new Error('No project to rename')
+      name = canonicalName(name)
+      if (name === previousName) return true
+
+      name = await persistUnderName(name, { renameCurrent: true })
+      if (!name) return false
+      addLog?.('info', `Project renamed from ${previousName} to ${name}`, 'System')
+      return true
+    } catch (error) {
+      addLog?.('error', `Failed to rename project: ${error.message}`, 'System')
+      showError(`Failed to rename project: ${error.message}`)
       return false
     }
   }
@@ -363,6 +414,7 @@ export function useProjectSession({
     create,
     save,
     saveAs,
+    rename,
     delete: remove,
     importProject,
     serializeProjectData,

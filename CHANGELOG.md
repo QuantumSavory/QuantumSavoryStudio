@@ -4,8 +4,11 @@
 
 - Protocol constructor fields now show the Julia text representation of their
   native QuantumSavory default while the Default input option is selected.
+- Added direct project renaming by editing the project name in the top bar.
 - Added constructor-documentation tooltips and Variables-tab numeric inputs to States Zoo
   parameters, including live preview and weighted-state trace updates.
+- Restored simulation routes for project names containing spaces after an
+  upstream URI parser compatibility change.
 - Expanded QuantumSavory compatibility to include the 0.8 development line.
 - Updated the Repeater Chain Generator to support chains without a repeater template,
   infer the only eligible template edge from the start node, and restrict protocol

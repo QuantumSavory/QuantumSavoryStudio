@@ -560,12 +560,48 @@
   min-height: 32px;
 }
 .project-name-label {
+  appearance: none;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-control);
+  background: transparent;
+  font: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  color: #2d2d2d;
+  color: var(--app-color-text);
   max-width: 300px;
+  cursor: text;
+}
+.project-name-label:hover {
+  border-color: var(--app-color-border);
+  background: var(--app-color-surface-hover);
+}
+.project-name-label:disabled,
+.project-name-label:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  cursor: not-allowed;
+}
+.project-name-label:focus-visible,
+.project-name-input:focus-visible {
+  outline: var(--app-focus-ring-width) solid var(--app-color-focus);
+  outline-offset: var(--app-focus-ring-offset);
+}
+.project-name-input {
+  box-sizing: border-box;
+  width: clamp(120px, 24vw, 300px);
+  padding: 3px 6px;
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-control);
+  background: var(--app-color-surface);
+  color: var(--app-color-text);
+  font: inherit;
+  font-weight: 600;
+}
+.project-name-input:read-only {
+  background: var(--app-color-surface-subtle);
 }
 /* ==================== VENDOR ADAPTERS ==================== */
 .json-viewer-box{
