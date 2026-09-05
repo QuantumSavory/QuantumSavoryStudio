@@ -38,14 +38,17 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   await page.evaluate(() => {
     const setup = document.querySelector('#app').__vue_app__._instance.setupState
     setup.projectData.net.nodes.forEach((node, index) => {
-      const qubit = node.createNewSlot()
-      qubit.assignment = index === 0
-      const qumode = node.createNewSlot()
-      qumode.type = 'Qumode'
-      qumode.isLocked = index === 1
+      const slotCount = index === 0 ? 50 : 2
+      for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
+        const slot = node.createNewSlot()
+        slot.type = slotIndex % 2 === 0 ? 'Qubit' : 'Qumode'
+        slot.assignment = (slotIndex + index) % 2 === 0
+        slot.isLocked = slotIndex === index
+      }
     })
   })
-  await expect(markers.locator('.slot-icon')).toHaveCount(4)
+  await expect(markers.locator('.slot-icon')).toHaveCount(52)
+  await page.mouse.move(20, 20)
 
   const detailLevels = () => markers.evaluateAll(elements => (
     elements.map(element => element.dataset.detailLevel)
@@ -66,6 +69,21 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   const dotBounds = await markers.first().boundingBox()
   expect(dotBounds.width).toBeLessThan(slotsBounds.width)
   expect(dotBounds.width).toBeCloseTo(dotBounds.height, 0)
+  const hiddenSlotOffsets = await markers.first().evaluate(marker => {
+    const markerBounds = marker.getBoundingClientRect()
+    const markerCenter = {
+      x: markerBounds.left + markerBounds.width / 2,
+      y: markerBounds.top + markerBounds.height / 2,
+    }
+    return [...marker.querySelectorAll('.slot-icon')].map(slot => {
+      const slotBounds = slot.getBoundingClientRect()
+      return Math.hypot(
+        slotBounds.left + slotBounds.width / 2 - markerCenter.x,
+        slotBounds.top + slotBounds.height / 2 - markerCenter.y,
+      )
+    })
+  })
+  expect(Math.max(...hiddenSlotOffsets)).toBeLessThan(1)
 
   const dotStyles = await markers.evaluateAll(elements => elements.map(element => {
     const style = getComputedStyle(element)
@@ -85,8 +103,18 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   await expect(markers.first()).toHaveAttribute('aria-label', 'Node 1')
 
   await markers.first().hover()
+  const revealHeights = await markers.first().evaluate(async element => {
+    const heights = []
+    const end = performance.now() + 250
+    while (performance.now() < end) {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+      heights.push(element.getBoundingClientRect().height)
+    }
+    return heights
+  })
+  expect(Math.max(...revealHeights)).toBeLessThanOrEqual(revealHeights.at(-1) + 1)
   await expect(markers.first().locator('.node-name')).toBeVisible()
-  await expect(markers.first().locator('.slot-icon')).toHaveCount(2)
+  await expect(markers.first().locator('.slot-icon')).toHaveCount(50)
   await expect(markers.first().locator('.slot-icon').first()).toBeVisible()
 
   const hoveredBounds = await markers.first().boundingBox()
@@ -110,28 +138,39 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   await page.getByRole('button', { name: 'Menu' }).first().focus()
   await expect(markers.first().locator('.node-name')).toBeHidden()
 
-  const stateShown = await page.evaluate(() => {
+  const stateSlotId = await page.evaluate(() => {
     const setup = document.querySelector('#app').__vue_app__._instance.setupState
     const baseMap = setup.baseMapInstance?.value ?? setup.baseMapInstance
     const node = setup.projectData.net.nodes[0]
-    return baseMap.showSlotConnectionState({
+    const slot = node.data.slots.at(-1)
+    const shown = baseMap.showSlotConnectionState({
       id: 'node-detail-state',
-      slots: [{ nodeId: node.id, slotId: node.data.slots[0].id }],
+      slots: [{ nodeId: node.id, slotId: slot.id }],
     })
+    return shown ? slot.id : null
   })
-  expect(stateShown).toBe(true)
+  expect(stateSlotId).not.toBeNull()
   await expect(page.locator('.connection-line')).toHaveCount(1)
 
-  const slotConnectionOffset = () => page.evaluate(() => {
+  const slotConnectionOffset = () => page.evaluate(slotId => {
     const mapBounds = document.querySelector('.map-container').getBoundingClientRect()
-    const slotBounds = document.querySelector('.node-marker .slot-icon').getBoundingClientRect()
+    const slotBounds = document.querySelector(`[data-slot-id="${slotId}"]`).getBoundingClientRect()
     const line = document.querySelector('.connection-line')
     return Math.hypot(
       Number(line.getAttribute('x1')) - (slotBounds.left + slotBounds.width / 2 - mapBounds.left),
       Number(line.getAttribute('y1')) - (slotBounds.top + slotBounds.height / 2 - mapBounds.top),
     )
+  }, stateSlotId)
+  const markerConnectionOffset = () => page.evaluate(() => {
+    const mapBounds = document.querySelector('.map-container').getBoundingClientRect()
+    const markerBounds = document.querySelector('.node-marker').getBoundingClientRect()
+    const line = document.querySelector('.connection-line')
+    return Math.hypot(
+      Number(line.getAttribute('x1')) - (markerBounds.left + markerBounds.width / 2 - mapBounds.left),
+      Number(line.getAttribute('y1')) - (markerBounds.top + markerBounds.height / 2 - mapBounds.top),
+    )
   })
-  await expect.poll(slotConnectionOffset).toBeLessThan(1)
+  await expect.poll(markerConnectionOffset).toBeLessThan(1)
 
   await markers.first().focus()
   await expect.poll(async () => (await markers.first().boundingBox()).width)
@@ -141,6 +180,6 @@ test('reduces node detail as nearby markers converge', async ({ page }) => {
   await page.getByRole('button', { name: 'Menu' }).first().focus()
   await expect.poll(async () => (await markers.first().boundingBox()).width)
     .toBeLessThan(dotBounds.width + 1)
-  await expect.poll(slotConnectionOffset).toBeLessThan(1)
-  await expect(markers.locator('.slot-icon')).toHaveCount(4)
+  await expect.poll(markerConnectionOffset).toBeLessThan(1)
+  await expect(markers.locator('.slot-icon')).toHaveCount(52)
 })

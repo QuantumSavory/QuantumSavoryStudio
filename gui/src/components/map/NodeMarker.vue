@@ -29,11 +29,15 @@ const emit = defineEmits([
 ])
 const marker = ref(null)
 const markerEl = ref(null)
+const isHovered = ref(false)
 const isDraggingMarker = ref(false)
 const isDraggingConnector = ref(false)
 const { showEntangledSlots } = useUiServices()
 let dragStartPosition = null
 let displayedDragStartPosition = null
+let pointerPosition = null
+let hoverCheckFrame = null
+let watchesMapMovement = false
 
 function markerPosition() {
   const position = marker.value?.getLngLat()
@@ -53,9 +57,59 @@ function currentProjectWorldPosition() {
   )
 }
 
+function rememberPointerPosition(event) {
+  if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+    pointerPosition = { x: event.clientX, y: event.clientY }
+  }
+}
+
+function scheduleHoverCheck() {
+  if (hoverCheckFrame !== null) return
+  hoverCheckFrame = requestAnimationFrame(() => {
+    hoverCheckFrame = null
+    const target = pointerPosition
+      ? document.elementFromPoint(pointerPosition.x, pointerPosition.y)
+      : null
+    setHovered(target?.closest?.('.node-marker') === markerEl.value)
+  })
+}
+
+function setHovered(hovered) {
+  isHovered.value = hovered
+  if (hovered && !watchesMapMovement) {
+    props.map.on('move', scheduleHoverCheck)
+    watchesMapMovement = true
+  } else if (!hovered && watchesMapMovement) {
+    props.map.off('move', scheduleHoverCheck)
+    watchesMapMovement = false
+  }
+}
+
+function handlePointerEnter(event) {
+  rememberPointerPosition(event)
+  setHovered(true)
+}
+
+function handlePointerDown(event) {
+  rememberPointerPosition(event)
+  captureDragStartPosition()
+}
+
+function handlePointerLeave(event) {
+  rememberPointerPosition(event)
+  setHovered(false)
+}
+
 function setMarkerDragging(isDragging) {
   isDraggingMarker.value = isDragging
   markerEl.value?.classList.toggle('is-dragging', isDragging)
+  if (isDragging) {
+    setHovered(false)
+    window.addEventListener('pointermove', rememberPointerPosition, { passive: true })
+  } else {
+    window.removeEventListener('pointermove', rememberPointerPosition)
+    scheduleHoverCheck()
+  }
 }
 
 onMounted(() => {
@@ -97,7 +151,10 @@ onMounted(() => {
       node: props.node,
       position: currentProjectWorldPosition(),
       previousPosition: [...dragStartPosition],
-      finish: () => marker.value?.setLngLat(props.node.position),
+      finish: () => {
+        marker.value?.setLngLat(props.node.position)
+        scheduleHoverCheck()
+      },
     })
     setMarkerDragging(false)
     dragStartPosition = null
@@ -113,11 +170,17 @@ watch(
 
 watch(
   () => props.node.position,
-  position => marker.value?.setLngLat(position),
+  position => {
+    marker.value?.setLngLat(position)
+    if (isHovered.value) scheduleHoverCheck()
+  },
   { deep: true },
 )
 
 onUnmounted(() => {
+  if (watchesMapMovement) props.map.off('move', scheduleHoverCheck)
+  if (hoverCheckFrame !== null) cancelAnimationFrame(hoverCheckFrame)
+  window.removeEventListener('pointermove', rememberPointerPosition)
   if (marker.value) {
     marker.value.remove()
   }
@@ -213,14 +276,21 @@ function handleSlotClick(slot, e){
     class="node-marker"
     :class="[
       `node-marker--${detailLevel}`,
-      { 'is-selected': isSelected, 'is-dragging': isDraggingMarker },
+      {
+        'is-selected': isSelected,
+        'is-hovered': isHovered,
+        'is-dragging': isDraggingMarker,
+      },
     ]"
     :data-node-id="node.id"
     :data-detail-level="detailLevel"
     :aria-label="node.name"
     role="button"
     tabindex="0"
-    @pointerdown="captureDragStartPosition"
+    @pointerenter="handlePointerEnter"
+    @pointermove="rememberPointerPosition"
+    @pointerleave="handlePointerLeave"
+    @pointerdown="handlePointerDown"
     @click="handleClick"
     @keydown.enter="handleClick"
     @keydown.space="handleClick"
@@ -285,7 +355,7 @@ function handleSlotClick(slot, e){
   z-index: var(--app-z-map-node-selected);
 }
 
-.node-marker:hover,
+.node-marker.is-hovered,
 .node-marker:focus-visible,
 .node-marker.is-dragging {
   background-color: var(--app-color-map-node-hover);
@@ -298,14 +368,14 @@ function handleSlotClick(slot, e){
   outline-offset: 2px;
 }
 
-.node-marker--slots:not(:hover):not(:focus-visible):not(.is-dragging) {
+.node-marker--slots:not(.is-hovered):not(:focus-visible):not(.is-dragging) {
   min-width: 24px;
   min-height: 24px;
   padding: 3px 5px;
   border-radius: 12px;
 }
 
-.node-marker--dot:not(:hover):not(:focus-visible):not(.is-dragging) {
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) {
   width: 16px;
   min-width: 16px;
   height: 16px;
@@ -315,6 +385,7 @@ function handleSlotClick(slot, e){
   background-color: var(--app-color-map-node);
   box-shadow: var(--app-shadow-marker);
   font-weight: 500;
+  overflow: hidden;
   z-index: var(--app-z-map-node);
 }
 
@@ -332,11 +403,15 @@ function handleSlotClick(slot, e){
   flex-wrap: wrap;
   max-width: 120px;
   margin-left: 10px;
+  opacity: 1;
   overflow: hidden;
+  visibility: visible;
+  transition:
+    opacity var(--node-marker-transition-duration) ease,
+    visibility 0s linear;
 }
 
-.node-name,
-.node-slots {
+.node-name {
   opacity: 1;
   transform: scale(1);
   visibility: visible;
@@ -347,17 +422,37 @@ function handleSlotClick(slot, e){
     visibility 0s linear;
 }
 
-:is(.node-marker--slots, .node-marker--dot):not(:hover):not(:focus-visible):not(.is-dragging) .node-name,
-.node-marker--dot:not(:hover):not(:focus-visible):not(.is-dragging) .node-slots {
-  max-width: 0;
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-name,
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.75);
   visibility: hidden;
+}
+
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-name {
+  max-width: 0;
+  transform: scale(0.75);
   transition-delay: 0s, 0s, 0s, var(--node-marker-transition-duration);
 }
 
-:is(.node-marker--slots, .node-marker--dot):not(:hover):not(:focus-visible):not(.is-dragging) .node-slots {
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  transition-delay: 0s, var(--node-marker-transition-duration);
+}
+
+.node-marker--dot:not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots > :deep(.slot-icon) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+:is(.node-marker--slots, .node-marker--dot):not(.is-hovered):not(:focus-visible):not(.is-dragging) .node-slots {
   margin-left: 0;
 }
 
@@ -375,7 +470,7 @@ function handleSlotClick(slot, e){
   visibility: hidden;
 }
 
-.node-marker:hover .connector,
+.node-marker.is-hovered .connector,
 .node-marker:focus-visible .connector,
 .node-marker.is-dragging .connector {
   pointer-events: auto;
