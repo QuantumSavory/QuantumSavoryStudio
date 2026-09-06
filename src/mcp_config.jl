@@ -31,7 +31,7 @@ change the listener after the loopback check. Only those two options are
 inspected here because other process arguments may belong to an embedding
 caller, such as the test runner's positional file selectors.
 
-Keep this parser synchronized with Genie 5.35.15's `src/Commands.jl`
+Keep this parser synchronized with Genie's `src/Commands.jl`
 `parse_commandline_args` host and port assignments.
 """
 function effective_genie_server_endpoint(
@@ -172,7 +172,7 @@ end
 
 mcp_enabled() = mcp_configuration().enabled
 
-function _normalized_request_headers(headers::AbstractDict)
+function _normalized_request_headers(headers)
   return Dict{String,String}(
     lowercase(strip(string(key))) => strip(string(value))
     for (key, value) in headers
@@ -188,7 +188,7 @@ the MCP browser routes enforce their stronger boundary themselves. Requests
 without browser fetch metadata remain available to local diagnostics, while a
 browser-provided `Origin` or `Sec-Fetch-Site` must prove same-origin context.
 """
-function verify_mcp_browser_origin!(headers::AbstractDict)
+function verify_mcp_browser_origin!(headers)
   normalized = _normalized_request_headers(headers)
   fetch_site = lowercase(get(normalized, "sec-fetch-site", ""))
   fetch_site in ("cross-site", "same-site") && throw(

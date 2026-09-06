@@ -123,7 +123,7 @@ function main()
   end
 
   # MCP needs a validation point after `Loader.loadenv` selects the environment
-  # but before routes load. Genie 5.35.15 does not expose that hook and applies
+  # but before routes load. Genie does not expose that hook and applies
   # CLI `-l`/`-p` overrides later in `Commands.execute`, so the enabled path
   # mirrors `Genie.genie` from Genie.jl and the endpoint parsing in Commands.jl.
   server = Genie.Loader.loadenv(context=@__MODULE__)
