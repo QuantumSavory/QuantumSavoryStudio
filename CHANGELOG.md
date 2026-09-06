@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.13.0
+
+- Bumped the backend and frontend to 1.13.0 and the bundled MCP sidecar package to 1.1.0.
 - Unified brief and detailed help callouts across the interface, added purpose guidance to the
   Description and Tags & Queries tools, and clarified physical-edge context values and weighted
   States Zoo trace variables.
