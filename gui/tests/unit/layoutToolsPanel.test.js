@@ -56,6 +56,13 @@ describe('layout tools physical settings', () => {
       'drawing-card',
       'helpers-card',
     ])
+    const defaultsHelp = wrapper.get('.physical-defaults-help')
+    expect(defaultsHelp.attributes('role')).toBe('note')
+    expect(defaultsHelp.text()).toContain('delay')
+    expect(defaultsHelp.text()).toContain('transmissivity')
+    expect(defaultsHelp.text()).toContain('channel latency')
+    expect(defaultsHelp.text()).toContain('overridden on each physical edge')
+    expect(defaultsHelp.text()).toContain('a parameter expression references it')
   })
 
   it('keeps the session badge toggle available while simulation editing is locked', async () => {

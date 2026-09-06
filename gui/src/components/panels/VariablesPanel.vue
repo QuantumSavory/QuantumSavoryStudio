@@ -1,9 +1,9 @@
 <template>
   <div class="variables-panel" data-testid="variables-panel">
     <div class="variables-header">
-      <p class="variables-description">
+      <HelpCallout>
         Define values once and link them to constructor parameters.
-      </p>
+      </HelpCallout>
       <button
         type="button"
         class="add-variable-button"
@@ -114,6 +114,7 @@ import {
   parameterInputIsComplete,
   resetValueForType
 } from '../../utils/parameterTypes'
+import HelpCallout from '../ui/HelpCallout.vue'
 import TypedValueInput from './TypedValueInput.vue'
 
 const props = defineProps({
@@ -333,18 +334,9 @@ function variableNameError(variable) {
 
 .add-variable-button {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
-}
-
-.variables-description {
-  margin: 0;
-  color: #666;
-  font-size: 0.85rem;
-}
-
-.add-variable-button {
-  flex: 0 0 auto;
 }
 
 .empty-variables {

@@ -14,13 +14,7 @@
             'controlled-parameter': isControlledParameter(param),
           }"
         >
-          <div
-            v-tooltip.top="{
-              value: parameterDefinitionText(param),
-              pt: { arrow: { style: { borderTopColor: 'var(--app-color-surface)' } } },
-            }"
-            class="param-name"
-          >
+          <div v-tooltip.top="parameterDefinitionText(param)" class="param-name">
             {{ parameterName(param) }}
             <span v-if="paramUnknownTypes(param).length" class="unknown-type-indicator">
               <TriangleAlert :size="13" aria-hidden="true" />
@@ -339,7 +333,8 @@ function parameterDisabled(param) {
 }
 
 function parameterDefinitionText(param) {
-  let result = runtimeParameterDefinition(param)?.doc || 'NO DOC'
+  let result = runtimeParameterDefinition(param)?.doc
+    || 'No parameter documentation is available.'
   const unsupported = paramUnknownTypes(param)
   if (unsupported.length) {
     result += '\n\n**Unsupported:** '

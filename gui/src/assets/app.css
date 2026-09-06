@@ -338,11 +338,6 @@
   border: 1px solid #ddd;
 }
 
-.position-instructions {
-  color: #2196f3;
-  font-weight: 500;
-}
-
 .selected-item {
   background: white;
   padding: 15px;
@@ -442,13 +437,6 @@
   line-height: 1.4;
 }
 
-.layout-generator-dialog .template-note {
-  margin: 14px 0 0;
-  color: var(--app-color-text-muted);
-  font-size: 0.86rem;
-  line-height: 1.4;
-}
-
 .layout-generator-dialog .layout-generator-content {
   min-width: 0;
 }
@@ -479,39 +467,6 @@
 
 .layout-generator-help-slot {
   min-width: 0;
-}
-
-.layout-generator-help {
-  padding: var(--app-space-4);
-  border: solid 1px var(--app-color-border);
-  border-radius: var(--app-radius-surface);
-  background: var(--app-color-surface-subtle);
-  color: var(--app-color-text-muted);
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-
-.layout-generator-help-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  margin-bottom: var(--app-space-2);
-  color: var(--app-color-primary);
-}
-
-.layout-generator-help-heading h3 {
-  margin: 0;
-  color: inherit;
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-
-.layout-generator-help-content > :first-child {
-  margin-top: 0;
-}
-
-.layout-generator-help-content > :last-child {
-  margin-bottom: 0;
 }
 
 @media (max-width: 640px) {

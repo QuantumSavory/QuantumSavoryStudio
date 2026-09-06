@@ -75,12 +75,12 @@
     </div>
 
     <template #help>
-      <LayoutGeneratorHelp title="Template behavior">
+      <HelpCallout title="Template behavior" variant="detailed">
         <p>
           Both edge endpoints and the selected edge are removed. Every generated node copies the
           selected node's configuration, while the edge endpoints define the first two positions.
         </p>
-      </LayoutGeneratorHelp>
+      </HelpCallout>
     </template>
   </LayoutGeneratorDialog>
 </template>
@@ -92,8 +92,8 @@ import {
   validateGraphNetwork
 } from '../utils/graphNetwork'
 import { edgeHasNode, endpointId } from '../utils/layoutTemplates'
+import HelpCallout from './ui/HelpCallout.vue'
 import LayoutGeneratorDialog from './ui/LayoutGeneratorDialog.vue'
-import LayoutGeneratorHelp from './ui/LayoutGeneratorHelp.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },

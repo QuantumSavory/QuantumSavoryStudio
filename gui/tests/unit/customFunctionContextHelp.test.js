@@ -165,6 +165,7 @@ describe('custom-function contextual help', () => {
     })
 
     const help = wrapper.get('[data-testid="node-context-help"]')
+    expect(help.attributes('role')).toBe('note')
     expect(help.text()).toContain('one-based simulator IDs')
     expect(help.text()).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.syntax)
     expect(help.text()).toContain(CUSTOM_FUNCTION_CONTEXT_BY_ID.nodeid.recommendation)

@@ -5,8 +5,8 @@ import GraphNetworkDialog from '../../src/components/GraphNetworkDialog.vue'
 import ProjectNameDialog from '../../src/components/ProjectNameDialog.vue'
 import RepeaterChainDialog from '../../src/components/RepeaterChainDialog.vue'
 import StarNetworkDialog from '../../src/components/StarNetworkDialog.vue'
+import HelpCallout from '../../src/components/ui/HelpCallout.vue'
 import LayoutGeneratorDialog from '../../src/components/ui/LayoutGeneratorDialog.vue'
-import LayoutGeneratorHelp from '../../src/components/ui/LayoutGeneratorHelp.vue'
 
 vi.mock('maplibre-gl', () => {
   class MercatorCoordinate {
@@ -124,7 +124,7 @@ function expectSharedGeneratorFrame(wrapper, {
     .filter(Boolean)
   expect(sections).toEqual(['description', 'fields', 'validation', 'help'])
 
-  const help = wrapper.getComponent(LayoutGeneratorHelp)
+  const help = wrapper.getComponent(HelpCallout)
   const note = help.get('[role="note"]')
   const headingId = note.attributes('aria-labelledby')
   expect(headingId).toBeTruthy()

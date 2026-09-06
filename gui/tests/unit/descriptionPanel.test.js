@@ -29,7 +29,9 @@ describe('DescriptionPanel', () => {
       props: { modelValue: 'Project details' },
     })
     const editor = wrapper.getComponent(MarkdownEditor)
+    const purpose = wrapper.get('[role="note"]')
 
+    expect(purpose.text()).toContain("project's purpose, assumptions, and usage notes")
     expect(editor.props()).toMatchObject({
       modelValue: 'Project details',
       idPrefix: 'project-description',

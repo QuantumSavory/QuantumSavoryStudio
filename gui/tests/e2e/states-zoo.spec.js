@@ -463,6 +463,14 @@ test.describe('States Zoo variables', () => {
     await createProject(page, 'Weighted States Zoo Project')
 
     const panel = await openStatesZoo(page)
+    const weightGuide = panel.getByRole('note', { name: 'Weighted and unweighted states' })
+    await expect(weightGuide).toContainText('unweighted state recipes have unit trace')
+    await expect(weightGuide).toContainText('instead of requiring unit trace')
+    await expect(weightGuide).toContainText('for physical parameter values')
+    await expect(weightGuide).toContainText('probability of successful state generation')
+    await expect(weightGuide).toContainText('absolute trace to be finite and nonzero')
+    await expect(weightGuide).toContainText('makes the magnitude available')
+    await expect(weightGuide).toContainText('<state name>_tr')
     const row = await addState(page, panel)
     const stateId = await row.getAttribute('data-variable-id')
     const traceId = `${stateId}_tr`
@@ -477,8 +485,7 @@ test.describe('States Zoo variables', () => {
     const note = row.locator('.states-zoo-trace-note')
     await expect(note).toContainText('state_1_tr')
     await expect(note).toContainText('0.25')
-    await expect(note).toContainText('probability of successfully heralding the state')
-    await expect(note).toContainText('heralded entanglement generation')
+    await expect(note).toContainText('companion variable')
 
     expect(await page.evaluate(id => {
       const setupState = document.querySelector('#app')?.__vue_app__?._instance?.setupState

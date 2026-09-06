@@ -61,7 +61,6 @@ export const PHYSICAL_PARAMETER_DESCRIPTORS = Object.freeze({
     defaultValue: DEFAULT_REFRACTIVE_INDEX,
     dormantWhen: 'manualDelay',
     automaticDescription: 'the project refractive index',
-    help: 'Used for automatic propagation-delay calculations.',
   }),
   propagationDelaySeconds: descriptor({
     id: 'propagationDelaySeconds',
@@ -89,7 +88,6 @@ export const PHYSICAL_PARAMETER_DESCRIPTORS = Object.freeze({
     defaultValue: DEFAULT_LOSS_DB_PER_KM,
     dormantWhen: 'manualTransmissivity',
     automaticDescription: 'the project fiber loss',
-    help: 'Used with distance for automatic edge-transmissivity calculations.',
   }),
   transmissivity: descriptor({
     id: 'transmissivity',

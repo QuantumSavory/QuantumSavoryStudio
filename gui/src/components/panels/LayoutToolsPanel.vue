@@ -1,15 +1,17 @@
 <template>
   <div class="layout-tools">
-    <section class="layout-tools-card help-card" aria-labelledby="layout-tools-help-title">
-      <h3 id="layout-tools-help-title" class="card-title">
-        {{ activeHelper ? activeHelper.label : 'Help' }}
-      </h3>
+    <HelpCallout
+      class="layout-tools-card help-card"
+      heading-id="layout-tools-help-title"
+      :title="activeHelper ? activeHelper.label : 'Help'"
+      variant="detailed"
+      aria-live="polite"
+    >
       <div class="help-content">
         <ul
           class="layout-instructions"
           :class="{ placeholder: activeHelper }"
           :aria-hidden="Boolean(activeHelper)"
-          aria-live="polite"
         >
           <li><kbd>Alt</kbd>-click the map to add a node.</li>
           <li>Drag a node connector onto another node to create a physical edge.</li>
@@ -19,14 +21,22 @@
           <li>Click a handle for smooth → sharp → delete.</li>
           <li>Choose Add Annotation, then click the map to place a note.</li>
         </ul>
-        <p v-if="activeHelper" class="helper-description" aria-live="polite">
+        <p v-if="activeHelper" class="helper-description">
           {{ activeHelper.description }}
         </p>
       </div>
-    </section>
+    </HelpCallout>
 
     <section class="layout-tools-card defaults-card" aria-labelledby="physical-defaults-title">
       <h3 id="physical-defaults-title" class="card-title">Physical Defaults</h3>
+      <HelpCallout class="physical-defaults-help">
+        Distance and refractive index determine each edge's <code>delay</code>. Studio uses it as
+        classical and quantum channel latency and also exposes it to edge protocols as a context
+        variable. Distance and fiber loss determine the <code>transmissivity</code> context variable.
+        Both derived values can be overridden on each physical edge. Studio does not insert either
+        value into protocol parameters automatically; a configured edge protocol uses one only when
+        a parameter expression references it.
+      </HelpCallout>
       <div class="physical-default-fields">
         <div
           v-for="parameter in globalPhysicalParameters"
@@ -41,7 +51,6 @@
             :disabled="disabled"
             @update:value="updatePhysicalDefault(parameter, $event)"
           />
-          <p class="field-help">{{ parameter.help }}</p>
         </div>
       </div>
       <div class="template-node">
@@ -144,6 +153,7 @@
 import { ref } from 'vue'
 import { MessageSquarePlus, Network, Star, Waypoints } from '@lucide/vue'
 import SlotsEditor from './SlotsEditor.vue'
+import HelpCallout from '../ui/HelpCallout.vue'
 import QuantityField from '../ui/QuantityField.vue'
 import {
   DEFAULT_PHYSICAL_CONFIG_VALUES,
@@ -279,15 +289,17 @@ function reorderTemplateSlot({ slot, toIndex }) {
 
 .layout-tools-card {
   min-width: 0;
+}
+
+.layout-tools-card:not(.help-card) {
   padding: 10px 12px;
   border: 1px solid var(--app-color-border);
-  border-radius: 4px;
+  border-radius: var(--app-radius-control);
   background: var(--app-color-surface);
 }
 
 .help-card {
   grid-column: 1 / -1;
-  background: var(--app-color-surface-subtle);
 }
 
 .help-content {
@@ -364,6 +376,10 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: var(--app-space-4);
+}
+
+.physical-defaults-help {
+  margin-bottom: var(--app-space-4);
 }
 
 .quantity-default {

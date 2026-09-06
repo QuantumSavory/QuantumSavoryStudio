@@ -51,6 +51,7 @@
   --app-overlay-background: rgba(0, 0, 0, 0.18);
   --app-z-popup: 3000;
   --app-z-tooltip: 10000;
+  --app-tooltip-max-width: 300px;
   /* MapLibre marker stacking: canvas geometry < annotations < badges/handles
      < nodes < transient state visualization. */
   --app-z-map-annotation: 10;
@@ -63,6 +64,7 @@
   --app-z-map-state-node: 1001;
   --app-shadow-dialog: 0 2px 16px rgba(0, 0, 0, 0.13);
   --app-shadow-marker: 0 1px 4px rgba(0, 0, 0, 0.35);
+  --app-shadow-tooltip: 1px 2px 10px #00003090;
   --app-radius-control: 4px;
   --app-radius-surface: 8px;
   --app-font-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -88,9 +90,6 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --p-tooltip-background: #fff !important;
-  --p-tooltip-max-width: 500px !important;
-  --p-tooltip-color: #000 !important;
 }
 
 /* ==================== RESET AND BASE ELEMENTS ==================== */
@@ -266,10 +265,6 @@ h1 {
   border-bottom: 1px transparent;
 }
 
-.panel-title-collapsable:hover{
-  font-weight: 700;
-}
-
 .panel-content{
   padding-top: 10px;
   height: calc(100% - 15px);
@@ -317,8 +312,6 @@ h1 {
 
 .p-tooltip-text {
   white-space: normal !important;
-  box-shadow: 1px 2px 10px #00003090 !important;
-  max-width: 300px !important;
   font-size: 0.9rem !important;
   overflow-wrap: anywhere;
 }
@@ -351,7 +344,7 @@ h1 {
   padding: 1px 3px;
   border-radius: 3px;
   background: var(--app-color-surface-subtle);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--app-font-monospace);
   font-size: 0.92em;
 }
 
