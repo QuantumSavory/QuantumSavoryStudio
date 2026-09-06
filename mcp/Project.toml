@@ -1,6 +1,6 @@
 name = "WebQuantumSavoryMCP"
 uuid = "d3692f8a-3119-4d91-a4ec-510c2f0c862a"
-version = "1.0.0"
+version = "1.1.0"
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
