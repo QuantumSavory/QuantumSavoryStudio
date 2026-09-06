@@ -7,12 +7,12 @@
     @update:collapsed="emit('update:collapsed', $event)"
   >
     <template #content>
-      <p v-if="nodes.length" class="node-context-help" data-testid="node-context-help">
+      <HelpCallout v-if="nodes.length" class="node-context-help" data-testid="node-context-help">
         The <code>#</code> values are one-based simulator IDs.
         In custom functions, <code>{{ nodeIdKeyword.syntax }}</code>:
         {{ nodeIdKeyword.description }}
         {{ nodeIdKeyword.recommendation }}
-      </p>
+      </HelpCallout>
       <div v-if="!nodes.length" class="empty-list">No nodes</div>
       <div v-else style="max-height: 20vh; overflow-y: auto;">
         <div
@@ -66,6 +66,7 @@
 import { computed } from 'vue'
 import { ArrowDown, ArrowUp, Plus } from '@lucide/vue'
 import { CUSTOM_FUNCTION_CONTEXT_BY_ID } from '../../utils/customFunctionContext'
+import HelpCallout from '../ui/HelpCallout.vue'
 import BasePanel from './BasePanel.vue'
 import NodeIndex from './NodeIndex.vue'
 
@@ -121,18 +122,6 @@ function reorderTooltip(atBoundary) {
 
 .node-context-help {
   margin: 0 0 var(--app-space-2);
-  padding: var(--app-space-2) var(--app-space-3);
-  border-left: 3px solid var(--app-color-primary);
-  border-radius: var(--app-radius-control);
-  background: var(--app-color-surface-subtle);
-  color: var(--app-color-text-muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.node-context-help code {
-  color: var(--app-color-text);
-  font-size: inherit;
 }
 
 .node-list-item {

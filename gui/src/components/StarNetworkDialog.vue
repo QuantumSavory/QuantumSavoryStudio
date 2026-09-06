@@ -55,12 +55,12 @@
     </div>
 
     <template #help>
-      <LayoutGeneratorHelp title="Template behavior">
+      <HelpCallout title="Template behavior" variant="detailed">
         <p>
           The peripheral template and its edge are removed. The first generated node keeps the
           template position; the remaining nodes rotate counterclockwise around the center.
         </p>
-      </LayoutGeneratorHelp>
+      </HelpCallout>
     </template>
   </LayoutGeneratorDialog>
 </template>
@@ -69,8 +69,8 @@
 import { computed, reactive, watch } from 'vue'
 import { endpointId } from '../utils/layoutTemplates'
 import { validateStarNetwork } from '../utils/starNetwork'
+import HelpCallout from './ui/HelpCallout.vue'
 import LayoutGeneratorDialog from './ui/LayoutGeneratorDialog.vue'
-import LayoutGeneratorHelp from './ui/LayoutGeneratorHelp.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },

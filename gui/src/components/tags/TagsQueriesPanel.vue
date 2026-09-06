@@ -1,5 +1,9 @@
 <template>
-  <div class="tags-queries-panel" :class="{ disabled: !enabled }">
+  <div class="tags-queries-panel">
+    <HelpCallout>
+      Inspect and edit live simulator tags, or run non-consuming tag queries against a selected
+      target.
+    </HelpCallout>
     <p v-if="!enabled" class="tag-explorer-disabled" role="status">
       Parse a network to explore its live tags and queries.
     </p>
@@ -166,6 +170,7 @@ import { computed, ref, watch } from 'vue'
 import { LoaderCircle, RefreshCw } from '@lucide/vue'
 import { useTagExplorer } from '../../composables/useTagExplorer.js'
 import { targetKey } from '../../utils/tagExplorer.js'
+import HelpCallout from '../ui/HelpCallout.vue'
 import TagConstructor from './TagConstructor.vue'
 import TagResultsList from './TagResultsList.vue'
 import TagTargetSelector from './TagTargetSelector.vue'
@@ -386,7 +391,6 @@ function handleInnerTabKeydown(event, index) {
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--app-space-4);
-  overflow: auto;
 }
 
 .tag-results-column,

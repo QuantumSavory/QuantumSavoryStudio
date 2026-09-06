@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Unified brief and detailed help callouts across the interface, added purpose guidance to the
+  Description and Tags & Queries tools, and clarified physical-edge context values and weighted
+  States Zoo trace variables.
 - Protocol constructor fields now show the Julia text representation of their
   native QuantumSavory default while the Default input option is selected.
 - Added direct project renaming by editing the project name in the top bar.

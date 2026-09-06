@@ -26,6 +26,22 @@ const MyPreset = definePreset(Aura, {
             900: '{indigo.900}',
             950: '{indigo.950}'
         }
+    },
+    components: {
+        tooltip: {
+            root: {
+                maxWidth: 'var(--app-tooltip-max-width)',
+                shadow: 'var(--app-shadow-tooltip)'
+            },
+            colorScheme: {
+                light: {
+                    root: {
+                        background: 'var(--app-color-surface)',
+                        color: 'var(--app-color-text)'
+                    }
+                }
+            }
+        }
     }
 });
 

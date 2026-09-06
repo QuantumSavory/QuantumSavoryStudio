@@ -82,6 +82,7 @@ describe('TagsQueriesPanel orchestration', () => {
     await flushPromises()
     const tagsPanel = wrapper.get('#tag-explorer-tags-panel')
 
+    expect(wrapper.get('[role="note"]').text()).toContain('non-consuming tag queries')
     expect(list).toHaveBeenCalledWith('Explorer Test', expect.objectContaining({
       kind: 'register',
       node_id: 'node-external'
@@ -238,6 +239,7 @@ describe('TagsQueriesPanel orchestration', () => {
 
     await wrapper.setProps({ enabled: false })
     await flushPromises()
+    expect(wrapper.get('[role="note"]').text()).toContain('live simulator tags')
     expect(wrapper.get('[role="status"]').text()).toContain('Parse a network')
 
     await wrapper.setProps({ enabled: true, projectName: 'New Project' })

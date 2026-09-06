@@ -1,9 +1,9 @@
 <template>
   <div class="states-zoo-panel" data-testid="states-zoo-panel">
     <div class="states-zoo-header">
-      <p class="states-zoo-description">
+      <HelpCallout>
         Create reusable symbolic states and preview their density matrices.
-      </p>
+      </HelpCallout>
       <button
         type="button"
         class="add-states-zoo-button"
@@ -14,6 +14,23 @@
         Add State
       </button>
     </div>
+
+    <HelpCallout
+      class="states-zoo-weight-help"
+      title="Weighted and unweighted states"
+      variant="detailed"
+    >
+      <p>
+        By convention, unweighted state recipes have unit trace. Weighted recipes retain their
+        generation weight instead of requiring unit trace; for physical parameter values, that
+        trace is the probability of successful state generation.
+      </p>
+      <p>
+        Studio requires the absolute trace to be finite and nonzero. It divides the weighted state
+        by that magnitude and makes the magnitude available as an automatically generated
+        <code>Float64</code> companion variable named <code>&lt;state name&gt;_tr</code>.
+      </p>
+    </HelpCallout>
 
     <div v-if="typesLoading" class="states-zoo-catalog-status" role="status">
       Loading States Zoo types…
@@ -108,10 +125,7 @@
               :data-parameter-name="parameter.name"
             >
               <div
-                v-tooltip.top="{
-                  value: parameter.doc || 'NO DOC',
-                  pt: { arrow: { style: { borderTopColor: 'var(--app-color-surface)' } } },
-                }"
+                v-tooltip.top="parameter.doc || 'No parameter documentation is available.'"
                 class="states-zoo-parameter-label"
               >
                 <span>{{ parameter.name }}</span>
@@ -210,17 +224,14 @@
                 Retry preview
               </button>
             </div>
-            <p
+            <HelpCallout
               v-if="isWeighted(variable) && traceVariable(variable)"
               class="states-zoo-trace-note"
-              role="note"
             >
-              Generated Float64 variable
+              Generated <code>Float64</code> companion variable
               <code>{{ traceVariable(variable).name }}</code>
-              with value <strong>{{ traceVariable(variable).value }}</strong>.
-              This trace usually corresponds to the probability of successfully heralding the
-              state, for example in heralded entanglement generation.
-            </p>
+              with trace value <strong>{{ traceVariable(variable).value }}</strong>.
+            </HelpCallout>
           </div>
         </div>
       </article>
@@ -245,6 +256,7 @@ import {
 import { api } from '../../utils/ApiConnector'
 import { watermarkGeneratedPng } from '../../utils/pngWatermark'
 import { generateUUid } from '../../utils/Utils'
+import HelpCallout from '../ui/HelpCallout.vue'
 
 const PREVIEW_DEBOUNCE_MS = 500
 
@@ -951,18 +963,13 @@ onUnmounted(() => {
 
 .add-states-zoo-button {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
 }
 
-.states-zoo-description {
-  margin: 0;
-  color: #666;
-  font-size: 0.85rem;
-}
-
-.add-states-zoo-button {
-  flex: 0 0 auto;
+.states-zoo-weight-help {
+  margin-bottom: var(--app-space-3);
 }
 
 .states-zoo-catalog-status,
@@ -1158,28 +1165,6 @@ onUnmounted(() => {
 
 .states-zoo-trace-note {
   margin-top: var(--app-space-2);
-  padding: var(--app-space-3);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-control);
-  color: var(--app-color-text-muted);
-  background: var(--app-color-surface-subtle);
-  font-size: 0.78rem;
-}
-
-.states-zoo-trace-note code,
-.states-zoo-trace-note strong {
-  color: var(--app-color-text);
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @keyframes states-zoo-spin {

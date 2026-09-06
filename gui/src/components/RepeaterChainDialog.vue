@@ -241,7 +241,7 @@
     </section>
 
     <template #help>
-      <LayoutGeneratorHelp title="Repeater protocol guidance">
+      <HelpCallout title="Repeater protocol guidance" variant="detailed">
         <p>
           Protocol configuration is available when the chain does not copy a repeater template.
           Existing endpoint protocols are retained, except for a configured tracker of the same type.
@@ -257,7 +257,7 @@
           Use unique node names, review the generated directions, and add CutoffProt where
           stale entanglement should be discarded to avoid persistent deadlock-like waits.
         </p>
-      </LayoutGeneratorHelp>
+      </HelpCallout>
     </template>
   </LayoutGeneratorDialog>
 </template>
@@ -277,8 +277,8 @@ import {
   seedProtocolConstructor
 } from '../utils/protocolConstructors.js'
 import ProtocolConstructorForm from './panels/ProtocolConstructorForm.vue'
+import HelpCallout from './ui/HelpCallout.vue'
 import LayoutGeneratorDialog from './ui/LayoutGeneratorDialog.vue'
-import LayoutGeneratorHelp from './ui/LayoutGeneratorHelp.vue'
 import OptionHelpTooltip from './ui/OptionHelpTooltip.vue'
 
 const props = defineProps({
@@ -742,11 +742,6 @@ function handleCancel() {
 .controlled-fields-note {
   margin: 0 0 var(--app-space-3);
   font-size: 0.82rem;
-}
-
-:deep(.layout-generator-help ul) {
-  margin: var(--app-space-2) 0;
-  padding-left: 1.25rem;
 }
 
 @media (max-width: 640px) {

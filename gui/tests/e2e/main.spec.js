@@ -184,6 +184,25 @@ test.describe.serial('Main Workflow', () => {
       expect(Number(await topTooltip.evaluate(element => getComputedStyle(element).zIndex))).toBeGreaterThan(2200);
     }
 
+    const tooltipStyles = await page.locator('.p-tooltip:visible').evaluate(element => {
+      const text = element.querySelector('.p-tooltip-text');
+      const arrow = element.querySelector('.p-tooltip-arrow');
+      return {
+        maxWidth: getComputedStyle(element).maxWidth,
+        background: getComputedStyle(text).backgroundColor,
+        color: getComputedStyle(text).color,
+        shadow: getComputedStyle(text).boxShadow,
+        arrow: getComputedStyle(arrow).borderTopColor,
+      };
+    });
+    expect(tooltipStyles).toMatchObject({
+      maxWidth: '300px',
+      background: 'rgb(255, 255, 255)',
+      color: 'rgb(34, 34, 34)',
+      arrow: 'rgb(255, 255, 255)',
+    });
+    expect(tooltipStyles.shadow).not.toBe('none');
+
     const toggleDetailsButton = slotActions.getByRole('button', { name: 'Toggle details' });
     await toggleDetailsButton.click();
     await expect(firstSlot.locator('.slot-row-expanded')).toBeVisible();

@@ -1,5 +1,8 @@
 <template>
   <div class="description-panel" data-testid="description-panel">
+    <HelpCallout>
+      Document this project's purpose, assumptions, and usage notes.
+    </HelpCallout>
     <MarkdownEditor
       id-prefix="project-description"
       :model-value="modelValue"
@@ -15,6 +18,7 @@
 </template>
 
 <script setup>
+import HelpCallout from '../ui/HelpCallout.vue'
 import MarkdownEditor from '../ui/MarkdownEditor.vue'
 
 defineProps({
@@ -29,8 +33,16 @@ const emit = defineEmits(['update:modelValue'])
 
 <style scoped>
 .description-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
   min-height: 132px;
   padding: 0 var(--app-space-1) var(--app-space-1) 0;
   color: var(--app-color-text);
+}
+
+.description-panel :deep(.markdown-editor) {
+  min-height: 0;
+  flex: 1 1 auto;
 }
 </style>
