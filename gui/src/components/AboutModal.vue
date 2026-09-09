@@ -123,7 +123,12 @@
               <CodeXml :size="18" aria-hidden="true" />
               <span>
                 <strong>Bounty program</strong>
-                <small>Contribute fixes and enhancements across the open-source ecosystem.</small>
+                <small>
+                  New contributors participating in the bounty program must not use LLMs or coding
+                  agents to generate code. They may use these tools to analyze existing code and
+                  to review code they have written themselves. They must attend office hours to
+                  discuss their pull request.
+                </small>
               </span>
             </a>
           </div>
