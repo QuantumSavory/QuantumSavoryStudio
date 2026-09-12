@@ -7,7 +7,7 @@ steps:
     key: backend-unit
     command: ./ci/backend-unit.sh
     plugins:
-      - JuliaCI/julia#v1:
+      - QuantumSavory/julia#v1.14:
           version: "1.12"
     timeout_in_minutes: 45
 
@@ -19,7 +19,7 @@ steps:
     env:
       WEBQUANTUMSAVORY_CI_SERVER_PORT: "8003"
     plugins:
-      - JuliaCI/julia#v1:
+      - QuantumSavory/julia#v1.14:
           version: "1.12"
     artifact_paths: "ci-artifacts/**/*"
     timeout_in_minutes: 60
@@ -40,7 +40,7 @@ steps:
     env:
       WEBQUANTUMSAVORY_CI_SERVER_PORT: "8002"
     plugins:
-      - JuliaCI/julia#v1:
+      - QuantumSavory/julia#v1.14:
           version: "1.12"
       - mise#v1.1.4:
           version: "2026.7.2"
@@ -55,7 +55,7 @@ steps:
     env:
       PLAYWRIGHT_INSTALL_SYSTEM_DEPS: "true"
     plugins:
-      - JuliaCI/julia#v1:
+      - QuantumSavory/julia#v1.14:
           version: "1.12"
       - mise#v1.1.4:
           version: "2026.7.2"
