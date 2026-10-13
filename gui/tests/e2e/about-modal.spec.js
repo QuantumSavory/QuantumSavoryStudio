@@ -70,7 +70,10 @@ test('About describes the project, its support, and ways to participate', async 
 
   await expect(dialog.getByRole('link', { name: /Office hours/ })).toHaveAttribute(
     'href',
-    'https://quantumsavory.org/community/office-hours/'
+    'https://cal.com/krastanov/quantum-savory-office-hours'
+  )
+  await expect(dialog.getByRole('link', { name: /Office hours/ })).toContainText(
+    'Schedule office hours on-demand'
   )
   await expect(dialog.getByRole('link', { name: /Bounty program/ })).toHaveAttribute(
     'href',

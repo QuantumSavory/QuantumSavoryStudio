@@ -104,14 +104,14 @@
           <div class="community-links">
             <a
               class="community-link"
-              href="https://quantumsavory.org/community/office-hours/"
+              href="https://cal.com/krastanov/quantum-savory-office-hours"
               target="_blank"
               rel="noopener noreferrer"
             >
               <MessageCircle :size="18" aria-hidden="true" />
               <span>
                 <strong>Office hours</strong>
-                <small>Ask questions and find current scheduling and joining details.</small>
+                <small>Schedule office hours on-demand to ask questions and discuss projects.</small>
               </span>
             </a>
             <a

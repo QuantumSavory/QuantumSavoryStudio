@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The About dialog now links directly to on-demand office-hours scheduling.
+
 ## 1.13.0
 
 - Bumped the backend and frontend to 1.13.0 and the bundled MCP sidecar package to 1.1.0.
